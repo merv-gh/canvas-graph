@@ -1257,32 +1257,32 @@ function runDemo() {
     { fn: () => bus.emit('cmd-add-node', { at:[340,40,0], title:'JVM Stack', body:'Per-thread' }), delay: 450 },
     { fn: () => remember('stack'), delay: 50 },
     { fn: () => bus.emit('node-select', { eid: refs.jvm }), delay: 200 },
-    { fn: () => bus.emit('cmd-add-node', { at:[0,260,0], title:'Metaspace', body:'Class metadata' }), delay: 450 },
+    { fn: () => bus.emit('cmd-add-node', { at:[0,0,0], title:'Metaspace', body:'Class metadata' }), delay: 450 },
     { fn: () => remember('meta'), delay: 50 },
     // Heap children at deeper layer
     { fn: () => bus.emit('cmd-layer', { z:-300 }), delay: 250 },
     { fn: () => bus.emit('node-select', { eid: refs.heap }), delay: 200 },
-    { fn: () => bus.emit('cmd-add-node', { at:[-480,220,-300], title:'Eden', body:'New objects' }), delay: 400 },
+    { fn: () => bus.emit('cmd-add-node', { at:[-420,220,-300], title:'Eden', body:'New objects' }), delay: 400 },
     { fn: () => remember('eden'), delay: 50 },
     { fn: () => bus.emit('node-select', { eid: refs.heap }), delay: 200 },
-    { fn: () => bus.emit('cmd-add-node', { at:[-340,220,-300], title:'Survivor', body:'S0 / S1' }), delay: 400 },
+    { fn: () => bus.emit('cmd-add-node', { at:[-190,220,-300], title:'Survivor', body:'S0 / S1' }), delay: 400 },
     { fn: () => bus.emit('node-select', { eid: refs.heap }), delay: 200 },
-    { fn: () => bus.emit('cmd-add-node', { at:[-200,220,-300], title:'Old Gen', body:'Long-lived' }), delay: 400 },
+    { fn: () => bus.emit('cmd-add-node', { at:[40,220,-300], title:'Old Gen', body:'Long-lived' }), delay: 400 },
     // Stack threads
     { fn: () => bus.emit('node-select', { eid: refs.stack }), delay: 200 },
-    { fn: () => bus.emit('cmd-add-node', { at:[200,220,-300], title:'Thread-1', body:'frame' }), delay: 400 },
+    { fn: () => bus.emit('cmd-add-node', { at:[260,220,-300], title:'Thread-1', body:'frame' }), delay: 400 },
     { fn: () => remember('t1'), delay: 50 },
     { fn: () => bus.emit('node-select', { eid: refs.stack }), delay: 200 },
-    { fn: () => bus.emit('cmd-add-node', { at:[420,220,-300], title:'Thread-2', body:'frame' }), delay: 400 },
+    { fn: () => bus.emit('cmd-add-node', { at:[500,220,-300], title:'Thread-2', body:'frame' }), delay: 400 },
     // Object node at z=-600, demonstrate connect-create flow
     { fn: () => bus.emit('cmd-layer', { z:-600 }), delay: 250 },
     { fn: () => bus.emit('node-select', { eid: refs.eden }), delay: 200 },
-    { fn: () => bus.emit('cmd-add-node', { at:[-340,420,-600], title:'Object', body:'In Eden' }), delay: 450 },
+    { fn: () => bus.emit('cmd-add-node', { at:[-520,420,-600], title:'Object', body:'In Eden' }), delay: 450 },
     { fn: () => remember('obj'), delay: 50 },
     // Show off connect mode -> create new node by clicking empty space (simulated)
     { fn: () => bus.emit('node-select', { eid: refs.t1 }), delay: 250 },
     { fn: () => bus.emit('cmd-connect-start'), delay: 250 },
-    { fn: () => bus.emit('cmd-add-node', { at:[200,420,-600], title:'ref', body:'local var', connectFrom: refs.t1 }), delay: 450 },
+    { fn: () => bus.emit('cmd-add-node', { at:[340,420,-600], title:'ref', body:'local var', connectFrom: refs.t1 }), delay: 450 },
     // Reuse layout
     { fn: () => bus.emit('node-select', { eid: refs.jvm }), delay: 250 },
     { fn: () => bus.emit('cmd-layout'), delay: 600 },
@@ -1344,15 +1344,15 @@ function buildJMM() {
   const jvm = createNode(0, -260, 0, 'JVM Runtime', '');
   const heap = createNode(-340, 40, 0, 'Heap', 'Object storage', jvm);
   const stack = createNode(340, 40, 0, 'JVM Stack', 'Per-thread', jvm);
-  const meta = createNode(0, 260, 0, 'Metaspace', 'Class metadata', jvm);
-  const eden = createNode(-480, 220, -300, 'Eden', 'New objects', heap);
-  const surv = createNode(-340, 220, -300, 'Survivor', 'S0 / S1', heap);
-  const old  = createNode(-200, 220, -300, 'Old Gen', 'Long-lived', heap);
-  const t1   = createNode(200, 220, -300, 'Thread-1', 'Local vars', stack);
-  const t2   = createNode(420, 220, -300, 'Thread-2', 'Local vars', stack);
-  const obj  = createNode(-340, 420, -600, 'Object', 'In Eden', eden);
-  const ref1 = createNode(200, 420, -600, 'ref', 'Local variable', t1);
-  const ref2 = createNode(420, 420, -600, 'ref', 'Local variable', t2);
+  const meta = createNode(0, 0, 0, 'Metaspace', 'Class metadata', jvm);
+  const eden = createNode(-420, 220, -300, 'Eden', 'New objects', heap);
+  const surv = createNode(-190, 220, -300, 'Survivor', 'S0 / S1', heap);
+  const old  = createNode(40, 220, -300, 'Old Gen', 'Long-lived', heap);
+  const t1   = createNode(260, 220, -300, 'Thread-1', 'Local vars', stack);
+  const t2   = createNode(500, 220, -300, 'Thread-2', 'Local vars', stack);
+  const obj  = createNode(-520, 420, -600, 'Object', 'In Eden', eden);
+  const ref1 = createNode(340, 420, -600, 'ref', 'Local variable', t1);
+  const ref2 = createNode(620, 420, -600, 'ref', 'Local variable', t2);
   createEdge(jvm,heap,'manages'); createEdge(jvm,stack,'manages'); createEdge(jvm,meta,'manages');
   createEdge(heap,eden,'contains'); createEdge(heap,surv,'contains'); createEdge(heap,old,'contains');
   createEdge(stack,t1,'frame'); createEdge(stack,t2,'frame');
@@ -1379,7 +1379,9 @@ const screenshotFixtures = {
   },
 };
 
-function resetGraphState(camera = { x: 0, y: 0, zoom: 1, layerZ: 0 }) {
+const defaultScreenshotCamera = { x: 0, y: 0, zoom: 1, layerZ: 0 };
+
+function resetGraphState(camera = defaultScreenshotCamera) {
   stopDemo();
   world.clear();
   Context.selectedId = null;
@@ -1402,16 +1404,127 @@ function buildScreenshotFixture(name) {
   document.body.dataset.fixtureReady = '1';
 }
 
+function selectRef(refs, key) {
+  bus.emit('node-select', { eid: refs[key] });
+}
+
+function addScriptNode(refs, key, data) {
+  bus.emit('cmd-add-node', data);
+  refs[key] = Context.selectedId;
+}
+
+const screenshotScripts = {
+  demoMemory: [
+    {
+      checkpoint: 'root-added',
+      fn: refs => addScriptNode(refs, 'jvm', { at: [0, -260, 0], title: 'JVM Runtime', parent: null }),
+    },
+    {
+      checkpoint: 'top-level-expanded',
+      fn: refs => {
+        selectRef(refs, 'jvm');
+        addScriptNode(refs, 'heap', { at: [-340, 40, 0], title: 'Heap', body: 'Object storage' });
+        selectRef(refs, 'jvm');
+        addScriptNode(refs, 'stack', { at: [340, 40, 0], title: 'JVM Stack', body: 'Per-thread' });
+        selectRef(refs, 'jvm');
+        addScriptNode(refs, 'meta', { at: [0, 0, 0], title: 'Metaspace', body: 'Class metadata' });
+      },
+    },
+    {
+      checkpoint: 'heap-children-just-added',
+      fn: refs => {
+        bus.emit('cmd-layer', { z: -300 });
+        selectRef(refs, 'heap');
+        addScriptNode(refs, 'eden', { at: [-420, 220, -300], title: 'Eden', body: 'New objects' });
+        selectRef(refs, 'heap');
+        addScriptNode(refs, 'surv', { at: [-190, 220, -300], title: 'Survivor', body: 'S0 / S1' });
+        selectRef(refs, 'heap');
+        addScriptNode(refs, 'old', { at: [40, 220, -300], title: 'Old Gen', body: 'Long-lived' });
+      },
+    },
+    {
+      checkpoint: 'stack-children-just-added',
+      fn: refs => {
+        selectRef(refs, 'stack');
+        addScriptNode(refs, 't1', { at: [260, 220, -300], title: 'Thread-1', body: 'Local vars' });
+        selectRef(refs, 'stack');
+        addScriptNode(refs, 't2', { at: [500, 220, -300], title: 'Thread-2', body: 'Local vars' });
+      },
+    },
+    {
+      checkpoint: 'deep-object-just-added',
+      fn: refs => {
+        bus.emit('cmd-layer', { z: -600 });
+        selectRef(refs, 'eden');
+        addScriptNode(refs, 'obj', { at: [-520, 420, -600], title: 'Object', body: 'In Eden' });
+      },
+    },
+    {
+      checkpoint: 'deep-ref-just-added',
+      fn: refs => {
+        selectRef(refs, 't1');
+        bus.emit('cmd-connect-start');
+        addScriptNode(refs, 'ref1', { at: [340, 420, -600], title: 'ref', body: 'Local variable', connectFrom: refs.t1 });
+      },
+    },
+    {
+      checkpoint: 'heap-collapsed',
+      fn: refs => {
+        selectRef(refs, 'heap');
+        bus.emit('cmd-collapse');
+      },
+    },
+    {
+      checkpoint: 'heap-expanded-again',
+      fn: refs => {
+        selectRef(refs, 'heap');
+        bus.emit('cmd-collapse');
+      },
+    },
+  ],
+};
+
+function visibleNodeCount() {
+  return world.q(['Node']).filter(isVisible).length;
+}
+
+function runScreenshotScript(name, checkpoint) {
+  const script = screenshotScripts[name];
+  if (!script) throw new Error(`Unknown screenshot script: ${name}`);
+  resetGraphState(defaultScreenshotCamera);
+  const refs = {};
+  let reached = null;
+
+  for (const step of script) {
+    step.fn(refs);
+    reached = step.checkpoint;
+    if (!checkpoint || reached === checkpoint) break;
+  }
+
+  if (checkpoint && reached !== checkpoint) throw new Error(`Unknown checkpoint "${checkpoint}" for screenshot script "${name}"`);
+  render();
+  document.body.dataset.fixture = '';
+  document.body.dataset.script = name;
+  document.body.dataset.checkpoint = reached || '';
+  document.body.dataset.visibleNodeCount = String(visibleNodeCount());
+  document.body.dataset.fixtureReady = '1';
+  return { script: name, checkpoint: reached, refs: { ...refs }, visibleNodeCount: visibleNodeCount() };
+}
+
 window.__ecsGraphTest = {
   buildScreenshotFixture,
+  runScreenshotScript,
   resetGraphState,
   worldToScreen,
   renderNow: render,
   fixtures: Object.keys(screenshotFixtures),
+  scripts: Object.fromEntries(Object.entries(screenshotScripts).map(([name, steps]) => [name, steps.map(step => step.checkpoint)])),
 };
 
 const screenshotFixture = queryParams.get('fixture');
+const screenshotScript = queryParams.get('script');
 if (screenshotFixture) buildScreenshotFixture(screenshotFixture);
+else if (screenshotScript) runScreenshotScript(screenshotScript, queryParams.get('checkpoint'));
 else buildJMM();
 scheduleRender();
 </script>

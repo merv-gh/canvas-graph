@@ -153,8 +153,13 @@ The starter baselines are URL fixtures:
 
 | URL | Purpose |
 |-----|---------|
+| `/?screenshot=1` | The default seeded Java Memory Model graph |
 | `/?screenshot=1&fixture=separated` | Two hardcoded nodes that should not overlap |
 | `/?screenshot=1&fixture=overlapping` | Two hardcoded nodes that prove the detector and red-square annotation work |
+
+Scripted screenshot states use `?screenshot=1&script=demoMemory&checkpoint=...`. The first script mirrors the demo flow without timers so tests can jump straight to:
+
+`root-added`, `top-level-expanded`, `heap-children-just-added`, `stack-children-just-added`, `deep-object-just-added`, `deep-ref-just-added`, `heap-collapsed`, and `heap-expanded-again`.
 
 When a no-overlap expectation finds overlap-color pixels, the test writes an annotated PNG with red square markers into Playwright's test output.
 

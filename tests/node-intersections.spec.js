@@ -21,6 +21,29 @@ async function openScreenshotFixture(page, name, nodeCount) {
   }));
 }
 
+async function openScreenshotSeed(page) {
+  await page.goto('/?screenshot=1');
+  await page.waitForFunction(() => document.querySelectorAll('.node').length === 12);
+  await page.evaluate(() => new Promise(resolve => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  }));
+}
+
+async function openScreenshotScript(page, script, checkpoint) {
+  await page.goto(`/?screenshot=1&script=${script}&checkpoint=${checkpoint}`);
+  await page.waitForFunction(
+    ([expectedScript, expectedCheckpoint]) =>
+      document.body.dataset.fixtureReady === '1' &&
+      document.body.dataset.script === expectedScript &&
+      document.body.dataset.checkpoint === expectedCheckpoint &&
+      Number(document.body.dataset.visibleNodeCount || 0) > 0,
+    [script, checkpoint],
+  );
+  await page.evaluate(() => new Promise(resolve => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  }));
+}
+
 function isOverlapPixel(png, x, y) {
   const i = (y * png.width + x) * 4;
   const [r, g, b, a] = png.data.slice(i, i + 4);
@@ -156,4 +179,29 @@ test.describe('screenshot node intersection guard', () => {
     expect(result.annotationPath).toBeTruthy();
     expect(fs.existsSync(result.annotationPath)).toBe(true);
   });
+
+  test('default seeded graph has no node intersections', async ({ page }, testInfo) => {
+    await openScreenshotSeed(page);
+    await expectNoNodeIntersections(page, testInfo, 'default-seed');
+  });
+});
+
+const DEMO_MEMORY_CHECKPOINTS = [
+  'root-added',
+  'top-level-expanded',
+  'heap-children-just-added',
+  'stack-children-just-added',
+  'deep-object-just-added',
+  'deep-ref-just-added',
+  'heap-collapsed',
+  'heap-expanded-again',
+];
+
+test.describe('scripted demo states', () => {
+  for (const checkpoint of DEMO_MEMORY_CHECKPOINTS) {
+    test(`demoMemory ${checkpoint} has no node intersections`, async ({ page }, testInfo) => {
+      await openScreenshotScript(page, 'demoMemory', checkpoint);
+      await expectNoNodeIntersections(page, testInfo, `demoMemory-${checkpoint}`);
+    });
+  }
 });
