@@ -10,6 +10,13 @@
     if (params.has('screenshot') || params.get('mode') === 'screenshot') {
       document.documentElement.classList.add('screenshot-mode');
     }
+    const themes = new Set(['default', 'grayscale', 'blueprint']);
+    let storedTheme = 'default';
+    try { storedTheme = localStorage.getItem('graphTheme') || 'default'; } catch (_) {}
+    const theme = themes.has(params.get('theme')) ? params.get('theme') : storedTheme;
+    if (theme && theme !== 'default' && themes.has(theme)) {
+      document.documentElement.dataset.theme = theme;
+    }
   })();
 </script>
 <style>
@@ -28,10 +35,97 @@
     --grid: #2c3050;
     --grid-2: #353a5e;
     --shadow: 0 10px 32px rgba(0,0,0,0.45);
+    --node-title: #fff;
+    --container-title-hover: #fff;
+    --selected-ring: rgba(91,210,255,0.25);
+    --connecting-ring: rgba(255,184,77,0.25);
+    --dock-active-bg: rgba(255,184,77,0.18);
+    --dock-bg: rgba(28,32,50,0.85);
+    --modal-bg: rgba(28,32,50,0.97);
+    --toast-bg: rgba(28,32,50,0.92);
+    --edge-label-bg: rgba(28,32,50,0.96);
+    --canvas-grid: #252840;
+    --container-fill: rgba(43,50,86,0.55);
+    --container-stroke: rgba(111,134,196,0.4);
+    --edge: #5bd2ff;
+    --edge-selected: #ffb84d;
+    --edge-label: #8590b5;
+    --ghost: #ffb84d;
+    --ui-font: system-ui, -apple-system, sans-serif;
+  }
+  html[data-theme="grayscale"] {
+    --bg: #f4f4f4;
+    --bg-2: #e6e6e6;
+    --panel: rgba(250,250,250,0.94);
+    --panel-2: rgba(235,235,235,0.96);
+    --border: #bdbdbd;
+    --border-2: #747474;
+    --text: #181818;
+    --text-dim: #4b4b4b;
+    --text-mute: #777;
+    --accent: #1f1f1f;
+    --accent-2: #686868;
+    --grid: #d8d8d8;
+    --grid-2: #c9c9c9;
+    --shadow: 0 10px 30px rgba(0,0,0,0.16);
+    --node-title: #111;
+    --container-title-hover: #000;
+    --selected-ring: rgba(0,0,0,0.18);
+    --connecting-ring: rgba(70,70,70,0.22);
+    --dock-active-bg: rgba(0,0,0,0.08);
+    --dock-bg: rgba(250,250,250,0.92);
+    --modal-bg: rgba(252,252,252,0.98);
+    --toast-bg: rgba(250,250,250,0.94);
+    --edge-label-bg: rgba(252,252,252,0.98);
+    --canvas-grid: #dedede;
+    --container-fill: rgba(214,214,214,0.48);
+    --container-stroke: rgba(92,92,92,0.45);
+    --edge: #4d4d4d;
+    --edge-selected: #111;
+    --edge-label: #555;
+    --ghost: #666;
+  }
+  html[data-theme="blueprint"] {
+    --bg: #061c2f;
+    --bg-2: #082842;
+    --panel: rgba(7,37,61,0.9);
+    --panel-2: rgba(10,50,82,0.94);
+    --border: #1d638a;
+    --border-2: #49b9dc;
+    --text: #e1f8ff;
+    --text-dim: #9bdcf0;
+    --text-mute: #64a9c4;
+    --accent: #7be7ff;
+    --accent-2: #ffd166;
+    --grid: #0d3a5d;
+    --grid-2: #14527d;
+    --shadow: 0 12px 34px rgba(0,11,24,0.58);
+    --node-title: #f4fdff;
+    --container-title-hover: #fff;
+    --selected-ring: rgba(123,231,255,0.28);
+    --connecting-ring: rgba(255,209,102,0.28);
+    --dock-active-bg: rgba(255,209,102,0.16);
+    --dock-bg: rgba(5,30,50,0.84);
+    --modal-bg: rgba(5,29,48,0.97);
+    --toast-bg: rgba(5,30,50,0.94);
+    --edge-label-bg: rgba(5,29,48,0.97);
+    --canvas-grid: #134361;
+    --container-fill: rgba(12,70,110,0.38);
+    --container-stroke: rgba(123,231,255,0.5);
+    --edge: #9af0ff;
+    --edge-selected: #ffd166;
+    --edge-label: #94d7ea;
+    --ghost: #ffd166;
   }
   * { box-sizing: border-box; }
   body { margin:0; overflow:hidden; background:var(--bg); color:var(--text);
-         font-family: system-ui, -apple-system, sans-serif; }
+         font-family: var(--ui-font); }
+  html[data-theme="blueprint"] body {
+    background-image:
+      linear-gradient(rgba(123,231,255,0.055) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(123,231,255,0.055) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
   canvas { position:fixed; inset:0; z-index:0; }
 
   /* HTML Nodes */
@@ -43,8 +137,8 @@
           transition: border-color .15s, box-shadow .2s, opacity .2s, background .15s; }
   .node.smooth { transition: border-color .15s, box-shadow .2s, opacity .2s, background .15s, transform .35s cubic-bezier(.2,.8,.2,1); }
   .node:hover { border-color:var(--border-2); background:var(--panel-2); }
-  .node.selected { border-color:var(--accent); box-shadow:0 0 0 2px rgba(91,210,255,0.25), var(--shadow); }
-  .node.connecting { border-color:var(--accent-2); box-shadow:0 0 0 2px rgba(255,184,77,0.25), var(--shadow); }
+  .node.selected { border-color:var(--accent); box-shadow:0 0 0 2px var(--selected-ring), var(--shadow); }
+  .node.connecting { border-color:var(--accent-2); box-shadow:0 0 0 2px var(--connecting-ring), var(--shadow); }
   .node.collapsed .body { display:none; }
   .node.collapsed { background: var(--panel-2); }
   .node.collapsed .title::after { content:' ▸'; color:var(--accent-2); margin-left:4px; }
@@ -57,14 +151,14 @@
   .node.is-container .title { font-size:13px; letter-spacing:.3px; margin-bottom:0;
     color:var(--accent); font-weight:600; text-shadow:0 1px 3px rgba(0,0,0,0.7); }
   .node.is-container.has-children .title::before { content:'▾ '; color:var(--accent); opacity:.65; }
-  .node.is-container:hover .title { color:#fff; }
-  .node.is-container.selected { background:rgba(91,210,255,0.10); border-radius:6px; }
+  .node.is-container:hover .title { color:var(--container-title-hover); }
+  .node.is-container.selected { background:var(--selected-ring); border-radius:6px; }
   /* Inline edge-label editor */
   .edge-label-edit { position:fixed; transform:translate(-50%,-50%); z-index:80;
-    background:rgba(28,32,50,0.96); border:1px solid var(--accent); color:var(--text);
+    background:var(--edge-label-bg); border:1px solid var(--accent); color:var(--text);
     padding:3px 9px; border-radius:5px; font:600 12px ui-monospace,monospace;
     outline:none; min-width:90px; text-align:center; }
-  .node .title { font-weight:600; font-size:14px; color:#fff; margin-bottom:3px; letter-spacing:.1px; }
+  .node .title { font-weight:600; font-size:14px; color:var(--node-title); margin-bottom:3px; letter-spacing:.1px; }
   .node .body { font-size:12.5px; color:var(--text-dim); line-height:1.45; }
   .node input { background:transparent; border:none; box-shadow:none; color:inherit; font:inherit;
                 width:100%; outline:none; padding:0; margin:0; -webkit-appearance:none; appearance:none;
@@ -80,7 +174,7 @@
 
   /* Modal (palette + editor) */
   .modal { position:fixed; top:14%; left:50%; transform:translateX(-50%);
-    width:480px; max-height:68vh; background:rgba(28,32,50,0.97); border:1px solid var(--border);
+    width:480px; max-height:68vh; background:var(--modal-bg); border:1px solid var(--border);
     border-radius:14px; z-index:100; display:flex; flex-direction:column; overflow:hidden;
     box-shadow:0 24px 80px rgba(0,0,0,0.75); backdrop-filter:blur(16px); pointer-events:auto; }
   .modal.hidden { display:none; }
@@ -91,7 +185,7 @@
   .modal .list { overflow-y:auto; padding:6px; }
   .modal .item { display:flex; justify-content:space-between; align-items:center;
     padding:9px 11px; border-radius:6px; cursor:pointer; color:var(--text-dim); font-size:13px; }
-  .modal .item:hover, .modal .item.sel { background:rgba(91,210,255,0.13); color:var(--text); }
+  .modal .item:hover, .modal .item.sel { background:var(--selected-ring); color:var(--text); }
   .modal .item .shortcut { color:var(--text-mute); font-family: ui-monospace, monospace; font-size:11px; }
   .modal .actions { display:flex; gap:8px; padding:10px 14px; border-top:1px solid var(--border); }
   .modal button { background:var(--panel); color:var(--text); border:1px solid var(--border);
@@ -101,12 +195,12 @@
   /* Editor rows */
   .modal .row { display:grid; grid-template-columns: 30px 1fr 80px 1fr 24px; gap:6px; align-items:center;
     padding:5px 8px; border-radius:6px; cursor:default; }
-  .modal .row.sel { background:rgba(91,210,255,0.10); }
+  .modal .row.sel { background:var(--selected-ring); }
   .modal .row .num { color:var(--text-mute); font-family:monospace; font-size:10.5px; text-align:right; }
   .modal .row .ed { background:transparent; color:var(--text); border:1px solid transparent; border-radius:4px;
     padding:4px 6px; font:inherit; font-size:12.5px; outline:none; width:100%; }
   .modal .row .ed:hover { border-color:var(--border); }
-  .modal .row .ed:focus { border-color:var(--accent); background:rgba(0,0,0,0.18); }
+  .modal .row .ed:focus { border-color:var(--accent); background:var(--dock-active-bg); }
   .modal .row .ed.mono { font-family:ui-monospace,monospace; font-size:11.5px; color:var(--text-dim); }
   .modal .row .del { background:transparent; border:none; color:var(--text-mute); cursor:pointer; padding:2px 6px; font-size:14px; line-height:1; }
   .modal .row .del:hover { color:#ff7a7a; }
@@ -114,7 +208,7 @@
   /* Toast */
   #toast { position:fixed; top:12px; right:12px; z-index:50; display:flex; flex-direction:column; gap:5px;
     pointer-events:none; max-width:340px; }
-  .toast-item { background:rgba(28,32,50,0.92); border:1px solid var(--border); border-radius:6px;
+  .toast-item { background:var(--toast-bg); border:1px solid var(--border); border-radius:6px;
     padding:5px 9px; font-size:11.5px; font-family: ui-monospace, SFMono-Regular, monospace;
     color:var(--text-dim); animation:slideIn .18s ease; line-height:1.4; }
   .toast-item .t { color:var(--text-mute); margin-right:6px; }
@@ -131,12 +225,12 @@
 
   /* Tool dock (right-side controls) */
   #dock { position:fixed; bottom:12px; right:12px; z-index:41; display:flex; gap:8px; align-items:center;
-    pointer-events:auto; background:rgba(28,32,50,0.85); border:1px solid var(--border); border-radius:10px;
+    pointer-events:auto; background:var(--dock-bg); border:1px solid var(--border); border-radius:10px;
     padding:8px 12px; backdrop-filter:blur(8px); font-size:12px; color:var(--text-dim); }
   #dock button { background:var(--panel); color:var(--text); border:1px solid var(--border);
     padding:6px 10px; border-radius:6px; cursor:pointer; font:inherit; font-size:12px; }
   #dock button:hover { background:var(--panel-2); border-color:var(--border-2); }
-  #dock button.active { background:rgba(255,184,77,0.18); border-color:var(--accent-2); color:var(--accent-2); }
+  #dock button.active { background:var(--dock-active-bg); border-color:var(--accent-2); color:var(--accent-2); }
   #dock input[type=range] { accent-color: var(--accent); width:90px; }
   #dock label { color:var(--text-mute); }
 
@@ -207,6 +301,9 @@
   <span id="speed-val">1.0×</span>
   <button id="btn-edit-palette">⚙ Palette</button>
   <button id="btn-toast">Toast: off</button>
+  <button id="btn-theme">Theme: Default</button>
+  <button id="btn-case-record">Rec: off</button>
+  <button id="btn-case-export">Export Case</button>
   <button id="btn-reset">↺ Reset</button>
 </div>
 
@@ -235,8 +332,14 @@ const Context = {
   lastEvents: [],
   demoSpeed: 1,
   layoutMode: 'radial', // radial | vertical | horizontal | grid
+  theme: document.documentElement.dataset.theme || 'default',
 };
 const LAYOUTS = ['radial','vertical','horizontal','grid'];
+const THEMES = [
+  { id: 'default', label: 'Default' },
+  { id: 'grayscale', label: 'Grayscale' },
+  { id: 'blueprint', label: 'Blueprint' },
+];
 
 /* ============================================================
    3. TOAST (coalesces streams, suppresses noise)
@@ -270,6 +373,7 @@ class EventBus {
   off(e, cb) { if (this.l[e]) this.l[e] = this.l[e].filter(f => f !== cb); }
   emit(e, d) {
     (this.l[e] || []).forEach(cb => cb(d || {}));
+    recordCaseEvent(e, d);
     logToast(e, d);
     scheduleRender();
   }
@@ -530,6 +634,9 @@ let PALETTE_COMMANDS = [
   { label: 'Deselect', shortcut: 'Esc', emit: 'cmd-deselect', context: ['node','edge'] },
   { label: 'History Back', shortcut: 'Alt+Z', emit: 'cmd-history-back', context: ['always'] },
   { label: 'Run Demo', shortcut: '', emit: 'cmd-demo-start', context: ['always'] },
+  { label: 'Cycle Theme', shortcut: '', emit: 'cmd-theme-cycle', context: ['always'] },
+  { label: 'Toggle Case Recording', shortcut: '', emit: 'cmd-case-record-toggle', context: ['always'] },
+  { label: 'Export Case to Clipboard', shortcut: '', emit: 'cmd-case-export', context: ['always'] },
   { label: 'Reset Canvas', shortcut: '', emit: 'cmd-reset', context: ['always'] },
   { label: 'Edit Palette…', shortcut: '', emit: 'cmd-edit-palette', context: ['always'] },
 ];
@@ -1069,6 +1176,8 @@ function deleteTree(id) {
    ============================================================ */
 function render() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const css = getComputedStyle(document.documentElement);
+  const themeColor = (name, fallback) => css.getPropertyValue(name).trim() || fallback;
 
   // Grid (two-tone for depth)
   const c = Context.camera;
@@ -1076,7 +1185,7 @@ function render() {
   const gs = 60 * c.zoom;
   const ox = (canvas.width / 2 - c.x * c.zoom) % gs;
   const oy = (canvas.height / 2 - c.y * c.zoom) % gs;
-  ctx.strokeStyle = '#252840';
+  ctx.strokeStyle = themeColor('--canvas-grid', '#252840');
   ctx.beginPath();
   for (let x = ox; x < canvas.width; x += gs) { ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); }
   for (let y = oy; y < canvas.height; y += gs) { ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); }
@@ -1124,19 +1233,52 @@ function render() {
   const bboxByParent = new Map();
   for (const pid of parents) bboxByParent.set(pid, descendantsBounds(pid));
 
+  const headerPositions = new Map();
+  const placedHeaders = [];
+  const rectsTooClose = (a, b, gap = 8) =>
+    a.left < b.right + gap && a.right + gap > b.left &&
+    a.top < b.bottom + gap && a.bottom + gap > b.top;
+
+  for (const pid of parents) {
+    const b = bboxByParent.get(pid);
+    if (!isFinite(b.minX)) continue;
+    const n = world.get(pid, 'Node');
+    const headerW = n.domEl.offsetWidth || 180;
+    const headerH = n.domEl.offsetHeight || HEADER_H;
+    const cx = (b.minX + b.maxX) / 2;
+    let cy = b.minY - 22 - headerH/2;
+    let rect = {
+      left: cx - headerW/2,
+      right: cx + headerW/2,
+      top: cy - headerH/2,
+      bottom: cy + headerH/2,
+    };
+
+    while (placedHeaders.some(placed => rectsTooClose(rect, placed))) {
+      cy -= headerH + 8;
+      rect = {
+        left: cx - headerW/2,
+        right: cx + headerW/2,
+        top: cy - headerH/2,
+        bottom: cy + headerH/2,
+      };
+    }
+
+    headerPositions.set(pid, { cx, cy });
+    placedHeaders.push(rect);
+  }
+
   for (const pid of parents) {
     const b = bboxByParent.get(pid);
     if (!isFinite(b.minX)) continue;
     const pad = 22;
-    const d = depthOf(pid);
     const x = b.minX - pad;
     const y = b.minY - pad - HEADER_H;
     const w = (b.maxX - b.minX) + pad*2;
     const h = (b.maxY - b.minY) + pad*2 + HEADER_H;
     const r = 14;
-    const hue = 220 + (d * 18) % 60;
-    ctx.fillStyle = `hsla(${hue}, 35%, 22%, 0.55)`;
-    ctx.strokeStyle = `hsla(${hue}, 45%, 55%, 0.4)`;
+    ctx.fillStyle = themeColor('--container-fill', 'rgba(43,50,86,0.55)');
+    ctx.strokeStyle = themeColor('--container-stroke', 'rgba(111,134,196,0.4)');
     ctx.lineWidth = 1.2;
     roundRect(x, y, w, h, r); ctx.fill(); ctx.stroke();
   }
@@ -1154,20 +1296,20 @@ function render() {
     if (!t1 || !t2) continue;
     const s1 = worldToScreen(t1.x, t1.y, t1.z), s2 = worldToScreen(t2.x, t2.y, t2.z);
     const sel = Context.selectedId === eid;
-    ctx.strokeStyle = sel ? '#ffb84d' : '#5bd2ff';
+    ctx.strokeStyle = sel ? themeColor('--edge-selected', '#ffb84d') : themeColor('--edge', '#5bd2ff');
     ctx.lineWidth = sel ? 3 : 2;
     ctx.globalAlpha = Math.min(1, Math.min(s1.scale, s2.scale));
     ctx.beginPath(); ctx.moveTo(s1.x, s1.y); ctx.lineTo(s2.x, s2.y); ctx.stroke();
     const ang = Math.atan2(s2.y - s1.y, s2.x - s1.x);
     const ah = 9 * Math.min(s1.scale, s2.scale);
-    ctx.fillStyle = sel ? '#ffb84d' : '#5bd2ff';
+    ctx.fillStyle = sel ? themeColor('--edge-selected', '#ffb84d') : themeColor('--edge', '#5bd2ff');
     ctx.beginPath();
     ctx.moveTo(s2.x, s2.y);
     ctx.lineTo(s2.x - ah * Math.cos(ang - 0.4), s2.y - ah * Math.sin(ang - 0.4));
     ctx.lineTo(s2.x - ah * Math.cos(ang + 0.4), s2.y - ah * Math.sin(ang + 0.4));
     ctx.fill();
     if (ed.label) {
-      ctx.fillStyle = '#8590b5'; ctx.font = '12px sans-serif';
+      ctx.fillStyle = themeColor('--edge-label', '#8590b5'); ctx.font = '12px sans-serif';
       ctx.fillText(ed.label, (s1.x + s2.x) / 2, (s1.y + s2.y) / 2 - 6);
     }
     ctx.globalAlpha = 1;
@@ -1179,8 +1321,8 @@ function render() {
     if (t) {
       const s = worldToScreen(t.x, t.y, t.z);
       ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(Context.mouse.x, Context.mouse.y);
-      ctx.strokeStyle = '#ffb84d'; ctx.setLineDash([6, 5]); ctx.lineWidth = 2; ctx.stroke(); ctx.setLineDash([]);
-      ctx.fillStyle = '#ffb84d'; ctx.font = '12px sans-serif';
+      ctx.strokeStyle = themeColor('--ghost', '#ffb84d'); ctx.setLineDash([6, 5]); ctx.lineWidth = 2; ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = themeColor('--ghost', '#ffb84d'); ctx.font = '12px sans-serif';
       ctx.fillText('connect (click empty to create)', (s.x + Context.mouse.x) / 2 + 10, (s.y + Context.mouse.y) / 2 - 8);
     }
   }
@@ -1195,13 +1337,14 @@ function render() {
     const b = bboxByParent.get(eid);
     const isContainer = !!(b && isFinite(b.minX));
     if (isContainer) {
-      const cx = (b.minX + b.maxX) / 2;
-      const cy = b.minY - 22 - HEADER_H/2;
+      const header = headerPositions.get(eid);
+      const cx = header?.cx ?? (b.minX + b.maxX) / 2;
+      const cy = header?.cy ?? b.minY - 22 - HEADER_H/2;
       n.domEl.style.transform = `translate(${cx}px,${cy}px) translate(-50%,-50%)`;
       n.domEl.style.opacity = 1;
       n.domEl.style.zIndex = Math.floor(t.z + 1000) + 2;
     } else {
-      n.domEl.style.transform = `translate(${s.x}px,${s.y}px) scale(${s.scale}) translate(-50%,-50%)`;
+      n.domEl.style.transform = `translate(${s.x}px,${s.y}px) translate(-50%,-50%) scale(${s.scale})`;
       n.domEl.style.opacity = Math.max(0.4, Math.min(1, s.scale));
       n.domEl.style.zIndex = Math.floor(t.z + 1000);
     }
@@ -1310,9 +1453,40 @@ function runDemo() {
 /* ============================================================
    14. DOCK WIRING
    ============================================================ */
+function themeById(id) {
+  return THEMES.find(t => t.id === id) || THEMES[0];
+}
+function refreshThemeBtn() {
+  const btn = document.getElementById('btn-theme');
+  if (!btn) return;
+  const theme = themeById(Context.theme);
+  btn.textContent = `Theme: ${theme.label}`;
+  btn.classList.toggle('active', theme.id !== 'default');
+}
+function setTheme(id, { persist = true } = {}) {
+  const theme = themeById(id);
+  Context.theme = theme.id;
+  if (theme.id === 'default') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.dataset.theme = theme.id;
+  if (persist) {
+    try { localStorage.setItem('graphTheme', theme.id); } catch (_) {}
+  }
+  refreshThemeBtn();
+  scheduleRender();
+}
+function nextThemeId() {
+  const i = THEMES.findIndex(t => t.id === Context.theme);
+  return THEMES[(i + 1) % THEMES.length].id;
+}
+bus.on('cmd-theme-cycle', () => setTheme(nextThemeId()));
+
 document.getElementById('btn-demo').addEventListener('click', () => bus.emit('cmd-demo-start'));
 document.getElementById('btn-stop').addEventListener('click', () => bus.emit('cmd-demo-stop'));
 document.getElementById('btn-reset').addEventListener('click', () => bus.emit('cmd-reset'));
+document.getElementById('btn-theme').addEventListener('click', () => bus.emit('cmd-theme-cycle'));
+document.getElementById('btn-case-record').addEventListener('click', () => bus.emit('cmd-case-record-toggle'));
+document.getElementById('btn-case-export').addEventListener('click', () => bus.emit('cmd-case-export'));
+setTheme(Context.theme, { persist: false });
 const speedEl = document.getElementById('speed');
 const speedVal = document.getElementById('speed-val');
 speedEl.addEventListener('input', () => {
@@ -1336,7 +1510,209 @@ btnToast.addEventListener('click', () => {
 refreshToastBtn();
 
 /* ============================================================
-   15. SEED: Java Memory Model
+   15. CASE RECORDER / EXPORT
+   ============================================================ */
+const CASE_RECORD_SKIP = new Set([
+  'compAdded', 'entityRemoved', 'worldCleared',
+  'cmd-case-record-toggle', 'cmd-case-export',
+  'case-record-started', 'case-record-stopped', 'case-exported',
+]);
+
+function caseTimestampName() {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  return `case-${stamp}`;
+}
+function stablePayload(data) {
+  try { return JSON.parse(JSON.stringify(data || {})); }
+  catch (_) { return {}; }
+}
+function snapshotGraph(label = 'current') {
+  const nodeIds = world.q(['Transform','Node']);
+  const refById = new Map(nodeIds.map((id, index) => [id, `n${index + 1}`]));
+  const nodes = nodeIds.map(id => {
+    const t = world.get(id, 'Transform');
+    const n = world.get(id, 'Node');
+    return {
+      ref: refById.get(id),
+      title: n.title,
+      body: n.body,
+      at: [t.x, t.y, t.z],
+      parent: n.parentId ? refById.get(n.parentId) : null,
+      collapsed: !!n.collapsed,
+    };
+  });
+  const edges = world.q(['Edge']).map(id => {
+    const ed = world.get(id, 'Edge');
+    return {
+      from: refById.get(ed.from),
+      to: refById.get(ed.to),
+      label: ed.label || '',
+    };
+  }).filter(edge => edge.from && edge.to);
+
+  return {
+    label,
+    camera: { ...Context.camera },
+    layoutMode: Context.layoutMode,
+    selected: Context.selectedId ? refById.get(Context.selectedId) || null : null,
+    nodes,
+    edges,
+  };
+}
+function restoreGraphSnapshot(snapshot) {
+  resetGraphState(snapshot.camera || defaultScreenshotCamera);
+  Context.layoutMode = snapshot.layoutMode || 'radial';
+  const idByRef = new Map();
+
+  for (const node of snapshot.nodes || []) {
+    const parentId = node.parent ? idByRef.get(node.parent) || null : null;
+    const at = node.at || [0, 0, 0];
+    const id = createNode(at[0], at[1], at[2], node.title || 'Node', node.body || '', parentId);
+    idByRef.set(node.ref, id);
+    const n = world.get(id, 'Node');
+    if (n) n.collapsed = !!node.collapsed;
+  }
+
+  for (const edge of snapshot.edges || []) {
+    const from = idByRef.get(edge.from);
+    const to = idByRef.get(edge.to);
+    if (from && to) createEdge(from, to, edge.label || '');
+  }
+
+  Context.selectedId = snapshot.selected ? idByRef.get(snapshot.selected) || null : null;
+  render();
+  return idByRef;
+}
+function caseCheckpoints(caseData) {
+  if (Array.isArray(caseData.checkpoints) && caseData.checkpoints.length) return caseData.checkpoints;
+  if (caseData.snapshot) return [{ label: caseData.name || 'snapshot', snapshot: caseData.snapshot }];
+  return [{ label: caseData.name || 'snapshot', snapshot: caseData }];
+}
+function loadCaseCheckpoint(caseData, checkpoint = 0) {
+  const checkpoints = caseCheckpoints(caseData);
+  const target = typeof checkpoint === 'string' && checkpoint
+    ? checkpoints.find(cp => cp.label === checkpoint) || checkpoints[Number(checkpoint)]
+    : checkpoints[Number(checkpoint) || 0];
+  if (!target?.snapshot) throw new Error(`Missing case checkpoint: ${checkpoint}`);
+  restoreGraphSnapshot(target.snapshot);
+  document.body.dataset.fixture = '';
+  document.body.dataset.script = '';
+  document.body.dataset.case = caseData.name || 'case';
+  document.body.dataset.checkpoint = target.label || '';
+  document.body.dataset.visibleNodeCount = String(visibleNodeCount());
+  document.body.dataset.fixtureReady = '1';
+  return { caseName: caseData.name || 'case', checkpoint: target.label || '', checkpointCount: checkpoints.length };
+}
+async function loadCaseFromUrl(caseUrl, checkpoint = 0) {
+  const url = caseUrl.startsWith('/') ? caseUrl : `/cases/${caseUrl}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Unable to load case ${url}: ${res.status}`);
+  const data = await res.json();
+  return loadCaseCheckpoint(data, checkpoint);
+}
+function newCaseEnvelope(name, checkpoints) {
+  return {
+    schemaVersion: 1,
+    name,
+    viewport: { width: innerWidth, height: innerHeight },
+    assertions: {
+      noPixelIntersections: true,
+      noDomIntersections: true,
+    },
+    checkpoints,
+  };
+}
+function currentCaseExport() {
+  const rec = window.__caseRecorder;
+  if (rec?.checkpoints?.length) {
+    return newCaseEnvelope(rec.name, rec.checkpoints.map(cp => ({ ...cp, payload: stablePayload(cp.payload) })));
+  }
+  return newCaseEnvelope(caseTimestampName(), [
+    { label: 'current', snapshot: snapshotGraph('current') },
+  ]);
+}
+function refreshCaseRecordBtn() {
+  const btn = document.getElementById('btn-case-record');
+  if (!btn) return;
+  const rec = window.__caseRecorder;
+  const count = rec?.checkpoints?.length || 0;
+  btn.textContent = rec?.active ? `Rec: ${count}` : 'Rec: off';
+  btn.classList.toggle('active', !!rec?.active);
+}
+function startCaseRecording() {
+  const name = caseTimestampName();
+  window.__caseRecorder = {
+    active: true,
+    name,
+    sequence: 0,
+    checkpoints: [
+      { label: '000 initial', snapshot: snapshotGraph('000 initial') },
+    ],
+  };
+  refreshCaseRecordBtn();
+}
+function stopCaseRecording() {
+  if (window.__caseRecorder) window.__caseRecorder.active = false;
+  refreshCaseRecordBtn();
+}
+function recordCaseEvent(name, data) {
+  const rec = window.__caseRecorder;
+  if (!rec?.active || CASE_RECORD_SKIP.has(name)) return;
+  rec.sequence += 1;
+  const label = `${String(rec.sequence).padStart(3, '0')} ${name}`;
+  rec.checkpoints.push({
+    label,
+    event: name,
+    payload: stablePayload(data),
+    snapshot: snapshotGraph(label),
+  });
+  refreshCaseRecordBtn();
+}
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  document.execCommand('copy');
+  ta.remove();
+}
+async function exportCaseToClipboard() {
+  const payload = currentCaseExport();
+  const text = JSON.stringify(payload, null, 2);
+  await copyTextToClipboard(text);
+  const btn = document.getElementById('btn-case-export');
+  if (btn) {
+    const original = btn.textContent;
+    btn.textContent = 'Copied';
+    setTimeout(() => { btn.textContent = original; }, 1200);
+  }
+  bus.emit('case-exported', { checkpoints: payload.checkpoints.length });
+}
+bus.on('cmd-case-record-toggle', () => {
+  if (window.__caseRecorder?.active) {
+    stopCaseRecording();
+    bus.emit('case-record-stopped');
+  } else {
+    startCaseRecording();
+    bus.emit('case-record-started');
+  }
+});
+bus.on('cmd-case-export', () => {
+  exportCaseToClipboard().catch(err => {
+    console.error(err);
+    alert('Could not copy case to clipboard. See console for details.');
+  });
+});
+
+/* ============================================================
+   16. SEED: Java Memory Model
    ============================================================ */
 const queryParams = new URLSearchParams(location.search);
 
@@ -1514,19 +1890,34 @@ function runScreenshotScript(name, checkpoint) {
 window.__ecsGraphTest = {
   buildScreenshotFixture,
   runScreenshotScript,
+  loadCaseCheckpoint,
+  loadCaseFromUrl,
   resetGraphState,
+  restoreGraphSnapshot,
+  snapshotGraph,
   worldToScreen,
   renderNow: render,
   fixtures: Object.keys(screenshotFixtures),
   scripts: Object.fromEntries(Object.entries(screenshotScripts).map(([name, steps]) => [name, steps.map(step => step.checkpoint)])),
 };
 
-const screenshotFixture = queryParams.get('fixture');
-const screenshotScript = queryParams.get('script');
-if (screenshotFixture) buildScreenshotFixture(screenshotFixture);
-else if (screenshotScript) runScreenshotScript(screenshotScript, queryParams.get('checkpoint'));
-else buildJMM();
-scheduleRender();
+async function bootGraph() {
+  const screenshotFixture = queryParams.get('fixture');
+  const screenshotScript = queryParams.get('script');
+  const screenshotCase = queryParams.get('case');
+  const checkpoint = queryParams.get('checkpoint');
+  if (screenshotCase) await loadCaseFromUrl(screenshotCase, checkpoint || 0);
+  else if (screenshotFixture) buildScreenshotFixture(screenshotFixture);
+  else if (screenshotScript) runScreenshotScript(screenshotScript, checkpoint);
+  else buildJMM();
+  scheduleRender();
+}
+bootGraph().catch(err => {
+  console.error(err);
+  document.body.dataset.fixtureReady = 'error';
+  buildJMM();
+  scheduleRender();
+});
 </script>
 </body>
 </html>

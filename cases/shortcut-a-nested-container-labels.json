@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "name": "shortcut-a-nested-container-labels",
+  "description": "Repeated A shortcuts create a single-child chain; ancestor container labels must not merge.",
+  "viewport": {
+    "width": 800,
+    "height": 600
+  },
+  "assertions": {
+    "noPixelIntersections": true,
+    "noDomIntersections": true,
+    "minDomGap": 6
+  },
+  "checkpoints": [
+    {
+      "label": "after-four-a-shortcuts",
+      "snapshot": {
+        "label": "after-four-a-shortcuts",
+        "camera": {
+          "x": 0,
+          "y": -600,
+          "zoom": 1,
+          "layerZ": 0
+        },
+        "layoutMode": "radial",
+        "selected": "n4",
+        "nodes": [
+          {
+            "ref": "n1",
+            "title": "Root",
+            "body": "",
+            "at": [0, 0, 0],
+            "parent": null,
+            "collapsed": false
+          },
+          {
+            "ref": "n2",
+            "title": "A",
+            "body": "",
+            "at": [0, -200, 0],
+            "parent": "n1",
+            "collapsed": false
+          },
+          {
+            "ref": "n3",
+            "title": "A",
+            "body": "",
+            "at": [0, -400, 0],
+            "parent": "n2",
+            "collapsed": false
+          },
+          {
+            "ref": "n4",
+            "title": "A",
+            "body": "",
+            "at": [0, -600, 0],
+            "parent": "n3",
+            "collapsed": false
+          }
+        ],
+        "edges": []
+      }
+    }
+  ]
+}

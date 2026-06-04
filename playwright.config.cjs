@@ -4,7 +4,7 @@ module.exports = defineConfig({
   testDir: './tests',
   timeout: 30_000,
   fullyParallel: true,
-  reporter: [['list']],
+  reporter: [['./tests/screenshot-reporter.cjs']],
   use: {
     baseURL: 'http://127.0.0.1:5173',
     viewport: { width: 800, height: 600 },

@@ -6,6 +6,24 @@ const { PNG } = require('pngjs');
 const OVERLAP_RGB = { r: 64, g: 64, b: 64 };
 const OVERLAP_TOLERANCE = 8;
 const MIN_COMPONENT_PIXELS = 12;
+const CASES_DIR = path.join(__dirname, '..', 'cases');
+
+function loadCaseFiles() {
+  if (!fs.existsSync(CASES_DIR)) return [];
+  return fs.readdirSync(CASES_DIR)
+    .filter(file => file.endsWith('.json'))
+    .sort()
+    .map(file => {
+      const filePath = path.join(CASES_DIR, file);
+      return { file, filePath, data: JSON.parse(fs.readFileSync(filePath, 'utf8')) };
+    });
+}
+
+function caseCheckpoints(caseData) {
+  if (Array.isArray(caseData.checkpoints) && caseData.checkpoints.length) return caseData.checkpoints;
+  if (caseData.snapshot) return [{ label: caseData.name || 'snapshot', snapshot: caseData.snapshot }];
+  return [{ label: caseData.name || 'snapshot', snapshot: caseData }];
+}
 
 async function openScreenshotFixture(page, name, nodeCount) {
   await page.goto(`/?screenshot=1&fixture=${name}`);
@@ -44,13 +62,30 @@ async function openScreenshotScript(page, script, checkpoint) {
   }));
 }
 
+async function openScreenshotCase(page, caseData, checkpointIndex) {
+  const viewport = caseData.viewport || { width: 800, height: 600 };
+  await page.setViewportSize({ width: viewport.width || 800, height: viewport.height || 600 });
+  await page.goto('/?screenshot=1');
+  await page.waitForFunction(() => !!window.__ecsGraphTest);
+  await page.evaluate(
+    ({ data, index }) => window.__ecsGraphTest.loadCaseCheckpoint(data, index),
+    { data: caseData, index: checkpointIndex },
+  );
+  await page.waitForFunction(() => document.body.dataset.fixtureReady === '1');
+  await page.evaluate(() => new Promise(resolve => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  }));
+}
+
 function isOverlapPixel(png, x, y) {
   const i = (y * png.width + x) * 4;
   const [r, g, b, a] = png.data.slice(i, i + 4);
   if (a < 250) return false;
-  return Math.abs(r - OVERLAP_RGB.r) <= OVERLAP_TOLERANCE &&
-    Math.abs(g - OVERLAP_RGB.g) <= OVERLAP_TOLERANCE &&
-    Math.abs(b - OVERLAP_RGB.b) <= OVERLAP_TOLERANCE;
+  const isGray = Math.max(r, g, b) - Math.min(r, g, b) <= OVERLAP_TOLERANCE;
+  const isDarkerThanOneNode = r <= OVERLAP_RGB.r + OVERLAP_TOLERANCE &&
+    g <= OVERLAP_RGB.g + OVERLAP_TOLERANCE &&
+    b <= OVERLAP_RGB.b + OVERLAP_TOLERANCE;
+  return isGray && isDarkerThanOneNode;
 }
 
 function findOverlapBoxes(png) {
@@ -150,6 +185,8 @@ async function scanNodeIntersections(page, testInfo, label) {
 
 async function expectNoNodeIntersections(page, testInfo, label) {
   const result = await scanNodeIntersections(page, testInfo, label);
+  if (!result.boxes.length) return;
+
   const summary = result.boxes
     .map((box, index) => {
       const width = box.maxX - box.minX + 1;
@@ -158,11 +195,71 @@ async function expectNoNodeIntersections(page, testInfo, label) {
     })
     .join(', ');
 
-  expect(
-    result.boxes,
-    `Detected node intersections by overlap color rgb(${OVERLAP_RGB.r}, ${OVERLAP_RGB.g}, ${OVERLAP_RGB.b}). ` +
-      `Annotated screenshot: ${result.annotationPath || '(not written)'}. ${summary}`,
-  ).toEqual([]);
+  throw new Error(
+    `${label}: PIXEL_INTERSECTIONS count=${result.boxes.length} ` +
+      `color=rgb(${OVERLAP_RGB.r},${OVERLAP_RGB.g},${OVERLAP_RGB.b}) ` +
+      `annotated=${result.annotationPath || '(not written)'} boxes=${summary}`,
+  );
+}
+
+function boxesIntersect(a, b) {
+  return Math.max(a.left, b.left) < Math.min(a.right, b.right) &&
+    Math.max(a.top, b.top) < Math.min(a.bottom, b.bottom);
+}
+
+function boxGap(a, b) {
+  const dx = Math.max(a.left - b.right, b.left - a.right, 0);
+  const dy = Math.max(a.top - b.bottom, b.top - a.bottom, 0);
+  if (dx === 0 && dy === 0) return 0;
+  if (dx === 0) return dy;
+  if (dy === 0) return dx;
+  return Math.hypot(dx, dy);
+}
+
+async function visibleNodeBoxes(page) {
+  return page.evaluate(() => [...document.querySelectorAll('.node')]
+    .filter(el => getComputedStyle(el).display !== 'none')
+    .map(el => {
+      const r = el.getBoundingClientRect();
+      return {
+        eid: el.dataset.eid,
+        title: el.querySelector('.title')?.textContent || '',
+        classes: el.className,
+        left: r.left,
+        top: r.top,
+        right: r.right,
+        bottom: r.bottom,
+        width: r.width,
+        height: r.height,
+      };
+    })
+    .filter(box => box.width > 0 && box.height > 0));
+}
+
+async function expectDomNodeClearance(page, minGap, label) {
+  const boxes = await visibleNodeBoxes(page);
+  const failures = [];
+
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      const a = boxes[i], b = boxes[j];
+      const gap = boxGap(a, b);
+      if (boxesIntersect(a, b) || gap < minGap) {
+        failures.push({
+          a: `${a.title || a.eid} (${Math.round(a.left)},${Math.round(a.top)})`,
+          b: `${b.title || b.eid} (${Math.round(b.left)},${Math.round(b.top)})`,
+          gap: Math.round(gap * 10) / 10,
+        });
+      }
+    }
+  }
+
+  if (failures.length) {
+    const pairs = failures
+      .map((failure, index) => `#${index + 1} ${failure.a} vs ${failure.b} gap=${failure.gap}`)
+      .join('; ');
+    throw new Error(`${label}: DOM_CLEARANCE count=${failures.length} minGap=${minGap}px pairs=${pairs}`);
+  }
 }
 
 test.describe('screenshot node intersection guard', () => {
@@ -202,6 +299,34 @@ test.describe('scripted demo states', () => {
     test(`demoMemory ${checkpoint} has no node intersections`, async ({ page }, testInfo) => {
       await openScreenshotScript(page, 'demoMemory', checkpoint);
       await expectNoNodeIntersections(page, testInfo, `demoMemory-${checkpoint}`);
+    });
+  }
+});
+
+const CASE_FILES = loadCaseFiles();
+
+test.describe('saved regression cases', () => {
+  for (const caseFile of CASE_FILES) {
+    const checkpoints = caseCheckpoints(caseFile.data);
+    checkpoints.forEach((checkpoint, index) => {
+      const caseName = caseFile.data.name || caseFile.file;
+      const label = checkpoint.label || `checkpoint-${index}`;
+      test(`${caseName} ${label}`, async ({ page }, testInfo) => {
+        await openScreenshotCase(page, caseFile.data, index);
+        const assertions = {
+          noPixelIntersections: true,
+          noDomIntersections: true,
+          ...(caseFile.data.assertions || {}),
+          ...(checkpoint.assertions || {}),
+        };
+
+        if (assertions.noPixelIntersections) {
+          await expectNoNodeIntersections(page, testInfo, `${caseName}-${label}`);
+        }
+        if (assertions.noDomIntersections) {
+          await expectDomNodeClearance(page, assertions.minDomGap || 0, `${caseName}-${label}`);
+        }
+      });
     });
   }
 });

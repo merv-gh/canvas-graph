@@ -161,7 +161,25 @@ Scripted screenshot states use `?screenshot=1&script=demoMemory&checkpoint=...`.
 
 `root-added`, `top-level-expanded`, `heap-children-just-added`, `stack-children-just-added`, `deep-object-just-added`, `deep-ref-just-added`, `heap-collapsed`, and `heap-expanded-again`.
 
+Saved regression cases live in `/cases/*.json`. The test suite discovers every JSON file there and runs each checkpoint through the screenshot overlap detector plus DOM-box clearance checks.
+
+To capture a new case from the app, use the dock:
+
+1. Click `Rec: off` to start recording checkpoints after domain events.
+2. Reproduce the layout problem.
+3. Click `Rec: ...` again to stop.
+4. Click `Export Case` and save the clipboard JSON as a new file in `/cases`.
+5. Run `npm test`.
+
 When a no-overlap expectation finds overlap-color pixels, the test writes an annotated PNG with red square markers into Playwright's test output.
+
+---
+
+## Runtime Themes
+
+The dock's `Theme` control cycles the runtime display through `Default`, `Grayscale`, and `Blueprint`. The choice is persisted in `localStorage`, and a theme can be opened directly with `?theme=grayscale` or `?theme=blueprint`.
+
+Screenshot mode still overrides runtime themes so overlap-color tests stay deterministic.
 
 ---
 
