@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D ECS Graph — Event-Driven Architecture</title>
+<style>
+  :root {
+    --bg: #1c1f2e;
+    --bg-2: #232639;
+    --panel: rgba(46,50,72,0.92);
+    --panel-2: rgba(56,62,86,0.9);
+    --border: #3a3f5c;
+    --border-2: #4a5074;
+    --text: #ecedf3;
+    --text-dim: #a8acc4;
+    --text-mute: #7a7f9a;
+    --accent: #5bd2ff;
+    --accent-2: #ffb84d;
+    --grid: #2c3050;
+    --grid-2: #353a5e;
+    --shadow: 0 10px 32px rgba(0,0,0,0.45);
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; overflow:hidden; background:var(--bg); color:var(--text);
+         font-family: system-ui, -apple-system, sans-serif; }
+  canvas { position:fixed; inset:0; z-index:0; }
+
+  /* HTML Nodes */
+  #ui-layer { position:fixed; inset:0; z-index:1; pointer-events:none; }
+  .node { position:absolute; pointer-events:auto; min-width:150px; max-width:280px;
+          background:var(--panel); border:1px solid var(--border); border-radius:11px;
+          padding:11px 13px; box-shadow:var(--shadow); backdrop-filter:blur(8px);
+          cursor:grab; user-select:none;
+          transition: border-color .15s, box-shadow .2s, transform .25s cubic-bezier(.2,.8,.2,1), opacity .25s, background .15s; }
+  .node:hover { border-color:var(--border-2); background:var(--panel-2); }
+  .node.selected { border-color:var(--accent); box-shadow:0 0 0 2px rgba(91,210,255,0.25), var(--shadow); }
+  .node.connecting { border-color:var(--accent-2); box-shadow:0 0 0 2px rgba(255,184,77,0.25), var(--shadow); }
+  .node.collapsed .body { display:none; }
+  .node.collapsed { background: var(--panel-2); }
+  .node.collapsed .title::after { content:' ▸'; color:var(--accent-2); margin-left:4px; }
+  .node.has-children .title::before { content:'▾ '; color:var(--text-mute); font-size:10px; }
+  .node.has-children.collapsed .title::before { content:'▸ '; color:var(--accent-2); }
+  .node .title { font-weight:600; font-size:14px; color:#fff; margin-bottom:3px; letter-spacing:.1px; }
+  .node .body { font-size:12.5px; color:var(--text-dim); line-height:1.45; }
+  .node input { background:transparent; border:none; color:inherit; font:inherit; width:100%; outline:none; padding:0; }
+
+  /* Modal (palette + editor) */
+  .modal { position:fixed; top:14%; left:50%; transform:translateX(-50%);
+    width:480px; max-height:68vh; background:rgba(28,32,50,0.97); border:1px solid var(--border);
+    border-radius:14px; z-index:100; display:flex; flex-direction:column; overflow:hidden;
+    box-shadow:0 24px 80px rgba(0,0,0,0.75); backdrop-filter:blur(16px); pointer-events:auto; }
+  .modal.hidden { display:none; }
+  .modal input, .modal textarea { width:100%; padding:12px 16px; background:transparent;
+    border:none; border-bottom:1px solid var(--border); color:var(--text); font-size:14px; outline:none;
+    font-family: inherit; }
+  .modal textarea { resize: vertical; min-height:200px; font-family: ui-monospace, monospace; font-size:12.5px; }
+  .modal .list { overflow-y:auto; padding:6px; }
+  .modal .item { display:flex; justify-content:space-between; align-items:center;
+    padding:9px 11px; border-radius:6px; cursor:pointer; color:var(--text-dim); font-size:13px; }
+  .modal .item:hover, .modal .item.sel { background:rgba(91,210,255,0.13); color:var(--text); }
+  .modal .item .shortcut { color:var(--text-mute); font-family: ui-monospace, monospace; font-size:11px; }
+  .modal .actions { display:flex; gap:8px; padding:10px 14px; border-top:1px solid var(--border); }
+  .modal button { background:var(--panel); color:var(--text); border:1px solid var(--border);
+    padding:7px 14px; border-radius:6px; cursor:pointer; font:inherit; font-size:13px; }
+  .modal button:hover { background:var(--panel-2); border-color:var(--border-2); }
+  .modal button.primary { background:rgba(91,210,255,0.18); border-color:var(--accent); color:var(--accent); }
+
+  /* Toast */
+  #toast { position:fixed; top:12px; right:12px; z-index:50; display:flex; flex-direction:column; gap:5px;
+    pointer-events:none; max-width:340px; }
+  .toast-item { background:rgba(28,32,50,0.92); border:1px solid var(--border); border-radius:6px;
+    padding:5px 9px; font-size:11.5px; font-family: ui-monospace, SFMono-Regular, monospace;
+    color:var(--text-dim); animation:slideIn .18s ease; line-height:1.4; }
+  .toast-item .t { color:var(--text-mute); margin-right:6px; }
+  .toast-item .n { color:var(--accent); font-weight:600; }
+  .toast-item .m { color:var(--text-mute); }
+  @keyframes slideIn { from{opacity:0;transform:translateX(12px);} to{opacity:1;transform:none;} }
+
+  /* HUD */
+  #hud { position:fixed; bottom:12px; left:12px; z-index:40; color:var(--text-dim); font-size:11.5px;
+    line-height:1.7; pointer-events:none; max-width:60%; }
+  #hud kbd { background:var(--bg-2); border:1px solid var(--border); border-radius:4px; padding:1px 5px;
+    color:var(--text); font-family:monospace; }
+  #hud .mode { color:var(--accent); font-weight:700; }
+
+  /* Tool dock (right-side controls) */
+  #dock { position:fixed; bottom:12px; right:12px; z-index:41; display:flex; gap:8px; align-items:center;
+    pointer-events:auto; background:rgba(28,32,50,0.85); border:1px solid var(--border); border-radius:10px;
+    padding:8px 12px; backdrop-filter:blur(8px); font-size:12px; color:var(--text-dim); }
+  #dock button { background:var(--panel); color:var(--text); border:1px solid var(--border);
+    padding:6px 10px; border-radius:6px; cursor:pointer; font:inherit; font-size:12px; }
+  #dock button:hover { background:var(--panel-2); border-color:var(--border-2); }
+  #dock button.active { background:rgba(255,184,77,0.18); border-color:var(--accent-2); color:var(--accent-2); }
+  #dock input[type=range] { accent-color: var(--accent); width:90px; }
+  #dock label { color:var(--text-mute); }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui-layer"></div>
+
+<div id="palette" class="modal hidden">
+  <input id="palette-input" placeholder="Type a command…" autocomplete="off" spellcheck="false">
+  <div id="palette-list" class="list"></div>
+</div>
+
+<div id="editor" class="modal hidden">
+  <input id="editor-title" value="Palette Commands (JSON)" readonly>
+  <textarea id="editor-body" spellcheck="false"></textarea>
+  <div class="actions">
+    <button id="editor-cancel">Cancel</button>
+    <button id="editor-save" class="primary">Save</button>
+    <span style="flex:1"></span>
+    <span style="color:var(--text-mute); font-size:11px;">[{label, shortcut, emit, payload?}]</span>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<div id="hud">
+  <div>Mode: <span class="mode" id="hud-mode">NORMAL</span></div>
+  <kbd>A</kbd> Add &nbsp;<kbd>Del</kbd> Delete &nbsp;<kbd>E</kbd> Edit &nbsp;<kbd>C</kbd> Connect &nbsp;<kbd>Space</kbd> Collapse<br>
+  <kbd>1-3</kbd> Layers &nbsp;<kbd>Arrows</kbd> Pan &nbsp;<kbd>+/-</kbd> Zoom &nbsp;<kbd>L</kbd> Layout &nbsp;<kbd>P</kbd> Palette<br>
+  <kbd>Alt+Z</kbd> Back &nbsp;Click selected title to rename &nbsp;Connect-click empty to create
+</div>
+
+<div id="dock">
+  <button id="btn-demo">▶ Demo</button>
+  <button id="btn-stop" style="display:none;">■ Stop</button>
+  <label>Speed</label>
+  <input id="speed" type="range" min="0.25" max="4" step="0.25" value="1">
+  <span id="speed-val">1.0×</span>
+  <button id="btn-edit-palette">⚙ Palette</button>
+  <button id="btn-reset">↺ Reset</button>
+</div>
+
+<script>
+/* ============================================================
+   1. SCHEDULER
+   ============================================================ */
+let rafId = null;
+function scheduleRender() {
+  if (rafId !== null) return;
+  rafId = requestAnimationFrame(() => { rafId = null; render(); });
+}
+
+/* ============================================================
+   2. CONTEXT
+   ============================================================ */
+const Context = {
+  selectedId: null,
+  mode: 'normal',           // normal | connecting | palette
+  camera: { x: 0, y: 0, zoom: 1, layerZ: 0 },
+  history: [],
+  lastVisited: null,
+  connectSource: null,
+  drag: { active: false, id: null, sx: 0, sy: 0, moved: false },
+  mouse: { x: innerWidth/2, y: innerHeight/2 },
+  lastEvents: [],
+  demoSpeed: 1,
+};
+
+/* ============================================================
+   3. TOAST (coalesces streams, suppresses noise)
+   ============================================================ */
+const activeStreams = new Set();
+const TOAST_SUPPRESS = new Set(['compAdded','entityRemoved','worldCleared']);
+function logToast(name, data) {
+  if (TOAST_SUPPRESS.has(name)) return;
+  if (name === 'camera-pan' || name === 'node-drag') {
+    if (activeStreams.has(name)) return;
+    activeStreams.add(name);
+    name += ' (start)';
+  }
+  if (name === 'camera-pan-end' || name === 'node-drag-end') {
+    activeStreams.delete(name.replace('-end',''));
+  }
+  const payload = data ? JSON.stringify(data).slice(0, 80) : '';
+  const entry = `<span class="t">${performance.now().toFixed(0)}</span><span class="n">${name}</span> <span class="m">${Context.mode}${payload ? ' • ' + payload : ''}</span>`;
+  Context.lastEvents.unshift(entry);
+  if (Context.lastEvents.length > 7) Context.lastEvents.pop();
+  document.getElementById('toast').innerHTML = Context.lastEvents.map(h => `<div class="toast-item">${h}</div>`).join('');
+}
+
+/* ============================================================
+   4. EVENT BUS
+   ============================================================ */
+class EventBus {
+  constructor() { this.l = {}; }
+  on(e, cb) { (this.l[e] = this.l[e] || []).push(cb); return () => this.off(e, cb); }
+  off(e, cb) { if (this.l[e]) this.l[e] = this.l[e].filter(f => f !== cb); }
+  emit(e, d) {
+    (this.l[e] || []).forEach(cb => cb(d || {}));
+    logToast(e, d);
+    scheduleRender();
+  }
+}
+const bus = new EventBus();
+
+/* ============================================================
+   5. ECS
+   ============================================================ */
+const world = {
+  e: new Map(), c: {}, id: 1,
+  create() { const i = this.id++; this.e.set(i, new Set()); return i; },
+  add(i, t, d) { (this.c[t] = this.c[t] || new Map()).set(i, d); this.e.get(i).add(t); bus.emit('compAdded', { i, t }); },
+  get(i, t) { return this.c[t]?.get(i); },
+  has(i, t) { return this.e.get(i)?.has(t); },
+  remove(i) { this.e.get(i)?.forEach(t => this.c[t]?.delete(i)); this.e.delete(i); bus.emit('entityRemoved', { i }); },
+  q(ts) { const r = []; for (const [i, cs] of this.e) if (ts.every(t => cs.has(t))) r.push(i); return r; },
+  clear() {
+    for (const [i] of this.e) {
+      const n = this.c.Node?.get(i); if (n?.domEl) n.domEl.remove();
+    }
+    this.e.clear(); this.c = {}; this.id = 1;
+    bus.emit('worldCleared');
+  }
+};
+
+/* ============================================================
+   6. CANVAS & PROJECTION
+   ============================================================ */
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const uiLayer = document.getElementById('ui-layer');
+
+function resize() { canvas.width = innerWidth; canvas.height = innerHeight; }
+window.addEventListener('resize', () => { resize(); scheduleRender(); });
+resize();
+
+function persp(z) { return 1000 / (1000 - z); }
+function worldToScreen(x, y, z) {
+  const c = Context.camera, s = c.zoom * persp(z);
+  return { x: (x - c.x) * s + canvas.width / 2, y: (y - c.y) * s + canvas.height / 2, scale: s };
+}
+function screenToWorld(sx, sy, z = Context.camera.layerZ) {
+  const c = Context.camera, s = c.zoom * persp(z);
+  return { x: (sx - canvas.width / 2) / s + c.x, y: (sy - canvas.height / 2) / s + c.y, z };
+}
+
+/* ============================================================
+   7. SHORTCUTS
+   ============================================================ */
+const SHORTCUTS = [
+  { event: 'keydown', key: 'a', mode: 'normal', repeat: false, emit: 'cmd-add-node' },
+  { event: 'keydown', key: 'Delete', mode: 'normal', repeat: false, emit: 'cmd-delete' },
+  { event: 'keydown', key: 'e', mode: 'normal', repeat: false, emit: 'cmd-edit' },
+  { event: 'keydown', key: 'c', mode: 'normal', repeat: false, emit: 'cmd-connect-start' },
+  { event: 'keydown', key: ' ', mode: 'normal', repeat: false, emit: 'cmd-collapse' },
+  { event: 'keydown', key: 'l', mode: 'normal', repeat: false, emit: 'cmd-layout' },
+  { event: 'keydown', key: '1', mode: 'normal', repeat: false, emit: 'cmd-layer', payload: { z: 0 } },
+  { event: 'keydown', key: '2', mode: 'normal', repeat: false, emit: 'cmd-layer', payload: { z: -300 } },
+  { event: 'keydown', key: '3', mode: 'normal', repeat: false, emit: 'cmd-layer', payload: { z: -600 } },
+  { event: 'keydown', key: 'Escape', mode: 'normal', emit: 'cmd-deselect' },
+  { event: 'keydown', key: 'z', modifiers: ['alt'], mode: 'normal', repeat: false, emit: 'cmd-history-back' },
+  { event: 'keydown', key: 'p', mode: 'normal', repeat: false, emit: 'cmd-palette-open' },
+  { event: 'keydown', key: 'Escape', mode: 'connecting', emit: 'cmd-connect-cancel' },
+  { event: 'keydown', key: 'Escape', mode: 'palette', emit: 'cmd-palette-close' },
+
+  { event: 'keydown', key: 'ArrowLeft', emit: 'pan-left' },
+  { event: 'keydown', key: 'ArrowRight', emit: 'pan-right' },
+  { event: 'keydown', key: 'ArrowUp', emit: 'pan-up' },
+  { event: 'keydown', key: 'ArrowDown', emit: 'pan-down' },
+  { event: 'keydown', key: '+', emit: 'zoom-in' },
+  { event: 'keydown', key: '=', emit: 'zoom-in' },
+  { event: 'keydown', key: '-', emit: 'zoom-out' },
+
+  { event: 'wheel', deltaY: '<0', emit: 'zoom-in' },
+  { event: 'wheel', deltaY: '>0', emit: 'zoom-out' },
+
+  { event: 'dblclick', target: 'node', emit: 'cmd-edit' },
+];
+
+class DomainEventRouter {
+  constructor(map) { this.map = map; }
+  match(raw) {
+    for (const sc of this.map) {
+      if (sc.event && sc.event !== raw.type) continue;
+      if (sc.key && sc.key !== raw.key) continue;
+      if (sc.target && sc.target !== raw.target) continue;
+      if (sc.mode && sc.mode !== Context.mode) continue;
+      if (sc.repeat === false && raw.repeat) continue;
+      if (sc.deltaY) {
+        if (sc.deltaY === '>0' && !(raw.deltaY > 0)) continue;
+        if (sc.deltaY === '<0' && !(raw.deltaY < 0)) continue;
+      }
+      if (sc.modifiers) {
+        let ok = true;
+        for (const m of sc.modifiers) {
+          if (m === 'ctrl' && !raw.ctrl) ok = false;
+          if (m === 'shift' && !raw.shift) ok = false;
+          if (m === 'alt' && !raw.alt) ok = false;
+          if (m === 'meta' && !raw.meta) ok = false;
+        }
+        if (!ok) continue;
+      }
+      bus.emit(sc.emit, { ...(sc.payload || {}), eid: raw.eid });
+      return true;
+    }
+    return false;
+  }
+}
+const router = new DomainEventRouter(SHORTCUTS);
+
+/* ============================================================
+   8. INPUT CONTROLLER
+   ============================================================ */
+class InputController {
+  constructor() {
+    this.stream = null;
+    window.addEventListener('keydown', e => this._key(e));
+    window.addEventListener('wheel', e => this._wheel(e), { passive: true });
+    window.addEventListener('mousedown', e => this._md(e));
+    window.addEventListener('mousemove', e => this._mm(e));
+    window.addEventListener('mouseup', e => this._mu(e));
+    window.addEventListener('dblclick', e => this._dbl(e));
+  }
+  _tgt(e) {
+    if (e.target.closest('.node')) return 'node';
+    if (e.target.closest('.modal')) return 'modal';
+    if (e.target.closest('#dock')) return 'dock';
+    return 'background';
+  }
+  _key(e) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    router.match({ type: 'keydown', key: e.key, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey, meta: e.metaKey, repeat: e.repeat });
+  }
+  _wheel(e) {
+    if (e.target.closest('.modal')) return;
+    router.match({ type: 'wheel', deltaY: e.deltaY > 0 ? '>0' : '<0' });
+  }
+  _md(e) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    const t = this._tgt(e);
+    Context.drag = { active: true, id: null, sx: e.clientX, sy: e.clientY, moved: false };
+    if (t === 'node') {
+      const el = e.target.closest('.node');
+      const eid = parseInt(el.dataset.eid);
+      const wasSelected = Context.selectedId === eid;
+      const onTitle = !!e.target.closest('.title');
+      // Single-click rename: clicking title of already-selected node enters edit
+      if (wasSelected && onTitle && Context.mode === 'normal') {
+        Context.drag.active = false;
+        bus.emit('cmd-edit', { eid });
+        e.stopPropagation();
+        return;
+      }
+      bus.emit('node-select', { eid });
+      Context.drag.id = eid;
+      e.stopPropagation();
+    }
+  }
+  _mm(e) {
+    Context.mouse.x = e.clientX;
+    Context.mouse.y = e.clientY;
+    if (Context.mode === 'connecting') { scheduleRender(); return; }
+    if (!Context.drag.active) return;
+    const dx = e.movementX, dy = e.movementY;
+    Context.drag.moved = Context.drag.moved || Math.hypot(e.clientX - Context.drag.sx, e.clientY - Context.drag.sy) > 4;
+    if (!Context.drag.moved) return;
+    if (!this.stream) this.stream = Context.drag.id !== null ? 'node-drag' : 'camera-pan';
+    bus.emit(this.stream, { eid: Context.drag.id, dx, dy });
+  }
+  _mu(e) {
+    if (this.stream) { bus.emit(this.stream + '-end'); this.stream = null; }
+    if (!Context.drag.active) { return; }
+    const wasClick = !Context.drag.moved;
+    Context.drag.active = false;
+    if (!wasClick) return;
+    const t = this._tgt(e);
+    if (t === 'node') {
+      const eid = parseInt(e.target.closest('.node').dataset.eid);
+      if (Context.mode === 'connecting') {
+        if (eid !== Context.connectSource) bus.emit('cmd-connect-finish', { from: Context.connectSource, to: eid });
+        else bus.emit('cmd-connect-cancel');
+      } else {
+        const n = world.get(eid, 'Node');
+        if (n && n.collapsed) bus.emit('cmd-collapse', { eid });
+      }
+    } else if (t === 'background') {
+      if (Context.mode === 'connecting') {
+        // Connect-to creates a new node and links from source
+        const w = screenToWorld(e.clientX, e.clientY, Context.camera.layerZ);
+        bus.emit('cmd-add-node', { at: [w.x, w.y, w.z], title: 'Node', connectFrom: Context.connectSource });
+      } else {
+        bus.emit('bg-click');
+      }
+    }
+  }
+  _dbl(e) {
+    if (e.target.closest('.node')) {
+      const eid = parseInt(e.target.closest('.node').dataset.eid);
+      router.match({ type: 'dblclick', target: 'node', eid });
+    }
+  }
+}
+new InputController();
+
+/* ============================================================
+   9. PALETTE COMMANDS (data-driven, editable)
+   ============================================================ */
+let PALETTE_COMMANDS = [
+  { label: 'Add Child Node', shortcut: 'A', emit: 'cmd-add-node' },
+  { label: 'Delete Node', shortcut: 'Del', emit: 'cmd-delete' },
+  { label: 'Edit Node Title', shortcut: 'E', emit: 'cmd-edit' },
+  { label: 'Connect Nodes', shortcut: 'C', emit: 'cmd-connect-start' },
+  { label: 'Collapse / Expand', shortcut: 'Space', emit: 'cmd-collapse' },
+  { label: 'Auto Layout Tree', shortcut: 'L', emit: 'cmd-layout' },
+  { label: 'Layer: Front', shortcut: '1', emit: 'cmd-layer', payload: { z: 0 } },
+  { label: 'Layer: Mid', shortcut: '2', emit: 'cmd-layer', payload: { z: -300 } },
+  { label: 'Layer: Back', shortcut: '3', emit: 'cmd-layer', payload: { z: -600 } },
+  { label: 'Deselect', shortcut: 'Esc', emit: 'cmd-deselect' },
+  { label: 'History Back', shortcut: 'Alt+Z', emit: 'cmd-history-back' },
+  { label: 'Run Demo', shortcut: '', emit: 'cmd-demo-start' },
+  { label: 'Reset Canvas', shortcut: '', emit: 'cmd-reset' },
+  { label: 'Edit Palette…', shortcut: '', emit: 'cmd-edit-palette' },
+];
+
+const palette = document.getElementById('palette');
+const paletteInput = document.getElementById('palette-input');
+const paletteList = document.getElementById('palette-list');
+function openPalette() {
+  Context.mode = 'palette';
+  palette.classList.remove('hidden');
+  paletteInput.value = ''; paletteInput.focus();
+  renderPalette();
+}
+function closePalette() {
+  Context.mode = 'normal';
+  palette.classList.add('hidden');
+  scheduleRender();
+}
+function renderPalette(filter = '') {
+  const f = filter.toLowerCase();
+  const cmds = PALETTE_COMMANDS.filter(c => c.label.toLowerCase().includes(f));
+  paletteList.innerHTML = cmds.map((c, i) => `
+    <div class="item ${i === 0 ? 'sel' : ''}" data-idx="${i}">
+      <span>${c.label}</span><span class="shortcut">${c.shortcut || ''}</span>
+    </div>`).join('');
+  paletteList.querySelectorAll('.item').forEach(el => {
+    el.addEventListener('click', () => {
+      const c = cmds[parseInt(el.dataset.idx)];
+      closePalette(); bus.emit(c.emit, c.payload);
+    });
+  });
+}
+palette.addEventListener('mousedown', e => e.stopPropagation());
+paletteInput.addEventListener('input', e => renderPalette(e.target.value));
+paletteInput.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { bus.emit('cmd-palette-close'); return; }
+  if (e.key === 'Enter') {
+    const s = paletteList.querySelector('.item.sel'); if (s) s.click();
+  }
+});
+
+/* Palette editor modal */
+const editor = document.getElementById('editor');
+const editorBody = document.getElementById('editor-body');
+document.getElementById('btn-edit-palette').addEventListener('click', () => bus.emit('cmd-edit-palette'));
+document.getElementById('editor-cancel').addEventListener('click', () => editor.classList.add('hidden'));
+document.getElementById('editor-save').addEventListener('click', () => {
+  try {
+    const parsed = JSON.parse(editorBody.value);
+    if (!Array.isArray(parsed)) throw new Error('must be array');
+    PALETTE_COMMANDS = parsed;
+    editor.classList.add('hidden');
+    bus.emit('palette-updated', { count: parsed.length });
+  } catch (err) { alert('Invalid JSON: ' + err.message); }
+});
+editor.addEventListener('mousedown', e => e.stopPropagation());
+
+/* ============================================================
+   10. DOMAIN HANDLERS
+   ============================================================ */
+bus.on('node-select', ({ eid }) => {
+  if (Context.mode === 'connecting') return;
+  if (Context.selectedId && Context.selectedId !== eid) {
+    Context.lastVisited = Context.selectedId;
+    Context.history.unshift(Context.selectedId);
+    if (Context.history.length > 20) Context.history.pop();
+  }
+  Context.selectedId = eid;
+});
+bus.on('bg-click', () => {
+  if (Context.mode === 'palette') { bus.emit('cmd-palette-close'); return; }
+  if (Context.mode === 'connecting') { bus.emit('cmd-connect-cancel'); return; }
+  bus.emit('cmd-deselect');
+});
+bus.on('cmd-deselect', () => { Context.selectedId = null; });
+bus.on('cmd-history-back', () => { if (Context.history.length) Context.selectedId = Context.history.shift(); });
+
+bus.on('cmd-add-node', (d = {}) => {
+  const parent = d.parent !== undefined ? d.parent : Context.selectedId;
+  let [wx, wy, wz] = d.at || (() => {
+    const w = screenToWorld(Context.mouse.x, Context.mouse.y, Context.camera.layerZ);
+    return [w.x, w.y, w.z];
+  })();
+  const eid = createNode(wx, wy, wz, d.title || 'Node', d.body || '', parent);
+  Context.selectedId = eid;
+  if (d.connectFrom !== undefined && d.connectFrom !== null) {
+    createEdge(d.connectFrom, eid, '');
+    Context.mode = 'normal'; Context.connectSource = null;
+  }
+});
+bus.on('cmd-delete', ({ eid } = {}) => {
+  const t = eid || Context.selectedId;
+  if (t) { deleteTree(t); Context.selectedId = null; }
+});
+bus.on('cmd-edit', ({ eid } = {}) => {
+  const target = eid || Context.selectedId; if (!target) return;
+  const n = world.get(target, 'Node'); if (!n) return;
+  const te = n.domEl.querySelector('.title');
+  if (te.querySelector('input')) return;
+  const inp = document.createElement('input');
+  inp.value = n.title; te.innerHTML = ''; te.appendChild(inp); inp.focus(); inp.select();
+  const save = () => { n.title = inp.value; te.innerHTML = (n.children.length?'':'') + n.title; scheduleRender(); };
+  inp.addEventListener('blur', save);
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
+    if (e.key === 'Escape') { inp.value = n.title; inp.blur(); }
+    e.stopPropagation();
+  });
+});
+bus.on('cmd-connect-start', () => {
+  if (Context.selectedId) { Context.mode = 'connecting'; Context.connectSource = Context.selectedId; }
+});
+bus.on('cmd-connect-finish', ({ from, to }) => {
+  createEdge(from, to, ''); Context.mode = 'normal'; Context.connectSource = null;
+});
+bus.on('cmd-connect-cancel', () => { Context.mode = 'normal'; Context.connectSource = null; });
+bus.on('cmd-collapse', ({ eid } = {}) => {
+  const t = eid || Context.selectedId;
+  const n = world.get(t, 'Node'); if (n) n.collapsed = !n.collapsed;
+});
+bus.on('cmd-layer', ({ z }) => { Context.camera.layerZ = z; });
+bus.on('cmd-layout', () => {
+  const root = Context.selectedId || world.q(['Node']).find(id => !world.get(id, 'Node').parentId);
+  if (!root) return;
+  const lay = (id, x, y, z, aStart, aSpread, depth) => {
+    const t = world.get(id, 'Transform'), n = world.get(id, 'Node');
+    if (!t || !n) return;
+    t.x = x; t.y = y; t.z = z;
+    if (n.collapsed) return;
+    const c = n.children; if (!c.length) return;
+    const r = 200 + depth * 50, step = aSpread / Math.max(1, c.length);
+    c.forEach((cid, i) => {
+      const a = aStart - aSpread / 2 + step * (i + 0.5);
+      lay(cid, x + Math.cos(a) * r, y + Math.sin(a) * r, z, a, Math.PI / (1 + depth * 0.6), depth + 1);
+    });
+  };
+  lay(root, 0, 0, Context.camera.layerZ, -Math.PI / 2, Math.PI * 1.6, 0);
+});
+bus.on('cmd-palette-open', () => openPalette());
+bus.on('cmd-palette-close', () => closePalette());
+bus.on('cmd-edit-palette', () => {
+  closePalette();
+  editorBody.value = JSON.stringify(PALETTE_COMMANDS, null, 2);
+  editor.classList.remove('hidden');
+});
+bus.on('cmd-reset', () => { world.clear(); Context.selectedId = null; Context.history = []; Context.camera = { x:0,y:0,zoom:1,layerZ:0 }; });
+bus.on('cmd-demo-start', () => runDemo());
+bus.on('cmd-demo-stop', () => stopDemo());
+
+bus.on('node-drag', ({ eid, dx, dy }) => {
+  const t = world.get(eid, 'Transform'); if (t) { const p = persp(t.z); t.x += dx / (Context.camera.zoom*p); t.y += dy / (Context.camera.zoom*p); }
+});
+bus.on('camera-pan', ({ dx, dy }) => {
+  Context.camera.x -= dx / Context.camera.zoom; Context.camera.y -= dy / Context.camera.zoom;
+});
+bus.on('zoom-in', () => Context.camera.zoom *= 1.12);
+bus.on('zoom-out', () => Context.camera.zoom /= 1.12);
+bus.on('pan-left', () => Context.camera.x -= 40 / Context.camera.zoom);
+bus.on('pan-right', () => Context.camera.x += 40 / Context.camera.zoom);
+bus.on('pan-up', () => Context.camera.y -= 40 / Context.camera.zoom);
+bus.on('pan-down', () => Context.camera.y += 40 / Context.camera.zoom);
+
+/* ============================================================
+   11. FACTORIES
+   ============================================================ */
+function createNode(x, y, z, title, body = '', parentId = null) {
+  const eid = world.create();
+  const el = document.createElement('div');
+  el.className = 'node'; el.dataset.eid = eid;
+  el.innerHTML = `<div class="title">${title}</div><div class="body">${body}</div>`;
+  uiLayer.appendChild(el);
+  world.add(eid, 'Transform', { x, y, z });
+  world.add(eid, 'Node', { title, body, parentId, domEl: el, children: [], collapsed: false });
+  if (parentId) { const p = world.get(parentId, 'Node'); if (p) p.children.push(eid); }
+  return eid;
+}
+function createEdge(from, to, label = '') {
+  const eid = world.create();
+  world.add(eid, 'Edge', { from, to, label });
+  return eid;
+}
+function isVisible(id) {
+  const n = world.get(id, 'Node'); if (!n) return true;
+  if (n.parentId) { const p = world.get(n.parentId, 'Node'); if (p && p.collapsed) return false; return isVisible(n.parentId); }
+  return true;
+}
+function deleteTree(id) {
+  const n = world.get(id, 'Node');
+  if (n) { [...n.children].forEach(deleteTree); n.domEl.remove(); }
+  world.q(['Edge']).forEach(eid2 => { const ed = world.get(eid2, 'Edge'); if (ed.from === id || ed.to === id) world.remove(eid2); });
+  world.remove(id);
+}
+
+/* ============================================================
+   12. RENDER (grid → containers → edges → ghost → nodes)
+   ============================================================ */
+function render() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Grid (two-tone for depth)
+  const c = Context.camera;
+  ctx.lineWidth = 1;
+  const gs = 60 * c.zoom;
+  const ox = (canvas.width / 2 - c.x * c.zoom) % gs;
+  const oy = (canvas.height / 2 - c.y * c.zoom) % gs;
+  ctx.strokeStyle = '#252840';
+  ctx.beginPath();
+  for (let x = ox; x < canvas.width; x += gs) { ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); }
+  for (let y = oy; y < canvas.height; y += gs) { ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); }
+  ctx.stroke();
+
+  // 3D nested containers: draw a translucent rounded box around each parent's subtree.
+  // Walk from deepest -> shallowest so outer boxes sit behind inner ones.
+  const nodes = world.q(['Transform','Node']);
+  const depthMap = new Map();
+  const depthOf = (id) => {
+    if (depthMap.has(id)) return depthMap.get(id);
+    const n = world.get(id, 'Node');
+    const d = n.parentId ? depthOf(n.parentId) + 1 : 0;
+    depthMap.set(id, d); return d;
+  };
+  nodes.forEach(depthOf);
+  const parents = nodes.filter(id => {
+    const n = world.get(id, 'Node');
+    return n.children.length && !n.collapsed && isVisible(id);
+  }).sort((a, b) => depthOf(a) - depthOf(b));
+
+  const subtreeBounds = (id) => {
+    const result = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+    const visit = (i) => {
+      const t = world.get(i, 'Transform'), n = world.get(i, 'Node');
+      if (!t || !n) return;
+      const el = n.domEl;
+      const w = (el.offsetWidth || 180) / 2;
+      const h = (el.offsetHeight || 70) / 2;
+      const s = worldToScreen(t.x, t.y, t.z);
+      result.minX = Math.min(result.minX, s.x - w * s.scale);
+      result.maxX = Math.max(result.maxX, s.x + w * s.scale);
+      result.minY = Math.min(result.minY, s.y - h * s.scale);
+      result.maxY = Math.max(result.maxY, s.y + h * s.scale);
+      if (!n.collapsed) n.children.forEach(visit);
+    };
+    visit(id); return result;
+  };
+
+  for (const pid of parents) {
+    const b = subtreeBounds(pid);
+    if (!isFinite(b.minX)) continue;
+    const pad = 22;
+    const d = depthOf(pid);
+    const x = b.minX - pad, y = b.minY - pad, w = (b.maxX - b.minX) + pad*2, h = (b.maxY - b.minY) + pad*2;
+    const r = 16;
+    const hue = 220 + (d * 18) % 60;
+    ctx.fillStyle = `hsla(${hue}, 35%, 22%, 0.55)`;
+    ctx.strokeStyle = `hsla(${hue}, 45%, 55%, 0.35)`;
+    ctx.lineWidth = 1.2;
+    roundRect(x, y, w, h, r); ctx.fill(); ctx.stroke();
+  }
+
+  // Edges
+  ctx.lineWidth = 2;
+  for (const eid of world.q(['Edge'])) {
+    const ed = world.get(eid, 'Edge');
+    if (!isVisible(ed.from) || !isVisible(ed.to)) continue;
+    const t1 = world.get(ed.from, 'Transform'), t2 = world.get(ed.to, 'Transform');
+    if (!t1 || !t2) continue;
+    const s1 = worldToScreen(t1.x, t1.y, t1.z), s2 = worldToScreen(t2.x, t2.y, t2.z);
+    ctx.strokeStyle = '#5bd2ff'; ctx.globalAlpha = Math.min(1, Math.min(s1.scale, s2.scale));
+    ctx.beginPath(); ctx.moveTo(s1.x, s1.y); ctx.lineTo(s2.x, s2.y); ctx.stroke();
+    const ang = Math.atan2(s2.y - s1.y, s2.x - s1.x);
+    const ah = 9 * Math.min(s1.scale, s2.scale);
+    ctx.fillStyle = '#5bd2ff';
+    ctx.beginPath();
+    ctx.moveTo(s2.x, s2.y);
+    ctx.lineTo(s2.x - ah * Math.cos(ang - 0.4), s2.y - ah * Math.sin(ang - 0.4));
+    ctx.lineTo(s2.x - ah * Math.cos(ang + 0.4), s2.y - ah * Math.sin(ang + 0.4));
+    ctx.fill();
+    if (ed.label) {
+      ctx.fillStyle = '#8590b5'; ctx.font = '12px sans-serif';
+      ctx.fillText(ed.label, (s1.x + s2.x) / 2, (s1.y + s2.y) / 2 - 6);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Ghost connect line
+  if (Context.mode === 'connecting' && Context.connectSource) {
+    const t = world.get(Context.connectSource, 'Transform');
+    if (t) {
+      const s = worldToScreen(t.x, t.y, t.z);
+      ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(Context.mouse.x, Context.mouse.y);
+      ctx.strokeStyle = '#ffb84d'; ctx.setLineDash([6, 5]); ctx.lineWidth = 2; ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = '#ffb84d'; ctx.font = '12px sans-serif';
+      ctx.fillText('connect (click empty to create)', (s.x + Context.mouse.x) / 2 + 10, (s.y + Context.mouse.y) / 2 - 8);
+    }
+  }
+
+  // DOM nodes
+  nodes.sort((a, b) => world.get(a, 'Transform').z - world.get(b, 'Transform').z);
+  for (const eid of nodes) {
+    const t = world.get(eid, 'Transform'), n = world.get(eid, 'Node');
+    const s = worldToScreen(t.x, t.y, t.z);
+    const vis = isVisible(eid);
+    n.domEl.style.display = vis ? 'block' : 'none'; if (!vis) continue;
+    n.domEl.style.transform = `translate(${s.x}px,${s.y}px) scale(${s.scale}) translate(-50%,-50%)`;
+    n.domEl.style.zIndex = Math.floor(t.z + 1000);
+    n.domEl.style.opacity = Math.max(0.4, Math.min(1, s.scale));
+    n.domEl.classList.toggle('selected', Context.selectedId === eid);
+    n.domEl.classList.toggle('connecting', Context.mode === 'connecting' && Context.connectSource === eid);
+    n.domEl.classList.toggle('collapsed', n.collapsed);
+    n.domEl.classList.toggle('has-children', n.children.length > 0);
+  }
+
+  document.getElementById('hud-mode').textContent =
+    Context.mode === 'normal' ? 'NORMAL' :
+    Context.mode === 'connecting' ? 'CONNECTING' : 'PALETTE';
+}
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.arcTo(x+w, y, x+w, y+h, r);
+  ctx.arcTo(x+w, y+h, x, y+h, r);
+  ctx.arcTo(x, y+h, x, y, r);
+  ctx.arcTo(x, y, x+w, y, r);
+  ctx.closePath();
+}
+
+/* ============================================================
+   13. DEMO RUNNER (user-flow event simulator)
+   ============================================================ */
+let demoTimer = null;
+function stopDemo() {
+  if (demoTimer) { clearTimeout(demoTimer); demoTimer = null; }
+  document.getElementById('btn-demo').style.display = '';
+  document.getElementById('btn-stop').style.display = 'none';
+}
+function runDemo() {
+  stopDemo();
+  bus.emit('cmd-reset');
+  // Capture entity ids as they are created via emit; we reference them by 'last' or named refs.
+  const refs = {};
+  const remember = (key) => { refs[key] = Context.selectedId; };
+  // Each step demonstrates user *thinking*: select before add, connect-create, rename.
+  const script = [
+    // Build root
+    { fn: () => bus.emit('cmd-add-node', { at:[0,-260,0], title:'JVM Runtime', parent:null }), say:'create root', delay: 500 },
+    { fn: () => remember('jvm'), delay: 50 },
+    // Add three regions as children — user must keep selecting parent each time
+    { fn: () => bus.emit('node-select', { eid: refs.jvm }), delay: 200 },
+    { fn: () => bus.emit('cmd-add-node', { at:[-340,40,0], title:'Heap', body:'Object storage' }), delay: 450 },
+    { fn: () => remember('heap'), delay: 50 },
+    { fn: () => bus.emit('node-select', { eid: refs.jvm }), delay: 200 },
+    { fn: () => bus.emit('cmd-add-node', { at:[340,40,0], title:'JVM Stack', body:'Per-thread' }), delay: 450 },
+    { fn: () => remember('stack'), delay: 50 },
+    { fn: () => bus.emit('node-select', { eid: refs.jvm }), delay: 200 },
+    { fn: () => bus.emit('cmd-add-node', { at:[0,260,0], title:'Metaspace', body:'Class metadata' }), delay: 450 },
+    { fn: () => remember('meta'), delay: 50 },
+    // Heap children at deeper layer
+    { fn: () => bus.emit('cmd-layer', { z:-300 }), delay: 250 },
+    { fn: () => bus.emit('node-select', { eid: refs.heap }), delay: 200 },
+    { fn: () => bus.emit('cmd-add-node', { at:[-480,220,-300], title:'Eden', body:'New objects' }), delay: 400 },
+    { fn: () => remember('eden'), delay: 50 },
+    { fn: () => bus.emit('node-select', { eid: refs.heap }), delay: 200 },
+    { fn: () => bus.emit('cmd-add-node', { at:[-340,220,-300], title:'Survivor', body:'S0 / S1' }), delay: 400 },
+    { fn: () => bus.emit('node-select', { eid: refs.heap }), delay: 200 },
+    { fn: () => bus.emit('cmd-add-node', { at:[-200,220,-300], title:'Old Gen', body:'Long-lived' }), delay: 400 },
+    // Stack threads
+    { fn: () => bus.emit('node-select', { eid: refs.stack }), delay: 200 },
+    { fn: () => bus.emit('cmd-add-node', { at:[200,220,-300], title:'Thread-1', body:'frame' }), delay: 400 },
+    { fn: () => remember('t1'), delay: 50 },
+    { fn: () => bus.emit('node-select', { eid: refs.stack }), delay: 200 },
+    { fn: () => bus.emit('cmd-add-node', { at:[420,220,-300], title:'Thread-2', body:'frame' }), delay: 400 },
+    // Object node at z=-600, demonstrate connect-create flow
+    { fn: () => bus.emit('cmd-layer', { z:-600 }), delay: 250 },
+    { fn: () => bus.emit('node-select', { eid: refs.eden }), delay: 200 },
+    { fn: () => bus.emit('cmd-add-node', { at:[-340,420,-600], title:'Object', body:'In Eden' }), delay: 450 },
+    { fn: () => remember('obj'), delay: 50 },
+    // Show off connect mode -> create new node by clicking empty space (simulated)
+    { fn: () => bus.emit('node-select', { eid: refs.t1 }), delay: 250 },
+    { fn: () => bus.emit('cmd-connect-start'), delay: 250 },
+    { fn: () => bus.emit('cmd-add-node', { at:[200,420,-600], title:'ref', body:'local var', connectFrom: refs.t1 }), delay: 450 },
+    // Reuse layout
+    { fn: () => bus.emit('node-select', { eid: refs.jvm }), delay: 250 },
+    { fn: () => bus.emit('cmd-layout'), delay: 600 },
+    // Final touch: collapse heap to show 3D nesting flatten
+    { fn: () => bus.emit('node-select', { eid: refs.heap }), delay: 400 },
+    { fn: () => bus.emit('cmd-collapse'), delay: 600 },
+    { fn: () => bus.emit('cmd-collapse'), delay: 600 },
+  ];
+  const startUI = () => {
+    document.getElementById('btn-demo').style.display = 'none';
+    document.getElementById('btn-stop').style.display = '';
+  };
+  startUI();
+  let i = 0;
+  const tick = () => {
+    if (i >= script.length) { stopDemo(); return; }
+    const step = script[i++];
+    step.fn();
+    const d = (step.delay || 300) / (Context.demoSpeed || 1);
+    demoTimer = setTimeout(tick, d);
+  };
+  demoTimer = setTimeout(tick, 100);
+}
+
+/* ============================================================
+   14. DOCK WIRING
+   ============================================================ */
+document.getElementById('btn-demo').addEventListener('click', () => bus.emit('cmd-demo-start'));
+document.getElementById('btn-stop').addEventListener('click', () => bus.emit('cmd-demo-stop'));
+document.getElementById('btn-reset').addEventListener('click', () => bus.emit('cmd-reset'));
+const speedEl = document.getElementById('speed');
+const speedVal = document.getElementById('speed-val');
+speedEl.addEventListener('input', () => {
+  Context.demoSpeed = parseFloat(speedEl.value);
+  speedVal.textContent = Context.demoSpeed.toFixed(2) + '×';
+});
+
+/* ============================================================
+   15. SEED: Java Memory Model
+   ============================================================ */
+function buildJMM() {
+  const jvm = createNode(0, -260, 0, 'JVM Runtime', '');
+  const heap = createNode(-340, 40, 0, 'Heap', 'Object storage', jvm);
+  const stack = createNode(340, 40, 0, 'JVM Stack', 'Per-thread', jvm);
+  const meta = createNode(0, 260, 0, 'Metaspace', 'Class metadata', jvm);
+  const eden = createNode(-480, 220, -300, 'Eden', 'New objects', heap);
+  const surv = createNode(-340, 220, -300, 'Survivor', 'S0 / S1', heap);
+  const old  = createNode(-200, 220, -300, 'Old Gen', 'Long-lived', heap);
+  const t1   = createNode(200, 220, -300, 'Thread-1', 'Local vars', stack);
+  const t2   = createNode(420, 220, -300, 'Thread-2', 'Local vars', stack);
+  const obj  = createNode(-340, 420, -600, 'Object', 'In Eden', eden);
+  const ref1 = createNode(200, 420, -600, 'ref', 'Local variable', t1);
+  const ref2 = createNode(420, 420, -600, 'ref', 'Local variable', t2);
+  createEdge(jvm,heap,'manages'); createEdge(jvm,stack,'manages'); createEdge(jvm,meta,'manages');
+  createEdge(heap,eden,'contains'); createEdge(heap,surv,'contains'); createEdge(heap,old,'contains');
+  createEdge(stack,t1,'frame'); createEdge(stack,t2,'frame');
+  createEdge(eden,obj,'allocates');
+  createEdge(t1,ref1,'holds'); createEdge(t2,ref2,'holds');
+  createEdge(ref1,obj,'points to'); createEdge(ref2,obj,'points to');
+  Context.selectedId = jvm;
+}
+buildJMM();
+scheduleRender();
+</script>
+</body>
+</html>
