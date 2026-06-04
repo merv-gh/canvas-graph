@@ -138,6 +138,28 @@ Everything lives in a single `index.html`:
 
 ---
 
+## Screenshot Tests
+
+The Playwright suite runs the app through Vite in screenshot mode:
+
+```bash
+npm install
+npm test
+```
+
+Screenshot mode is enabled with `?screenshot=1`. It hides the HUD, dock, canvas, modals, and toast UI, then paints nodes as fixed-size 50% black rectangles over a white background. Two intersecting nodes produce a distinct overlap color near `rgb(64, 64, 64)`.
+
+The starter baselines are URL fixtures:
+
+| URL | Purpose |
+|-----|---------|
+| `/?screenshot=1&fixture=separated` | Two hardcoded nodes that should not overlap |
+| `/?screenshot=1&fixture=overlapping` | Two hardcoded nodes that prove the detector and red-square annotation work |
+
+When a no-overlap expectation finds overlap-color pixels, the test writes an annotated PNG with red square markers into Playwright's test output.
+
+---
+
 ## Keyboard Map
 
 | Key | Action |

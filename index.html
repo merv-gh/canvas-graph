@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>3D ECS Graph — Event-Driven Architecture</title>
+<script>
+  (() => {
+    const params = new URLSearchParams(location.search);
+    if (params.has('screenshot') || params.get('mode') === 'screenshot') {
+      document.documentElement.classList.add('screenshot-mode');
+    }
+  })();
+</script>
 <style>
   :root {
     --bg: #1c1f2e;
@@ -131,6 +139,34 @@
   #dock button.active { background:rgba(255,184,77,0.18); border-color:var(--accent-2); color:var(--accent-2); }
   #dock input[type=range] { accent-color: var(--accent); width:90px; }
   #dock label { color:var(--text-mute); }
+
+  /* Screenshot-test mode: strip chrome and make DOM-node overlap a pixel color. */
+  html.screenshot-mode body { background:#fff; }
+  html.screenshot-mode canvas,
+  html.screenshot-mode #hud,
+  html.screenshot-mode #dock,
+  html.screenshot-mode #toast,
+  html.screenshot-mode #jump-layer,
+  html.screenshot-mode .modal { display:none !important; }
+  html.screenshot-mode #ui-layer { pointer-events:none; }
+  html.screenshot-mode .node,
+  html.screenshot-mode .node:hover,
+  html.screenshot-mode .node.selected,
+  html.screenshot-mode .node.connecting,
+  html.screenshot-mode .node.collapsed,
+  html.screenshot-mode .node.is-container {
+    width:160px; height:72px; min-width:160px; max-width:160px;
+    padding:0; border:0; border-radius:0; box-shadow:none; backdrop-filter:none;
+    background:rgba(0,0,0,0.5); opacity:1 !important; overflow:hidden;
+    transition:none; cursor:default;
+  }
+  html.screenshot-mode .node .title,
+  html.screenshot-mode .node .body,
+  html.screenshot-mode .node.is-container .title {
+    color:transparent; text-shadow:none;
+  }
+  html.screenshot-mode .node.has-children .title::before,
+  html.screenshot-mode .node.collapsed .title::after { content:none; }
 </style>
 </head>
 <body>
@@ -1302,6 +1338,8 @@ refreshToastBtn();
 /* ============================================================
    15. SEED: Java Memory Model
    ============================================================ */
+const queryParams = new URLSearchParams(location.search);
+
 function buildJMM() {
   const jvm = createNode(0, -260, 0, 'JVM Runtime', '');
   const heap = createNode(-340, 40, 0, 'Heap', 'Object storage', jvm);
@@ -1323,7 +1361,58 @@ function buildJMM() {
   createEdge(ref1,obj,'points to'); createEdge(ref2,obj,'points to');
   Context.selectedId = jvm;
 }
-buildJMM();
+
+const screenshotFixtures = {
+  separated: {
+    camera: { x: 0, y: 0, zoom: 1, layerZ: 0 },
+    nodes: [
+      { at: [-140, 0, 0], title: 'A' },
+      { at: [140, 0, 0], title: 'B' },
+    ],
+  },
+  overlapping: {
+    camera: { x: 0, y: 0, zoom: 1, layerZ: 0 },
+    nodes: [
+      { at: [-40, 0, 0], title: 'A' },
+      { at: [40, 0, 0], title: 'B' },
+    ],
+  },
+};
+
+function resetGraphState(camera = { x: 0, y: 0, zoom: 1, layerZ: 0 }) {
+  stopDemo();
+  world.clear();
+  Context.selectedId = null;
+  Context.mode = 'normal';
+  Context.camera = { ...camera };
+  Context.history = [];
+  Context.lastVisited = null;
+  Context.connectSource = null;
+  Context.drag = { active: false, id: null, sx: 0, sy: 0, moved: false };
+}
+
+function buildScreenshotFixture(name) {
+  const fixture = screenshotFixtures[name];
+  if (!fixture) throw new Error(`Unknown screenshot fixture: ${name}`);
+  resetGraphState(fixture.camera);
+  const ids = fixture.nodes.map(node => createNode(node.at[0], node.at[1], node.at[2], node.title, node.body || '', node.parentId || null));
+  for (const edge of fixture.edges || []) createEdge(ids[edge.from], ids[edge.to], edge.label || '');
+  Context.selectedId = ids[0] || null;
+  document.body.dataset.fixture = name;
+  document.body.dataset.fixtureReady = '1';
+}
+
+window.__ecsGraphTest = {
+  buildScreenshotFixture,
+  resetGraphState,
+  worldToScreen,
+  renderNow: render,
+  fixtures: Object.keys(screenshotFixtures),
+};
+
+const screenshotFixture = queryParams.get('fixture');
+if (screenshotFixture) buildScreenshotFixture(screenshotFixture);
+else buildJMM();
 scheduleRender();
 </script>
 </body>

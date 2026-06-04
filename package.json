@@ -1,0 +1,14 @@
+{
+  "name": "ecs-canvas-graph",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.44.0",
+    "pngjs": "^7.0.0",
+    "vite": "^8.0.16"
+  }
+}
