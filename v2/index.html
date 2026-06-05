@@ -9,5 +9,91 @@
 </head>
 <body>
   <div id="app"></div>
+
+  <template id="tpl-shell">
+    <section class="shell">
+      <header class="top" data-place="top"></header>
+      <aside class="left" data-place="left"></aside>
+      <main class="stage" data-place="stage"></main>
+      <div class="modal-slot" data-place="modal"></div>
+    </section>
+  </template>
+
+  <template id="tpl-toolbar">
+    <nav class="toolbar" aria-label="App commands">
+      <span class="brand">ECS Graph v2</span>
+      <button data-command="editing.node.create">+ Node</button>
+      <button data-command="palette.open">Palette</button>
+      <button data-command="help.open">Help</button>
+      <button data-command="modal.open" data-title="Modal" data-body="Ready.">Modal</button>
+    </nav>
+  </template>
+
+  <template id="tpl-log">
+    <section>
+      <h2 class="panel-title">Event log</h2>
+      <div class="log" data-slot="rows"></div>
+    </section>
+  </template>
+
+  <template id="tpl-log-row">
+    <div class="log-row" data-text="name"></div>
+  </template>
+
+  <template id="tpl-nodes">
+    <div class="nodes"></div>
+  </template>
+
+  <template id="tpl-node">
+    <article class="node">
+      <div class="node-title" data-text="title"></div>
+      <div class="node-meta" data-text="meta"></div>
+    </article>
+  </template>
+
+  <template id="tpl-modal">
+    <div class="modal-layer">
+      <div class="backdrop" data-command="modal.close"></div>
+      <section class="modal">
+        <div class="modal-head">
+          <span data-text="title"></span>
+          <button data-command="modal.close">Close</button>
+        </div>
+        <div class="modal-body" data-slot="body"></div>
+      </section>
+    </div>
+  </template>
+
+  <template id="tpl-palette">
+    <section class="palette">
+      <input class="palette-search" placeholder="Search commands" autocomplete="off" autofocus>
+      <div class="command-list" data-slot="commands"></div>
+    </section>
+  </template>
+
+  <template id="tpl-help">
+    <section class="help-list" data-slot="systems"></section>
+  </template>
+
+  <template id="tpl-command-section">
+    <section class="command-section">
+      <h3 data-text="group"></h3>
+      <div data-slot="rows"></div>
+    </section>
+  </template>
+
+  <template id="tpl-command-row">
+    <button class="command-row">
+      <span><b data-text="label"></b><small data-text="id"></small></span>
+      <kbd data-text="shortcut"></kbd>
+    </button>
+  </template>
+
+  <template id="tpl-help-row">
+    <div class="help-row">
+      <span><b data-text="label"></b><small data-text="id"></small></span>
+      <input class="shortcut-edit">
+    </div>
+  </template>
 </body>
 </html>

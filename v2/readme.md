@@ -122,6 +122,14 @@ type Renderable = string | Node | (() => string | Node);
 
 This keeps render as an adapter boundary. Today it accepts DOM strings or DOM nodes; later we can add JSX/React adapters without forcing every system to learn a new component model.
 
+The default adapter uses native `<template>` elements from `index.html`:
+
+- `ctx.contexts.templates.clone(name)` clones `#tpl-${name}`.
+- `templates.text(root, name, value)` fills `[data-text="name"]`.
+- `templates.slot(root, name)` finds `[data-slot="name"]` for child renderables.
+
+Systems still emit renderables, not framework components. The template adapter is just the current default.
+
 ## Open Questions
 
 - Should `selected` and `focused` move out of `world` into small system-owned stores?

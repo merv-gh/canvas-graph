@@ -1,5 +1,4 @@
 type Id = string;
-type Html = string;
 type Renderable = string | globalThis.Node | (() => string | globalThis.Node);
 type RawInput = 'click' | 'keydown' | 'pointerdown' | 'pointermove' | 'pointerup';
 
@@ -19,7 +18,7 @@ type AppEvents = {
   'render.view.set': { place: Place; key?: string; view: Renderable };
   'render.view.clear': { place: Place; key?: string };
   'render.nodes.draw': void;
-  'modal.open': { title?: string; body?: Html };
+  'modal.open': { title?: string; body?: Renderable };
   'modal.close': void;
   'palette.open': void;
   'help.open': void;
@@ -82,19 +81,43 @@ type Registry = ((name: string, setup: AppSystem) => void) & {
 
 declare global { interface Window { v2?: AppCtx } }
 
-const esc = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, ch => ({
-  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-})[ch]!);
 const systemOf = (id: string) => id.split('.')[0] || 'app';
 const shortcutOf = (command: CommandSpec) => command.shortcut ?? (command.input?.key ? command.input.key.toUpperCase() : '');
 const keyOfShortcut = (shortcut: string) => shortcut.trim().toLowerCase() === 'esc' ? 'Escape' : shortcut.trim();
 const keyMatches = (event: Event, key: string) => event instanceof KeyboardEvent
   && (event.key.toLowerCase() === key.toLowerCase() || (key === '?' && event.key === '/' && event.shiftKey));
+const appendRenderable = (slot: Element, view: Renderable) => {
+  const value = typeof view === 'function' ? view() : view;
+  if (typeof value === 'string') slot.insertAdjacentHTML('beforeend', value);
+  else slot.append(value);
+};
 const grouped = <T,>(items: T[], keyOf: (item: T) => string) => {
   const groups = new Map<string, T[]>();
   items.forEach(item => (groups.get(keyOf(item)) || groups.set(keyOf(item), []).get(keyOf(item))!).push(item));
   return [...groups.entries()];
 };
+
+function templateContext() {
+  const find = (root: ParentNode, selector: string) =>
+    root instanceof Element && root.matches(selector) ? root : root.querySelector(selector);
+  const clone = <T extends HTMLElement = HTMLElement>(name: string) => {
+    const template = document.getElementById(`tpl-${name}`);
+    const node = template instanceof HTMLTemplateElement ? template.content.firstElementChild?.cloneNode(true) : null;
+    if (!(node instanceof HTMLElement)) throw new Error(`Missing template: ${name}`);
+    return node as T;
+  };
+  const text = (root: ParentNode, name: string, value: unknown) => {
+    const el = find(root, `[data-text="${name}"]`);
+    if (el) el.textContent = String(value ?? '');
+    return root;
+  };
+  const slot = (root: ParentNode, name: string) => {
+    const el = find(root, `[data-slot="${name}"]`);
+    if (!(el instanceof HTMLElement)) throw new Error(`Missing slot: ${name}`);
+    return el;
+  };
+  return { clone, text, slot };
+}
 
 function eventBus(): Bus {
   const listeners = new Map<EventName, ((data: unknown, event: AnyEvent) => void)[]>();
@@ -137,6 +160,7 @@ function worldStore() {
 function createContexts(bus: Bus) {
   const commandMap = new Map<string, CommandSpec>();
   const places = new Map<Place, HTMLElement>();
+  const templates = templateContext();
 
   const commands = {
     register: (command: CommandSpec) => commandMap.set(command.id, command),
@@ -197,7 +221,7 @@ function createContexts(bus: Bus) {
     },
   };
 
-  return { commands, input, places: placeContext };
+  return { commands, input, places: placeContext, templates };
 }
 
 function registry(): Registry {
@@ -225,38 +249,38 @@ const feature = features;
 system('render', ({ on, emit, world, contexts }) => {
   const root = document.getElementById('app')!;
   const views = new Map<Place, Map<string, Renderable>>();
-  const append = (slot: HTMLElement, view: Renderable) => {
-    const value = typeof view === 'function' ? view() : view;
-    if (typeof value === 'string') slot.insertAdjacentHTML('beforeend', value);
-    else slot.append(value);
-  };
   const flush = (place: Place) => {
     const slot = contexts.places.el(place), parts = views.get(place);
     if (!slot || !parts) return;
     slot.replaceChildren();
-    [...parts.values()].forEach(view => append(slot, view));
+    [...parts.values()].forEach(view => appendRenderable(slot, view));
+  };
+  const nodeView = (node: NodeEntity) => {
+    const el = contexts.templates.clone('node');
+    const pos = node.Position ?? { x: 0, y: 0 };
+    el.dataset.nodeId = node.id;
+    el.classList.toggle('selected', world.selected === node.id);
+    el.classList.toggle('focused', world.focused === node.id);
+    el.style.left = `${pos.x}px`;
+    el.style.top = `${pos.y}px`;
+    el.style.width = `${node.Size.w}px`;
+    el.style.height = `${node.Size.h}px`;
+    contexts.templates.text(el, 'title', node.Label.text);
+    contexts.templates.text(el, 'meta', node.id);
+    return el;
   };
   const drawNodes = () => emit('render.view.set', {
     place: Places.Stage,
     key: 'nodes',
-    view: () => `<div class="nodes">${world.nodes().map(node => {
-      const pos = node.Position ?? { x: 0, y: 0 };
-      const focusClass = world.focused === node.id ? ' focused' : '';
-      return `<article class="node ${world.selected === node.id ? 'selected' : ''}${focusClass}" data-node-id="${node.id}"
-        style="left:${pos.x}px;top:${pos.y}px;width:${node.Size.w}px;height:${node.Size.h}px">
-        <div class="node-title">${esc(node.Label.text)}</div>
-        <div class="node-meta">${esc(node.id)}</div>
-      </article>`;
-    }).join('')}</div>`,
+    view: () => {
+      const layer = contexts.templates.clone('nodes');
+      world.nodes().forEach(node => layer.append(nodeView(node)));
+      return layer;
+    },
   });
 
   on('render.shell', () => {
-    root.innerHTML = `<section class="shell">
-      <header class="top" data-place="${Places.Top}"></header>
-      <aside class="left" data-place="${Places.Left}"></aside>
-      <main class="stage" data-place="${Places.Stage}"></main>
-      <div class="modal-slot" data-place="${Places.Modal}"></div>
-    </section>`;
+    root.replaceChildren(contexts.templates.clone('shell'));
     Object.values(Places).forEach(place => contexts.places.set(place, root.querySelector(`[data-place="${place}"]`)));
     Object.values(Places).forEach(flush);
   });
@@ -272,23 +296,29 @@ system('input', ({ on, contexts }) => {
   on('app.start', () => contexts.input.start());
 });
 
-system('main', ({ on, emit }) => {
+system('main', ({ on, emit, contexts }) => {
   on('app.start', () => {
     emit('render.shell');
     emit('render.view.set', {
       place: Places.Top,
       key: 'toolbar',
-      view: `<span class="brand">ECS Graph v2</span>
-        <button data-command="editing.node.create">+ Node</button>
-        <button data-command="palette.open">Palette</button>
-        <button data-command="help.open">Help</button>
-        <button data-command="modal.open" data-title="Modal" data-body="Ready.">Modal</button>`,
+      view: () => contexts.templates.clone('toolbar'),
     });
   });
 });
 
-system('log', ({ bus, emit }) => {
+system('log', ({ bus, emit, contexts }) => {
   const rows: string[] = [];
+  const renderLog = () => {
+    const panel = contexts.templates.clone('log');
+    const list = contexts.templates.slot(panel, 'rows');
+    rows.forEach(row => {
+      const item = contexts.templates.clone('log-row');
+      contexts.templates.text(item, 'name', row);
+      list.append(item);
+    });
+    return panel;
+  };
   bus.onAny(event => {
     if (event.name.startsWith('render.')) return;
     rows.unshift(event.name);
@@ -296,7 +326,7 @@ system('log', ({ bus, emit }) => {
     emit('render.view.set', {
       place: Places.Left,
       key: 'log',
-      view: `<h2 class="panel-title">Event log</h2><div class="log">${rows.map(row => `<div class="log-row">${esc(row)}</div>`).join('')}</div>`,
+      view: renderLog,
     });
   });
 });
@@ -321,62 +351,91 @@ system('modal', ({ on, emit, contexts }) => {
     emit('render.view.set', {
       place: Places.Modal,
       key: 'modal',
-      view: `<div class="modal-slot open">
-        <div class="backdrop" data-command="modal.close"></div>
-        <section class="modal">
-          <div class="modal-head"><span>${esc(title)}</span><button data-command="modal.close">Close</button></div>
-          <div class="modal-body">${body}</div>
-        </section>
-      </div>`,
+      view: () => {
+        const modal = contexts.templates.clone('modal');
+        contexts.templates.text(modal, 'title', title);
+        appendRenderable(contexts.templates.slot(modal, 'body'), body);
+        return modal;
+      },
     });
+    queueMicrotask(() => (contexts.places.el(Places.Modal)?.querySelector('[autofocus]') as HTMLElement | null)?.focus());
   });
 });
 
 system('palette', ({ on, emit, contexts }) => {
-  const renderRows = (query = '') => {
+  const visibleCommands = (query = '') => {
     const q = query.trim().toLowerCase();
-    const commands = contexts.commands.all()
+    return contexts.commands.all()
       .filter(command => !command.hidden)
       .filter(command => !q || `${command.id} ${command.label} ${command.group ?? ''} ${shortcutOf(command)}`.toLowerCase().includes(q));
-    const sections = grouped(commands, command => command.group ?? systemOf(command.id));
-    return `<input class="palette-search" placeholder="Search commands" value="${esc(query)}" autocomplete="off" autofocus>
-      <div class="command-list">${sections.map(([group, groupCommands]) => `
-        <section class="command-section">
-          <h3>${esc(group)}</h3>
-          ${groupCommands.map(command => `<button class="command-row" data-command="${esc(command.id)}">
-            <span><b>${esc(command.label)}</b><small>${esc(command.id)}</small></span>
-            ${shortcutOf(command) ? `<kbd>${esc(shortcutOf(command))}</kbd>` : ''}
-          </button>`).join('')}
-        </section>`).join('')}</div>`;
+  };
+  const commandSection = (group: string, commands: CommandSpec[]) => {
+    const section = contexts.templates.clone('command-section');
+    const rows = contexts.templates.slot(section, 'rows');
+    contexts.templates.text(section, 'group', group);
+    commands.forEach(command => {
+      const row = contexts.templates.clone<HTMLButtonElement>('command-row');
+      const shortcut = shortcutOf(command);
+      row.dataset.command = command.id;
+      contexts.templates.text(row, 'label', command.label);
+      contexts.templates.text(row, 'id', command.id);
+      if (shortcut) contexts.templates.text(row, 'shortcut', shortcut);
+      else row.querySelector('kbd')?.remove();
+      rows.append(row);
+    });
+    return section;
+  };
+  const renderList = (query = '') => {
+    const fragment = document.createDocumentFragment();
+    grouped(visibleCommands(query), command => command.group ?? systemOf(command.id))
+      .forEach(([group, commands]) => fragment.append(commandSection(group, commands)));
+    return fragment;
+  };
+  const renderPalette = () => {
+    const palette = contexts.templates.clone('palette');
+    contexts.templates.slot(palette, 'commands').append(renderList());
+    return palette;
   };
   contexts.commands.register({ id: 'palette.open', label: 'Open palette', event: 'palette.open', group: 'palette', shortcut: 'P', input: { on: 'keydown', key: 'p', prevent: true } });
   on('palette.open', () => emit('modal.open', {
     title: 'Palette',
-    body: renderRows(),
+    body: renderPalette,
   }));
   document.addEventListener('input', event => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement) || !target.classList.contains('palette-search')) return;
-    const body = target.closest('.modal-body');
-    if (body) body.innerHTML = renderRows(target.value);
-    (body?.querySelector('.palette-search') as HTMLInputElement | null)?.focus();
+    const list = target.closest('.palette')?.querySelector('[data-slot="commands"]');
+    if (list) list.replaceChildren(renderList(target.value));
   });
 });
 
 system('help', ({ on, emit, contexts }) => {
   const renderHelp = () => {
+    const help = contexts.templates.clone('help');
+    const list = contexts.templates.slot(help, 'systems');
     const sections = grouped(contexts.commands.all().filter(command => !command.hidden), command => command.group ?? systemOf(command.id));
-    return `<div class="help-list">${sections.map(([group, commands]) => `
-      <section class="command-section">
-        <h3>${esc(group)}</h3>
-        ${commands.map(command => `<div class="help-row">
-          <span><b>${esc(command.label)}</b><small>${esc(command.id)}</small></span>
-          <input class="shortcut-edit" data-shortcut-command="${esc(command.id)}" value="${esc(shortcutOf(command))}" aria-label="${esc(command.label)} shortcut">
-        </div>`).join('')}
-      </section>`).join('')}</div>`;
+    sections.forEach(([group, commands]) => {
+      const section = contexts.templates.clone('command-section');
+      const rows = contexts.templates.slot(section, 'rows');
+      contexts.templates.text(section, 'group', group);
+      commands.forEach(command => {
+        const row = contexts.templates.clone('help-row');
+        const input = row.querySelector('input');
+        contexts.templates.text(row, 'label', command.label);
+        contexts.templates.text(row, 'id', command.id);
+        if (input) {
+          input.dataset.shortcutCommand = command.id;
+          input.value = shortcutOf(command);
+          input.setAttribute('aria-label', `${command.label} shortcut`);
+        }
+        rows.append(row);
+      });
+      list.append(section);
+    });
+    return help;
   };
   contexts.commands.register({ id: 'help.open', label: 'Open help', event: 'help.open', group: 'help', shortcut: '?', input: { on: 'keydown', key: '?', prevent: true } });
-  on('help.open', () => emit('modal.open', { title: 'Help', body: renderHelp() }));
+  on('help.open', () => emit('modal.open', { title: 'Help', body: renderHelp }));
   document.addEventListener('change', event => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement) || !target.classList.contains('shortcut-edit')) return;
