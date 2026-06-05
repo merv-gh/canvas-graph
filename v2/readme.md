@@ -28,6 +28,7 @@ V2 serves at `http://127.0.0.1:5174/`.
 - System bodies receive `on` and `emit` directly, so they read as event handlers rather than plumbing.
 - `ctx.contexts.commands` owns command metadata and raw input mapping.
 - `ctx.contexts.places` exposes named render places without leaking DOM queries everywhere.
+- `ctx.contexts.view` owns pan/zoom state plus screen/space coordinate utilities.
 - `world` stores plain node data plus small UI state (`selected`, `focused`).
 
 ## Systems
@@ -39,6 +40,7 @@ V2 serves at `http://127.0.0.1:5174/`.
 - `modal`: registers modal commands and renders modal contents.
 - `palette`: registers the palette command and renders searchable commands from command metadata.
 - `help`: opens the shortcut editor, grouped by system.
+- `view`: owns canvas pan/zoom and emits `view.changed`.
 - `editing`: registers the create-node command and label payload.
 - `data`: owns node create/update and emits data facts.
 - `layout`: handles layout commands such as centering a node.
@@ -129,6 +131,18 @@ The default adapter uses native `<template>` elements from `index.html`:
 - `templates.slot(root, name)` finds `[data-slot="name"]` for child renderables.
 
 Systems still emit renderables, not framework components. The template adapter is just the current default.
+
+## View And Space
+
+Node positions are graph-space coordinates. The stage is screen-space. The `view` context bridges them:
+
+- `view.get()` returns `{ x, y, scale }`, where `x/y` are the graph-space point at the top-left of the stage.
+- `view.screenToSpace(point)` and `view.spaceToScreen(point)` convert coordinates.
+- `view.clientToSpace(place, point)` converts pointer events into graph-space.
+- `view.visibleRect(place, margin)` returns the graph-space area currently visible.
+- `view.isVisible(place, rect, margin)` lets render skip offscreen entities.
+
+Render keeps HTML nodes in graph space, then transforms the node layer with the current view. Wheel zoom anchors at the cursor; background drag pans the view. Dragging nodes uses `clientToSpace`, so node movement stays correct at any zoom level.
 
 ## Open Questions
 

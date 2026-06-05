@@ -17,19 +17,31 @@ button:hover { border-color: var(--accent); }
 .shell { display: grid; grid-template: 48px 1fr / 260px 1fr; height: 100vh; }
 .top { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
 .toolbar { display: flex; align-items: center; gap: 8px; width: 100%; }
+.toolbar-spacer { flex: 1; }
 .brand { font-weight: 700; margin-right: 10px; }
 .left { border-right: 1px solid var(--line); background: var(--panel-2); overflow: auto; padding: 12px; }
-.stage { position: relative; overflow: hidden; background: #fbfbf8; }
+.stage {
+  --grid-size: 32px;
+  --grid-x: 0px;
+  --grid-y: 0px;
+  position: relative;
+  overflow: hidden;
+  background: #fbfbf8;
+  cursor: grab;
+  touch-action: none;
+}
+.stage.panning { cursor: grabbing; }
 .stage::before {
   content: "";
   position: absolute;
   inset: 0;
   background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
-  background-size: 32px 32px;
+  background-position: var(--grid-x) var(--grid-y);
+  background-size: var(--grid-size) var(--grid-size);
   opacity: .55;
 }
 
-.nodes { position: absolute; inset: 0; }
+.nodes { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; }
 .node {
   position: absolute;
   min-width: 140px;

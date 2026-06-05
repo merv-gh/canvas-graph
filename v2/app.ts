@@ -1,12 +1,14 @@
 type Id = string;
 type Renderable = string | globalThis.Node | (() => string | globalThis.Node);
-type RawInput = 'click' | 'keydown' | 'pointerdown' | 'pointermove' | 'pointerup';
+type RawInput = 'click' | 'keydown' | 'pointerdown' | 'pointermove' | 'pointerup' | 'wheel';
 
 const Places = { Top: 'top', Left: 'left', Stage: 'stage', Modal: 'modal' } as const;
 type Place = typeof Places[keyof typeof Places];
 
 type Position = { x: number; y: number };
 type Size = { w: number; h: number };
+type Rect = Position & Size;
+type ViewState = Position & { scale: number };
 type Label = { text: string };
 type NodeDraft = { Label?: Label; Position?: Position; Size?: Size };
 type NodeEntity = { id: Id; kind: 'node'; Label: Label; Size: Size; Position?: Position };
@@ -22,6 +24,14 @@ type AppEvents = {
   'modal.close': void;
   'palette.open': void;
   'help.open': void;
+  'view.changed': ViewState;
+  'view.zoom.by': { screen: Position; factor: number };
+  'view.zoom.in': void;
+  'view.zoom.out': void;
+  'view.zoom.reset': void;
+  'view.pan.start': Position;
+  'view.pan.move': Position;
+  'view.pan.end': void;
   'editing.node.create': NodeDraft;
   'data.node.create': NodeDraft;
   'data.node.created': { id: Id };
@@ -85,7 +95,20 @@ const systemOf = (id: string) => id.split('.')[0] || 'app';
 const shortcutOf = (command: CommandSpec) => command.shortcut ?? (command.input?.key ? command.input.key.toUpperCase() : '');
 const keyOfShortcut = (shortcut: string) => shortcut.trim().toLowerCase() === 'esc' ? 'Escape' : shortcut.trim();
 const keyMatches = (event: Event, key: string) => event instanceof KeyboardEvent
-  && (event.key.toLowerCase() === key.toLowerCase() || (key === '?' && event.key === '/' && event.shiftKey));
+  && (
+    event.key.toLowerCase() === key.toLowerCase()
+    || (key === '?' && event.key === '/' && event.shiftKey)
+    || (key === '+' && event.key === '=' && event.shiftKey)
+  );
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+const rectsIntersect = (a: Rect, b: Rect) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+const nodeRect = (node: NodeEntity): Rect => {
+  const pos = node.Position ?? { x: 0, y: 0 };
+  return { x: pos.x - node.Size.w / 2, y: pos.y - node.Size.h / 2, w: node.Size.w, h: node.Size.h };
+};
+const clientPoint = (event: Event): Position => ({ x: (event as PointerEvent).clientX, y: (event as PointerEvent).clientY });
+const isStageSurface = (event: Event, stage: Element) =>
+  event.target === stage || (event.target instanceof Element && event.target.classList.contains('nodes'));
 const appendRenderable = (slot: Element, view: Renderable) => {
   const value = typeof view === 'function' ? view() : view;
   if (typeof value === 'string') slot.insertAdjacentHTML('beforeend', value);
@@ -117,6 +140,52 @@ function templateContext() {
     return el;
   };
   return { clone, text, slot };
+}
+
+function viewContext(places: Map<Place, HTMLElement>) {
+  let state: ViewState = { x: 0, y: 0, scale: 1 };
+  const localRect = (place: Place) => places.get(place)?.getBoundingClientRect();
+  const get = () => ({ ...state });
+  const set = (next: Partial<ViewState>) => {
+    state = {
+      x: next.x ?? state.x,
+      y: next.y ?? state.y,
+      scale: clamp(next.scale ?? state.scale, 0.25, 3),
+    };
+    return get();
+  };
+  const clientToScreen = (place: Place, point: Position) => {
+    const rect = localRect(place);
+    return rect ? { x: point.x - rect.left, y: point.y - rect.top } : point;
+  };
+  const screenToSpace = (point: Position) => ({ x: state.x + point.x / state.scale, y: state.y + point.y / state.scale });
+  const spaceToScreen = (point: Position) => ({ x: (point.x - state.x) * state.scale, y: (point.y - state.y) * state.scale });
+  const clientToSpace = (place: Place, point: Position) => screenToSpace(clientToScreen(place, point));
+  const screenCenter = (place: Place) => {
+    const rect = localRect(place);
+    return rect ? { x: rect.width / 2, y: rect.height / 2 } : { x: innerWidth / 2, y: innerHeight / 2 };
+  };
+  const spaceCenter = (place: Place) => screenToSpace(screenCenter(place));
+  const visibleRect = (place: Place, margin = 0): Rect | null => {
+    const rect = localRect(place);
+    if (!rect) return null;
+    return {
+      x: state.x - margin,
+      y: state.y - margin,
+      w: rect.width / state.scale + margin * 2,
+      h: rect.height / state.scale + margin * 2,
+    };
+  };
+  const isVisible = (place: Place, rect: Rect, margin = 0) => {
+    const visible = visibleRect(place, margin);
+    return !visible || rectsIntersect(visible, rect);
+  };
+  const zoomAtScreen = (screen: Position, factor: number) => {
+    const before = screenToSpace(screen);
+    const scale = clamp(state.scale * factor, 0.25, 3);
+    return set({ scale, x: before.x - screen.x / scale, y: before.y - screen.y / scale });
+  };
+  return { get, set, clientToScreen, screenToSpace, spaceToScreen, clientToSpace, screenCenter, spaceCenter, visibleRect, isVisible, zoomAtScreen };
 }
 
 function eventBus(): Bus {
@@ -161,6 +230,7 @@ function createContexts(bus: Bus) {
   const commandMap = new Map<string, CommandSpec>();
   const places = new Map<Place, HTMLElement>();
   const templates = templateContext();
+  const view = viewContext(places);
 
   const commands = {
     register: (command: CommandSpec) => commandMap.set(command.id, command),
@@ -208,20 +278,17 @@ function createContexts(bus: Bus) {
           if (binding.stop) break;
         }
       };
-      (['click', 'keydown', 'pointerdown', 'pointermove', 'pointerup'] as RawInput[]).forEach(type => root.addEventListener(type, route));
+      (['click', 'keydown', 'pointerdown', 'pointermove', 'pointerup', 'wheel'] as RawInput[])
+        .forEach(type => root.addEventListener(type, route, type === 'wheel' ? { passive: false } : undefined));
     },
   };
 
   const placeContext = {
     set: (place: Place, el: HTMLElement | null) => { if (el) places.set(place, el); },
     el: (place: Place) => places.get(place) ?? null,
-    center(place: Place): Position {
-      const rect = places.get(place)?.getBoundingClientRect();
-      return rect ? { x: rect.width / 2, y: rect.height / 2 } : { x: innerWidth / 2, y: innerHeight / 2 };
-    },
   };
 
-  return { commands, input, places: placeContext, templates };
+  return { commands, input, places: placeContext, templates, view };
 }
 
 function registry(): Registry {
@@ -249,6 +316,14 @@ const feature = features;
 system('render', ({ on, emit, world, contexts }) => {
   const root = document.getElementById('app')!;
   const views = new Map<Place, Map<string, Renderable>>();
+  const syncStageView = () => {
+    const stage = contexts.places.el(Places.Stage), view = contexts.view.get();
+    if (!stage) return;
+    stage.style.setProperty('--grid-size', `${32 * view.scale}px`);
+    stage.style.setProperty('--grid-x', `${-view.x * view.scale}px`);
+    stage.style.setProperty('--grid-y', `${-view.y * view.scale}px`);
+    stage.dataset.zoom = `${Math.round(view.scale * 100)}%`;
+  };
   const flush = (place: Place) => {
     const slot = contexts.places.el(place), parts = views.get(place);
     if (!slot || !parts) return;
@@ -273,8 +348,13 @@ system('render', ({ on, emit, world, contexts }) => {
     place: Places.Stage,
     key: 'nodes',
     view: () => {
+      syncStageView();
+      const view = contexts.view.get();
       const layer = contexts.templates.clone('nodes');
-      world.nodes().forEach(node => layer.append(nodeView(node)));
+      layer.style.transform = `translate(${-view.x * view.scale}px, ${-view.y * view.scale}px) scale(${view.scale})`;
+      world.nodes()
+        .filter(node => contexts.view.isVisible(Places.Stage, nodeRect(node), 160))
+        .forEach(node => layer.append(nodeView(node)));
       return layer;
     },
   });
@@ -282,6 +362,7 @@ system('render', ({ on, emit, world, contexts }) => {
   on('render.shell', () => {
     root.replaceChildren(contexts.templates.clone('shell'));
     Object.values(Places).forEach(place => contexts.places.set(place, root.querySelector(`[data-place="${place}"]`)));
+    syncStageView();
     Object.values(Places).forEach(flush);
   });
   on('render.view.set', ({ place, key = 'default', view }) => {
@@ -290,6 +371,7 @@ system('render', ({ on, emit, world, contexts }) => {
   });
   on('render.view.clear', ({ place, key }) => { key ? views.get(place)?.delete(key) : views.delete(place); flush(place); });
   on('render.nodes.draw', drawNodes);
+  on('view.changed', drawNodes);
 });
 
 system('input', ({ on, contexts }) => {
@@ -469,8 +551,77 @@ system('data', ({ on, emit, world }) => {
 system('layout', ({ on, emit, contexts, world }) => {
   on('layout.node.center', ({ id }) => {
     const n = world.nodes().length;
-    const center = contexts.places.center(Places.Stage);
+    const center = contexts.view.spaceCenter(Places.Stage);
     emit('data.node.update', { id, patch: { Position: { x: center.x + (n % 4) * 24, y: center.y + (n % 3) * 18 } } });
+  });
+});
+
+system('view', ({ on, emit, contexts }) => {
+  let pan: { pointer: Position; view: ViewState } | null = null;
+  const stageSelector = `[data-place="${Places.Stage}"]`;
+  const commit = () => emit('view.changed', contexts.view.get());
+  const centerZoom = (factor: number) => {
+    contexts.view.zoomAtScreen(contexts.view.screenCenter(Places.Stage), factor);
+    commit();
+  };
+
+  contexts.commands.register({
+    id: 'view.zoom.wheel',
+    label: 'Wheel zoom',
+    event: 'view.zoom.by',
+    group: 'view',
+    hidden: true,
+    input: { on: 'wheel', selector: stageSelector, prevent: true },
+    payload: ({ event }) => {
+      const wheel = event as WheelEvent;
+      return {
+        screen: contexts.view.clientToScreen(Places.Stage, { x: wheel.clientX, y: wheel.clientY }),
+        factor: Math.exp(-wheel.deltaY * 0.001),
+      };
+    },
+  });
+  contexts.commands.register({ id: 'view.zoom.in', label: 'Zoom in', event: 'view.zoom.in', group: 'view', shortcut: '+', input: { on: 'keydown', key: '+', prevent: true } });
+  contexts.commands.register({ id: 'view.zoom.out', label: 'Zoom out', event: 'view.zoom.out', group: 'view', shortcut: '-', input: { on: 'keydown', key: '-', prevent: true } });
+  contexts.commands.register({ id: 'view.zoom.reset', label: 'Reset view', event: 'view.zoom.reset', group: 'view', shortcut: '0', input: { on: 'keydown', key: '0', prevent: true } });
+  contexts.commands.register({
+    id: 'view.pan.start',
+    label: 'Start canvas pan',
+    event: 'view.pan.start',
+    group: 'view',
+    hidden: true,
+    input: { on: 'pointerdown', selector: stageSelector, when: isStageSurface, prevent: true },
+    payload: ({ event }) => clientPoint(event!),
+  });
+  contexts.commands.register({
+    id: 'view.pan.move',
+    label: 'Pan canvas',
+    event: 'view.pan.move',
+    group: 'view',
+    hidden: true,
+    input: { on: 'pointermove', when: () => !!pan, prevent: true },
+    payload: ({ event }) => clientPoint(event!),
+  });
+  contexts.commands.register({ id: 'view.pan.end', label: 'End canvas pan', event: 'view.pan.end', group: 'view', hidden: true, input: { on: 'pointerup', when: () => !!pan } });
+
+  on('view.zoom.by', ({ screen, factor }) => { contexts.view.zoomAtScreen(screen, factor); commit(); });
+  on('view.zoom.in', () => centerZoom(1.2));
+  on('view.zoom.out', () => centerZoom(1 / 1.2));
+  on('view.zoom.reset', () => { contexts.view.set({ x: 0, y: 0, scale: 1 }); commit(); });
+  on('view.pan.start', pointer => {
+    pan = { pointer, view: contexts.view.get() };
+    contexts.places.el(Places.Stage)?.classList.add('panning');
+  });
+  on('view.pan.move', pointer => {
+    if (!pan) return;
+    contexts.view.set({
+      x: pan.view.x - (pointer.x - pan.pointer.x) / pan.view.scale,
+      y: pan.view.y - (pointer.y - pan.pointer.y) / pan.view.scale,
+    });
+    commit();
+  });
+  on('view.pan.end', () => {
+    pan = null;
+    contexts.places.el(Places.Stage)?.classList.remove('panning');
   });
 });
 
@@ -489,7 +640,7 @@ system('selection', ({ on, emit, world, contexts }) => {
     label: 'Clear selection',
     event: 'selection.node.clear',
     group: 'selection',
-    input: { on: 'pointerdown', selector: `[data-place="${Places.Stage}"]`, when: (event, stage) => event.target === stage || (event.target as Element).classList.contains('nodes') },
+    input: { on: 'pointerdown', selector: `[data-place="${Places.Stage}"]`, when: isStageSurface },
   });
   on('selection.node.select', ({ id }) => { world.selected = id; emit('selection.node.selected', { id }); });
   on('selection.node.clear', () => { world.selected = null; emit('selection.node.selected', { id: null }); });
@@ -501,7 +652,7 @@ system('focus', ({ on, emit, world }) => {
 });
 
 system('drag', ({ on, emit, world, contexts }) => {
-  let drag: { id: Id; x: number; y: number; start: Position } | null = null;
+  let drag: { id: Id; pointer: Position; start: Position } | null = null;
   contexts.commands.register({
     id: 'drag.node.start',
     label: 'Start drag',
@@ -524,11 +675,12 @@ system('drag', ({ on, emit, world, contexts }) => {
 
   on('drag.node.start', ({ id, x, y }) => {
     const node = world.node(id);
-    if (node?.Position) drag = { id, x, y, start: { ...node.Position } };
+    if (node?.Position) drag = { id, pointer: contexts.view.clientToSpace(Places.Stage, { x, y }), start: { ...node.Position } };
   });
   on('drag.node.move', ({ x, y }) => {
     if (!drag) return;
-    emit('data.node.update', { id: drag.id, patch: { Position: { x: drag.start.x + x - drag.x, y: drag.start.y + y - drag.y } } });
+    const pointer = contexts.view.clientToSpace(Places.Stage, { x, y });
+    emit('data.node.update', { id: drag.id, patch: { Position: { x: drag.start.x + pointer.x - drag.pointer.x, y: drag.start.y + pointer.y - drag.pointer.y } } });
     emit('drag.node.moved', { id: drag.id });
   });
   on('drag.node.end', () => { drag = null; });
