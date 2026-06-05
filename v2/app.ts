@@ -88,6 +88,8 @@ const esc = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, ch => ({
 const systemOf = (id: string) => id.split('.')[0] || 'app';
 const shortcutOf = (command: CommandSpec) => command.shortcut ?? (command.input?.key ? command.input.key.toUpperCase() : '');
 const keyOfShortcut = (shortcut: string) => shortcut.trim().toLowerCase() === 'esc' ? 'Escape' : shortcut.trim();
+const keyMatches = (event: Event, key: string) => event instanceof KeyboardEvent
+  && (event.key.toLowerCase() === key.toLowerCase() || (key === '?' && event.key === '/' && event.shiftKey));
 const grouped = <T,>(items: T[], keyOf: (item: T) => string) => {
   const groups = new Map<string, T[]>();
   items.forEach(item => (groups.get(keyOf(item)) || groups.set(keyOf(item), []).get(keyOf(item))!).push(item));
@@ -172,7 +174,7 @@ function createContexts(bus: Bus) {
         for (const command of commands.all()) {
           const binding = command.input;
           if (!binding || binding.on !== event.type) continue;
-          if (binding.key && (!(event instanceof KeyboardEvent) || event.key.toLowerCase() !== binding.key.toLowerCase())) continue;
+          if (binding.key && !keyMatches(event, binding.key)) continue;
           if (typing && !binding.global) continue;
           const target = rawTarget && binding.selector ? rawTarget.closest(binding.selector) : rawTarget;
           if (!(target instanceof Element) || (binding.selector && !target)) continue;
