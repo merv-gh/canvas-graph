@@ -22,6 +22,7 @@ type AppEvents = {
   'modal.open': { title?: string; body?: Html };
   'modal.close': void;
   'palette.open': void;
+  'help.open': void;
   'editing.node.create': NodeDraft;
   'data.node.create': NodeDraft;
   'data.node.created': { id: Id };
@@ -53,6 +54,7 @@ type CommandInput = {
   on: RawInput;
   key?: string;
   selector?: string;
+  global?: boolean;
   prevent?: boolean;
   stop?: boolean;
   when?: (event: Event, target: Element) => boolean;
@@ -62,7 +64,9 @@ type CommandSpec<K extends EventName = EventName> = {
   label: string;
   event: K;
   input?: CommandInput;
-  palette?: boolean;
+  group?: string;
+  hidden?: boolean;
+  shortcut?: string;
   payload?: (source: CommandSource) => AppEvents[K];
 };
 
@@ -81,6 +85,14 @@ declare global { interface Window { v2?: AppCtx } }
 const esc = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, ch => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 })[ch]!);
+const systemOf = (id: string) => id.split('.')[0] || 'app';
+const shortcutOf = (command: CommandSpec) => command.shortcut ?? (command.input?.key ? command.input.key.toUpperCase() : '');
+const keyOfShortcut = (shortcut: string) => shortcut.trim().toLowerCase() === 'esc' ? 'Escape' : shortcut.trim();
+const grouped = <T,>(items: T[], keyOf: (item: T) => string) => {
+  const groups = new Map<string, T[]>();
+  items.forEach(item => (groups.get(keyOf(item)) || groups.set(keyOf(item), []).get(keyOf(item))!).push(item));
+  return [...groups.entries()];
+};
 
 function eventBus(): Bus {
   const listeners = new Map<EventName, ((data: unknown, event: AnyEvent) => void)[]>();
@@ -128,6 +140,13 @@ function createContexts(bus: Bus) {
     register: (command: CommandSpec) => commandMap.set(command.id, command),
     get: (id: string) => commandMap.get(id),
     all: () => [...commandMap.values()],
+    setShortcut(id: string, shortcut: string) {
+      const command = commandMap.get(id);
+      if (!command) return false;
+      command.shortcut = shortcut.trim();
+      if (command.input?.key) command.input.key = keyOfShortcut(command.shortcut);
+      return true;
+    },
     run(id: string, source: CommandSource = {}) {
       const command = commandMap.get(id);
       if (!command) return false;
@@ -141,7 +160,7 @@ function createContexts(bus: Bus) {
     start(root: Document | HTMLElement = document) {
       const route = (event: Event) => {
         const rawTarget = event.target instanceof Element ? event.target : null;
-        if (event instanceof KeyboardEvent && /input|textarea|select/i.test(rawTarget?.tagName ?? '')) return;
+        const typing = event instanceof KeyboardEvent && /input|textarea|select/i.test(rawTarget?.tagName ?? '');
 
         const button = event.type === 'click' ? rawTarget?.closest('[data-command]') : null;
         if (button instanceof HTMLElement) {
@@ -154,6 +173,7 @@ function createContexts(bus: Bus) {
           const binding = command.input;
           if (!binding || binding.on !== event.type) continue;
           if (binding.key && (!(event instanceof KeyboardEvent) || event.key.toLowerCase() !== binding.key.toLowerCase())) continue;
+          if (typing && !binding.global) continue;
           const target = rawTarget && binding.selector ? rawTarget.closest(binding.selector) : rawTarget;
           if (!(target instanceof Element) || (binding.selector && !target)) continue;
           if (binding.when && !binding.when(event, target)) continue;
@@ -259,6 +279,7 @@ system('main', ({ on, emit }) => {
       view: `<span class="brand">ECS Graph v2</span>
         <button data-command="editing.node.create">+ Node</button>
         <button data-command="palette.open">Palette</button>
+        <button data-command="help.open">Help</button>
         <button data-command="modal.open" data-title="Modal" data-body="Ready.">Modal</button>`,
     });
   });
@@ -284,10 +305,10 @@ system('modal', ({ on, emit, contexts }) => {
     id: 'modal.open',
     label: 'Open modal',
     event: 'modal.open',
-    palette: true,
+    group: 'modal',
     payload: ({ target }) => ({ title: (target as HTMLElement)?.dataset.title, body: (target as HTMLElement)?.dataset.body }),
   });
-  contexts.commands.register({ id: 'modal.close', label: 'Close modal', event: 'modal.close', palette: true, input: { on: 'keydown', key: 'Escape', when: () => open, prevent: true } });
+  contexts.commands.register({ id: 'modal.close', label: 'Close modal', event: 'modal.close', group: 'modal', shortcut: 'Esc', input: { on: 'keydown', key: 'Escape', global: true, when: () => open, prevent: true } });
 
   on('modal.close', () => {
     open = false;
@@ -310,13 +331,55 @@ system('modal', ({ on, emit, contexts }) => {
 });
 
 system('palette', ({ on, emit, contexts }) => {
-  contexts.commands.register({ id: 'palette.open', label: 'Open palette', event: 'palette.open', input: { on: 'keydown', key: 'p', prevent: true } });
+  const renderRows = (query = '') => {
+    const q = query.trim().toLowerCase();
+    const commands = contexts.commands.all()
+      .filter(command => !command.hidden)
+      .filter(command => !q || `${command.id} ${command.label} ${command.group ?? ''} ${shortcutOf(command)}`.toLowerCase().includes(q));
+    const sections = grouped(commands, command => command.group ?? systemOf(command.id));
+    return `<input class="palette-search" placeholder="Search commands" value="${esc(query)}" autocomplete="off" autofocus>
+      <div class="command-list">${sections.map(([group, groupCommands]) => `
+        <section class="command-section">
+          <h3>${esc(group)}</h3>
+          ${groupCommands.map(command => `<button class="command-row" data-command="${esc(command.id)}">
+            <span><b>${esc(command.label)}</b><small>${esc(command.id)}</small></span>
+            ${shortcutOf(command) ? `<kbd>${esc(shortcutOf(command))}</kbd>` : ''}
+          </button>`).join('')}
+        </section>`).join('')}</div>`;
+  };
+  contexts.commands.register({ id: 'palette.open', label: 'Open palette', event: 'palette.open', group: 'palette', shortcut: 'P', input: { on: 'keydown', key: 'p', prevent: true } });
   on('palette.open', () => emit('modal.open', {
     title: 'Palette',
-    body: contexts.commands.all().filter(command => command.palette).map(command =>
-      `<div class="palette-row"><span>${esc(command.label)}</span><button data-command="${esc(command.id)}">Run</button></div>`
-    ).join(''),
+    body: renderRows(),
   }));
+  document.addEventListener('input', event => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement) || !target.classList.contains('palette-search')) return;
+    const body = target.closest('.modal-body');
+    if (body) body.innerHTML = renderRows(target.value);
+    (body?.querySelector('.palette-search') as HTMLInputElement | null)?.focus();
+  });
+});
+
+system('help', ({ on, emit, contexts }) => {
+  const renderHelp = () => {
+    const sections = grouped(contexts.commands.all().filter(command => !command.hidden), command => command.group ?? systemOf(command.id));
+    return `<div class="help-list">${sections.map(([group, commands]) => `
+      <section class="command-section">
+        <h3>${esc(group)}</h3>
+        ${commands.map(command => `<div class="help-row">
+          <span><b>${esc(command.label)}</b><small>${esc(command.id)}</small></span>
+          <input class="shortcut-edit" data-shortcut-command="${esc(command.id)}" value="${esc(shortcutOf(command))}" aria-label="${esc(command.label)} shortcut">
+        </div>`).join('')}
+      </section>`).join('')}</div>`;
+  };
+  contexts.commands.register({ id: 'help.open', label: 'Open help', event: 'help.open', group: 'help', shortcut: '?', input: { on: 'keydown', key: '?', prevent: true } });
+  on('help.open', () => emit('modal.open', { title: 'Help', body: renderHelp() }));
+  document.addEventListener('change', event => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement) || !target.classList.contains('shortcut-edit')) return;
+    contexts.commands.setShortcut(target.dataset.shortcutCommand!, target.value);
+  });
 });
 
 system('editing', ({ contexts }) => {
@@ -325,7 +388,8 @@ system('editing', ({ contexts }) => {
     id: 'editing.node.create',
     label: 'Create node',
     event: 'editing.node.create',
-    palette: true,
+    group: 'editing',
+    shortcut: 'A',
     input: { on: 'keydown', key: 'a', prevent: true },
     payload: () => ({ Label: { text: `Node ${count++}` } }),
   });
@@ -354,6 +418,8 @@ system('selection', ({ on, emit, world, contexts }) => {
     id: 'selection.node.select',
     label: 'Select node',
     event: 'selection.node.select',
+    group: 'selection',
+    hidden: true,
     input: { on: 'pointerdown', selector: '[data-node-id]', prevent: true },
     payload: ({ target }) => ({ id: (target as HTMLElement).dataset.nodeId! }),
   });
@@ -361,6 +427,7 @@ system('selection', ({ on, emit, world, contexts }) => {
     id: 'selection.node.clear',
     label: 'Clear selection',
     event: 'selection.node.clear',
+    group: 'selection',
     input: { on: 'pointerdown', selector: `[data-place="${Places.Stage}"]`, when: (event, stage) => event.target === stage || (event.target as Element).classList.contains('nodes') },
   });
   on('selection.node.select', ({ id }) => { world.selected = id; emit('selection.node.selected', { id }); });
@@ -378,6 +445,8 @@ system('drag', ({ on, emit, world, contexts }) => {
     id: 'drag.node.start',
     label: 'Start drag',
     event: 'drag.node.start',
+    group: 'drag',
+    hidden: true,
     input: { on: 'pointerdown', selector: '[data-node-id]', prevent: true },
     payload: ({ event, target }) => ({ id: (target as HTMLElement).dataset.nodeId!, x: (event as PointerEvent).clientX, y: (event as PointerEvent).clientY }),
   });
@@ -385,10 +454,12 @@ system('drag', ({ on, emit, world, contexts }) => {
     id: 'drag.node.move',
     label: 'Move dragged node',
     event: 'drag.node.move',
+    group: 'drag',
+    hidden: true,
     input: { on: 'pointermove', when: () => !!drag, prevent: true },
     payload: ({ event }) => ({ x: (event as PointerEvent).clientX, y: (event as PointerEvent).clientY }),
   });
-  contexts.commands.register({ id: 'drag.node.end', label: 'End drag', event: 'drag.node.end', input: { on: 'pointerup', when: () => !!drag } });
+  contexts.commands.register({ id: 'drag.node.end', label: 'End drag', event: 'drag.node.end', group: 'drag', hidden: true, input: { on: 'pointerup', when: () => !!drag } });
 
   on('drag.node.start', ({ id, x, y }) => {
     const node = world.node(id);

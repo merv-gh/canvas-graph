@@ -37,7 +37,8 @@ V2 serves at `http://127.0.0.1:5174/`.
 - `main`: emits base shell and toolbar.
 - `log`: observes events and renders the event log.
 - `modal`: registers modal commands and renders modal contents.
-- `palette`: registers the palette command and renders commands from command metadata.
+- `palette`: registers the palette command and renders searchable commands from command metadata.
+- `help`: opens the shortcut editor, grouped by system.
 - `editing`: registers the create-node command and label payload.
 - `data`: owns node create/update and emits data facts.
 - `layout`: handles layout commands such as centering a node.
@@ -86,7 +87,14 @@ contexts.commands.register({
 });
 ```
 
-The same registry drives keyboard shortcuts, `data-command` buttons, and palette rows. Palette contents are no longer hardcoded.
+The same registry drives keyboard shortcuts, `data-command` buttons, palette rows, and the help shortcut editor. Palette contents are searched from command metadata, not hardcoded.
+
+Useful command fields:
+
+- `group`: where the command appears in palette/help, usually the owning system.
+- `shortcut`: display label for the help editor.
+- `hidden`: keeps pointer/internal commands out of user-facing lists.
+- `input.global`: allows shortcuts such as `Escape` to work while a text field is focused.
 
 ## Data
 
