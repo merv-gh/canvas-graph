@@ -9,25 +9,31 @@ type Place = typeof Places[keyof typeof Places];
 type Position = { x: number; y: number };
 type Size = { w: number; h: number };
 type Label = { text: string };
-type NodeDraft = { Label?: Label; Position?: Position; Size?: Size; Selectable?: boolean; Draggable?: boolean };
-type NodeEntity = NodeDraft & { id: Id; kind: 'node'; Label: Label };
-type NodePatch = Partial<Omit<NodeEntity, 'id' | 'kind'>>;
+type NodeDraft = { Label?: Label; Position?: Position; Size?: Size };
+type NodeEntity = { id: Id; kind: 'node'; Label: Label; Size: Size; Position?: Position };
+type NodePatch = Partial<Pick<NodeEntity, 'Label' | 'Size' | 'Position'>>;
 
 type AppEvents = {
   'app.start': void;
   'render.shell': void;
   'render.view.set': { place: Place; key?: string; view: Renderable };
   'render.view.clear': { place: Place; key?: string };
+  'render.nodes.draw': void;
   'modal.open': { title?: string; body?: Html };
   'modal.close': void;
   'palette.open': void;
+  'editing.node.create': NodeDraft;
   'data.node.create': NodeDraft;
   'data.node.created': { id: Id };
   'data.node.update': { id: Id; patch: NodePatch };
   'data.node.updated': { id: Id };
+  'layout.node.center': { id: Id };
   'selection.node.select': { id: Id };
   'selection.node.clear': void;
   'selection.node.selected': { id: Id | null };
+  'focus.node.focus': { id: Id };
+  'focus.node.clear': void;
+  'focus.node.focused': { id: Id | null };
   'drag.node.start': { id: Id; x: number; y: number };
   'drag.node.move': { x: number; y: number };
   'drag.node.end': void;
@@ -56,14 +62,16 @@ type CommandSpec<K extends EventName = EventName> = {
   label: string;
   event: K;
   input?: CommandInput;
+  palette?: boolean;
   payload?: (source: CommandSource) => AppEvents[K];
 };
 
 type World = ReturnType<typeof worldStore>;
 type Contexts = ReturnType<typeof createContexts>;
 type AppCtx = { bus: Bus; world: World; contexts: Contexts };
-type AppSystem = (ctx: AppCtx) => void;
-type Systems = ((name: string, setup: AppSystem) => void) & {
+type SystemCtx = AppCtx & Pick<Bus, 'on' | 'emit'>;
+type AppSystem = (ctx: SystemCtx) => void;
+type Registry = ((name: string, setup: AppSystem) => void) & {
   start(ctx: AppCtx, then?: () => void): void;
   names(): string[];
 };
@@ -73,16 +81,6 @@ declare global { interface Window { v2?: AppCtx } }
 const esc = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, ch => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 })[ch]!);
-
-function mergeDraft(...drafts: NodeDraft[]): NodeDraft {
-  const out: NodeDraft = {};
-  for (const draft of drafts) {
-    for (const [key, value] of Object.entries(draft) as [keyof NodeDraft, NodeDraft[keyof NodeDraft]][]) {
-      if (value !== undefined) (out as Record<keyof NodeDraft, NodeDraft[keyof NodeDraft]>)[key] = value;
-    }
-  }
-  return out;
-}
 
 function eventBus(): Bus {
   const listeners = new Map<EventName, ((data: unknown, event: AnyEvent) => void)[]>();
@@ -99,14 +97,16 @@ function eventBus(): Bus {
 }
 
 function worldStore() {
-  let next = 1, selected: Id | null = null;
+  let next = 1, selected: Id | null = null, focused: Id | null = null;
   const nodes = new Map<Id, NodeEntity>();
   return {
     get selected() { return selected; },
     set selected(id: Id | null) { selected = id; },
+    get focused() { return focused; },
+    set focused(id: Id | null) { focused = id; },
     createNode(draft: NodeDraft = {}) {
       const id = `e${next++}`;
-      nodes.set(id, { id, kind: 'node', ...draft, Label: draft.Label ?? { text: id } });
+      nodes.set(id, { id, kind: 'node', Size: { w: 150, h: 64 }, ...draft, Label: draft.Label ?? { text: id } });
       return id;
     },
     node: (id: Id) => nodes.get(id),
@@ -123,7 +123,6 @@ function worldStore() {
 function createContexts(bus: Bus) {
   const commandMap = new Map<string, CommandSpec>();
   const places = new Map<Place, HTMLElement>();
-  const archetypeDefaults = new Map<'node', NodeDraft>();
 
   const commands = {
     register: (command: CommandSpec) => commandMap.set(command.id, command),
@@ -144,10 +143,10 @@ function createContexts(bus: Bus) {
         const rawTarget = event.target instanceof Element ? event.target : null;
         if (event instanceof KeyboardEvent && /input|textarea|select/i.test(rawTarget?.tagName ?? '')) return;
 
-        const commandButton = event.type === 'click' ? rawTarget?.closest('[data-command]') : null;
-        if (commandButton instanceof HTMLElement) {
+        const button = event.type === 'click' ? rawTarget?.closest('[data-command]') : null;
+        if (button instanceof HTMLElement) {
           event.preventDefault();
-          commands.run(commandButton.dataset.command!, { event, target: commandButton });
+          commands.run(button.dataset.command!, { event, target: button });
           return;
         }
 
@@ -167,7 +166,7 @@ function createContexts(bus: Bus) {
     },
   };
 
-  const placesContext = {
+  const placeContext = {
     set: (place: Place, el: HTMLElement | null) => { if (el) places.set(place, el); },
     el: (place: Place) => places.get(place) ?? null,
     center(place: Place): Position {
@@ -176,22 +175,17 @@ function createContexts(bus: Bus) {
     },
   };
 
-  const archetypes = {
-    extend(kind: 'node', draft: NodeDraft) {
-      archetypeDefaults.set(kind, mergeDraft(archetypeDefaults.get(kind) ?? {}, draft));
-    },
-    compose(kind: 'node', draft: NodeDraft = {}) {
-      return mergeDraft(archetypeDefaults.get(kind) ?? {}, draft);
-    },
-  };
-
-  return { commands, input, places: placesContext, archetypes };
+  return { commands, input, places: placeContext };
 }
 
-function systemRegistry(): Systems {
+function registry(): Registry {
   const entries: { name: string; setup: AppSystem }[] = [];
-  const register = ((name: string, setup: AppSystem) => { entries.push({ name, setup }); }) as Systems;
-  register.start = (ctx, then) => { entries.forEach(entry => entry.setup(ctx)); then?.(); };
+  const register = ((name: string, setup: AppSystem) => { entries.push({ name, setup }); }) as Registry;
+  register.start = (ctx, then) => {
+    const api: SystemCtx = { ...ctx, on: ctx.bus.on, emit: ctx.bus.emit };
+    entries.forEach(entry => entry.setup(api));
+    then?.();
+  };
   register.names = () => entries.map(entry => entry.name);
   return register;
 }
@@ -201,14 +195,14 @@ function createAppContext(): AppCtx {
   return { bus, world: worldStore(), contexts: createContexts(bus) };
 }
 
-const systems = systemRegistry();
+const systems = registry();
+const features = registry();
 const system = systems;
+const feature = features;
 
-system('render', ({ bus, world, contexts }) => {
+system('render', ({ on, emit, world, contexts }) => {
   const root = document.getElementById('app')!;
   const views = new Map<Place, Map<string, Renderable>>();
-  contexts.archetypes.extend('node', { Size: { w: 150, h: 64 } });
-
   const append = (slot: HTMLElement, view: Renderable) => {
     const value = typeof view === 'function' ? view() : view;
     if (typeof value === 'string') slot.insertAdjacentHTML('beforeend', value);
@@ -220,21 +214,21 @@ system('render', ({ bus, world, contexts }) => {
     slot.replaceChildren();
     [...parts.values()].forEach(view => append(slot, view));
   };
-  const drawNodes = () => bus.emit('render.view.set', {
+  const drawNodes = () => emit('render.view.set', {
     place: Places.Stage,
     key: 'nodes',
     view: () => `<div class="nodes">${world.nodes().map(node => {
       const pos = node.Position ?? { x: 0, y: 0 };
-      const size = node.Size ?? { w: 150, h: 64 };
-      return `<article class="node ${world.selected === node.id ? 'selected' : ''}" data-node-id="${node.id}"
-        style="left:${pos.x}px;top:${pos.y}px;width:${size.w}px;height:${size.h}px">
+      const focusClass = world.focused === node.id ? ' focused' : '';
+      return `<article class="node ${world.selected === node.id ? 'selected' : ''}${focusClass}" data-node-id="${node.id}"
+        style="left:${pos.x}px;top:${pos.y}px;width:${node.Size.w}px;height:${node.Size.h}px">
         <div class="node-title">${esc(node.Label.text)}</div>
         <div class="node-meta">${esc(node.id)}</div>
       </article>`;
     }).join('')}</div>`,
   });
 
-  bus.on('render.shell', () => {
+  on('render.shell', () => {
     root.innerHTML = `<section class="shell">
       <header class="top" data-place="${Places.Top}"></header>
       <aside class="left" data-place="${Places.Left}"></aside>
@@ -244,32 +238,22 @@ system('render', ({ bus, world, contexts }) => {
     Object.values(Places).forEach(place => contexts.places.set(place, root.querySelector(`[data-place="${place}"]`)));
     Object.values(Places).forEach(flush);
   });
-  bus.on('render.view.set', ({ place, key = 'default', view }) => {
+  on('render.view.set', ({ place, key = 'default', view }) => {
     (views.get(place) || views.set(place, new Map()).get(place)!).set(key, view);
     flush(place);
   });
-  bus.on('render.view.clear', ({ place, key }) => { key ? views.get(place)?.delete(key) : views.delete(place); flush(place); });
-  bus.on('data.node.created', ({ id }) => {
-    const node = world.node(id);
-    if (!node?.Position) {
-      const n = world.nodes().length, center = contexts.places.center(Places.Stage);
-      bus.emit('data.node.update', { id, patch: { Position: { x: center.x + (n % 4) * 24, y: center.y + (n % 3) * 18 } } });
-    } else {
-      drawNodes();
-    }
-  });
-  bus.on('data.node.updated', drawNodes);
-  bus.on('selection.node.selected', drawNodes);
+  on('render.view.clear', ({ place, key }) => { key ? views.get(place)?.delete(key) : views.delete(place); flush(place); });
+  on('render.nodes.draw', drawNodes);
 });
 
-system('input', ({ bus, contexts }) => {
-  bus.on('app.start', () => contexts.input.start());
+system('input', ({ on, contexts }) => {
+  on('app.start', () => contexts.input.start());
 });
 
-system('main', ({ bus }) => {
-  bus.on('app.start', () => {
-    bus.emit('render.shell');
-    bus.emit('render.view.set', {
+system('main', ({ on, emit }) => {
+  on('app.start', () => {
+    emit('render.shell');
+    emit('render.view.set', {
       place: Places.Top,
       key: 'toolbar',
       view: `<span class="brand">ECS Graph v2</span>
@@ -280,13 +264,13 @@ system('main', ({ bus }) => {
   });
 });
 
-system('log', ({ bus }) => {
+system('log', ({ bus, emit }) => {
   const rows: string[] = [];
   bus.onAny(event => {
     if (event.name.startsWith('render.')) return;
     rows.unshift(event.name);
     rows.length = Math.min(rows.length, 12);
-    bus.emit('render.view.set', {
+    emit('render.view.set', {
       place: Places.Left,
       key: 'log',
       view: `<h2 class="panel-title">Event log</h2><div class="log">${rows.map(row => `<div class="log-row">${esc(row)}</div>`).join('')}</div>`,
@@ -294,23 +278,24 @@ system('log', ({ bus }) => {
   });
 });
 
-system('modal', ({ bus, contexts }) => {
+system('modal', ({ on, emit, contexts }) => {
   let open = false;
   contexts.commands.register({
     id: 'modal.open',
     label: 'Open modal',
     event: 'modal.open',
+    palette: true,
     payload: ({ target }) => ({ title: (target as HTMLElement)?.dataset.title, body: (target as HTMLElement)?.dataset.body }),
   });
-  contexts.commands.register({ id: 'modal.close', label: 'Close modal', event: 'modal.close', input: { on: 'keydown', key: 'Escape', when: () => open, prevent: true } });
+  contexts.commands.register({ id: 'modal.close', label: 'Close modal', event: 'modal.close', palette: true, input: { on: 'keydown', key: 'Escape', when: () => open, prevent: true } });
 
-  bus.on('modal.close', () => {
+  on('modal.close', () => {
     open = false;
-    bus.emit('render.view.set', { place: Places.Modal, key: 'modal', view: '' });
+    emit('render.view.set', { place: Places.Modal, key: 'modal', view: '' });
   });
-  bus.on('modal.open', ({ title = 'Modal', body = '' }) => {
+  on('modal.open', ({ title = 'Modal', body = '' }) => {
     open = true;
-    bus.emit('render.view.set', {
+    emit('render.view.set', {
       place: Places.Modal,
       key: 'modal',
       view: `<div class="modal-slot open">
@@ -324,14 +309,13 @@ system('modal', ({ bus, contexts }) => {
   });
 });
 
-system('palette', ({ bus, contexts }) => {
+system('palette', ({ on, emit, contexts }) => {
   contexts.commands.register({ id: 'palette.open', label: 'Open palette', event: 'palette.open', input: { on: 'keydown', key: 'p', prevent: true } });
-  bus.on('palette.open', () => bus.emit('modal.open', {
+  on('palette.open', () => emit('modal.open', {
     title: 'Palette',
-    body: ['editing.node.create', 'modal.close'].map(id => {
-      const command = contexts.commands.get(id);
-      return command ? `<div class="palette-row"><span>${esc(command.label)}</span><button data-command="${esc(command.id)}">Run</button></div>` : '';
-    }).join(''),
+    body: contexts.commands.all().filter(command => command.palette).map(command =>
+      `<div class="palette-row"><span>${esc(command.label)}</span><button data-command="${esc(command.id)}">Run</button></div>`
+    ).join(''),
   }));
 });
 
@@ -340,24 +324,32 @@ system('editing', ({ contexts }) => {
   contexts.commands.register({
     id: 'editing.node.create',
     label: 'Create node',
-    event: 'data.node.create',
+    event: 'editing.node.create',
+    palette: true,
     input: { on: 'keydown', key: 'a', prevent: true },
     payload: () => ({ Label: { text: `Node ${count++}` } }),
   });
 });
 
-system('data', ({ bus, world, contexts }) => {
-  bus.on('data.node.create', draft => {
-    const id = world.createNode(contexts.archetypes.compose('node', draft));
-    bus.emit('data.node.created', { id });
+system('data', ({ on, emit, world }) => {
+  on('data.node.create', draft => {
+    const id = world.createNode(draft);
+    emit('data.node.created', { id });
   });
-  bus.on('data.node.update', ({ id, patch }) => {
-    if (world.updateNode(id, patch)) bus.emit('data.node.updated', { id });
+  on('data.node.update', ({ id, patch }) => {
+    if (world.updateNode(id, patch)) emit('data.node.updated', { id });
   });
 });
 
-system('selection', ({ bus, world, contexts }) => {
-  contexts.archetypes.extend('node', { Selectable: true });
+system('layout', ({ on, emit, contexts, world }) => {
+  on('layout.node.center', ({ id }) => {
+    const n = world.nodes().length;
+    const center = contexts.places.center(Places.Stage);
+    emit('data.node.update', { id, patch: { Position: { x: center.x + (n % 4) * 24, y: center.y + (n % 3) * 18 } } });
+  });
+});
+
+system('selection', ({ on, emit, world, contexts }) => {
   contexts.commands.register({
     id: 'selection.node.select',
     label: 'Select node',
@@ -371,14 +363,17 @@ system('selection', ({ bus, world, contexts }) => {
     event: 'selection.node.clear',
     input: { on: 'pointerdown', selector: `[data-place="${Places.Stage}"]`, when: (event, stage) => event.target === stage || (event.target as Element).classList.contains('nodes') },
   });
-  bus.on('data.node.created', ({ id }) => { if (world.node(id)?.Selectable) bus.emit('selection.node.select', { id }); });
-  bus.on('selection.node.select', ({ id }) => { world.selected = id; bus.emit('selection.node.selected', { id }); });
-  bus.on('selection.node.clear', () => { world.selected = null; bus.emit('selection.node.selected', { id: null }); });
+  on('selection.node.select', ({ id }) => { world.selected = id; emit('selection.node.selected', { id }); });
+  on('selection.node.clear', () => { world.selected = null; emit('selection.node.selected', { id: null }); });
 });
 
-system('drag', ({ bus, world, contexts }) => {
+system('focus', ({ on, emit, world }) => {
+  on('focus.node.focus', ({ id }) => { world.focused = id; emit('focus.node.focused', { id }); });
+  on('focus.node.clear', () => { world.focused = null; emit('focus.node.focused', { id: null }); });
+});
+
+system('drag', ({ on, emit, world, contexts }) => {
   let drag: { id: Id; x: number; y: number; start: Position } | null = null;
-  contexts.archetypes.extend('node', { Draggable: true });
   contexts.commands.register({
     id: 'drag.node.start',
     label: 'Start drag',
@@ -395,21 +390,34 @@ system('drag', ({ bus, world, contexts }) => {
   });
   contexts.commands.register({ id: 'drag.node.end', label: 'End drag', event: 'drag.node.end', input: { on: 'pointerup', when: () => !!drag } });
 
-  bus.on('drag.node.start', ({ id, x, y }) => {
+  on('drag.node.start', ({ id, x, y }) => {
     const node = world.node(id);
-    if (node?.Draggable && node.Position) drag = { id, x, y, start: { ...node.Position } };
+    if (node?.Position) drag = { id, x, y, start: { ...node.Position } };
   });
-  bus.on('drag.node.move', ({ x, y }) => {
+  on('drag.node.move', ({ x, y }) => {
     if (!drag) return;
-    bus.emit('data.node.update', { id: drag.id, patch: { Position: { x: drag.start.x + x - drag.x, y: drag.start.y + y - drag.y } } });
-    bus.emit('drag.node.moved', { id: drag.id });
+    emit('data.node.update', { id: drag.id, patch: { Position: { x: drag.start.x + x - drag.x, y: drag.start.y + y - drag.y } } });
+    emit('drag.node.moved', { id: drag.id });
   });
-  bus.on('drag.node.end', () => { drag = null; });
+  on('drag.node.end', () => { drag = null; });
+});
+
+feature('nodeLifecycle', ({ on, emit }) => {
+  on('editing.node.create', draft => emit('data.node.create', draft));
+  on('data.node.created', ({ id }) => {
+    emit('layout.node.center', { id });
+    emit('selection.node.select', { id });
+    emit('focus.node.focus', { id });
+  });
+  on('data.node.updated', () => emit('render.nodes.draw'));
+  on('selection.node.selected', () => emit('render.nodes.draw'));
+  on('focus.node.focused', () => emit('render.nodes.draw'));
 });
 
 window.addEventListener('DOMContentLoaded', () => {
   const ctx = createAppContext();
-  systems.start(ctx, () => ctx.bus.emit('app.start'));
+  systems.start(ctx);
+  features.start(ctx, () => ctx.bus.emit('app.start'));
   window.v2 = ctx;
 });
 

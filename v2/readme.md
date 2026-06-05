@@ -2,7 +2,7 @@
 
 Small TypeScript proof of concept for a composable, event-driven graph app.
 
-This iteration tests whether systems can stay small and independent while sharing typed infrastructure: bus, commands, archetypes, places, and data.
+This iteration favors obvious data and explicit cross-system features over hidden defaults. Systems stay small; complex behavior is named as a feature slice.
 
 ## Run
 
@@ -22,44 +22,55 @@ V2 serves at `http://127.0.0.1:5174/`.
 
 ## Current Shape
 
-- `system(name, setup)` registers a system.
-- `systems.start(ctx, () => ctx.bus.emit('app.start'))` wires all systems and starts the app.
-- `ctx.bus` is the only semantic communication path between systems.
+- `system(name, setup)` registers an independent system.
+- `feature(name, setup)` registers a cross-system workflow.
+- `systems.start(ctx); features.start(ctx, () => ctx.bus.emit('app.start'))` wires everything and starts the app.
+- System bodies receive `on` and `emit` directly, so they read as event handlers rather than plumbing.
 - `ctx.contexts.commands` owns command metadata and raw input mapping.
-- `ctx.contexts.archetypes` lets systems contribute entity defaults/capabilities.
 - `ctx.contexts.places` exposes named render places without leaking DOM queries everywhere.
-- `world` stores entity data; only the `data` system mutates node CRUD.
+- `world` stores plain node data plus small UI state (`selected`, `focused`).
 
 ## Systems
 
-- `render`: owns shell slots, render placement, node DOM drawing, and render-time default centering.
+- `render`: owns shell slots, render placement, and node DOM drawing.
 - `input`: starts the command-backed input router.
 - `main`: emits base shell and toolbar.
 - `log`: observes events and renders the event log.
 - `modal`: registers modal commands and renders modal contents.
-- `palette`: registers the palette command and renders command rows.
+- `palette`: registers the palette command and renders commands from command metadata.
 - `editing`: registers the create-node command and label payload.
 - `data`: owns node create/update and emits data facts.
-- `selection`: contributes `Selectable`, registers selection commands, owns selection state.
-- `drag`: contributes `Draggable`, registers drag commands, requests data updates.
+- `layout`: handles layout commands such as centering a node.
+- `selection`: registers selection commands and owns selection state.
+- `focus`: owns focused-node state.
+- `drag`: registers drag commands and requests data updates.
+
+## Features
+
+`nodeLifecycle` is the current complex feature slice. It is intentionally the place where cross-system behavior lives.
+
+Node creation flow:
+
+1. `editing.node.create` command runs from `A`, toolbar, or palette.
+2. `nodeLifecycle` translates it into `data.node.create`.
+3. `data` saves the node and emits `data.node.created`.
+4. `nodeLifecycle` emits:
+   - `layout.node.center`
+   - `selection.node.select`
+   - `focus.node.focus`
+5. `layout`, `selection`, and `focus` each handle their own events.
+6. `nodeLifecycle` reacts to data/selection/focus facts and emits `render.nodes.draw`.
+7. `render` draws from current world state.
+
+This is more verbose than a direct function call, but the debug story is much cleaner: the event log shows the lifecycle.
 
 ## Event Convention
 
-Events are namespaced by owning system or domain.
+Events are namespaced by owning system or feature domain.
 
 - Commands/request events use imperative names, for example `data.node.create`, `selection.node.select`.
 - Facts use past-tense names, for example `data.node.created`, `selection.node.selected`.
-- Render adapter events live under `render.*`.
-
-The current event flow for node creation:
-
-1. `editing.node.create` command runs from `A` or toolbar.
-2. Command emits `data.node.create`.
-3. `data` creates the node from archetype defaults plus command payload.
-4. `data` emits `data.node.created`.
-5. `render` requests centering through `data.node.update` if needed.
-6. `selection` auto-selects created selectable nodes.
-7. `render` redraws on data/selection facts.
+- Cross-system orchestration belongs in `feature(...)`, not in individual systems.
 
 ## Commands
 
@@ -69,24 +80,29 @@ Commands are registered as data:
 contexts.commands.register({
   id: 'editing.node.create',
   label: 'Create node',
-  event: 'data.node.create',
+  event: 'editing.node.create',
   input: { on: 'keydown', key: 'a', prevent: true },
   payload: () => ({ Label: { text: nextName() } }),
 });
 ```
 
-The same registry drives keyboard shortcuts, `data-command` buttons, and palette rows. This should make shortcut editing/export possible later without rewriting systems.
+The same registry drives keyboard shortcuts, `data-command` buttons, and palette rows. Palette contents are no longer hardcoded.
 
-## Capabilities
+## Data
 
-Capabilities are contributed by systems through archetypes:
+Nodes are plain data:
 
 ```ts
-contexts.archetypes.extend('node', { Selectable: true });
-contexts.archetypes.extend('node', { Draggable: true });
+type NodeEntity = {
+  id: Id;
+  kind: 'node';
+  Label: Label;
+  Size: Size;
+  Position?: Position;
+};
 ```
 
-The data system does not know which systems contributed those defaults. It only composes the node archetype when constructing data.
+There are no hidden archetype defaults or capability merges. If a future capability needs data, it should be visible as data. If it is behavior, keep it in that behavior's system.
 
 ## Render Boundary
 
@@ -100,8 +116,8 @@ This keeps render as an adapter boundary. Today it accepts DOM strings or DOM no
 
 ## Open Questions
 
-- Should `world.selected` move out of `world` into a selection-owned store?
-- Should render be allowed to request default centering, or should layout become its own system?
-- Should command ids and event names share a generated type to avoid string duplication?
+- Should `selected` and `focused` move out of `world` into small system-owned stores?
+- Should layout own all visual defaults, including size?
+- Should features be typed separately from systems so only features can listen across domains?
+- Should command ids and event names share generated types to avoid string duplication?
 - How much command metadata is needed for user-editable shortcuts: category, scope, conflict policy, display order?
-- Should data updates become patch operations, component operations, or command transactions?
