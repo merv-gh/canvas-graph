@@ -1,4 +1,15 @@
+const fs = require('fs');
+const path = require('path');
 const { test, expect } = require('@playwright/test');
+
+test('v2 routes DOM events through input adapter only', async () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'v2', 'app.ts'), 'utf8');
+  const listeners = app.split('\n').filter(line => line.includes('addEventListener'));
+
+  expect(listeners).toHaveLength(2);
+  expect(listeners[0]).toContain('root.addEventListener(type, route');
+  expect(listeners[1]).toContain("window.addEventListener('DOMContentLoaded'");
+});
 
 test('v2 help rejects duplicate shortcuts without saving', async ({ page }) => {
   await page.goto('/v2/');

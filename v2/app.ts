@@ -292,7 +292,7 @@ function createContexts(bus: Bus) {
   };
 
   const commands = {
-    register: (command: CommandSpec) => commandMap.set(command.id, command),
+    register: (commands: CommandSpec[]) => commands.forEach(command => commandMap.set(command.id, command)),
     get: (id: string) => commandMap.get(id),
     all: () => [...commandMap.values()],
     shortcutConflict,
@@ -332,16 +332,16 @@ function createContexts(bus: Bus) {
           const binding = command.input;
           if (!binding || binding.on !== event.type) continue;
           if (binding.key && !keyMatches(event, binding.key)) continue;
-          if (typing && !binding.global) continue;
           const target = rawTarget && binding.selector ? rawTarget.closest(binding.selector) : rawTarget;
           if (!(target instanceof Element) || (binding.selector && !target)) continue;
+          if (typing && !binding.global && !binding.selector) continue;
           if (binding.when && !binding.when(event, target)) continue;
           if (binding.prevent) event.preventDefault();
           commands.run(command.id, { event, target });
           if (binding.stop) break;
         }
       };
-      (['click', 'keydown', 'pointerdown', 'pointermove', 'pointerup', 'wheel'] as RawInput[])
+      (['click', 'keydown', 'pointerdown', 'pointermove', 'pointerup', 'wheel', 'input', 'change', 'focusout'] as RawInput[])
         .forEach(type => root.addEventListener(type, route, type === 'wheel' ? { passive: false } : undefined));
     },
   };
@@ -666,29 +666,43 @@ system('outline', ctx => {
     return panel;
   };
   const draw = () => emit('render.view.set', { place: Places.Left, key: 'outline', view: renderOutline });
+  contexts.commands.register([{
+    id: 'outline.search.change',
+    label: 'Change outline search',
+    event: 'outline.search.changed',
+    group: 'outline',
+    hidden: true,
+    input: { on: 'input', selector: '.outline-search' },
+    payload: ({ target }) => ({
+      collectionId: (target as HTMLElement).dataset.collectionId!,
+      query: (target as HTMLInputElement).value,
+    }),
+  }]);
   on('app.start', draw);
   on('outline.draw', draw);
-  document.addEventListener('input', event => {
-    const target = event.target;
-    if (!(target instanceof HTMLInputElement) || !target.classList.contains('outline-search')) return;
-    searches.set(target.dataset.collectionId!, target.value);
+  on('outline.search.changed', ({ collectionId, query }) => {
+    searches.set(collectionId, query);
     draw();
-    const next = contexts.places.el(Places.Left)?.querySelector(`[data-collection-id="${target.dataset.collectionId}"]`) as HTMLInputElement | null;
-    next?.focus();
-    next?.setSelectionRange(next.value.length, next.value.length);
+    queueMicrotask(() => {
+      const next = contexts.places.el(Places.Left)?.querySelector(`[data-collection-id="${collectionId}"]`) as HTMLInputElement | null;
+      next?.focus();
+      next?.setSelectionRange(next.value.length, next.value.length);
+    });
   });
 });
 
 system('modal', ({ on, emit, contexts }) => {
   let open = false;
-  contexts.commands.register({
-    id: 'modal.open',
-    label: 'Open modal',
-    event: 'modal.open',
-    group: 'modal',
-    payload: ({ target }) => ({ title: (target as HTMLElement)?.dataset.title, body: (target as HTMLElement)?.dataset.body, visual: (target as HTMLElement)?.dataset.visual as AppEvents['modal.open']['visual'] }),
-  });
-  contexts.commands.register({ id: 'modal.close', label: 'Close modal', event: 'modal.close', group: 'modal', shortcut: 'Esc', input: { on: 'keydown', key: 'Escape', global: true, when: () => open, prevent: true } });
+  contexts.commands.register([
+    {
+      id: 'modal.open',
+      label: 'Open modal',
+      event: 'modal.open',
+      group: 'modal',
+      payload: ({ target }) => ({ title: (target as HTMLElement)?.dataset.title, body: (target as HTMLElement)?.dataset.body, visual: (target as HTMLElement)?.dataset.visual as AppEvents['modal.open']['visual'] }),
+    },
+    { id: 'modal.close', label: 'Close modal', event: 'modal.close', group: 'modal', shortcut: 'Esc', input: { on: 'keydown', key: 'Escape', global: true, when: () => open, prevent: true } },
+  ]);
 
   on('modal.close', () => {
     open = false;
@@ -781,14 +795,49 @@ system('commandModal', ({ on, emit, contexts }) => {
     contexts.templates.slot(palette, 'commands').append(renderList(modal));
     return palette;
   };
-  Object.values(commandModals).forEach(modal => contexts.commands.register({
-    id: modal.event,
-    label: modal.label,
-    event: modal.event,
-    group: 'modal',
-    shortcut: modal.shortcut,
-    input: { on: 'keydown', key: modal.key, prevent: true },
-  }));
+  contexts.commands.register([
+    ...Object.values(commandModals).map(modal => ({
+      id: modal.event,
+      label: modal.label,
+      event: modal.event,
+      group: 'modal',
+      shortcut: modal.shortcut,
+      input: { on: 'keydown', key: modal.key, prevent: true },
+    }) satisfies CommandSpec),
+    {
+      id: 'commandModal.search.change',
+      label: 'Search command modal',
+      event: 'commandModal.search.changed',
+      group: 'modal',
+      hidden: true,
+      input: { on: 'input', selector: '.palette-search' },
+      payload: ({ target }) => {
+        const root = target?.closest('[data-command-modal]');
+        return {
+          modalId: root instanceof HTMLElement ? root.dataset.commandModal ?? '' : '',
+          query: (target as HTMLInputElement).value,
+        };
+      },
+    },
+    {
+      id: 'shortcut.edit.preview',
+      label: 'Preview shortcut edit',
+      event: 'shortcut.edit.preview',
+      group: 'modal',
+      hidden: true,
+      input: { on: 'input', selector: '.shortcut-edit' },
+      payload: ({ target }) => ({ id: (target as HTMLElement).dataset.shortcutCommand!, shortcut: (target as HTMLInputElement).value }),
+    },
+    {
+      id: 'shortcut.edit.commit',
+      label: 'Commit shortcut edit',
+      event: 'shortcut.edit.commit',
+      group: 'modal',
+      hidden: true,
+      input: { on: 'change', selector: '.shortcut-edit' },
+      payload: ({ target }) => ({ id: (target as HTMLElement).dataset.shortcutCommand!, shortcut: (target as HTMLInputElement).value }),
+    },
+  ]);
   const open = (modal: CommandModalDef) => emit('modal.open', {
     title: modal.title,
     visual: 'command',
@@ -796,24 +845,20 @@ system('commandModal', ({ on, emit, contexts }) => {
   });
   on('palette.open', () => open(commandModals.palette));
   on('help.open', () => open(commandModals.help));
-  document.addEventListener('input', event => {
-    const target = event.target;
-    if (!(target instanceof HTMLInputElement)) return;
-    if (target.classList.contains('shortcut-edit')) {
-      syncShortcutConflict(target);
-      return;
-    }
-    if (!target.classList.contains('palette-search')) return;
-    const root = target.closest('[data-command-modal]');
-    const modal = root instanceof HTMLElement ? commandModals[root.dataset.commandModal as CommandModalDef['id']] : null;
+  on('commandModal.search.changed', ({ modalId, query }) => {
+    const modal = commandModals[modalId as CommandModalDef['id']];
+    const root = document.querySelector(`[data-command-modal="${modalId}"]`);
     const list = root?.querySelector('[data-slot="commands"]');
-    if (modal && list) list.replaceChildren(renderList(modal, target.value));
+    if (modal && list) list.replaceChildren(renderList(modal, query));
   });
-  document.addEventListener('change', event => {
-    const target = event.target;
-    if (!(target instanceof HTMLInputElement) || !target.classList.contains('shortcut-edit')) return;
-    if (!syncShortcutConflict(target)) return;
-    contexts.commands.setShortcut(target.dataset.shortcutCommand!, target.value);
+  on('shortcut.edit.preview', ({ id }) => {
+    const input = document.querySelector(`.shortcut-edit[data-shortcut-command="${id}"]`);
+    if (input instanceof HTMLInputElement) syncShortcutConflict(input);
+  });
+  on('shortcut.edit.commit', ({ id }) => {
+    const input = document.querySelector(`.shortcut-edit[data-shortcut-command="${id}"]`);
+    if (!(input instanceof HTMLInputElement) || !syncShortcutConflict(input)) return;
+    contexts.commands.setShortcut(id, input.value);
   });
 });
 
@@ -829,135 +874,162 @@ system('domain', ({ contexts, graphs }) => {
   };
   const nextGraphId = () => graphs.all().find(graph => graph.id !== graphs.current.id)?.id ?? `g${graphs.all().length + 1}`;
 
-  contexts.commands.register({
-    id: 'editing.node.create',
-    label: 'Create node',
-    event: 'editing.node.create',
-    group: 'editing',
-    shortcut: 'A',
-    input: { on: 'keydown', key: 'a', prevent: true },
-    payload: () => ({ Label: { text: `Node ${count++}` } }),
-  });
-  contexts.commands.register({
-    id: 'graph.create',
-    label: 'Create graph',
-    event: 'graph.create',
-    group: 'graph',
-    shortcut: 'N',
-    input: { on: 'keydown', key: 'n', prevent: true },
-  });
-  contexts.commands.register({
-    id: 'graph.switch.next',
-    label: 'Switch graph',
-    event: 'graph.switch',
-    group: 'graph',
-    shortcut: 'G',
-    input: { on: 'keydown', key: 'g', prevent: true },
-    payload: () => ({ id: nextGraphId() }),
-  });
-  contexts.commands.register({
-    id: 'graph.switch.item',
-    label: 'Switch graph item',
-    event: 'graph.switch',
-    group: 'graph',
-    hidden: true,
-    payload: source => ({ id: graphId(source) }),
-  });
-  contexts.commands.register({
-    id: 'graph.node.delete.selected',
-    label: 'Delete node',
-    event: 'graph.node.delete',
-    group: 'graph',
-    shortcut: 'Delete',
-    input: { on: 'keydown', key: 'Delete', prevent: true },
-    available: source => !!nodeId(source ?? {}) || !!graphs.current.selected,
-    payload: source => ({ id: nodeId(source) }),
-  });
-  contexts.commands.register({
-    id: 'graph.delete.current',
-    label: 'Delete graph',
-    event: 'graph.delete',
-    group: 'graph',
-    available: source => graphs.all().length > 1 && (!!itemIdFrom(source?.target) || !!graphs.current.id),
-    payload: source => ({ id: graphId(source) }),
-  });
-  contexts.commands.register({
-    id: 'selection.node.select',
-    label: 'Select node',
-    event: 'selection.node.select',
-    group: 'selection',
-    hidden: true,
-    input: { on: 'pointerdown', selector: '[data-node-id]', when: event => !(event.target as Element).closest('[data-command]'), prevent: true },
-    payload: source => ({ id: nodeId(source) }),
-  });
-  contexts.commands.register({
-    id: 'selection.node.next',
-    label: 'Select next node',
-    event: 'selection.node.select',
-    group: 'selection',
-    shortcut: 'Tab',
-    input: { on: 'keydown', key: 'Tab', prevent: true },
-    available: () => graphs.current.nodes().length > 0,
-    payload: () => ({ id: nextNodeId() }),
-  });
-  contexts.commands.register({
-    id: 'selection.node.clear',
-    label: 'Clear selection',
-    event: 'selection.node.clear',
-    group: 'selection',
-    available: () => !!graphs.current.selected,
-    input: { on: 'pointerdown', selector: `[data-place="${Places.Stage}"]`, when: isStageSurface },
-  });
-  contexts.commands.register({
-    id: 'graph.node.nudge.right',
-    label: 'Nudge node right',
-    event: 'graph.node.update',
-    group: 'node',
-    shortcut: 'ArrowRight',
-    input: { on: 'keydown', key: 'ArrowRight', prevent: true },
-    available: () => !!selectedNode(),
-    payload: () => {
-      const node = selectedNode()!;
-      const pos = node.Position ?? { x: 0, y: 0 };
-      return { id: node.id, patch: { Position: { x: pos.x + 24, y: pos.y } } };
+  contexts.commands.register([
+    {
+      id: 'editing.node.create',
+      label: 'Create node',
+      event: 'editing.node.create',
+      group: 'editing',
+      shortcut: 'A',
+      input: { on: 'keydown', key: 'a', prevent: true },
+      payload: () => ({ Label: { text: `Node ${count++}` } }),
     },
-  });
-  contexts.commands.register({
-    id: 'node.collapse.toggle',
-    label: 'Toggle node collapse',
-    event: 'graph.node.update',
-    group: 'node',
-    shortcut: 'C',
-    input: { on: 'keydown', key: 'c', prevent: true },
-    available: source => !!nodeId(source ?? {}) || !!selectedNode(),
-    payload: source => {
-      const id = nodeId(source) || graphs.current.selected || graphs.current.nodes()[0]?.id || '';
-      const node = graphs.current.node(id)!;
-      return { id, patch: { Collapsed: !node.Collapsed } };
+    {
+      id: 'graph.create',
+      label: 'Create graph',
+      event: 'graph.create',
+      group: 'graph',
+      shortcut: 'N',
+      input: { on: 'keydown', key: 'n', prevent: true },
     },
-  });
-  contexts.commands.register({
-    id: 'node.title.edit',
-    label: 'Edit node title',
-    event: 'node.title.edit',
-    group: 'node',
-    shortcut: 'Enter',
-    input: { on: 'keydown', key: 'Enter', prevent: true },
-    available: source => !!nodeId(source ?? {}) || !!selectedNode(),
-    payload: source => ({ id: nodeId(source) || graphs.current.selected || '' }),
-  });
-  contexts.commands.register({
-    id: 'item.properties.open',
-    label: 'Open item properties',
-    event: 'item.properties.open',
-    group: 'item',
-    available: source => !!itemRefFrom(source?.target) || !!selectedNode(),
-    payload: source => itemRefFrom(source.target) ?? { kind: 'node', id: graphs.current.selected || '' },
-  });
+    {
+      id: 'graph.switch.next',
+      label: 'Switch graph',
+      event: 'graph.switch',
+      group: 'graph',
+      shortcut: 'G',
+      input: { on: 'keydown', key: 'g', prevent: true },
+      payload: () => ({ id: nextGraphId() }),
+    },
+    {
+      id: 'graph.switch.item',
+      label: 'Switch graph item',
+      event: 'graph.switch',
+      group: 'graph',
+      hidden: true,
+      payload: source => ({ id: graphId(source) }),
+    },
+    {
+      id: 'graph.node.delete.selected',
+      label: 'Delete node',
+      event: 'graph.node.delete',
+      group: 'graph',
+      shortcut: 'Delete',
+      input: { on: 'keydown', key: 'Delete', prevent: true },
+      available: source => !!nodeId(source ?? {}) || !!graphs.current.selected,
+      payload: source => ({ id: nodeId(source) }),
+    },
+    {
+      id: 'graph.delete.current',
+      label: 'Delete graph',
+      event: 'graph.delete',
+      group: 'graph',
+      available: source => graphs.all().length > 1 && (!!itemIdFrom(source?.target) || !!graphs.current.id),
+      payload: source => ({ id: graphId(source) }),
+    },
+    {
+      id: 'selection.node.select',
+      label: 'Select node',
+      event: 'selection.node.select',
+      group: 'selection',
+      hidden: true,
+      input: { on: 'pointerdown', selector: '[data-node-id]', when: event => !(event.target as Element).closest('[data-command]'), prevent: true },
+      payload: source => ({ id: nodeId(source) }),
+    },
+    {
+      id: 'selection.node.next',
+      label: 'Select next node',
+      event: 'selection.node.select',
+      group: 'selection',
+      shortcut: 'Tab',
+      input: { on: 'keydown', key: 'Tab', prevent: true },
+      available: () => graphs.current.nodes().length > 0,
+      payload: () => ({ id: nextNodeId() }),
+    },
+    {
+      id: 'selection.node.clear',
+      label: 'Clear selection',
+      event: 'selection.node.clear',
+      group: 'selection',
+      available: () => !!graphs.current.selected,
+      input: { on: 'pointerdown', selector: `[data-place="${Places.Stage}"]`, when: isStageSurface },
+    },
+    {
+      id: 'graph.node.nudge.right',
+      label: 'Nudge node right',
+      event: 'graph.node.update',
+      group: 'node',
+      shortcut: 'ArrowRight',
+      input: { on: 'keydown', key: 'ArrowRight', prevent: true },
+      available: () => !!selectedNode(),
+      payload: () => {
+        const node = selectedNode()!;
+        const pos = node.Position ?? { x: 0, y: 0 };
+        return { id: node.id, patch: { Position: { x: pos.x + 24, y: pos.y } } };
+      },
+    },
+    {
+      id: 'node.collapse.toggle',
+      label: 'Toggle node collapse',
+      event: 'graph.node.update',
+      group: 'node',
+      shortcut: 'C',
+      input: { on: 'keydown', key: 'c', prevent: true },
+      available: source => !!nodeId(source ?? {}) || !!selectedNode(),
+      payload: source => {
+        const id = nodeId(source) || graphs.current.selected || graphs.current.nodes()[0]?.id || '';
+        const node = graphs.current.node(id)!;
+        return { id, patch: { Collapsed: !node.Collapsed } };
+      },
+    },
+    {
+      id: 'node.title.edit',
+      label: 'Edit node title',
+      event: 'node.title.edit',
+      group: 'node',
+      shortcut: 'Enter',
+      input: { on: 'keydown', key: 'Enter', prevent: true },
+      available: source => !!nodeId(source ?? {}) || !!selectedNode(),
+      payload: source => ({ id: nodeId(source) || graphs.current.selected || '' }),
+    },
+    {
+      id: 'item.properties.open',
+      label: 'Open item properties',
+      event: 'item.properties.open',
+      group: 'item',
+      available: source => !!itemRefFrom(source?.target) || !!selectedNode(),
+      payload: source => itemRefFrom(source.target) ?? { kind: 'node', id: graphs.current.selected || '' },
+    },
+  ]);
 });
 
-system('inlineEdit', ({ on, emit, graphs }) => {
+system('inlineEdit', ({ on, emit, graphs, contexts }) => {
   const titleEl = (id: Id) => document.querySelector(`.node[data-node-id="${id}"] .node-title`);
+  const titleCommit = (target?: Element | null, finish = false) => ({
+    id: itemIdFrom(target),
+    text: target?.textContent?.trim() ?? '',
+    finish,
+  });
+  contexts.commands.register([
+    {
+      id: 'node.title.commit.enter',
+      label: 'Commit node title',
+      event: 'node.title.commit',
+      group: 'node',
+      hidden: true,
+      input: { on: 'keydown', key: 'Enter', selector: '.node-title', prevent: true },
+      payload: ({ target }) => titleCommit(target, true),
+    },
+    {
+      id: 'node.title.commit.focusout',
+      label: 'Commit node title focusout',
+      event: 'node.title.commit',
+      group: 'node',
+      hidden: true,
+      input: { on: 'focusout', selector: '.node-title' },
+      payload: ({ target }) => titleCommit(target),
+    },
+  ]);
   on('node.title.edit', ({ id }) => queueMicrotask(() => {
     const title = titleEl(id);
     if (!(title instanceof HTMLElement)) return;
@@ -968,26 +1040,24 @@ system('inlineEdit', ({ on, emit, graphs }) => {
     selection?.removeAllRanges();
     selection?.addRange(range);
   }));
-  document.addEventListener('keydown', event => {
-    const target = event.target;
-    if (!(target instanceof HTMLElement) || !target.classList.contains('node-title') || event.key !== 'Enter') return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    target.blur();
-  });
-  document.addEventListener('blur', event => {
-    const target = event.target;
-    if (!(target instanceof HTMLElement) || !target.classList.contains('node-title')) return;
-    const id = itemIdFrom(target);
+  on('node.title.commit', ({ id, text, finish }) => {
     const node = graphs.current.node(id);
     if (!node) return;
-    const text = target.textContent?.trim() || node.Label.text;
-    if (text !== node.Label.text) emit('graph.node.update', { id, patch: { Label: { text } } });
-    else target.textContent = node.Label.text;
-  }, true);
+    if (text && text !== node.Label.text) emit('graph.node.update', { id, patch: { Label: { text } } });
+    if (!text) {
+      const title = titleEl(id);
+      if (title) title.textContent = node.Label.text;
+    }
+    if (finish) queueMicrotask(() => {
+      const title = titleEl(id);
+      if (title instanceof HTMLElement) title.blur();
+    });
+  });
 });
 
 system('properties', ({ on, emit, graphs, contexts }) => {
+  const formId = (target?: Element | null) => target?.closest('.properties')?.getAttribute('data-item-id') ?? '';
+  const fieldOf = (target?: Element | null) => target?.getAttribute('data-field') ?? '';
   const renderNodeProperties = (node: GraphNode) => {
     const form = contexts.templates.clone('properties');
     form.dataset.itemKind = 'node';
@@ -998,18 +1068,41 @@ system('properties', ({ on, emit, graphs, contexts }) => {
     (form.querySelector('[data-field="collapsed"]') as HTMLInputElement).checked = !!node.Collapsed;
     return form;
   };
-  const nodeFrom = (target: Element) => {
-    const form = target.closest('.properties');
-    return form instanceof HTMLElement && form.dataset.itemKind === 'node'
-      ? graphs.current.node(form.dataset.itemId ?? '')
-      : undefined;
-  };
   const updateSize = (node: GraphNode, field: string, value: string) => {
     const n = Number(value);
     if (!Number.isFinite(n)) return;
     const Size = { ...node.Size, [field === 'width' ? 'w' : 'h']: clamp(n, field === 'width' ? 96 : 40, 900) };
     emit('graph.node.update', { id: node.id, patch: { Size } });
   };
+
+  contexts.commands.register([
+    {
+      id: 'properties.node.input',
+      label: 'Edit node property',
+      event: 'properties.node.input',
+      group: 'properties',
+      hidden: true,
+      input: { on: 'input', selector: '.properties [data-field="title"], .properties [data-field="width"], .properties [data-field="height"]' },
+      payload: ({ target }) => ({
+        id: formId(target),
+        field: fieldOf(target) as 'title' | 'width' | 'height',
+        value: (target as HTMLInputElement).value,
+      }),
+    },
+    {
+      id: 'properties.node.toggle',
+      label: 'Toggle node property',
+      event: 'properties.node.toggle',
+      group: 'properties',
+      hidden: true,
+      input: { on: 'change', selector: '.properties [data-field="collapsed"]' },
+      payload: ({ target }) => ({
+        id: formId(target),
+        field: 'collapsed',
+        checked: (target as HTMLInputElement).checked,
+      }),
+    },
+  ]);
 
   on('item.properties.open', ref => {
     if (ref.kind !== 'node') return;
@@ -1021,19 +1114,15 @@ system('properties', ({ on, emit, graphs, contexts }) => {
       body: () => renderNodeProperties(node),
     });
   });
-  document.addEventListener('input', event => {
-    const target = event.target;
-    if (!(target instanceof HTMLInputElement) || !target.closest('.properties')) return;
-    const node = nodeFrom(target);
+  on('properties.node.input', ({ id, field, value }) => {
+    const node = graphs.current.node(id);
     if (!node) return;
-    if (target.dataset.field === 'title') emit('graph.node.update', { id: node.id, patch: { Label: { text: target.value } } });
-    if (target.dataset.field === 'width' || target.dataset.field === 'height') updateSize(node, target.dataset.field, target.value);
+    if (field === 'title') emit('graph.node.update', { id: node.id, patch: { Label: { text: value } } });
+    if (field === 'width' || field === 'height') updateSize(node, field, value);
   });
-  document.addEventListener('change', event => {
-    const target = event.target;
-    if (!(target instanceof HTMLInputElement) || target.dataset.field !== 'collapsed') return;
-    const node = nodeFrom(target);
-    if (node) emit('graph.node.update', { id: node.id, patch: { Collapsed: target.checked } });
+  on('properties.node.toggle', ({ id, checked }) => {
+    const node = graphs.current.node(id);
+    if (node) emit('graph.node.update', { id: node.id, patch: { Collapsed: checked } });
   });
 });
 
@@ -1074,43 +1163,45 @@ system('view', ({ on, emit, contexts }) => {
     commit();
   };
 
-  contexts.commands.register({
-    id: 'view.zoom.wheel',
-    label: 'Wheel zoom',
-    event: 'view.zoom.by',
-    group: 'view',
-    hidden: true,
-    input: { on: 'wheel', selector: stageSelector, prevent: true },
-    payload: ({ event }) => {
-      const wheel = event as WheelEvent;
-      return {
-        screen: contexts.view.clientToScreen(Places.Stage, { x: wheel.clientX, y: wheel.clientY }),
-        factor: Math.exp(-wheel.deltaY * 0.001),
-      };
+  contexts.commands.register([
+    {
+      id: 'view.zoom.wheel',
+      label: 'Wheel zoom',
+      event: 'view.zoom.by',
+      group: 'view',
+      hidden: true,
+      input: { on: 'wheel', selector: stageSelector, prevent: true },
+      payload: ({ event }) => {
+        const wheel = event as WheelEvent;
+        return {
+          screen: contexts.view.clientToScreen(Places.Stage, { x: wheel.clientX, y: wheel.clientY }),
+          factor: Math.exp(-wheel.deltaY * 0.001),
+        };
+      },
     },
-  });
-  contexts.commands.register({ id: 'view.zoom.in', label: 'Zoom in', event: 'view.zoom.in', group: 'view', shortcut: '+', input: { on: 'keydown', key: '+', prevent: true } });
-  contexts.commands.register({ id: 'view.zoom.out', label: 'Zoom out', event: 'view.zoom.out', group: 'view', shortcut: '-', input: { on: 'keydown', key: '-', prevent: true } });
-  contexts.commands.register({ id: 'view.zoom.reset', label: 'Reset view', event: 'view.zoom.reset', group: 'view', shortcut: '0', input: { on: 'keydown', key: '0', prevent: true } });
-  contexts.commands.register({
-    id: 'view.pan.start',
-    label: 'Start canvas pan',
-    event: 'view.pan.start',
-    group: 'view',
-    hidden: true,
-    input: { on: 'pointerdown', selector: stageSelector, when: isStageSurface, prevent: true },
-    payload: ({ event }) => clientPoint(event!),
-  });
-  contexts.commands.register({
-    id: 'view.pan.move',
-    label: 'Pan canvas',
-    event: 'view.pan.move',
-    group: 'view',
-    hidden: true,
-    input: { on: 'pointermove', when: () => !!pan, prevent: true },
-    payload: ({ event }) => clientPoint(event!),
-  });
-  contexts.commands.register({ id: 'view.pan.end', label: 'End canvas pan', event: 'view.pan.end', group: 'view', hidden: true, input: { on: 'pointerup', when: () => !!pan } });
+    { id: 'view.zoom.in', label: 'Zoom in', event: 'view.zoom.in', group: 'view', shortcut: '+', input: { on: 'keydown', key: '+', prevent: true } },
+    { id: 'view.zoom.out', label: 'Zoom out', event: 'view.zoom.out', group: 'view', shortcut: '-', input: { on: 'keydown', key: '-', prevent: true } },
+    { id: 'view.zoom.reset', label: 'Reset view', event: 'view.zoom.reset', group: 'view', shortcut: '0', input: { on: 'keydown', key: '0', prevent: true } },
+    {
+      id: 'view.pan.start',
+      label: 'Start canvas pan',
+      event: 'view.pan.start',
+      group: 'view',
+      hidden: true,
+      input: { on: 'pointerdown', selector: stageSelector, when: isStageSurface, prevent: true },
+      payload: ({ event }) => clientPoint(event!),
+    },
+    {
+      id: 'view.pan.move',
+      label: 'Pan canvas',
+      event: 'view.pan.move',
+      group: 'view',
+      hidden: true,
+      input: { on: 'pointermove', when: () => !!pan, prevent: true },
+      payload: ({ event }) => clientPoint(event!),
+    },
+    { id: 'view.pan.end', label: 'End canvas pan', event: 'view.pan.end', group: 'view', hidden: true, input: { on: 'pointerup', when: () => !!pan } },
+  ]);
 
   on('view.zoom.by', ({ screen, factor }) => { contexts.view.zoomAtScreen(screen, factor); commit(); });
   on('view.zoom.in', () => centerZoom(1.2));
@@ -1146,25 +1237,27 @@ system('focus', ({ on, emit, graphs }) => {
 
 system('drag', ({ on, emit, graphs, contexts }) => {
   let drag: { id: Id; pointer: Position; start: Position } | null = null;
-  contexts.commands.register({
-    id: 'drag.node.start',
-    label: 'Start drag',
-    event: 'drag.node.start',
-    group: 'drag',
-    hidden: true,
-    input: { on: 'pointerdown', selector: '[data-drag-handle]', when: event => !(event.target as Element).closest('[data-command]'), prevent: true },
-    payload: ({ event, target }) => ({ id: itemIdFrom(target), x: (event as PointerEvent).clientX, y: (event as PointerEvent).clientY }),
-  });
-  contexts.commands.register({
-    id: 'drag.node.move',
-    label: 'Move dragged node',
-    event: 'drag.node.move',
-    group: 'drag',
-    hidden: true,
-    input: { on: 'pointermove', when: () => !!drag, prevent: true },
-    payload: ({ event }) => ({ x: (event as PointerEvent).clientX, y: (event as PointerEvent).clientY }),
-  });
-  contexts.commands.register({ id: 'drag.node.end', label: 'End drag', event: 'drag.node.end', group: 'drag', hidden: true, input: { on: 'pointerup', when: () => !!drag } });
+  contexts.commands.register([
+    {
+      id: 'drag.node.start',
+      label: 'Start drag',
+      event: 'drag.node.start',
+      group: 'drag',
+      hidden: true,
+      input: { on: 'pointerdown', selector: '[data-drag-handle]', when: event => !(event.target as Element).closest('[data-command]'), prevent: true },
+      payload: ({ event, target }) => ({ id: itemIdFrom(target), x: (event as PointerEvent).clientX, y: (event as PointerEvent).clientY }),
+    },
+    {
+      id: 'drag.node.move',
+      label: 'Move dragged node',
+      event: 'drag.node.move',
+      group: 'drag',
+      hidden: true,
+      input: { on: 'pointermove', when: () => !!drag, prevent: true },
+      payload: ({ event }) => ({ x: (event as PointerEvent).clientX, y: (event as PointerEvent).clientY }),
+    },
+    { id: 'drag.node.end', label: 'End drag', event: 'drag.node.end', group: 'drag', hidden: true, input: { on: 'pointerup', when: () => !!drag } },
+  ]);
 
   on('drag.node.start', ({ id, x, y }) => {
     const node = graphs.current.node(id);

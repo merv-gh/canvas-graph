@@ -4,6 +4,12 @@ Small TypeScript proof of concept for a composable, event-driven graph app.
 
 This iteration tries a stricter rule: data declarations imply UI and commands. Entities declare abilities, collections declare CRUD/search/order, and a DX system checks that those declarations are actually surfaced.
 
+## Mental Model
+
+One sentence: v2 is a typed event app where systems register command arrays and react to bus events, while entities and collections declare enough data for render, palette/help, shortcuts, CRUD/search, and DX checks to be generated consistently.
+
+One paragraph: `Graph` owns graph data, `appModel` describes what that data can do, systems plug into a shared context, commands translate raw DOM input into typed app events, and render places DOM into named slots from templates and ability metadata. Cross-system workflows live in `feature(...)`, not inside individual systems. The only direct DOM event listeners are app boot and the input adapter; every other interaction should be a command or bus event so input, hotkeys, palette, help, and UI affordances stay overrideable from the same registry.
+
 ## Run
 
 From the repository root:
@@ -26,7 +32,7 @@ V2 serves at `http://127.0.0.1:5174/`.
 - `feature(name, setup)` registers a cross-system workflow.
 - `systems.start(ctx); features.start(ctx, () => ctx.bus.emit('app.start'))` wires everything and starts the app.
 - System bodies receive `on` and `emit` directly, so they read as event handlers rather than plumbing.
-- `ctx.contexts.commands` owns command metadata and raw input mapping.
+- `ctx.contexts.commands` owns command metadata and raw input mapping; systems register command arrays.
 - `ctx.contexts.places` exposes named render places without leaking DOM queries everywhere.
 - `ctx.contexts.view` owns pan/zoom state plus screen/space coordinate utilities.
 - `ctx.graphs.current` is the active graph aggregate.
@@ -144,16 +150,18 @@ Events are namespaced by owning system or feature domain.
 Commands are registered as data:
 
 ```ts
-contexts.commands.register({
-  id: 'editing.node.create',
-  label: 'Create node',
-  event: 'editing.node.create',
-  input: { on: 'keydown', key: 'a', prevent: true },
-  payload: () => ({ Label: { text: nextName() } }),
-});
+contexts.commands.register([
+  {
+    id: 'editing.node.create',
+    label: 'Create node',
+    event: 'editing.node.create',
+    input: { on: 'keydown', key: 'a', prevent: true },
+    payload: () => ({ Label: { text: nextName() } }),
+  },
+]);
 ```
 
-The same registry drives keyboard shortcuts, `data-command` buttons, command modal rows, and the help shortcut editor. Command modal contents are searched from command metadata, not hardcoded.
+The same registry drives keyboard shortcuts, form inputs, focus-out commits, pointer gestures, `data-command` buttons, command modal rows, and the help shortcut editor. Command modal contents are searched from command metadata, not hardcoded.
 
 Shortcut edits are checked against the registry before saving. Duplicate hotkeys are highlighted in red and stay unsaved until the user chooses a free key.
 
@@ -190,11 +198,11 @@ There are no hidden archetype defaults or capability merges. If a future capabil
 
 ## Size Note
 
-The declaration/validation layer grew the code. Recent passes moved shared vocabulary into `types.ts`, merged Palette/Help into one command-modal system, added shortcut conflict checks, made configurable properties first-class, and moved node header controls behind ability metadata:
+The declaration/validation layer grew the code. Recent passes moved shared vocabulary into `types.ts`, merged Palette/Help into one command-modal system, added shortcut conflict checks, made configurable properties first-class, moved node header controls behind ability metadata, and routed DOM input through commands:
 
 - baseline before these passes: `v2/app.ts` was `1,084` lines / `44,127` bytes
-- current `v2/app.ts`: `1,215` lines / `49,790` bytes
-- extracted `v2/types.ts`: `124` lines / `4,888` bytes
+- current `v2/app.ts`: `1,308` lines / `52,221` bytes
+- extracted `v2/types.ts`: `131` lines / `5,413` bytes
 
 So the runtime file is larger again after adding properties and validation behavior. The payoff depends on future entities reusing the same CRUD/list/search/palette/UI/modal plumbing instead of adding one-off systems.
 

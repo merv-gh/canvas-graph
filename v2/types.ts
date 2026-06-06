@@ -1,6 +1,6 @@
 export type Id = string;
 export type Renderable = string | globalThis.Node | (() => string | globalThis.Node);
-export type RawInput = 'click' | 'keydown' | 'pointerdown' | 'pointermove' | 'pointerup' | 'wheel';
+export type RawInput = 'click' | 'keydown' | 'pointerdown' | 'pointermove' | 'pointerup' | 'wheel' | 'input' | 'change' | 'focusout';
 
 export const Places = { Top: 'top', Left: 'left', Stage: 'stage', Modal: 'modal' } as const;
 export type Place = typeof Places[keyof typeof Places];
@@ -30,6 +30,10 @@ export type AppEvents = {
   'palette.open': void;
   'help.open': void;
   'outline.draw': void;
+  'outline.search.changed': { collectionId: Id; query: string };
+  'commandModal.search.changed': { modalId: string; query: string };
+  'shortcut.edit.preview': { id: string; shortcut: string };
+  'shortcut.edit.commit': { id: string; shortcut: string };
   'view.changed': ViewState;
   'view.zoom.by': { screen: Position; factor: number };
   'view.zoom.in': void;
@@ -52,7 +56,10 @@ export type AppEvents = {
   'graph.node.delete': { id: Id };
   'graph.node.deleted': { graphId: Id; id: Id };
   'node.title.edit': { id: Id };
+  'node.title.commit': { id: Id; text: string; finish?: boolean };
   'item.properties.open': ItemRef;
+  'properties.node.input': { id: Id; field: 'title' | 'width' | 'height'; value: string };
+  'properties.node.toggle': { id: Id; field: 'collapsed'; checked: boolean };
   'selection.node.select': { id: Id };
   'selection.node.clear': void;
   'selection.node.selected': { id: Id | null };
