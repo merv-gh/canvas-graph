@@ -94,6 +94,8 @@ Editable affordances use the same visual cue everywhere: dashed underline plus e
 
 Configurable affordances use the item properties command. Nodes expose it as a header gear button and as the `Open item properties` command when a node is selected.
 
+Entity templates expose structural slots, not hardcoded abilities. The node template has `header:start`, `title`, and `header:end`; render fills those slots from ability affordance metadata.
+
 ## Modal Model
 
 `modal` is the abstract container:
@@ -188,11 +190,11 @@ There are no hidden archetype defaults or capability merges. If a future capabil
 
 ## Size Note
 
-The declaration/validation layer grew the code. Recent passes moved shared vocabulary into `types.ts`, merged Palette/Help into one command-modal system, added shortcut conflict checks, and made configurable properties first-class:
+The declaration/validation layer grew the code. Recent passes moved shared vocabulary into `types.ts`, merged Palette/Help into one command-modal system, added shortcut conflict checks, made configurable properties first-class, and moved node header controls behind ability metadata:
 
 - baseline before these passes: `v2/app.ts` was `1,084` lines / `44,127` bytes
-- current `v2/app.ts`: `1,159` lines / `47,414` bytes
-- extracted `v2/types.ts`: `114` lines / `4,661` bytes
+- current `v2/app.ts`: `1,215` lines / `49,790` bytes
+- extracted `v2/types.ts`: `124` lines / `4,888` bytes
 
 So the runtime file is larger again after adding properties and validation behavior. The payoff depends on future entities reusing the same CRUD/list/search/palette/UI/modal plumbing instead of adding one-off systems.
 

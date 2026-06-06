@@ -95,10 +95,20 @@ export type CommandSpec<K extends EventName = EventName> = {
   payload?: (source: CommandSource) => AppEvents[K];
 };
 
-export type AffordanceDef = { surface: 'palette' | 'list' | 'entity'; command: string; kind: 'button' | 'handler' | 'shortcut'; slot?: string };
-export type ActionDef = { id: string; label: string; paletteCommand: string; ui: NonEmptyArray<AffordanceDef> };
-export type AbilityDef = { id: string; actions: NonEmptyArray<ActionDef> };
-export type EntityDef<T> = { kind: string; label: string; labelOf: (item: T) => string; abilities: AbilityDef[] };
+export type UiValue<T = unknown> = string | ((item: T) => string);
+export type AffordanceDef<T = unknown> = {
+  surface: 'palette' | 'list' | 'entity';
+  command: string;
+  kind: 'button' | 'handler' | 'shortcut';
+  slot?: string;
+  text?: UiValue<T>;
+  label?: UiValue<T>;
+  className?: string;
+  attrs?: Record<string, UiValue<T>>;
+};
+export type ActionDef<T = unknown> = { id: string; label: string; paletteCommand: string; ui: NonEmptyArray<AffordanceDef<T>> };
+export type AbilityDef<T = unknown> = { id: string; actions: NonEmptyArray<ActionDef<T>> };
+export type EntityDef<T> = { kind: string; label: string; labelOf: (item: T) => string; abilities: AbilityDef<T>[] };
 export type CollectionDef<T, Ctx = unknown> = {
   id: string;
   label: string;

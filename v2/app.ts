@@ -2,6 +2,7 @@ import { Places } from './types';
 import type {
   AbilityDef,
   ActionDef,
+  AffordanceDef,
   AnyEvent,
   AppEvents,
   Bus,
@@ -25,6 +26,7 @@ import type {
   Rect,
   Renderable,
   Size,
+  UiValue,
   ViewState,
 } from './types';
 
@@ -71,10 +73,18 @@ const grouped = <T,>(items: T[], keyOf: (item: T) => string) => {
   items.forEach(item => (groups.get(keyOf(item)) || groups.set(keyOf(item), []).get(keyOf(item))!).push(item));
   return [...groups.entries()];
 };
-const action = (def: ActionDef) => def;
-const ability = (id: string, actions: NonEmptyArray<ActionDef>): AbilityDef => ({ id, actions });
+const action = <T,>(def: ActionDef<T>) => def;
+const ability = <T,>(id: string, actions: NonEmptyArray<ActionDef<T>>): AbilityDef<T> => ({ id, actions });
 const entity = <T,>(kind: string, def: Omit<EntityDef<T>, 'kind'>): EntityDef<T> => ({ kind, ...def });
 const collection = <T,>(id: string, def: Omit<AppCollectionDef<T>, 'id'>): AppCollectionDef<T> => ({ id, ...def });
+const uiValue = <T,>(value: UiValue<T> | undefined, item: T, fallback = '') =>
+  typeof value === 'function' ? value(item) : value ?? fallback;
+const entityUi = <T,>(entityDef: EntityDef<T>, slot?: string) =>
+  entityDef.abilities.flatMap(abilityDef => abilityDef.actions.flatMap(actionDef =>
+    actionDef.ui
+      .filter(ui => ui.surface === 'entity' && (slot == null || ui.slot === slot))
+      .map(ui => ({ action: actionDef, ui })),
+  ));
 const itemIdFrom = (target?: Element | null) =>
   target?.closest('[data-item-id]')?.getAttribute('data-item-id')
   ?? target?.closest('[data-node-id]')?.getAttribute('data-node-id')
@@ -361,35 +371,58 @@ function createAppContext(): AppCtx {
   return { bus, graphs: graphStore(), contexts: createContexts(bus) };
 }
 
-const selectable = () => ability('selectable', [action({
+const selectable = () => ability<GraphNode>('selectable', [action<GraphNode>({
   id: 'node.select',
   label: 'Select node',
   paletteCommand: 'selection.node.next',
   ui: [{ surface: 'entity', command: 'selection.node.select', kind: 'handler' }],
 })]);
-const draggable = () => ability('draggable', [action({
+const draggable = () => ability<GraphNode>('draggable', [action<GraphNode>({
   id: 'node.drag',
   label: 'Move node',
   paletteCommand: 'graph.node.nudge.right',
-  ui: [{ surface: 'entity', command: 'drag.node.start', kind: 'handler', slot: 'header' }],
+  ui: [{ surface: 'entity', command: 'drag.node.start', kind: 'handler', slot: 'header', attrs: { 'data-drag-handle': '' } }],
 })]);
-const collapsible = () => ability('collapsible', [action({
+const collapsible = () => ability<GraphNode>('collapsible', [action<GraphNode>({
   id: 'node.collapse',
   label: 'Collapse node',
   paletteCommand: 'node.collapse.toggle',
-  ui: [{ surface: 'entity', command: 'node.collapse.toggle', kind: 'button', slot: 'header' }],
+  ui: [{
+    surface: 'entity',
+    command: 'node.collapse.toggle',
+    kind: 'button',
+    slot: 'header:start',
+    className: 'node-action node-toggle',
+    text: node => node.Collapsed ? '+' : '-',
+    label: node => node.Collapsed ? 'Expand node' : 'Collapse node',
+  }],
 })]);
-const editable = () => ability('editable', [action({
+const editable = () => ability<GraphNode>('editable', [action<GraphNode>({
   id: 'node.title.edit',
   label: 'Edit node title',
   paletteCommand: 'node.title.edit',
-  ui: [{ surface: 'entity', command: 'node.title.edit', kind: 'handler', slot: 'title' }],
+  ui: [{
+    surface: 'entity',
+    command: 'node.title.edit',
+    kind: 'handler',
+    slot: 'title',
+    className: 'editable-inline',
+    attrs: { contenteditable: 'plaintext-only', 'data-command': 'node.title.edit' },
+  }],
 })]);
-const configurable = () => ability('configurable', [action({
+const configurable = () => ability<GraphNode>('configurable', [action<GraphNode>({
   id: 'node.configure',
   label: 'Configure node',
   paletteCommand: 'item.properties.open',
-  ui: [{ surface: 'entity', command: 'item.properties.open', kind: 'button', slot: 'header' }],
+  ui: [{
+    surface: 'entity',
+    command: 'item.properties.open',
+    kind: 'button',
+    slot: 'header:end',
+    className: 'node-action node-config',
+    text: '⚙',
+    label: 'Configure node',
+  }],
 })]);
 
 const nodeEntity = entity<GraphNode>('node', {
@@ -456,6 +489,33 @@ const feature = features;
 system('render', ({ on, emit, graphs, contexts }) => {
   const root = document.getElementById('app')!;
   const views = new Map<Place, Map<string, Renderable>>();
+  const applyAffordance = (el: HTMLElement, node: GraphNode, ui: AffordanceDef<GraphNode>) => {
+    if (ui.className) el.classList.add(...ui.className.split(/\s+/).filter(Boolean));
+    Object.entries(ui.attrs ?? {}).forEach(([name, value]) => el.setAttribute(name, uiValue(value, node)));
+  };
+  const affordanceButton = (node: GraphNode, actionDef: ActionDef<GraphNode>, ui: AffordanceDef<GraphNode>) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.command = ui.command;
+    button.textContent = uiValue(ui.text, node, actionDef.label);
+    button.setAttribute('aria-label', uiValue(ui.label, node, actionDef.label));
+    applyAffordance(button, node, ui);
+    return button;
+  };
+  const wireNodeAffordances = (el: HTMLElement, node: GraphNode) => {
+    entityUi(nodeEntity, 'header')
+      .filter(({ ui }) => ui.kind === 'handler')
+      .forEach(({ ui }) => applyAffordance(contexts.templates.slot(el, 'header'), node, ui));
+    entityUi(nodeEntity, 'title')
+      .filter(({ ui }) => ui.kind === 'handler')
+      .forEach(({ ui }) => applyAffordance(contexts.templates.slot(el, 'title'), node, ui));
+    (['header:start', 'header:end'] as const).forEach(slot => {
+      const target = contexts.templates.slot(el, slot);
+      entityUi(nodeEntity, slot)
+        .filter(({ ui }) => ui.kind === 'button')
+        .forEach(({ action, ui }) => target.append(affordanceButton(node, action, ui)));
+    });
+  };
   const syncStageView = () => {
     const stage = contexts.places.el(Places.Stage), view = contexts.view.get();
     if (!stage) return;
@@ -470,7 +530,7 @@ system('render', ({ on, emit, graphs, contexts }) => {
     slot.replaceChildren();
     [...parts.values()].forEach(view => appendRenderable(slot, view));
   };
-  const nodeView = (node: NodeEntity) => {
+  const nodeView = (node: GraphNode) => {
     const graph = graphs.current;
     const el = contexts.templates.clone('node');
     const pos = node.Position ?? { x: 0, y: 0 };
@@ -482,13 +542,9 @@ system('render', ({ on, emit, graphs, contexts }) => {
     el.style.top = `${pos.y}px`;
     el.style.width = `${node.Size.w}px`;
     el.style.height = `${node.Size.h}px`;
-    const toggle = el.querySelector('.node-toggle');
-    if (toggle instanceof HTMLElement) {
-      toggle.dataset.nodeId = node.id;
-      toggle.textContent = node.Collapsed ? '+' : '-';
-    }
     contexts.templates.text(el, 'title', node.Label.text);
     contexts.templates.text(el, 'meta', node.id);
+    wireNodeAffordances(el, node);
     return el;
   };
   const drawNodes = () => emit('render.view.set', {

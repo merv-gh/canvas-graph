@@ -25,10 +25,15 @@ test('v2 help rejects duplicate shortcuts without saving', async ({ page }) => {
 
 test('v2 configurable ability opens node properties', async ({ page }) => {
   await page.goto('/v2/');
+  const nodeTemplate = await page.locator('#tpl-node').evaluate(template => template.innerHTML);
+  expect(nodeTemplate).not.toContain('node.collapse.toggle');
+  expect(nodeTemplate).not.toContain('item.properties.open');
+
   await page.getByRole('button', { name: '+ Node' }).click();
 
   const node = page.locator('.node').first();
   await expect(node).toBeVisible();
+  await expect(node.locator('[data-command="node.collapse.toggle"]')).toHaveText('-');
   await node.locator('[data-command="item.properties.open"]').click();
 
   await expect(page.locator('.modal-layer[data-visual="properties"]')).toBeVisible();

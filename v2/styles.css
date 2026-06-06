@@ -57,7 +57,8 @@ button:hover { border-color: var(--accent); }
 }
 .node.selected { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(33,107,255,.15), var(--shadow); }
 .node-header { display: flex; align-items: center; gap: 7px; padding: 8px 10px 4px; cursor: grab; }
-.node-toggle, .node-config { width: 22px; height: 22px; padding: 0; border-radius: 4px; line-height: 1; }
+.node-affordances { display: flex; align-items: center; gap: 5px; }
+.node-action, .node-toggle, .node-config { width: 22px; height: 22px; padding: 0; border-radius: 4px; line-height: 1; }
 .node-title { flex: 1; font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .node-body { padding: 0 12px 10px; }
 .node.collapsed { min-height: 40px; height: 40px !important; }

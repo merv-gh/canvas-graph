@@ -50,10 +50,10 @@
 
   <template id="tpl-node">
     <article class="node">
-      <header class="node-header" data-drag-handle>
-        <button class="node-toggle" data-command="node.collapse.toggle">-</button>
-        <div class="node-title editable-inline" data-command="node.title.edit" data-text="title" contenteditable="plaintext-only"></div>
-        <button class="node-config" data-command="item.properties.open" aria-label="Configure node">⚙</button>
+      <header class="node-header" data-slot="header">
+        <span class="node-affordances" data-slot="header:start"></span>
+        <div class="node-title" data-slot="title" data-text="title"></div>
+        <span class="node-affordances" data-slot="header:end"></span>
       </header>
       <div class="node-body">
         <div class="node-meta" data-text="meta"></div>
