@@ -1,0 +1,114 @@
+export type Id = string;
+export type Renderable = string | globalThis.Node | (() => string | globalThis.Node);
+export type RawInput = 'click' | 'keydown' | 'pointerdown' | 'pointermove' | 'pointerup' | 'wheel';
+
+export const Places = { Top: 'top', Left: 'left', Stage: 'stage', Modal: 'modal' } as const;
+export type Place = typeof Places[keyof typeof Places];
+
+export type Position = { x: number; y: number };
+export type Size = { w: number; h: number };
+export type Rect = Position & Size;
+export type ViewState = Position & { scale: number };
+export type Label = { text: string };
+export type NodeDraft = { Label?: Label; Position?: Position; Size?: Size; Collapsed?: boolean };
+export type NodeEntity = { id: Id; kind: 'node'; Label: Label; Size: Size; Position?: Position; Collapsed?: boolean };
+export type NodePatch = Partial<Pick<NodeEntity, 'Label' | 'Size' | 'Position' | 'Collapsed'>>;
+export type NodeCreateOptions = { at?: Position; near?: Id | null };
+export type NonEmptyArray<T> = [T, ...T[]];
+export type ModalVisual = 'panel' | 'command' | 'properties';
+export type ItemKind = 'graph' | 'node';
+export type ItemRef = { kind: ItemKind; id: Id };
+
+export type AppEvents = {
+  'app.start': void;
+  'render.shell': void;
+  'render.view.set': { place: Place; key?: string; view: Renderable };
+  'render.view.clear': { place: Place; key?: string };
+  'render.nodes.draw': void;
+  'modal.open': { title?: string; body?: Renderable; visual?: ModalVisual };
+  'modal.close': void;
+  'palette.open': void;
+  'help.open': void;
+  'outline.draw': void;
+  'view.changed': ViewState;
+  'view.zoom.by': { screen: Position; factor: number };
+  'view.zoom.in': void;
+  'view.zoom.out': void;
+  'view.zoom.reset': void;
+  'view.pan.start': Position;
+  'view.pan.move': Position;
+  'view.pan.end': void;
+  'editing.node.create': NodeDraft;
+  'graph.create': void;
+  'graph.created': { id: Id };
+  'graph.delete': { id: Id };
+  'graph.deleted': { id: Id; nextId: Id };
+  'graph.switch': { id: Id };
+  'graph.switched': { id: Id };
+  'graph.node.create': NodeDraft;
+  'graph.node.created': { graphId: Id; id: Id };
+  'graph.node.update': { id: Id; patch: NodePatch };
+  'graph.node.updated': { graphId: Id; id: Id };
+  'graph.node.delete': { id: Id };
+  'graph.node.deleted': { graphId: Id; id: Id };
+  'node.title.edit': { id: Id };
+  'item.properties.open': ItemRef;
+  'selection.node.select': { id: Id };
+  'selection.node.clear': void;
+  'selection.node.selected': { id: Id | null };
+  'focus.node.focus': { id: Id };
+  'focus.node.clear': void;
+  'focus.node.focused': { id: Id | null };
+  'drag.node.start': { id: Id; x: number; y: number };
+  'drag.node.move': { x: number; y: number };
+  'drag.node.end': void;
+  'drag.node.moved': { id: Id };
+};
+export type EventName = keyof AppEvents;
+export type EventOf<K extends EventName = EventName> = { name: K; data: AppEvents[K]; at: number };
+export type AnyEvent = { [K in EventName]: EventOf<K> }[EventName];
+export type Bus = {
+  on<K extends EventName>(name: K, fn: (data: AppEvents[K], event: EventOf<K>) => void): void;
+  onAny(fn: (event: AnyEvent) => void): void;
+  emit<K extends EventName>(name: K, ...data: AppEvents[K] extends void ? [] : [AppEvents[K]]): void;
+};
+
+export type CommandSource = { event?: Event; target?: Element | null };
+export type CommandInput = {
+  on: RawInput;
+  key?: string;
+  selector?: string;
+  global?: boolean;
+  prevent?: boolean;
+  stop?: boolean;
+  when?: (event: Event, target: Element) => boolean;
+};
+export type CommandSpec<K extends EventName = EventName> = {
+  id: string;
+  label: string;
+  event: K;
+  input?: CommandInput;
+  group?: string;
+  hidden?: boolean;
+  shortcut?: string;
+  available?: (source?: CommandSource) => boolean;
+  payload?: (source: CommandSource) => AppEvents[K];
+};
+
+export type AffordanceDef = { surface: 'palette' | 'list' | 'entity'; command: string; kind: 'button' | 'handler' | 'shortcut'; slot?: string };
+export type ActionDef = { id: string; label: string; paletteCommand: string; ui: NonEmptyArray<AffordanceDef> };
+export type AbilityDef = { id: string; actions: NonEmptyArray<ActionDef> };
+export type EntityDef<T> = { kind: string; label: string; labelOf: (item: T) => string; abilities: AbilityDef[] };
+export type CollectionDef<T, Ctx = unknown> = {
+  id: string;
+  label: string;
+  entity?: EntityDef<T>;
+  items: (ctx: Ctx) => T[];
+  itemId: (item: T) => Id;
+  itemLabel: (item: T) => string;
+  selectCommand?: string;
+  crud: { create: string; delete: string };
+  search: true;
+  order: 'created';
+};
+export type ModelDef<Ctx = unknown> = { entities: EntityDef<unknown>[]; collections: CollectionDef<unknown, Ctx>[] };

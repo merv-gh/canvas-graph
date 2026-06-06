@@ -50,8 +50,14 @@
 
   <template id="tpl-node">
     <article class="node">
-      <div class="node-title" data-text="title"></div>
-      <div class="node-meta" data-text="meta"></div>
+      <header class="node-header" data-drag-handle>
+        <button class="node-toggle" data-command="node.collapse.toggle">-</button>
+        <div class="node-title editable-inline" data-command="node.title.edit" data-text="title" contenteditable="plaintext-only"></div>
+        <button class="node-config" data-command="item.properties.open" aria-label="Configure node">⚙</button>
+      </header>
+      <div class="node-body">
+        <div class="node-meta" data-text="meta"></div>
+      </div>
     </article>
   </template>
 
@@ -75,10 +81,6 @@
     </section>
   </template>
 
-  <template id="tpl-help">
-    <section class="help-list" data-slot="systems"></section>
-  </template>
-
   <template id="tpl-command-section">
     <section class="command-section">
       <h3 data-text="group"></h3>
@@ -96,8 +98,17 @@
   <template id="tpl-help-row">
     <div class="help-row">
       <span><b data-text="label"></b><small data-text="id"></small></span>
-      <input class="shortcut-edit">
+      <input class="shortcut-edit editable-inline">
     </div>
+  </template>
+
+  <template id="tpl-properties">
+    <section class="properties">
+      <label>Title <input class="editable-inline" data-field="title"></label>
+      <label>Width <input type="number" min="96" step="8" data-field="width"></label>
+      <label>Height <input type="number" min="40" step="8" data-field="height"></label>
+      <label class="check-row"><input type="checkbox" data-field="collapsed"> Collapsed</label>
+    </section>
   </template>
 </body>
 </html>

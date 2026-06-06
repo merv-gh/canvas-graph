@@ -1,87 +1,38 @@
-type Id = string;
-type Renderable = string | globalThis.Node | (() => string | globalThis.Node);
-type RawInput = 'click' | 'keydown' | 'pointerdown' | 'pointermove' | 'pointerup' | 'wheel';
+import { Places } from './types';
+import type {
+  AbilityDef,
+  ActionDef,
+  AnyEvent,
+  AppEvents,
+  Bus,
+  CollectionDef,
+  CommandSource,
+  CommandSpec,
+  EntityDef,
+  EventName,
+  Id,
+  ItemRef,
+  Label,
+  ModelDef,
+  NonEmptyArray,
+  NodeCreateOptions,
+  NodeDraft,
+  NodeEntity,
+  NodePatch,
+  Place,
+  Position,
+  RawInput,
+  Rect,
+  Renderable,
+  Size,
+  ViewState,
+} from './types';
 
-const Places = { Top: 'top', Left: 'left', Stage: 'stage', Modal: 'modal' } as const;
-type Place = typeof Places[keyof typeof Places];
-
-type Position = { x: number; y: number };
-type Size = { w: number; h: number };
-type Rect = Position & Size;
-type ViewState = Position & { scale: number };
-type Label = { text: string };
-type NodeDraft = { Label?: Label; Position?: Position; Size?: Size };
-type NodeEntity = { id: Id; kind: 'node'; Label: Label; Size: Size; Position?: Position };
-type NodePatch = Partial<Pick<NodeEntity, 'Label' | 'Size' | 'Position'>>;
-
-type AppEvents = {
-  'app.start': void;
-  'render.shell': void;
-  'render.view.set': { place: Place; key?: string; view: Renderable };
-  'render.view.clear': { place: Place; key?: string };
-  'render.nodes.draw': void;
-  'modal.open': { title?: string; body?: Renderable };
-  'modal.close': void;
-  'palette.open': void;
-  'help.open': void;
-  'view.changed': ViewState;
-  'view.zoom.by': { screen: Position; factor: number };
-  'view.zoom.in': void;
-  'view.zoom.out': void;
-  'view.zoom.reset': void;
-  'view.pan.start': Position;
-  'view.pan.move': Position;
-  'view.pan.end': void;
-  'editing.node.create': NodeDraft;
-  'data.node.create': NodeDraft;
-  'data.node.created': { id: Id };
-  'data.node.update': { id: Id; patch: NodePatch };
-  'data.node.updated': { id: Id };
-  'layout.node.center': { id: Id };
-  'selection.node.select': { id: Id };
-  'selection.node.clear': void;
-  'selection.node.selected': { id: Id | null };
-  'focus.node.focus': { id: Id };
-  'focus.node.clear': void;
-  'focus.node.focused': { id: Id | null };
-  'drag.node.start': { id: Id; x: number; y: number };
-  'drag.node.move': { x: number; y: number };
-  'drag.node.end': void;
-  'drag.node.moved': { id: Id };
-};
-type EventName = keyof AppEvents;
-type EventOf<K extends EventName = EventName> = { name: K; data: AppEvents[K]; at: number };
-type AnyEvent = { [K in EventName]: EventOf<K> }[EventName];
-type Bus = {
-  on<K extends EventName>(name: K, fn: (data: AppEvents[K], event: EventOf<K>) => void): void;
-  onAny(fn: (event: AnyEvent) => void): void;
-  emit<K extends EventName>(name: K, ...data: AppEvents[K] extends void ? [] : [AppEvents[K]]): void;
-};
-
-type CommandSource = { event?: Event; target?: Element | null };
-type CommandInput = {
-  on: RawInput;
-  key?: string;
-  selector?: string;
-  global?: boolean;
-  prevent?: boolean;
-  stop?: boolean;
-  when?: (event: Event, target: Element) => boolean;
-};
-type CommandSpec<K extends EventName = EventName> = {
-  id: string;
-  label: string;
-  event: K;
-  input?: CommandInput;
-  group?: string;
-  hidden?: boolean;
-  shortcut?: string;
-  payload?: (source: CommandSource) => AppEvents[K];
-};
-
-type World = ReturnType<typeof worldStore>;
+type Graphs = ReturnType<typeof graphStore>;
 type Contexts = ReturnType<typeof createContexts>;
-type AppCtx = { bus: Bus; world: World; contexts: Contexts };
+type AppCtx = { bus: Bus; graphs: Graphs; contexts: Contexts };
+type AppCollectionDef<T> = CollectionDef<T, AppCtx>;
+type AppModelDef = ModelDef<AppCtx>;
 type SystemCtx = AppCtx & Pick<Bus, 'on' | 'emit'>;
 type AppSystem = (ctx: SystemCtx) => void;
 type Registry = ((name: string, setup: AppSystem) => void) & {
@@ -94,6 +45,7 @@ declare global { interface Window { v2?: AppCtx } }
 const systemOf = (id: string) => id.split('.')[0] || 'app';
 const shortcutOf = (command: CommandSpec) => command.shortcut ?? (command.input?.key ? command.input.key.toUpperCase() : '');
 const keyOfShortcut = (shortcut: string) => shortcut.trim().toLowerCase() === 'esc' ? 'Escape' : shortcut.trim();
+const shortcutKey = (shortcut: string) => keyOfShortcut(shortcut).toLowerCase();
 const keyMatches = (event: Event, key: string) => event instanceof KeyboardEvent
   && (
     event.key.toLowerCase() === key.toLowerCase()
@@ -118,6 +70,22 @@ const grouped = <T,>(items: T[], keyOf: (item: T) => string) => {
   const groups = new Map<string, T[]>();
   items.forEach(item => (groups.get(keyOf(item)) || groups.set(keyOf(item), []).get(keyOf(item))!).push(item));
   return [...groups.entries()];
+};
+const action = (def: ActionDef) => def;
+const ability = (id: string, actions: NonEmptyArray<ActionDef>): AbilityDef => ({ id, actions });
+const entity = <T,>(kind: string, def: Omit<EntityDef<T>, 'kind'>): EntityDef<T> => ({ kind, ...def });
+const collection = <T,>(id: string, def: Omit<AppCollectionDef<T>, 'id'>): AppCollectionDef<T> => ({ id, ...def });
+const itemIdFrom = (target?: Element | null) =>
+  target?.closest('[data-item-id]')?.getAttribute('data-item-id')
+  ?? target?.closest('[data-node-id]')?.getAttribute('data-node-id')
+  ?? target?.closest('[data-graph-id]')?.getAttribute('data-graph-id')
+  ?? '';
+const itemRefFrom = (target?: Element | null): ItemRef | null => {
+  const node = target?.closest('[data-node-id]')?.getAttribute('data-node-id');
+  if (node) return { kind: 'node', id: node };
+  const graph = target?.closest('[data-graph-id]')?.getAttribute('data-graph-id');
+  if (graph) return { kind: 'graph', id: graph };
+  return null;
 };
 
 function templateContext() {
@@ -202,26 +170,102 @@ function eventBus(): Bus {
   };
 }
 
-function worldStore() {
-  let next = 1, selected: Id | null = null, focused: Id | null = null;
-  const nodes = new Map<Id, NodeEntity>();
+class GraphNode implements NodeEntity {
+  kind = 'node' as const;
+  Label: Label;
+  Size: Size;
+  Position?: Position;
+  Collapsed?: boolean;
+
+  constructor(readonly graph: Graph, readonly id: Id, draft: NodeDraft = {}) {
+    this.Label = draft.Label ?? { text: id };
+    this.Size = draft.Size ?? { w: 150, h: 64 };
+    this.Position = draft.Position;
+    this.Collapsed = draft.Collapsed;
+  }
+}
+
+class Graph {
+  static new(id: Id) { return new Graph(id); }
+
+  selected: Id | null = null;
+  focused: Id | null = null;
+  private nextNode = 1;
+  private items = new Map<Id, GraphNode>();
+
+  private constructor(readonly id: Id) {}
+
+  node(draft?: NodeDraft, options?: NodeCreateOptions): GraphNode;
+  node(id: Id): GraphNode | undefined;
+  node(value: NodeDraft | Id = {}, options: NodeCreateOptions = {}) {
+    if (typeof value === 'string') return this.items.get(value);
+    const id = `e${this.nextNode++}`;
+    const node = new GraphNode(this, id, this.withDefaults(value, options));
+    this.items.set(id, node);
+    return node;
+  }
+
+  nodes() { return [...this.items.values()]; }
+  selectedNode() { return this.selected ? this.node(this.selected) : undefined; }
+  createNode(draft: NodeDraft = {}, options: NodeCreateOptions = {}) { return this.node(draft, options).id; }
+  updateNode(id: Id, patch: NodePatch) {
+    const node = this.node(id);
+    if (!node) return false;
+    Object.assign(node, patch);
+    return true;
+  }
+  deleteNode(id: Id) {
+    const deleted = this.items.delete(id);
+    if (this.selected === id) this.selected = null;
+    if (this.focused === id) this.focused = null;
+    return deleted;
+  }
+
+  private withDefaults(draft: NodeDraft, options: NodeCreateOptions): NodeDraft {
+    const nearId = options.near ?? this.selected;
+    const selected = options.near === null || !nearId ? undefined : this.node(nearId);
+    const anchor = selected?.Position ?? options.at ?? { x: 0, y: 0 };
+    const spread = this.items.size % 4;
+    return {
+      ...draft,
+      Position: draft.Position ?? {
+        x: anchor.x + (selected ? 180 : spread * 24),
+        y: anchor.y + (selected ? 0 : (this.items.size % 3) * 18),
+      },
+    };
+  }
+}
+
+function graphStore() {
+  let next = 1;
+  const graphs = new Map<Id, Graph>();
+  const nextId = () => {
+    let id = `g${next++}`;
+    while (graphs.has(id)) id = `g${next++}`;
+    return id;
+  };
+  const create = (id: Id = nextId()) => {
+    const existing = graphs.get(id);
+    if (existing) return existing;
+    const graph = Graph.new(id);
+    graphs.set(id, graph);
+    return graph;
+  };
+  let current = create();
   return {
-    get selected() { return selected; },
-    set selected(id: Id | null) { selected = id; },
-    get focused() { return focused; },
-    set focused(id: Id | null) { focused = id; },
-    createNode(draft: NodeDraft = {}) {
-      const id = `e${next++}`;
-      nodes.set(id, { id, kind: 'node', Size: { w: 150, h: 64 }, ...draft, Label: draft.Label ?? { text: id } });
-      return id;
+    get current() { return current; },
+    all: () => [...graphs.values()],
+    get: (id: Id) => graphs.get(id),
+    create,
+    delete(id: Id) {
+      if (graphs.size <= 1) return current;
+      graphs.delete(id);
+      if (current.id === id) current = graphs.values().next().value ?? create();
+      return current;
     },
-    node: (id: Id) => nodes.get(id),
-    nodes: () => [...nodes.values()],
-    updateNode(id: Id, patch: NodePatch) {
-      const node = nodes.get(id);
-      if (!node) return false;
-      Object.assign(node, patch);
-      return true;
+    switch(id: Id) {
+      current = graphs.get(id) ?? create(id);
+      return current;
     },
   };
 }
@@ -231,21 +275,29 @@ function createContexts(bus: Bus) {
   const places = new Map<Place, HTMLElement>();
   const templates = templateContext();
   const view = viewContext(places);
+  const shortcutConflict = (id: string, shortcut: string) => {
+    const key = shortcutKey(shortcut);
+    if (!key) return undefined;
+    return [...commandMap.values()].find(command => command.id !== id && shortcutKey(shortcutOf(command)) === key);
+  };
 
   const commands = {
     register: (command: CommandSpec) => commandMap.set(command.id, command),
     get: (id: string) => commandMap.get(id),
     all: () => [...commandMap.values()],
+    shortcutConflict,
     setShortcut(id: string, shortcut: string) {
       const command = commandMap.get(id);
       if (!command) return false;
-      command.shortcut = shortcut.trim();
+      const next = shortcut.trim();
+      if (shortcutConflict(id, next)) return false;
+      command.shortcut = next;
       if (command.input?.key) command.input.key = keyOfShortcut(command.shortcut);
       return true;
     },
     run(id: string, source: CommandSource = {}) {
       const command = commandMap.get(id);
-      if (!command) return false;
+      if (!command || command.available?.(source) === false) return false;
       const payload = command.payload?.(source);
       (bus.emit as (name: EventName, data?: unknown) => void)(command.event, payload);
       return true;
@@ -256,7 +308,8 @@ function createContexts(bus: Bus) {
     start(root: Document | HTMLElement = document) {
       const route = (event: Event) => {
         const rawTarget = event.target instanceof Element ? event.target : null;
-        const typing = event instanceof KeyboardEvent && /input|textarea|select/i.test(rawTarget?.tagName ?? '');
+        const typing = event instanceof KeyboardEvent
+          && (/input|textarea|select/i.test(rawTarget?.tagName ?? '') || (rawTarget instanceof HTMLElement && rawTarget.isContentEditable));
 
         const button = event.type === 'click' ? rawTarget?.closest('[data-command]') : null;
         if (button instanceof HTMLElement) {
@@ -305,7 +358,94 @@ function registry(): Registry {
 
 function createAppContext(): AppCtx {
   const bus = eventBus();
-  return { bus, world: worldStore(), contexts: createContexts(bus) };
+  return { bus, graphs: graphStore(), contexts: createContexts(bus) };
+}
+
+const selectable = () => ability('selectable', [action({
+  id: 'node.select',
+  label: 'Select node',
+  paletteCommand: 'selection.node.next',
+  ui: [{ surface: 'entity', command: 'selection.node.select', kind: 'handler' }],
+})]);
+const draggable = () => ability('draggable', [action({
+  id: 'node.drag',
+  label: 'Move node',
+  paletteCommand: 'graph.node.nudge.right',
+  ui: [{ surface: 'entity', command: 'drag.node.start', kind: 'handler', slot: 'header' }],
+})]);
+const collapsible = () => ability('collapsible', [action({
+  id: 'node.collapse',
+  label: 'Collapse node',
+  paletteCommand: 'node.collapse.toggle',
+  ui: [{ surface: 'entity', command: 'node.collapse.toggle', kind: 'button', slot: 'header' }],
+})]);
+const editable = () => ability('editable', [action({
+  id: 'node.title.edit',
+  label: 'Edit node title',
+  paletteCommand: 'node.title.edit',
+  ui: [{ surface: 'entity', command: 'node.title.edit', kind: 'handler', slot: 'title' }],
+})]);
+const configurable = () => ability('configurable', [action({
+  id: 'node.configure',
+  label: 'Configure node',
+  paletteCommand: 'item.properties.open',
+  ui: [{ surface: 'entity', command: 'item.properties.open', kind: 'button', slot: 'header' }],
+})]);
+
+const nodeEntity = entity<GraphNode>('node', {
+  label: 'Node',
+  labelOf: node => node.Label.text,
+  abilities: [selectable(), draggable(), collapsible(), editable(), configurable()],
+});
+
+const appModel = {
+  entities: [nodeEntity as EntityDef<unknown>],
+  collections: [
+    collection<Graph>('graphs', {
+      label: 'Graphs',
+      items: ctx => ctx.graphs.all(),
+      itemId: graph => graph.id,
+      itemLabel: graph => graph.id,
+      selectCommand: 'graph.switch.item',
+      crud: { create: 'graph.create', delete: 'graph.delete.current' },
+      search: true,
+      order: 'created',
+    }) as AppCollectionDef<unknown>,
+    collection<GraphNode>('nodes', {
+      label: 'Nodes',
+      entity: nodeEntity,
+      items: ctx => ctx.graphs.current.nodes(),
+      itemId: node => node.id,
+      itemLabel: node => node.Label.text,
+      selectCommand: 'selection.node.select',
+      crud: { create: 'editing.node.create', delete: 'graph.node.delete.selected' },
+      search: true,
+      order: 'created',
+    }) as AppCollectionDef<unknown>,
+  ],
+} satisfies AppModelDef;
+
+function validateModel(model: AppModelDef, commands: ReturnType<Contexts['commands']['all']>) {
+  const commandIds = new Set(commands.map(command => command.id));
+  const visibleCommandIds = new Set(commands.filter(command => !command.hidden).map(command => command.id));
+  const issues: string[] = [];
+  model.entities.forEach(entityDef => entityDef.abilities.forEach(abilityDef => {
+    if (!abilityDef.actions.length) issues.push(`${entityDef.kind}.${abilityDef.id} has no actions`);
+    abilityDef.actions.forEach(actionDef => {
+      if (!visibleCommandIds.has(actionDef.paletteCommand)) issues.push(`${actionDef.id} missing visible palette command ${actionDef.paletteCommand}`);
+      if (!actionDef.ui.length) issues.push(`${actionDef.id} has no UI affordance`);
+      actionDef.ui.forEach(ui => {
+        if (!commandIds.has(ui.command)) issues.push(`${actionDef.id} UI missing command ${ui.command}`);
+      });
+    });
+  }));
+  model.collections.forEach(collectionDef => {
+    if (!commandIds.has(collectionDef.crud.create)) issues.push(`${collectionDef.id} missing create command ${collectionDef.crud.create}`);
+    if (!commandIds.has(collectionDef.crud.delete)) issues.push(`${collectionDef.id} missing delete command ${collectionDef.crud.delete}`);
+    if (!collectionDef.search) issues.push(`${collectionDef.id} missing search`);
+    if (!collectionDef.order) issues.push(`${collectionDef.id} missing order`);
+  });
+  return issues;
 }
 
 const systems = registry();
@@ -313,7 +453,7 @@ const features = registry();
 const system = systems;
 const feature = features;
 
-system('render', ({ on, emit, world, contexts }) => {
+system('render', ({ on, emit, graphs, contexts }) => {
   const root = document.getElementById('app')!;
   const views = new Map<Place, Map<string, Renderable>>();
   const syncStageView = () => {
@@ -331,15 +471,22 @@ system('render', ({ on, emit, world, contexts }) => {
     [...parts.values()].forEach(view => appendRenderable(slot, view));
   };
   const nodeView = (node: NodeEntity) => {
+    const graph = graphs.current;
     const el = contexts.templates.clone('node');
     const pos = node.Position ?? { x: 0, y: 0 };
     el.dataset.nodeId = node.id;
-    el.classList.toggle('selected', world.selected === node.id);
-    el.classList.toggle('focused', world.focused === node.id);
+    el.classList.toggle('selected', graph.selected === node.id);
+    el.classList.toggle('focused', graph.focused === node.id);
+    el.classList.toggle('collapsed', !!node.Collapsed);
     el.style.left = `${pos.x}px`;
     el.style.top = `${pos.y}px`;
     el.style.width = `${node.Size.w}px`;
     el.style.height = `${node.Size.h}px`;
+    const toggle = el.querySelector('.node-toggle');
+    if (toggle instanceof HTMLElement) {
+      toggle.dataset.nodeId = node.id;
+      toggle.textContent = node.Collapsed ? '+' : '-';
+    }
     contexts.templates.text(el, 'title', node.Label.text);
     contexts.templates.text(el, 'meta', node.id);
     return el;
@@ -352,7 +499,7 @@ system('render', ({ on, emit, world, contexts }) => {
       const view = contexts.view.get();
       const layer = contexts.templates.clone('nodes');
       layer.style.transform = `translate(${-view.x * view.scale}px, ${-view.y * view.scale}px) scale(${view.scale})`;
-      world.nodes()
+      graphs.current.nodes()
         .filter(node => contexts.view.isVisible(Places.Stage, nodeRect(node), 160))
         .forEach(node => layer.append(nodeView(node)));
       return layer;
@@ -413,6 +560,69 @@ system('log', ({ bus, emit, contexts }) => {
   });
 });
 
+system('outline', ctx => {
+  const { on, emit, contexts } = ctx;
+  const searches = new Map<string, string>();
+  const el = (tag: string, className?: string, text?: string) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text != null) node.textContent = text;
+    return node;
+  };
+  const renderCollection = (collectionDef: AppCollectionDef<unknown>) => {
+    const section = el('section', 'outline-section');
+    const head = el('div', 'outline-head');
+    const title = el('h2', 'panel-title', collectionDef.label);
+    const createButton = el('button', 'icon-button', '+') as HTMLButtonElement;
+    createButton.dataset.command = collectionDef.crud.create;
+    head.append(title, createButton);
+    section.append(head);
+
+    const query = searches.get(collectionDef.id) ?? '';
+    const search = el('input', 'outline-search') as HTMLInputElement;
+    search.placeholder = `Search ${collectionDef.label.toLowerCase()}`;
+    search.value = query;
+    search.dataset.collectionId = collectionDef.id;
+    section.append(search);
+
+    const list = el('div', 'outline-list');
+    collectionDef.items(ctx)
+      .filter(item => collectionDef.itemLabel(item).toLowerCase().includes(query.toLowerCase()))
+      .forEach(item => {
+        const id = collectionDef.itemId(item);
+        const row = el('div', 'outline-row');
+        row.dataset.itemId = id;
+        if (collectionDef.id === 'graphs') row.dataset.graphId = id;
+        if (collectionDef.id === 'nodes') row.dataset.nodeId = id;
+        const main = el('button', 'outline-main', collectionDef.itemLabel(item)) as HTMLButtonElement;
+        if (collectionDef.selectCommand) main.dataset.command = collectionDef.selectCommand;
+        const remove = el('button', 'icon-button', 'x') as HTMLButtonElement;
+        remove.dataset.command = collectionDef.crud.delete;
+        row.append(main, remove);
+        list.append(row);
+      });
+    section.append(list);
+    return section;
+  };
+  const renderOutline = () => {
+    const panel = el('section', 'outline');
+    appModel.collections.forEach(collectionDef => panel.append(renderCollection(collectionDef)));
+    return panel;
+  };
+  const draw = () => emit('render.view.set', { place: Places.Left, key: 'outline', view: renderOutline });
+  on('app.start', draw);
+  on('outline.draw', draw);
+  document.addEventListener('input', event => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement) || !target.classList.contains('outline-search')) return;
+    searches.set(target.dataset.collectionId!, target.value);
+    draw();
+    const next = contexts.places.el(Places.Left)?.querySelector(`[data-collection-id="${target.dataset.collectionId}"]`) as HTMLInputElement | null;
+    next?.focus();
+    next?.setSelectionRange(next.value.length, next.value.length);
+  });
+});
+
 system('modal', ({ on, emit, contexts }) => {
   let open = false;
   contexts.commands.register({
@@ -420,7 +630,7 @@ system('modal', ({ on, emit, contexts }) => {
     label: 'Open modal',
     event: 'modal.open',
     group: 'modal',
-    payload: ({ target }) => ({ title: (target as HTMLElement)?.dataset.title, body: (target as HTMLElement)?.dataset.body }),
+    payload: ({ target }) => ({ title: (target as HTMLElement)?.dataset.title, body: (target as HTMLElement)?.dataset.body, visual: (target as HTMLElement)?.dataset.visual as AppEvents['modal.open']['visual'] }),
   });
   contexts.commands.register({ id: 'modal.close', label: 'Close modal', event: 'modal.close', group: 'modal', shortcut: 'Esc', input: { on: 'keydown', key: 'Escape', global: true, when: () => open, prevent: true } });
 
@@ -428,13 +638,14 @@ system('modal', ({ on, emit, contexts }) => {
     open = false;
     emit('render.view.set', { place: Places.Modal, key: 'modal', view: '' });
   });
-  on('modal.open', ({ title = 'Modal', body = '' }) => {
+  on('modal.open', ({ title = 'Modal', body = '', visual = 'panel' }) => {
     open = true;
     emit('render.view.set', {
       place: Places.Modal,
       key: 'modal',
       view: () => {
         const modal = contexts.templates.clone('modal');
+        modal.dataset.visual = visual;
         contexts.templates.text(modal, 'title', title);
         appendRenderable(contexts.templates.slot(modal, 'body'), body);
         return modal;
@@ -444,89 +655,124 @@ system('modal', ({ on, emit, contexts }) => {
   });
 });
 
-system('palette', ({ on, emit, contexts }) => {
-  const visibleCommands = (query = '') => {
+type CommandModalDef = {
+  id: 'palette' | 'help';
+  title: string;
+  event: 'palette.open' | 'help.open';
+  label: string;
+  shortcut: string;
+  key: string;
+  editableHotkeys: boolean;
+  availableOnly: boolean;
+  placeholder: string;
+};
+const commandModals: Record<CommandModalDef['id'], CommandModalDef> = {
+  palette: { id: 'palette', title: 'Palette', event: 'palette.open', label: 'Open palette', shortcut: 'P', key: 'p', editableHotkeys: false, availableOnly: true, placeholder: 'Search commands' },
+  help: { id: 'help', title: 'Help', event: 'help.open', label: 'Open help', shortcut: '?', key: '?', editableHotkeys: true, availableOnly: false, placeholder: 'Search shortcuts' },
+};
+
+system('commandModal', ({ on, emit, contexts }) => {
+  const syncShortcutConflict = (input: HTMLInputElement) => {
+    const conflict = contexts.commands.shortcutConflict(input.dataset.shortcutCommand!, input.value);
+    input.classList.toggle('is-conflict', !!conflict);
+    input.toggleAttribute('aria-invalid', !!conflict);
+    input.title = conflict ? `Already used by ${conflict.label}` : '';
+    input.closest('.help-row')?.classList.toggle('has-conflict', !!conflict);
+    return !conflict;
+  };
+  const visibleCommands = (modal: CommandModalDef, query = '') => {
     const q = query.trim().toLowerCase();
     return contexts.commands.all()
       .filter(command => !command.hidden)
+      .filter(command => !modal.availableOnly || command.available?.() !== false)
       .filter(command => !q || `${command.id} ${command.label} ${command.group ?? ''} ${shortcutOf(command)}`.toLowerCase().includes(q));
   };
-  const commandSection = (group: string, commands: CommandSpec[]) => {
+  const commandSection = (modal: CommandModalDef, group: string, commands: CommandSpec[]) => {
     const section = contexts.templates.clone('command-section');
     const rows = contexts.templates.slot(section, 'rows');
     contexts.templates.text(section, 'group', group);
     commands.forEach(command => {
-      const row = contexts.templates.clone<HTMLButtonElement>('command-row');
       const shortcut = shortcutOf(command);
-      row.dataset.command = command.id;
+      const row = contexts.templates.clone<HTMLElement>(modal.editableHotkeys ? 'help-row' : 'command-row');
+      if (!modal.editableHotkeys) row.dataset.command = command.id;
       contexts.templates.text(row, 'label', command.label);
       contexts.templates.text(row, 'id', command.id);
-      if (shortcut) contexts.templates.text(row, 'shortcut', shortcut);
+      if (modal.editableHotkeys) {
+        const input = row.querySelector('input');
+        if (input) {
+          input.dataset.shortcutCommand = command.id;
+          input.value = shortcut;
+          input.setAttribute('aria-label', `${command.label} shortcut`);
+          syncShortcutConflict(input);
+        }
+      } else if (shortcut) contexts.templates.text(row, 'shortcut', shortcut);
       else row.querySelector('kbd')?.remove();
       rows.append(row);
     });
     return section;
   };
-  const renderList = (query = '') => {
+  const renderList = (modal: CommandModalDef, query = '') => {
     const fragment = document.createDocumentFragment();
-    grouped(visibleCommands(query), command => command.group ?? systemOf(command.id))
-      .forEach(([group, commands]) => fragment.append(commandSection(group, commands)));
+    grouped(visibleCommands(modal, query), command => command.group ?? systemOf(command.id))
+      .forEach(([group, commands]) => fragment.append(commandSection(modal, group, commands)));
     return fragment;
   };
-  const renderPalette = () => {
+  const renderCommandModal = (modal: CommandModalDef) => {
     const palette = contexts.templates.clone('palette');
-    contexts.templates.slot(palette, 'commands').append(renderList());
+    palette.dataset.commandModal = modal.id;
+    const input = palette.querySelector('.palette-search');
+    if (input instanceof HTMLInputElement) input.placeholder = modal.placeholder;
+    contexts.templates.slot(palette, 'commands').append(renderList(modal));
     return palette;
   };
-  contexts.commands.register({ id: 'palette.open', label: 'Open palette', event: 'palette.open', group: 'palette', shortcut: 'P', input: { on: 'keydown', key: 'p', prevent: true } });
-  on('palette.open', () => emit('modal.open', {
-    title: 'Palette',
-    body: renderPalette,
+  Object.values(commandModals).forEach(modal => contexts.commands.register({
+    id: modal.event,
+    label: modal.label,
+    event: modal.event,
+    group: 'modal',
+    shortcut: modal.shortcut,
+    input: { on: 'keydown', key: modal.key, prevent: true },
   }));
+  const open = (modal: CommandModalDef) => emit('modal.open', {
+    title: modal.title,
+    visual: 'command',
+    body: () => renderCommandModal(modal),
+  });
+  on('palette.open', () => open(commandModals.palette));
+  on('help.open', () => open(commandModals.help));
   document.addEventListener('input', event => {
     const target = event.target;
-    if (!(target instanceof HTMLInputElement) || !target.classList.contains('palette-search')) return;
-    const list = target.closest('.palette')?.querySelector('[data-slot="commands"]');
-    if (list) list.replaceChildren(renderList(target.value));
+    if (!(target instanceof HTMLInputElement)) return;
+    if (target.classList.contains('shortcut-edit')) {
+      syncShortcutConflict(target);
+      return;
+    }
+    if (!target.classList.contains('palette-search')) return;
+    const root = target.closest('[data-command-modal]');
+    const modal = root instanceof HTMLElement ? commandModals[root.dataset.commandModal as CommandModalDef['id']] : null;
+    const list = root?.querySelector('[data-slot="commands"]');
+    if (modal && list) list.replaceChildren(renderList(modal, target.value));
   });
-});
-
-system('help', ({ on, emit, contexts }) => {
-  const renderHelp = () => {
-    const help = contexts.templates.clone('help');
-    const list = contexts.templates.slot(help, 'systems');
-    const sections = grouped(contexts.commands.all().filter(command => !command.hidden), command => command.group ?? systemOf(command.id));
-    sections.forEach(([group, commands]) => {
-      const section = contexts.templates.clone('command-section');
-      const rows = contexts.templates.slot(section, 'rows');
-      contexts.templates.text(section, 'group', group);
-      commands.forEach(command => {
-        const row = contexts.templates.clone('help-row');
-        const input = row.querySelector('input');
-        contexts.templates.text(row, 'label', command.label);
-        contexts.templates.text(row, 'id', command.id);
-        if (input) {
-          input.dataset.shortcutCommand = command.id;
-          input.value = shortcutOf(command);
-          input.setAttribute('aria-label', `${command.label} shortcut`);
-        }
-        rows.append(row);
-      });
-      list.append(section);
-    });
-    return help;
-  };
-  contexts.commands.register({ id: 'help.open', label: 'Open help', event: 'help.open', group: 'help', shortcut: '?', input: { on: 'keydown', key: '?', prevent: true } });
-  on('help.open', () => emit('modal.open', { title: 'Help', body: renderHelp }));
   document.addEventListener('change', event => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement) || !target.classList.contains('shortcut-edit')) return;
+    if (!syncShortcutConflict(target)) return;
     contexts.commands.setShortcut(target.dataset.shortcutCommand!, target.value);
   });
 });
 
-system('editing', ({ contexts }) => {
+system('domain', ({ contexts, graphs }) => {
   let count = 1;
+  const selectedNode = () => graphs.current.selectedNode();
+  const nodeId = (source: CommandSource) => itemIdFrom(source.target) || graphs.current.selected || '';
+  const graphId = (source: CommandSource) => itemIdFrom(source.target) || graphs.current.id;
+  const nextNodeId = () => {
+    const nodes = graphs.current.nodes();
+    const index = Math.max(0, nodes.findIndex(node => node.id === graphs.current.selected));
+    return nodes[(index + 1) % nodes.length]?.id ?? nodes[0]?.id ?? '';
+  };
+  const nextGraphId = () => graphs.all().find(graph => graph.id !== graphs.current.id)?.id ?? `g${graphs.all().length + 1}`;
+
   contexts.commands.register({
     id: 'editing.node.create',
     label: 'Create node',
@@ -536,23 +782,230 @@ system('editing', ({ contexts }) => {
     input: { on: 'keydown', key: 'a', prevent: true },
     payload: () => ({ Label: { text: `Node ${count++}` } }),
   });
+  contexts.commands.register({
+    id: 'graph.create',
+    label: 'Create graph',
+    event: 'graph.create',
+    group: 'graph',
+    shortcut: 'N',
+    input: { on: 'keydown', key: 'n', prevent: true },
+  });
+  contexts.commands.register({
+    id: 'graph.switch.next',
+    label: 'Switch graph',
+    event: 'graph.switch',
+    group: 'graph',
+    shortcut: 'G',
+    input: { on: 'keydown', key: 'g', prevent: true },
+    payload: () => ({ id: nextGraphId() }),
+  });
+  contexts.commands.register({
+    id: 'graph.switch.item',
+    label: 'Switch graph item',
+    event: 'graph.switch',
+    group: 'graph',
+    hidden: true,
+    payload: source => ({ id: graphId(source) }),
+  });
+  contexts.commands.register({
+    id: 'graph.node.delete.selected',
+    label: 'Delete node',
+    event: 'graph.node.delete',
+    group: 'graph',
+    shortcut: 'Delete',
+    input: { on: 'keydown', key: 'Delete', prevent: true },
+    available: source => !!nodeId(source ?? {}) || !!graphs.current.selected,
+    payload: source => ({ id: nodeId(source) }),
+  });
+  contexts.commands.register({
+    id: 'graph.delete.current',
+    label: 'Delete graph',
+    event: 'graph.delete',
+    group: 'graph',
+    available: source => graphs.all().length > 1 && (!!itemIdFrom(source?.target) || !!graphs.current.id),
+    payload: source => ({ id: graphId(source) }),
+  });
+  contexts.commands.register({
+    id: 'selection.node.select',
+    label: 'Select node',
+    event: 'selection.node.select',
+    group: 'selection',
+    hidden: true,
+    input: { on: 'pointerdown', selector: '[data-node-id]', when: event => !(event.target as Element).closest('[data-command]'), prevent: true },
+    payload: source => ({ id: nodeId(source) }),
+  });
+  contexts.commands.register({
+    id: 'selection.node.next',
+    label: 'Select next node',
+    event: 'selection.node.select',
+    group: 'selection',
+    shortcut: 'Tab',
+    input: { on: 'keydown', key: 'Tab', prevent: true },
+    available: () => graphs.current.nodes().length > 0,
+    payload: () => ({ id: nextNodeId() }),
+  });
+  contexts.commands.register({
+    id: 'selection.node.clear',
+    label: 'Clear selection',
+    event: 'selection.node.clear',
+    group: 'selection',
+    available: () => !!graphs.current.selected,
+    input: { on: 'pointerdown', selector: `[data-place="${Places.Stage}"]`, when: isStageSurface },
+  });
+  contexts.commands.register({
+    id: 'graph.node.nudge.right',
+    label: 'Nudge node right',
+    event: 'graph.node.update',
+    group: 'node',
+    shortcut: 'ArrowRight',
+    input: { on: 'keydown', key: 'ArrowRight', prevent: true },
+    available: () => !!selectedNode(),
+    payload: () => {
+      const node = selectedNode()!;
+      const pos = node.Position ?? { x: 0, y: 0 };
+      return { id: node.id, patch: { Position: { x: pos.x + 24, y: pos.y } } };
+    },
+  });
+  contexts.commands.register({
+    id: 'node.collapse.toggle',
+    label: 'Toggle node collapse',
+    event: 'graph.node.update',
+    group: 'node',
+    shortcut: 'C',
+    input: { on: 'keydown', key: 'c', prevent: true },
+    available: source => !!nodeId(source ?? {}) || !!selectedNode(),
+    payload: source => {
+      const id = nodeId(source) || graphs.current.selected || graphs.current.nodes()[0]?.id || '';
+      const node = graphs.current.node(id)!;
+      return { id, patch: { Collapsed: !node.Collapsed } };
+    },
+  });
+  contexts.commands.register({
+    id: 'node.title.edit',
+    label: 'Edit node title',
+    event: 'node.title.edit',
+    group: 'node',
+    shortcut: 'Enter',
+    input: { on: 'keydown', key: 'Enter', prevent: true },
+    available: source => !!nodeId(source ?? {}) || !!selectedNode(),
+    payload: source => ({ id: nodeId(source) || graphs.current.selected || '' }),
+  });
+  contexts.commands.register({
+    id: 'item.properties.open',
+    label: 'Open item properties',
+    event: 'item.properties.open',
+    group: 'item',
+    available: source => !!itemRefFrom(source?.target) || !!selectedNode(),
+    payload: source => itemRefFrom(source.target) ?? { kind: 'node', id: graphs.current.selected || '' },
+  });
 });
 
-system('data', ({ on, emit, world }) => {
-  on('data.node.create', draft => {
-    const id = world.createNode(draft);
-    emit('data.node.created', { id });
+system('inlineEdit', ({ on, emit, graphs }) => {
+  const titleEl = (id: Id) => document.querySelector(`.node[data-node-id="${id}"] .node-title`);
+  on('node.title.edit', ({ id }) => queueMicrotask(() => {
+    const title = titleEl(id);
+    if (!(title instanceof HTMLElement)) return;
+    title.focus();
+    const range = document.createRange();
+    range.selectNodeContents(title);
+    const selection = getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  }));
+  document.addEventListener('keydown', event => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement) || !target.classList.contains('node-title') || event.key !== 'Enter') return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    target.blur();
   });
-  on('data.node.update', ({ id, patch }) => {
-    if (world.updateNode(id, patch)) emit('data.node.updated', { id });
+  document.addEventListener('blur', event => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement) || !target.classList.contains('node-title')) return;
+    const id = itemIdFrom(target);
+    const node = graphs.current.node(id);
+    if (!node) return;
+    const text = target.textContent?.trim() || node.Label.text;
+    if (text !== node.Label.text) emit('graph.node.update', { id, patch: { Label: { text } } });
+    else target.textContent = node.Label.text;
+  }, true);
+});
+
+system('properties', ({ on, emit, graphs, contexts }) => {
+  const renderNodeProperties = (node: GraphNode) => {
+    const form = contexts.templates.clone('properties');
+    form.dataset.itemKind = 'node';
+    form.dataset.itemId = node.id;
+    (form.querySelector('[data-field="title"]') as HTMLInputElement).value = node.Label.text;
+    (form.querySelector('[data-field="width"]') as HTMLInputElement).value = `${node.Size.w}`;
+    (form.querySelector('[data-field="height"]') as HTMLInputElement).value = `${node.Size.h}`;
+    (form.querySelector('[data-field="collapsed"]') as HTMLInputElement).checked = !!node.Collapsed;
+    return form;
+  };
+  const nodeFrom = (target: Element) => {
+    const form = target.closest('.properties');
+    return form instanceof HTMLElement && form.dataset.itemKind === 'node'
+      ? graphs.current.node(form.dataset.itemId ?? '')
+      : undefined;
+  };
+  const updateSize = (node: GraphNode, field: string, value: string) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return;
+    const Size = { ...node.Size, [field === 'width' ? 'w' : 'h']: clamp(n, field === 'width' ? 96 : 40, 900) };
+    emit('graph.node.update', { id: node.id, patch: { Size } });
+  };
+
+  on('item.properties.open', ref => {
+    if (ref.kind !== 'node') return;
+    const node = graphs.current.node(ref.id);
+    if (!node) return;
+    emit('modal.open', {
+      title: 'Node Properties',
+      visual: 'properties',
+      body: () => renderNodeProperties(node),
+    });
+  });
+  document.addEventListener('input', event => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement) || !target.closest('.properties')) return;
+    const node = nodeFrom(target);
+    if (!node) return;
+    if (target.dataset.field === 'title') emit('graph.node.update', { id: node.id, patch: { Label: { text: target.value } } });
+    if (target.dataset.field === 'width' || target.dataset.field === 'height') updateSize(node, target.dataset.field, target.value);
+  });
+  document.addEventListener('change', event => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement) || target.dataset.field !== 'collapsed') return;
+    const node = nodeFrom(target);
+    if (node) emit('graph.node.update', { id: node.id, patch: { Collapsed: target.checked } });
   });
 });
 
-system('layout', ({ on, emit, contexts, world }) => {
-  on('layout.node.center', ({ id }) => {
-    const n = world.nodes().length;
-    const center = contexts.view.spaceCenter(Places.Stage);
-    emit('data.node.update', { id, patch: { Position: { x: center.x + (n % 4) * 24, y: center.y + (n % 3) * 18 } } });
+system('graph', ({ on, emit, graphs, contexts }) => {
+  on('graph.create', () => {
+    const graph = graphs.create();
+    graphs.switch(graph.id);
+    emit('graph.created', { id: graph.id });
+    emit('graph.switched', { id: graph.id });
+  });
+  on('graph.switch', ({ id }) => {
+    const graph = graphs.switch(id);
+    emit('graph.switched', { id: graph.id });
+  });
+  on('graph.node.create', draft => {
+    const node = graphs.current.node(draft, { at: contexts.view.spaceCenter(Places.Stage) });
+    emit('graph.node.created', { graphId: graphs.current.id, id: node.id });
+  });
+  on('graph.node.update', ({ id, patch }) => {
+    if (graphs.current.updateNode(id, patch)) emit('graph.node.updated', { graphId: graphs.current.id, id });
+  });
+  on('graph.node.delete', ({ id }) => {
+    if (graphs.current.deleteNode(id)) emit('graph.node.deleted', { graphId: graphs.current.id, id });
+  });
+  on('graph.delete', ({ id }) => {
+    const next = graphs.delete(id);
+    emit('graph.deleted', { id, nextId: next.id });
+    emit('graph.switched', { id: next.id });
   });
 });
 
@@ -625,33 +1078,17 @@ system('view', ({ on, emit, contexts }) => {
   });
 });
 
-system('selection', ({ on, emit, world, contexts }) => {
-  contexts.commands.register({
-    id: 'selection.node.select',
-    label: 'Select node',
-    event: 'selection.node.select',
-    group: 'selection',
-    hidden: true,
-    input: { on: 'pointerdown', selector: '[data-node-id]', prevent: true },
-    payload: ({ target }) => ({ id: (target as HTMLElement).dataset.nodeId! }),
-  });
-  contexts.commands.register({
-    id: 'selection.node.clear',
-    label: 'Clear selection',
-    event: 'selection.node.clear',
-    group: 'selection',
-    input: { on: 'pointerdown', selector: `[data-place="${Places.Stage}"]`, when: isStageSurface },
-  });
-  on('selection.node.select', ({ id }) => { world.selected = id; emit('selection.node.selected', { id }); });
-  on('selection.node.clear', () => { world.selected = null; emit('selection.node.selected', { id: null }); });
+system('selection', ({ on, emit, graphs, contexts }) => {
+  on('selection.node.select', ({ id }) => { graphs.current.selected = id; emit('selection.node.selected', { id }); });
+  on('selection.node.clear', () => { graphs.current.selected = null; emit('selection.node.selected', { id: null }); });
 });
 
-system('focus', ({ on, emit, world }) => {
-  on('focus.node.focus', ({ id }) => { world.focused = id; emit('focus.node.focused', { id }); });
-  on('focus.node.clear', () => { world.focused = null; emit('focus.node.focused', { id: null }); });
+system('focus', ({ on, emit, graphs }) => {
+  on('focus.node.focus', ({ id }) => { graphs.current.focused = id; emit('focus.node.focused', { id }); });
+  on('focus.node.clear', () => { graphs.current.focused = null; emit('focus.node.focused', { id: null }); });
 });
 
-system('drag', ({ on, emit, world, contexts }) => {
+system('drag', ({ on, emit, graphs, contexts }) => {
   let drag: { id: Id; pointer: Position; start: Position } | null = null;
   contexts.commands.register({
     id: 'drag.node.start',
@@ -659,8 +1096,8 @@ system('drag', ({ on, emit, world, contexts }) => {
     event: 'drag.node.start',
     group: 'drag',
     hidden: true,
-    input: { on: 'pointerdown', selector: '[data-node-id]', prevent: true },
-    payload: ({ event, target }) => ({ id: (target as HTMLElement).dataset.nodeId!, x: (event as PointerEvent).clientX, y: (event as PointerEvent).clientY }),
+    input: { on: 'pointerdown', selector: '[data-drag-handle]', when: event => !(event.target as Element).closest('[data-command]'), prevent: true },
+    payload: ({ event, target }) => ({ id: itemIdFrom(target), x: (event as PointerEvent).clientX, y: (event as PointerEvent).clientY }),
   });
   contexts.commands.register({
     id: 'drag.node.move',
@@ -674,27 +1111,41 @@ system('drag', ({ on, emit, world, contexts }) => {
   contexts.commands.register({ id: 'drag.node.end', label: 'End drag', event: 'drag.node.end', group: 'drag', hidden: true, input: { on: 'pointerup', when: () => !!drag } });
 
   on('drag.node.start', ({ id, x, y }) => {
-    const node = world.node(id);
+    const node = graphs.current.node(id);
     if (node?.Position) drag = { id, pointer: contexts.view.clientToSpace(Places.Stage, { x, y }), start: { ...node.Position } };
   });
   on('drag.node.move', ({ x, y }) => {
     if (!drag) return;
     const pointer = contexts.view.clientToSpace(Places.Stage, { x, y });
-    emit('data.node.update', { id: drag.id, patch: { Position: { x: drag.start.x + pointer.x - drag.pointer.x, y: drag.start.y + pointer.y - drag.pointer.y } } });
+    emit('graph.node.update', { id: drag.id, patch: { Position: { x: drag.start.x + pointer.x - drag.pointer.x, y: drag.start.y + pointer.y - drag.pointer.y } } });
     emit('drag.node.moved', { id: drag.id });
   });
   on('drag.node.end', () => { drag = null; });
 });
 
+system('dx', ({ on, contexts }) => {
+  on('app.start', () => {
+    const issues = validateModel(appModel, contexts.commands.all());
+    if (issues.length) throw new Error(`DX model contract failed:\n${issues.join('\n')}`);
+  });
+});
+
 feature('nodeLifecycle', ({ on, emit }) => {
-  on('editing.node.create', draft => emit('data.node.create', draft));
-  on('data.node.created', ({ id }) => {
-    emit('layout.node.center', { id });
+  on('editing.node.create', draft => emit('graph.node.create', draft));
+  on('graph.node.created', ({ id }) => {
     emit('selection.node.select', { id });
     emit('focus.node.focus', { id });
   });
-  on('data.node.updated', () => emit('render.nodes.draw'));
+  on('graph.node.updated', () => emit('render.nodes.draw'));
+  on('graph.node.deleted', () => emit('render.nodes.draw'));
+  on('graph.switched', () => emit('render.nodes.draw'));
+  on('graph.created', () => emit('outline.draw'));
+  on('graph.deleted', () => emit('outline.draw'));
+  on('graph.node.created', () => emit('outline.draw'));
+  on('graph.node.deleted', () => emit('outline.draw'));
+  on('graph.switched', () => emit('outline.draw'));
   on('selection.node.selected', () => emit('render.nodes.draw'));
+  on('selection.node.selected', () => emit('outline.draw'));
   on('focus.node.focused', () => emit('render.nodes.draw'));
 });
 

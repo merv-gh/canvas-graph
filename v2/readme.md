@@ -2,7 +2,7 @@
 
 Small TypeScript proof of concept for a composable, event-driven graph app.
 
-This iteration favors obvious data and explicit cross-system features over hidden defaults. Systems stay small; complex behavior is named as a feature slice.
+This iteration tries a stricter rule: data declarations imply UI and commands. Entities declare abilities, collections declare CRUD/search/order, and a DX system checks that those declarations are actually surfaced.
 
 ## Run
 
@@ -29,7 +29,10 @@ V2 serves at `http://127.0.0.1:5174/`.
 - `ctx.contexts.commands` owns command metadata and raw input mapping.
 - `ctx.contexts.places` exposes named render places without leaking DOM queries everywhere.
 - `ctx.contexts.view` owns pan/zoom state plus screen/space coordinate utilities.
-- `world` stores plain node data plus small UI state (`selected`, `focused`).
+- `ctx.graphs.current` is the active graph aggregate.
+- `Graph` owns nodes, selected/focused state, CRUD, and graph switching boundaries.
+- `appModel` declares entities, collections, abilities, and their required actions.
+- `types.ts` holds shared nouns: events, commands, modal visuals, entities, collections, abilities, and geometry.
 
 ## Systems
 
@@ -37,16 +40,78 @@ V2 serves at `http://127.0.0.1:5174/`.
 - `input`: starts the command-backed input router.
 - `main`: emits base shell and toolbar.
 - `log`: observes events and renders the event log.
+- `outline`: renders collection lists/search/create/delete from `appModel.collections`.
 - `modal`: registers modal commands and renders modal contents.
-- `palette`: registers the palette command and renders searchable commands from command metadata.
-- `help`: opens the shortcut editor, grouped by system.
+- `commandModal`: renders Palette and Help from the same searchable grouped command modal definition.
+- `domain`: registers commands implied by collections and abilities.
 - `view`: owns canvas pan/zoom and emits `view.changed`.
-- `editing`: registers the create-node command and label payload.
-- `data`: owns node create/update and emits data facts.
-- `layout`: handles layout commands such as centering a node.
-- `selection`: registers selection commands and owns selection state.
-- `focus`: owns focused-node state.
-- `drag`: registers drag commands and requests data updates.
+- `graph`: adapts graph CRUD/switch events to the current `Graph`.
+- `selection`: writes current graph selection.
+- `focus`: writes current graph focus.
+- `drag`: registers drag commands and requests graph node updates.
+- `properties`: renders item properties modals and maps field edits back to graph updates.
+- `dx`: validates model declarations against registered commands.
+
+## Model Rule
+
+The core rule is:
+
+```ts
+entity + abilities -> actions -> palette command + UI affordance
+collection -> list + CRUD + order + search
+```
+
+The current model declares:
+
+```ts
+const nodeEntity = entity('node', {
+  abilities: [
+    selectable(),
+    draggable(),
+    collapsible(),
+    editable(),
+    configurable(),
+  ],
+});
+
+const appModel = {
+  collections: [
+    collection('graphs', { crud, search: true, order: 'created' }),
+    collection('nodes', { entity: nodeEntity, crud, search: true, order: 'created' }),
+  ],
+};
+```
+
+`dx` checks this contract at app start:
+
+- every ability action has a visible palette command
+- every ability action has at least one UI affordance
+- every affordance points to a registered command
+- every collection has create/delete commands
+- every collection has search and order
+
+Editable affordances use the same visual cue everywhere: dashed underline plus edit-in-place. Node titles and Help hotkeys already share that rule.
+
+Configurable affordances use the item properties command. Nodes expose it as a header gear button and as the `Open item properties` command when a node is selected.
+
+## Modal Model
+
+`modal` is the abstract container:
+
+- trigger: command or event opens it
+- close ability: `Escape`, backdrop, or close button
+- render place: `Places.Modal`, above the app
+- container: `tpl-modal`
+- visual: `panel`, `command`, or `properties`
+
+Palette and Help are both command modals. Their only definition differences are title, shortcut, availability filter, and whether hotkeys are editable:
+
+```ts
+palette = { title: 'Palette', editableHotkeys: false, availableOnly: true }
+help = { title: 'Help', editableHotkeys: true, availableOnly: false }
+```
+
+Both have search. Help reuses the same grouped command collection but swaps the command button row for an editable hotkey row.
 
 ## Features
 
@@ -54,16 +119,13 @@ V2 serves at `http://127.0.0.1:5174/`.
 
 Node creation flow:
 
-1. `editing.node.create` command runs from `A`, toolbar, or palette.
-2. `nodeLifecycle` translates it into `data.node.create`.
-3. `data` saves the node and emits `data.node.created`.
-4. `nodeLifecycle` emits:
-   - `layout.node.center`
-   - `selection.node.select`
-   - `focus.node.focus`
-5. `layout`, `selection`, and `focus` each handle their own events.
-6. `nodeLifecycle` reacts to data/selection/focus facts and emits `render.nodes.draw`.
-7. `render` draws from current world state.
+1. `editing.node.create` command is generated by the `nodes` collection and runs from `A`, toolbar, outline, or palette.
+2. `nodeLifecycle` translates it into `graph.node.create`.
+3. `graph` asks `ctx.graphs.current.node(...)` to create and save the entity.
+4. The current graph places the node beside the selected node, or near the view center fallback.
+5. `graph` emits `graph.node.created`.
+6. `nodeLifecycle` selects and focuses the new node.
+7. `render` draws from `ctx.graphs.current`.
 
 This is more verbose than a direct function call, but the debug story is much cleaner: the event log shows the lifecycle.
 
@@ -71,8 +133,8 @@ This is more verbose than a direct function call, but the debug story is much cl
 
 Events are namespaced by owning system or feature domain.
 
-- Commands/request events use imperative names, for example `data.node.create`, `selection.node.select`.
-- Facts use past-tense names, for example `data.node.created`, `selection.node.selected`.
+- Commands/request events use imperative names, for example `graph.node.create`, `selection.node.select`.
+- Facts use past-tense names, for example `graph.node.created`, `selection.node.selected`.
 - Cross-system orchestration belongs in `feature(...)`, not in individual systems.
 
 ## Commands
@@ -89,30 +151,50 @@ contexts.commands.register({
 });
 ```
 
-The same registry drives keyboard shortcuts, `data-command` buttons, palette rows, and the help shortcut editor. Palette contents are searched from command metadata, not hardcoded.
+The same registry drives keyboard shortcuts, `data-command` buttons, command modal rows, and the help shortcut editor. Command modal contents are searched from command metadata, not hardcoded.
+
+Shortcut edits are checked against the registry before saving. Duplicate hotkeys are highlighted in red and stay unsaved until the user chooses a free key.
 
 Useful command fields:
 
 - `group`: where the command appears in palette/help, usually the owning system.
 - `shortcut`: display label for the help editor.
 - `hidden`: keeps pointer/internal commands out of user-facing lists.
+- `available`: hides selected-only commands from palette and blocks unavailable UI actions.
 - `input.global`: allows shortcuts such as `Escape` to work while a text field is focused.
 
-## Data
+## Graph Domain
 
-Nodes are plain data:
+`Graph` is the aggregate root. It owns relationships between nodes and graph-level UI state:
 
 ```ts
-type NodeEntity = {
-  id: Id;
-  kind: 'node';
-  Label: Label;
-  Size: Size;
-  Position?: Position;
-};
+const graph = ctx.graphs.current;
+const node = graph.node({ Label: { text: 'A' } }, { at: ctx.contexts.view.spaceCenter(Places.Stage) });
+
+graph.updateNode(node.id, { Position: { x: 100, y: 100 } });
+graph.deleteNode(node.id);
+ctx.graphs.switch('g2');
 ```
 
-There are no hidden archetype defaults or capability merges. If a future capability needs data, it should be visible as data. If it is behavior, keep it in that behavior's system.
+`GraphNode` keeps a `graph` reference, so the entity knows the aggregate it belongs to. Public creation goes through `graph.node(...)`, which both constructs and saves the node.
+
+Visible graph commands:
+
+- `N`: create a graph.
+- `G`: switch to another graph, creating `g2` on first use.
+- `Delete`: delete the selected node from the current graph.
+
+There are no hidden archetype defaults or capability merges. If a future capability needs data, it should be visible as entity data. If it is behavior, keep it in that behavior's system.
+
+## Size Note
+
+The declaration/validation layer grew the code. Recent passes moved shared vocabulary into `types.ts`, merged Palette/Help into one command-modal system, added shortcut conflict checks, and made configurable properties first-class:
+
+- baseline before these passes: `v2/app.ts` was `1,084` lines / `44,127` bytes
+- current `v2/app.ts`: `1,159` lines / `47,414` bytes
+- extracted `v2/types.ts`: `114` lines / `4,661` bytes
+
+So the runtime file is larger again after adding properties and validation behavior. The payoff depends on future entities reusing the same CRUD/list/search/palette/UI/modal plumbing instead of adding one-off systems.
 
 ## Render Boundary
 
@@ -146,8 +228,8 @@ Render keeps HTML nodes in graph space, then transforms the node layer with the 
 
 ## Open Questions
 
-- Should `selected` and `focused` move out of `world` into small system-owned stores?
-- Should layout own all visual defaults, including size?
+- Should `selected` and `focused` stay graph-owned, or move into small system-owned stores later?
+- Should graph creation own all visual defaults, including size?
 - Should features be typed separately from systems so only features can listen across domains?
 - Should command ids and event names share generated types to avoid string duplication?
 - How much command metadata is needed for user-editable shortcuts: category, scope, conflict policy, display order?

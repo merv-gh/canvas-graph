@@ -6,6 +6,7 @@
   --muted: #686b70;
   --line: #d4d5d0;
   --accent: #216bff;
+  --danger: #c62828;
   --shadow: 0 12px 30px rgba(0,0,0,.12);
 }
 
@@ -47,7 +48,6 @@ button:hover { border-color: var(--accent); }
   min-width: 140px;
   min-height: 58px;
   transform: translate(-50%, -50%);
-  padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(255,255,255,.92);
@@ -56,12 +56,32 @@ button:hover { border-color: var(--accent); }
   touch-action: none;
 }
 .node.selected { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(33,107,255,.15), var(--shadow); }
-.node-title { font-weight: 700; }
+.node-header { display: flex; align-items: center; gap: 7px; padding: 8px 10px 4px; cursor: grab; }
+.node-toggle, .node-config { width: 22px; height: 22px; padding: 0; border-radius: 4px; line-height: 1; }
+.node-title { flex: 1; font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.node-body { padding: 0 12px 10px; }
+.node.collapsed { min-height: 40px; height: 40px !important; }
+.node.collapsed .node-body { display: none; }
 .node-meta { color: var(--muted); font-size: 12px; }
 
 .panel-title { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .log { display: grid; gap: 5px; font: 12px/1.35 ui-monospace, monospace; }
 .log-row { padding: 5px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.outline { display: grid; gap: 14px; margin-bottom: 14px; }
+.outline-section { display: grid; gap: 7px; }
+.outline-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.outline-head .panel-title { margin: 0; }
+.outline-search {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 5px 7px;
+  font: 12px/1.35 ui-monospace, monospace;
+}
+.outline-list { display: grid; gap: 4px; }
+.outline-row { display: grid; grid-template-columns: minmax(0, 1fr) 28px; gap: 4px; }
+.outline-main { overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.icon-button { min-width: 28px; padding: 5px 7px; }
 
 .modal-slot { position: fixed; inset: 0; pointer-events: none; }
 .modal-layer { position: absolute; inset: 0; pointer-events: auto; }
@@ -80,6 +100,8 @@ button:hover { border-color: var(--accent); }
 }
 .modal-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--line); font-weight: 700; }
 .modal-body { padding: 12px; display: grid; gap: 10px; }
+.modal-layer[data-visual="command"] .modal { width: min(520px, calc(100vw - 32px)); }
+.modal-layer[data-visual="properties"] .modal { width: min(360px, calc(100vw - 32px)); }
 .palette-search {
   width: 100%;
   border: 1px solid var(--line);
@@ -112,3 +134,13 @@ button:hover { border-color: var(--accent); }
 }
 .help-row { border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; }
 .help-row input { width: 84px; border: 1px solid var(--line); border-radius: 5px; padding: 5px 7px; font: 12px ui-monospace, monospace; }
+.help-row.has-conflict { border-color: var(--danger); background: rgba(198,40,40,.06); }
+.shortcut-edit.is-conflict { border-color: var(--danger) !important; color: var(--danger); }
+.editable-inline { border-style: dashed !important; text-decoration: underline dashed var(--muted); text-underline-offset: 3px; }
+.editable-inline:focus { outline: 2px solid rgba(33,107,255,.22); outline-offset: 2px; }
+.shortcut-edit.is-conflict:focus { outline-color: rgba(198,40,40,.24); }
+.properties { display: grid; gap: 10px; }
+.properties label { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
+.properties input { width: 100%; border: 1px solid var(--line); border-radius: 5px; padding: 7px 8px; color: var(--ink); background: var(--panel); font: inherit; }
+.properties .check-row { display: flex; align-items: center; gap: 8px; color: var(--ink); }
+.properties .check-row input { width: auto; }
