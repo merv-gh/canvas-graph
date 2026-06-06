@@ -141,6 +141,7 @@ button:hover { border-color: var(--accent); }
 .editable-inline:focus { outline: 2px solid rgba(33,107,255,.22); outline-offset: 2px; }
 .shortcut-edit.is-conflict:focus { outline-color: rgba(198,40,40,.24); }
 .properties { display: grid; gap: 10px; }
+.properties [data-slot="fields"] { display: grid; gap: 10px; }
 .properties label { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
 .properties input { width: 100%; border: 1px solid var(--line); border-radius: 5px; padding: 7px 8px; color: var(--ink); background: var(--panel); font: inherit; }
 .properties .check-row { display: flex; align-items: center; gap: 8px; color: var(--ink); }

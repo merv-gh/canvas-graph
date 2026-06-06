@@ -58,8 +58,8 @@ export type AppEvents = {
   'node.title.edit': { id: Id };
   'node.title.commit': { id: Id; text: string; finish?: boolean };
   'item.properties.open': ItemRef;
-  'properties.node.input': { id: Id; field: 'title' | 'width' | 'height'; value: string };
-  'properties.node.toggle': { id: Id; field: 'collapsed'; checked: boolean };
+  'properties.item.input': { ref: ItemRef; field: string; value: string };
+  'properties.item.toggle': { ref: ItemRef; field: string; checked: boolean };
   'selection.node.select': { id: Id };
   'selection.node.clear': void;
   'selection.node.selected': { id: Id | null };
@@ -103,6 +103,17 @@ export type CommandSpec<K extends EventName = EventName> = {
 };
 
 export type UiValue<T = unknown> = string | ((item: T) => string);
+export type PropertyInput = 'text' | 'number' | 'checkbox';
+export type PropertyValue = string | number | boolean;
+export type PropertyDef<T = unknown, Patch = unknown> = {
+  id: string;
+  label: string;
+  input: PropertyInput;
+  value: (item: T) => PropertyValue;
+  patch: (item: T, value: PropertyValue) => Patch | undefined;
+  min?: number;
+  step?: number;
+};
 export type AffordanceDef<T = unknown> = {
   surface: 'palette' | 'list' | 'entity';
   command: string;
@@ -115,7 +126,13 @@ export type AffordanceDef<T = unknown> = {
 };
 export type ActionDef<T = unknown> = { id: string; label: string; paletteCommand: string; ui: NonEmptyArray<AffordanceDef<T>> };
 export type AbilityDef<T = unknown> = { id: string; actions: NonEmptyArray<ActionDef<T>> };
-export type EntityDef<T> = { kind: string; label: string; labelOf: (item: T) => string; abilities: AbilityDef<T>[] };
+export type EntityDef<T, Patch = unknown> = {
+  kind: string;
+  label: string;
+  labelOf: (item: T) => string;
+  abilities: AbilityDef<T>[];
+  properties?: PropertyDef<T, Patch>[];
+};
 export type CollectionDef<T, Ctx = unknown> = {
   id: string;
   label: string;
@@ -128,4 +145,4 @@ export type CollectionDef<T, Ctx = unknown> = {
   search: true;
   order: 'created';
 };
-export type ModelDef<Ctx = unknown> = { entities: EntityDef<unknown>[]; collections: CollectionDef<unknown, Ctx>[] };
+export type ModelDef<Ctx = unknown> = { entities: EntityDef<unknown, unknown>[]; collections: CollectionDef<unknown, Ctx>[] };

@@ -104,10 +104,7 @@
 
   <template id="tpl-properties">
     <section class="properties">
-      <label>Title <input class="editable-inline" data-field="title"></label>
-      <label>Width <input type="number" min="96" step="8" data-field="width"></label>
-      <label>Height <input type="number" min="40" step="8" data-field="height"></label>
-      <label class="check-row"><input type="checkbox" data-field="collapsed"> Collapsed</label>
+      <div data-slot="fields"></div>
     </section>
   </template>
 </body>

@@ -35,9 +35,10 @@ V2 serves at `http://127.0.0.1:5174/`.
 - `ctx.contexts.commands` owns command metadata and raw input mapping; systems register command arrays.
 - `ctx.contexts.places` exposes named render places without leaking DOM queries everywhere.
 - `ctx.contexts.view` owns pan/zoom state plus screen/space coordinate utilities.
+- `ctx.model` indexes entity and collection declarations by kind/id.
 - `ctx.graphs.current` is the active graph aggregate.
 - `Graph` owns nodes, selected/focused state, CRUD, and graph switching boundaries.
-- `appModel` declares entities, collections, abilities, and their required actions.
+- `model.ts` declares graph entities, collections, abilities, properties, and graph storage.
 - `types.ts` holds shared nouns: events, commands, modal visuals, entities, collections, abilities, and geometry.
 
 ## Systems
@@ -46,7 +47,7 @@ V2 serves at `http://127.0.0.1:5174/`.
 - `input`: starts the command-backed input router.
 - `main`: emits base shell and toolbar.
 - `log`: observes events and renders the event log.
-- `outline`: renders collection lists/search/create/delete from `appModel.collections`.
+- `outline`: renders collection lists/search/create/delete from `ctx.model.collections()`.
 - `modal`: registers modal commands and renders modal contents.
 - `commandModal`: renders Palette and Help from the same searchable grouped command modal definition.
 - `domain`: registers commands implied by collections and abilities.
@@ -55,8 +56,17 @@ V2 serves at `http://127.0.0.1:5174/`.
 - `selection`: writes current graph selection.
 - `focus`: writes current graph focus.
 - `drag`: registers drag commands and requests graph node updates.
-- `properties`: renders item properties modals and maps field edits back to graph updates.
+- `properties`: renders item properties from entity property schemas and applies declared patches.
 - `dx`: validates model declarations against registered commands.
+
+## Architectural Decisions
+
+- Domain declarations live in `model.ts`; runtime contexts and systems live in `app.ts`.
+- Raw DOM events enter through the input adapter only; systems register commands and listen to bus events.
+- Systems register command arrays, even when they currently own one command.
+- Render reads entity metadata through `ctx.model.entity(kind)`, not imported entity constants.
+- Configurable UI comes from entity `properties`; the properties system renders schema fields and applies schema patches.
+- Templates expose structural slots; entity abilities decide what controls and handlers fill those slots.
 
 ## Model Rule
 
@@ -78,6 +88,12 @@ const nodeEntity = entity('node', {
     editable(),
     configurable(),
   ],
+  properties: [
+    { id: 'title', input: 'text', patch },
+    { id: 'width', input: 'number', patch },
+    { id: 'height', input: 'number', patch },
+    { id: 'collapsed', input: 'checkbox', patch },
+  ],
 });
 
 const appModel = {
@@ -95,10 +111,11 @@ const appModel = {
 - every affordance points to a registered command
 - every collection has create/delete commands
 - every collection has search and order
+- every configurable entity has declared properties
 
 Editable affordances use the same visual cue everywhere: dashed underline plus edit-in-place. Node titles and Help hotkeys already share that rule.
 
-Configurable affordances use the item properties command. Nodes expose it as a header gear button and as the `Open item properties` command when a node is selected.
+Configurable affordances use the item properties command. Nodes expose it as a header gear button and as the `Open item properties` command when a node is selected. The properties modal is schema-driven: fields, labels, inputs, values, and patches come from `entity.properties`.
 
 Entity templates expose structural slots, not hardcoded abilities. The node template has `header:start`, `title`, and `header:end`; render fills those slots from ability affordance metadata.
 
@@ -198,13 +215,14 @@ There are no hidden archetype defaults or capability merges. If a future capabil
 
 ## Size Note
 
-The declaration/validation layer grew the code. Recent passes moved shared vocabulary into `types.ts`, merged Palette/Help into one command-modal system, added shortcut conflict checks, made configurable properties first-class, moved node header controls behind ability metadata, and routed DOM input through commands:
+The declaration/validation layer grew the code. Recent passes moved shared vocabulary into `types.ts`, merged Palette/Help into one command-modal system, added shortcut conflict checks, made configurable properties first-class, moved node header controls behind ability metadata, routed DOM input through commands, and split the domain model into `model.ts`:
 
 - baseline before these passes: `v2/app.ts` was `1,084` lines / `44,127` bytes
-- current `v2/app.ts`: `1,308` lines / `52,221` bytes
-- extracted `v2/types.ts`: `131` lines / `5,413` bytes
+- current `v2/app.ts`: `1,147` lines / `47,675` bytes
+- extracted `v2/model.ts`: `254` lines / `8,053` bytes
+- extracted `v2/types.ts`: `148` lines / `5,837` bytes
 
-So the runtime file is larger again after adding properties and validation behavior. The payoff depends on future entities reusing the same CRUD/list/search/palette/UI/modal plumbing instead of adding one-off systems.
+So the main runtime file is closer to the original size again, while the overall v2 code is larger because the model and shared vocabulary are explicit. The payoff depends on future entities reusing the same CRUD/list/search/palette/UI/modal/property plumbing instead of adding one-off systems.
 
 ## Render Boundary
 

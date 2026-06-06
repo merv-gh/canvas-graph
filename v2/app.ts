@@ -1,6 +1,7 @@
+import { appModel, graphStore } from './model';
+import type { GraphNode } from './model';
 import { Places } from './types';
 import type {
-  AbilityDef,
   ActionDef,
   AffordanceDef,
   AnyEvent,
@@ -13,28 +14,26 @@ import type {
   EventName,
   Id,
   ItemRef,
-  Label,
   ModelDef,
-  NonEmptyArray,
-  NodeCreateOptions,
-  NodeDraft,
   NodeEntity,
   NodePatch,
   Place,
   Position,
+  PropertyDef,
+  PropertyValue,
   RawInput,
   Rect,
   Renderable,
-  Size,
   UiValue,
   ViewState,
 } from './types';
 
 type Graphs = ReturnType<typeof graphStore>;
 type Contexts = ReturnType<typeof createContexts>;
-type AppCtx = { bus: Bus; graphs: Graphs; contexts: Contexts };
-type AppCollectionDef<T> = CollectionDef<T, AppCtx>;
-type AppModelDef = ModelDef<AppCtx>;
+type Models = ReturnType<typeof createModelRegistry>;
+type AppCtx = { bus: Bus; graphs: Graphs; contexts: Contexts; model: Models };
+type ModelCtx = { graphs: Graphs };
+type AppCollectionDef<T> = CollectionDef<T, ModelCtx>;
 type SystemCtx = AppCtx & Pick<Bus, 'on' | 'emit'>;
 type AppSystem = (ctx: SystemCtx) => void;
 type Registry = ((name: string, setup: AppSystem) => void) & {
@@ -73,10 +72,6 @@ const grouped = <T,>(items: T[], keyOf: (item: T) => string) => {
   items.forEach(item => (groups.get(keyOf(item)) || groups.set(keyOf(item), []).get(keyOf(item))!).push(item));
   return [...groups.entries()];
 };
-const action = <T,>(def: ActionDef<T>) => def;
-const ability = <T,>(id: string, actions: NonEmptyArray<ActionDef<T>>): AbilityDef<T> => ({ id, actions });
-const entity = <T,>(kind: string, def: Omit<EntityDef<T>, 'kind'>): EntityDef<T> => ({ kind, ...def });
-const collection = <T,>(id: string, def: Omit<AppCollectionDef<T>, 'id'>): AppCollectionDef<T> => ({ id, ...def });
 const uiValue = <T,>(value: UiValue<T> | undefined, item: T, fallback = '') =>
   typeof value === 'function' ? value(item) : value ?? fallback;
 const entityUi = <T,>(entityDef: EntityDef<T>, slot?: string) =>
@@ -96,6 +91,18 @@ const itemRefFrom = (target?: Element | null): ItemRef | null => {
   const graph = target?.closest('[data-graph-id]')?.getAttribute('data-graph-id');
   if (graph) return { kind: 'graph', id: graph };
   return null;
+};
+const createModelRegistry = <Ctx,>(model: ModelDef<Ctx>) => {
+  const entities = new Map(model.entities.map(entityDef => [entityDef.kind, entityDef]));
+  const collections = new Map(model.collections.map(collectionDef =>
+    [collectionDef.id, collectionDef as unknown as CollectionDef<unknown, unknown>],
+  ));
+  return {
+    entity<T, Patch = unknown>(kind: string) { return entities.get(kind) as EntityDef<T, Patch> | undefined; },
+    collection<T>(id: string) { return collections.get(id) as CollectionDef<T, unknown> | undefined; },
+    entities: () => [...entities.values()],
+    collections: () => [...collections.values()],
+  };
 };
 
 function templateContext() {
@@ -176,106 +183,6 @@ function eventBus(): Bus {
       const event = { name, data: args[0], at: performance.now() } as AnyEvent;
       any.forEach(fn => fn(event));
       (listeners.get(name) || []).forEach(fn => fn(event.data, event));
-    },
-  };
-}
-
-class GraphNode implements NodeEntity {
-  kind = 'node' as const;
-  Label: Label;
-  Size: Size;
-  Position?: Position;
-  Collapsed?: boolean;
-
-  constructor(readonly graph: Graph, readonly id: Id, draft: NodeDraft = {}) {
-    this.Label = draft.Label ?? { text: id };
-    this.Size = draft.Size ?? { w: 150, h: 64 };
-    this.Position = draft.Position;
-    this.Collapsed = draft.Collapsed;
-  }
-}
-
-class Graph {
-  static new(id: Id) { return new Graph(id); }
-
-  selected: Id | null = null;
-  focused: Id | null = null;
-  private nextNode = 1;
-  private items = new Map<Id, GraphNode>();
-
-  private constructor(readonly id: Id) {}
-
-  node(draft?: NodeDraft, options?: NodeCreateOptions): GraphNode;
-  node(id: Id): GraphNode | undefined;
-  node(value: NodeDraft | Id = {}, options: NodeCreateOptions = {}) {
-    if (typeof value === 'string') return this.items.get(value);
-    const id = `e${this.nextNode++}`;
-    const node = new GraphNode(this, id, this.withDefaults(value, options));
-    this.items.set(id, node);
-    return node;
-  }
-
-  nodes() { return [...this.items.values()]; }
-  selectedNode() { return this.selected ? this.node(this.selected) : undefined; }
-  createNode(draft: NodeDraft = {}, options: NodeCreateOptions = {}) { return this.node(draft, options).id; }
-  updateNode(id: Id, patch: NodePatch) {
-    const node = this.node(id);
-    if (!node) return false;
-    Object.assign(node, patch);
-    return true;
-  }
-  deleteNode(id: Id) {
-    const deleted = this.items.delete(id);
-    if (this.selected === id) this.selected = null;
-    if (this.focused === id) this.focused = null;
-    return deleted;
-  }
-
-  private withDefaults(draft: NodeDraft, options: NodeCreateOptions): NodeDraft {
-    const nearId = options.near ?? this.selected;
-    const selected = options.near === null || !nearId ? undefined : this.node(nearId);
-    const anchor = selected?.Position ?? options.at ?? { x: 0, y: 0 };
-    const spread = this.items.size % 4;
-    return {
-      ...draft,
-      Position: draft.Position ?? {
-        x: anchor.x + (selected ? 180 : spread * 24),
-        y: anchor.y + (selected ? 0 : (this.items.size % 3) * 18),
-      },
-    };
-  }
-}
-
-function graphStore() {
-  let next = 1;
-  const graphs = new Map<Id, Graph>();
-  const nextId = () => {
-    let id = `g${next++}`;
-    while (graphs.has(id)) id = `g${next++}`;
-    return id;
-  };
-  const create = (id: Id = nextId()) => {
-    const existing = graphs.get(id);
-    if (existing) return existing;
-    const graph = Graph.new(id);
-    graphs.set(id, graph);
-    return graph;
-  };
-  let current = create();
-  return {
-    get current() { return current; },
-    all: () => [...graphs.values()],
-    get: (id: Id) => graphs.get(id),
-    create,
-    delete(id: Id) {
-      if (graphs.size <= 1) return current;
-      graphs.delete(id);
-      if (current.id === id) current = graphs.values().next().value ?? create();
-      return current;
-    },
-    switch(id: Id) {
-      current = graphs.get(id) ?? create(id);
-      return current;
     },
   };
 }
@@ -368,102 +275,16 @@ function registry(): Registry {
 
 function createAppContext(): AppCtx {
   const bus = eventBus();
-  return { bus, graphs: graphStore(), contexts: createContexts(bus) };
+  return { bus, graphs: graphStore(), contexts: createContexts(bus), model: createModelRegistry(appModel) };
 }
 
-const selectable = () => ability<GraphNode>('selectable', [action<GraphNode>({
-  id: 'node.select',
-  label: 'Select node',
-  paletteCommand: 'selection.node.next',
-  ui: [{ surface: 'entity', command: 'selection.node.select', kind: 'handler' }],
-})]);
-const draggable = () => ability<GraphNode>('draggable', [action<GraphNode>({
-  id: 'node.drag',
-  label: 'Move node',
-  paletteCommand: 'graph.node.nudge.right',
-  ui: [{ surface: 'entity', command: 'drag.node.start', kind: 'handler', slot: 'header', attrs: { 'data-drag-handle': '' } }],
-})]);
-const collapsible = () => ability<GraphNode>('collapsible', [action<GraphNode>({
-  id: 'node.collapse',
-  label: 'Collapse node',
-  paletteCommand: 'node.collapse.toggle',
-  ui: [{
-    surface: 'entity',
-    command: 'node.collapse.toggle',
-    kind: 'button',
-    slot: 'header:start',
-    className: 'node-action node-toggle',
-    text: node => node.Collapsed ? '+' : '-',
-    label: node => node.Collapsed ? 'Expand node' : 'Collapse node',
-  }],
-})]);
-const editable = () => ability<GraphNode>('editable', [action<GraphNode>({
-  id: 'node.title.edit',
-  label: 'Edit node title',
-  paletteCommand: 'node.title.edit',
-  ui: [{
-    surface: 'entity',
-    command: 'node.title.edit',
-    kind: 'handler',
-    slot: 'title',
-    className: 'editable-inline',
-    attrs: { contenteditable: 'plaintext-only', 'data-command': 'node.title.edit' },
-  }],
-})]);
-const configurable = () => ability<GraphNode>('configurable', [action<GraphNode>({
-  id: 'node.configure',
-  label: 'Configure node',
-  paletteCommand: 'item.properties.open',
-  ui: [{
-    surface: 'entity',
-    command: 'item.properties.open',
-    kind: 'button',
-    slot: 'header:end',
-    className: 'node-action node-config',
-    text: '⚙',
-    label: 'Configure node',
-  }],
-})]);
-
-const nodeEntity = entity<GraphNode>('node', {
-  label: 'Node',
-  labelOf: node => node.Label.text,
-  abilities: [selectable(), draggable(), collapsible(), editable(), configurable()],
-});
-
-const appModel = {
-  entities: [nodeEntity as EntityDef<unknown>],
-  collections: [
-    collection<Graph>('graphs', {
-      label: 'Graphs',
-      items: ctx => ctx.graphs.all(),
-      itemId: graph => graph.id,
-      itemLabel: graph => graph.id,
-      selectCommand: 'graph.switch.item',
-      crud: { create: 'graph.create', delete: 'graph.delete.current' },
-      search: true,
-      order: 'created',
-    }) as AppCollectionDef<unknown>,
-    collection<GraphNode>('nodes', {
-      label: 'Nodes',
-      entity: nodeEntity,
-      items: ctx => ctx.graphs.current.nodes(),
-      itemId: node => node.id,
-      itemLabel: node => node.Label.text,
-      selectCommand: 'selection.node.select',
-      crud: { create: 'editing.node.create', delete: 'graph.node.delete.selected' },
-      search: true,
-      order: 'created',
-    }) as AppCollectionDef<unknown>,
-  ],
-} satisfies AppModelDef;
-
-function validateModel(model: AppModelDef, commands: ReturnType<Contexts['commands']['all']>) {
+function validateModel<Ctx>(model: ModelDef<Ctx>, commands: ReturnType<Contexts['commands']['all']>) {
   const commandIds = new Set(commands.map(command => command.id));
   const visibleCommandIds = new Set(commands.filter(command => !command.hidden).map(command => command.id));
   const issues: string[] = [];
   model.entities.forEach(entityDef => entityDef.abilities.forEach(abilityDef => {
     if (!abilityDef.actions.length) issues.push(`${entityDef.kind}.${abilityDef.id} has no actions`);
+    if (abilityDef.id === 'configurable' && !entityDef.properties?.length) issues.push(`${entityDef.kind}.configurable has no properties`);
     abilityDef.actions.forEach(actionDef => {
       if (!visibleCommandIds.has(actionDef.paletteCommand)) issues.push(`${actionDef.id} missing visible palette command ${actionDef.paletteCommand}`);
       if (!actionDef.ui.length) issues.push(`${actionDef.id} has no UI affordance`);
@@ -486,7 +307,7 @@ const features = registry();
 const system = systems;
 const feature = features;
 
-system('render', ({ on, emit, graphs, contexts }) => {
+system('render', ({ on, emit, graphs, contexts, model }) => {
   const root = document.getElementById('app')!;
   const views = new Map<Place, Map<string, Renderable>>();
   const applyAffordance = (el: HTMLElement, node: GraphNode, ui: AffordanceDef<GraphNode>) => {
@@ -503,15 +324,17 @@ system('render', ({ on, emit, graphs, contexts }) => {
     return button;
   };
   const wireNodeAffordances = (el: HTMLElement, node: GraphNode) => {
-    entityUi(nodeEntity, 'header')
+    const entityDef = model.entity<GraphNode>(node.kind);
+    if (!entityDef) return;
+    entityUi(entityDef, 'header')
       .filter(({ ui }) => ui.kind === 'handler')
       .forEach(({ ui }) => applyAffordance(contexts.templates.slot(el, 'header'), node, ui));
-    entityUi(nodeEntity, 'title')
+    entityUi(entityDef, 'title')
       .filter(({ ui }) => ui.kind === 'handler')
       .forEach(({ ui }) => applyAffordance(contexts.templates.slot(el, 'title'), node, ui));
     (['header:start', 'header:end'] as const).forEach(slot => {
       const target = contexts.templates.slot(el, slot);
-      entityUi(nodeEntity, slot)
+      entityUi(entityDef, slot)
         .filter(({ ui }) => ui.kind === 'button')
         .forEach(({ action, ui }) => target.append(affordanceButton(node, action, ui)));
     });
@@ -617,7 +440,7 @@ system('log', ({ bus, emit, contexts }) => {
 });
 
 system('outline', ctx => {
-  const { on, emit, contexts } = ctx;
+  const { on, emit, contexts, model } = ctx;
   const searches = new Map<string, string>();
   const el = (tag: string, className?: string, text?: string) => {
     const node = document.createElement(tag);
@@ -662,7 +485,7 @@ system('outline', ctx => {
   };
   const renderOutline = () => {
     const panel = el('section', 'outline');
-    appModel.collections.forEach(collectionDef => panel.append(renderCollection(collectionDef)));
+    model.collections().forEach(collectionDef => panel.append(renderCollection(collectionDef as AppCollectionDef<unknown>)));
     return panel;
   };
   const draw = () => emit('render.view.set', { place: Places.Left, key: 'outline', view: renderOutline });
@@ -1055,75 +878,91 @@ system('inlineEdit', ({ on, emit, graphs, contexts }) => {
   });
 });
 
-system('properties', ({ on, emit, graphs, contexts }) => {
-  const formId = (target?: Element | null) => target?.closest('.properties')?.getAttribute('data-item-id') ?? '';
-  const fieldOf = (target?: Element | null) => target?.getAttribute('data-field') ?? '';
-  const renderNodeProperties = (node: GraphNode) => {
+system('properties', ({ on, emit, graphs, contexts, model }) => {
+  const formRef = (target?: Element | null): ItemRef => {
+    const form = target?.closest('.properties');
+    return {
+      kind: (form?.getAttribute('data-item-kind') as ItemRef['kind']) || 'node',
+      id: form?.getAttribute('data-item-id') ?? '',
+    };
+  };
+  const item = (ref: ItemRef) => ref.kind === 'node' ? graphs.current.node(ref.id) : undefined;
+  const entityDef = (ref: ItemRef) => ref.kind === 'node' ? model.entity<GraphNode, NodePatch>('node') : undefined;
+  const propertyInput = (node: GraphNode, prop: PropertyDef<GraphNode, NodePatch>) => {
+    const label = document.createElement('label');
+    const input = document.createElement('input');
+    input.dataset.field = prop.id;
+    input.type = prop.input === 'checkbox' ? 'checkbox' : prop.input;
+    if (prop.min != null) input.min = `${prop.min}`;
+    if (prop.step != null) input.step = `${prop.step}`;
+    if (prop.input === 'checkbox') {
+      label.className = 'check-row';
+      input.checked = Boolean(prop.value(node));
+      label.append(input, prop.label);
+    } else {
+      if (prop.input === 'text') input.classList.add('editable-inline');
+      input.value = String(prop.value(node));
+      label.append(prop.label, input);
+    }
+    return label;
+  };
+  const renderProperties = (ref: ItemRef, node: GraphNode, properties: PropertyDef<GraphNode, NodePatch>[]) => {
     const form = contexts.templates.clone('properties');
-    form.dataset.itemKind = 'node';
-    form.dataset.itemId = node.id;
-    (form.querySelector('[data-field="title"]') as HTMLInputElement).value = node.Label.text;
-    (form.querySelector('[data-field="width"]') as HTMLInputElement).value = `${node.Size.w}`;
-    (form.querySelector('[data-field="height"]') as HTMLInputElement).value = `${node.Size.h}`;
-    (form.querySelector('[data-field="collapsed"]') as HTMLInputElement).checked = !!node.Collapsed;
+    form.dataset.itemKind = ref.kind;
+    form.dataset.itemId = ref.id;
+    const fields = contexts.templates.slot(form, 'fields');
+    properties.forEach(prop => fields.append(propertyInput(node, prop)));
     return form;
   };
-  const updateSize = (node: GraphNode, field: string, value: string) => {
-    const n = Number(value);
-    if (!Number.isFinite(n)) return;
-    const Size = { ...node.Size, [field === 'width' ? 'w' : 'h']: clamp(n, field === 'width' ? 96 : 40, 900) };
-    emit('graph.node.update', { id: node.id, patch: { Size } });
+  const applyProperty = (ref: ItemRef, field: string, value: PropertyValue) => {
+    const node = item(ref);
+    const prop = entityDef(ref)?.properties?.find(candidate => candidate.id === field);
+    const patch = node && prop?.patch(node, value);
+    if (node && patch) emit('graph.node.update', { id: node.id, patch });
   };
 
   contexts.commands.register([
     {
-      id: 'properties.node.input',
-      label: 'Edit node property',
-      event: 'properties.node.input',
+      id: 'properties.item.input',
+      label: 'Edit item property',
+      event: 'properties.item.input',
       group: 'properties',
       hidden: true,
-      input: { on: 'input', selector: '.properties [data-field="title"], .properties [data-field="width"], .properties [data-field="height"]' },
+      input: { on: 'input', selector: '.properties input[data-field]:not([type="checkbox"])' },
       payload: ({ target }) => ({
-        id: formId(target),
-        field: fieldOf(target) as 'title' | 'width' | 'height',
+        ref: formRef(target),
+        field: target?.getAttribute('data-field') ?? '',
         value: (target as HTMLInputElement).value,
       }),
     },
     {
-      id: 'properties.node.toggle',
-      label: 'Toggle node property',
-      event: 'properties.node.toggle',
+      id: 'properties.item.toggle',
+      label: 'Toggle item property',
+      event: 'properties.item.toggle',
       group: 'properties',
       hidden: true,
       input: { on: 'change', selector: '.properties [data-field="collapsed"]' },
       payload: ({ target }) => ({
-        id: formId(target),
-        field: 'collapsed',
+        ref: formRef(target),
+        field: target?.getAttribute('data-field') ?? '',
         checked: (target as HTMLInputElement).checked,
       }),
     },
   ]);
 
   on('item.properties.open', ref => {
-    if (ref.kind !== 'node') return;
-    const node = graphs.current.node(ref.id);
-    if (!node) return;
+    const node = item(ref);
+    const entity = entityDef(ref);
+    const properties = entity?.properties ?? [];
+    if (!node || !entity || !properties.length) return;
     emit('modal.open', {
-      title: 'Node Properties',
+      title: `${entity.label} Properties`,
       visual: 'properties',
-      body: () => renderNodeProperties(node),
+      body: () => renderProperties(ref, node, properties),
     });
   });
-  on('properties.node.input', ({ id, field, value }) => {
-    const node = graphs.current.node(id);
-    if (!node) return;
-    if (field === 'title') emit('graph.node.update', { id: node.id, patch: { Label: { text: value } } });
-    if (field === 'width' || field === 'height') updateSize(node, field, value);
-  });
-  on('properties.node.toggle', ({ id, checked }) => {
-    const node = graphs.current.node(id);
-    if (node) emit('graph.node.update', { id: node.id, patch: { Collapsed: checked } });
-  });
+  on('properties.item.input', ({ ref, field, value }) => applyProperty(ref, field, value));
+  on('properties.item.toggle', ({ ref, field, checked }) => applyProperty(ref, field, checked));
 });
 
 system('graph', ({ on, emit, graphs, contexts }) => {
@@ -1272,9 +1111,9 @@ system('drag', ({ on, emit, graphs, contexts }) => {
   on('drag.node.end', () => { drag = null; });
 });
 
-system('dx', ({ on, contexts }) => {
+system('dx', ({ on, contexts, model }) => {
   on('app.start', () => {
-    const issues = validateModel(appModel, contexts.commands.all());
+    const issues = validateModel({ entities: model.entities(), collections: model.collections() }, contexts.commands.all());
     if (issues.length) throw new Error(`DX model contract failed:\n${issues.join('\n')}`);
   });
 });
