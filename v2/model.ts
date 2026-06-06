@@ -1,6 +1,5 @@
+import { collapsible, configurable, draggable, editable, selectable } from './abilities';
 import type {
-  AbilityDef,
-  ActionDef,
   CollectionDef,
   EntityDef,
   Id,
@@ -10,15 +9,12 @@ import type {
   NodeDraft,
   NodeEntity,
   NodePatch,
-  NonEmptyArray,
   Position,
   PropertyDef,
   Size,
 } from './types';
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-const action = <T,>(def: ActionDef<T>) => def;
-const ability = <T,>(id: string, actions: NonEmptyArray<ActionDef<T>>): AbilityDef<T> => ({ id, actions });
 const property = <T, Patch>(def: PropertyDef<T, Patch>) => def;
 const entity = <T, Patch = unknown>(kind: string, def: Omit<EntityDef<T, Patch>, 'kind'>): EntityDef<T, Patch> => ({ kind, ...def });
 
@@ -121,69 +117,16 @@ export function graphStore() {
     },
   };
 }
+export type GraphStore = ReturnType<typeof graphStore>;
 
 type ModelCtx = { graphs: ReturnType<typeof graphStore> };
 type ModelCollectionDef<T> = CollectionDef<T, ModelCtx>;
 const collection = <T,>(id: string, def: Omit<ModelCollectionDef<T>, 'id'>): ModelCollectionDef<T> => ({ id, ...def });
 
-const selectable = () => ability<GraphNode>('selectable', [action<GraphNode>({
-  id: 'node.select',
-  label: 'Select node',
-  paletteCommand: 'selection.node.next',
-  ui: [{ surface: 'entity', command: 'selection.node.select', kind: 'handler' }],
-})]);
-const draggable = () => ability<GraphNode>('draggable', [action<GraphNode>({
-  id: 'node.drag',
-  label: 'Move node',
-  paletteCommand: 'graph.node.nudge.right',
-  ui: [{ surface: 'entity', command: 'drag.node.start', kind: 'handler', slot: 'header', attrs: { 'data-drag-handle': '' } }],
-})]);
-const collapsible = () => ability<GraphNode>('collapsible', [action<GraphNode>({
-  id: 'node.collapse',
-  label: 'Collapse node',
-  paletteCommand: 'node.collapse.toggle',
-  ui: [{
-    surface: 'entity',
-    command: 'node.collapse.toggle',
-    kind: 'button',
-    slot: 'header:start',
-    className: 'node-action node-toggle',
-    text: node => node.Collapsed ? '+' : '-',
-    label: node => node.Collapsed ? 'Expand node' : 'Collapse node',
-  }],
-})]);
-const editable = () => ability<GraphNode>('editable', [action<GraphNode>({
-  id: 'node.title.edit',
-  label: 'Edit node title',
-  paletteCommand: 'node.title.edit',
-  ui: [{
-    surface: 'entity',
-    command: 'node.title.edit',
-    kind: 'handler',
-    slot: 'title',
-    className: 'editable-inline',
-    attrs: { contenteditable: 'plaintext-only', 'data-command': 'node.title.edit' },
-  }],
-})]);
-const configurable = () => ability<GraphNode>('configurable', [action<GraphNode>({
-  id: 'node.configure',
-  label: 'Configure node',
-  paletteCommand: 'item.properties.open',
-  ui: [{
-    surface: 'entity',
-    command: 'item.properties.open',
-    kind: 'button',
-    slot: 'header:end',
-    className: 'node-action node-config',
-    text: '⚙',
-    label: 'Configure node',
-  }],
-})]);
-
 export const nodeEntity = entity<GraphNode, NodePatch>('node', {
   label: 'Node',
   labelOf: node => node.Label.text,
-  abilities: [selectable(), draggable(), collapsible(), editable(), configurable()],
+  abilities: [selectable<GraphNode>(), draggable<GraphNode>(), collapsible<GraphNode>(), editable<GraphNode>(), configurable<GraphNode>()],
   properties: [
     property<GraphNode, NodePatch>({
       id: 'title',

@@ -6,9 +6,9 @@ This iteration tries a stricter rule: data declarations imply UI and commands. E
 
 ## Mental Model
 
-One sentence: v2 is a typed event app where systems register command arrays and react to bus events, while entities and collections declare enough data for render, palette/help, shortcuts, CRUD/search, and DX checks to be generated consistently.
+One sentence: v2 is a typed event app where entities choose abilities, abilities bring UI/commands/behavior, systems provide shared infrastructure, and features choreograph cross-system flows.
 
-One paragraph: `Graph` owns graph data, `appModel` describes what that data can do, systems plug into a shared context, commands translate raw DOM input into typed app events, and render places DOM into named slots from templates and ability metadata. Cross-system workflows live in `feature(...)`, not inside individual systems. The only direct DOM event listeners are app boot and the input adapter; every other interaction should be a command or bus event so input, hotkeys, palette, help, and UI affordances stay overrideable from the same registry.
+One paragraph: `Graph` owns graph data, `appModel` describes entities and collections, `abilities.ts` packages each capability's metadata and implementation, systems plug into a shared context, commands translate raw DOM input into typed app events, and render places DOM into named slots from templates and ability metadata. Cross-system workflows live in `features.ts`, not inside individual systems. The only direct DOM event listeners are app boot and the input adapter; every other interaction should be a command or bus event so input, hotkeys, palette, help, and UI affordances stay overrideable from the same registry.
 
 ## Run
 
@@ -28,9 +28,13 @@ V2 serves at `http://127.0.0.1:5174/`.
 
 ## Current Shape
 
-- `system(name, setup)` registers an independent system.
-- `feature(name, setup)` registers a cross-system workflow.
-- `systems.start(ctx); features.start(ctx, () => ctx.bus.emit('app.start'))` wires everything and starts the app.
+- `app.ts` is only the composition entrypoint.
+- `core.ts` owns the event bus, contexts, command registry, render helpers, view math, and registry helper.
+- `model.ts` owns graph data structures plus entity/collection declarations.
+- `abilities.ts` owns ability definitions and their command/event implementations.
+- `systems.ts` owns app-wide infrastructure, render, input, graph data adapters, modal, outline, view, and DX.
+- `features.ts` owns cross-system workflows that intentionally coordinate several domains.
+- `systems.start(ctx); features.start(ctx, () => ctx.bus.emit('app.start'))` starts all plugins and then emits `app.start`.
 - System bodies receive `on` and `emit` directly, so they read as event handlers rather than plumbing.
 - `ctx.contexts.commands` owns command metadata and raw input mapping; systems register command arrays.
 - `ctx.contexts.places` exposes named render places without leaking DOM queries everywhere.
@@ -38,7 +42,6 @@ V2 serves at `http://127.0.0.1:5174/`.
 - `ctx.model` indexes entity and collection declarations by kind/id.
 - `ctx.graphs.current` is the active graph aggregate.
 - `Graph` owns nodes, selected/focused state, CRUD, and graph switching boundaries.
-- `model.ts` declares graph entities, collections, abilities, properties, and graph storage.
 - `types.ts` holds shared nouns: events, commands, modal visuals, entities, collections, abilities, and geometry.
 
 ## Systems
@@ -50,22 +53,33 @@ V2 serves at `http://127.0.0.1:5174/`.
 - `outline`: renders collection lists/search/create/delete from `ctx.model.collections()`.
 - `modal`: registers modal commands and renders modal contents.
 - `commandModal`: renders Palette and Help from the same searchable grouped command modal definition.
-- `domain`: registers commands implied by collections and abilities.
+- `domain`: registers app/domain commands implied by collections.
 - `view`: owns canvas pan/zoom and emits `view.changed`.
 - `graph`: adapts graph CRUD/switch events to the current `Graph`.
-- `selection`: writes current graph selection.
 - `focus`: writes current graph focus.
-- `drag`: registers drag commands and requests graph node updates.
-- `properties`: renders item properties from entity property schemas and applies declared patches.
 - `dx`: validates model declarations against registered commands.
+
+## Ability Systems
+
+Ability definitions and implementation entrypoints live together in `abilities.ts`.
+
+- `selectable`: declares selection affordances, registers selection commands, and writes selected node state.
+- `draggable`: declares drag affordances, registers drag commands, and requests graph position updates.
+- `collapsible`: declares collapse UI and turns toggle commands into graph patch events.
+- `editable`: declares inline title editing, registers edit/commit commands, and requests label patches.
+- `configurable`: declares properties UI, registers property commands, renders the properties modal, and applies property patches.
+
+This keeps the add/remove test simple: if an entity no longer has an ability, its UI affordances, palette command, shortcuts, and behavior should disappear together.
 
 ## Architectural Decisions
 
-- Domain declarations live in `model.ts`; runtime contexts and systems live in `app.ts`.
+- Domain declarations live in `model.ts`; runtime contexts live in `core.ts`; app composition lives in `app.ts`.
 - Raw DOM events enter through the input adapter only; systems register commands and listen to bus events.
 - Systems register command arrays, even when they currently own one command.
+- Ability command ownership stays with the ability. App-wide systems should not contain ability-specific command handlers.
+- Cross-system reactions belong in `features.ts`, not in the systems or abilities that happen to emit the event.
 - Render reads entity metadata through `ctx.model.entity(kind)`, not imported entity constants.
-- Configurable UI comes from entity `properties`; the properties system renders schema fields and applies schema patches.
+- Configurable UI comes from entity `properties`; the configurable ability renders schema fields and applies schema patches.
 - Templates expose structural slots; entity abilities decide what controls and handlers fill those slots.
 
 ## Model Rule
@@ -211,18 +225,21 @@ Visible graph commands:
 - `G`: switch to another graph, creating `g2` on first use.
 - `Delete`: delete the selected node from the current graph.
 
-There are no hidden archetype defaults or capability merges. If a future capability needs data, it should be visible as entity data. If it is behavior, keep it in that behavior's system.
+There are no hidden archetype defaults or capability merges. If a future capability needs data, it should be visible as entity data. If it is behavior, keep it with that ability's implementation entrypoint.
 
 ## Size Note
 
-The declaration/validation layer grew the code. Recent passes moved shared vocabulary into `types.ts`, merged Palette/Help into one command-modal system, added shortcut conflict checks, made configurable properties first-class, moved node header controls behind ability metadata, routed DOM input through commands, and split the domain model into `model.ts`:
+The declaration/validation layer grew the total v2 code, but the entrypoint is now tiny and each concept has a narrower home:
 
-- baseline before these passes: `v2/app.ts` was `1,084` lines / `44,127` bytes
-- current `v2/app.ts`: `1,147` lines / `47,675` bytes
-- extracted `v2/model.ts`: `254` lines / `8,053` bytes
-- extracted `v2/types.ts`: `148` lines / `5,837` bytes
+- `v2/app.ts`: `21` lines / `615` bytes
+- `v2/core.ts`: `298` lines / `13,812` bytes
+- `v2/systems.ts`: `580` lines / `23,931` bytes
+- `v2/abilities.ts`: `360` lines / `13,830` bytes
+- `v2/features.ts`: `24` lines / `1,017` bytes
+- `v2/model.ts`: `197` lines / `6,261` bytes
+- `v2/types.ts`: `148` lines / `5,837` bytes
 
-So the main runtime file is closer to the original size again, while the overall v2 code is larger because the model and shared vocabulary are explicit. The payoff depends on future entities reusing the same CRUD/list/search/palette/UI/modal/property plumbing instead of adding one-off systems.
+The current tradeoff is explicitness over smallest total line count. The payoff should come when new entities reuse the same CRUD/list/search/palette/UI/modal/property plumbing instead of adding one-off systems.
 
 ## Render Boundary
 

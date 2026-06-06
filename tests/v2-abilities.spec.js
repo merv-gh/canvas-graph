@@ -3,12 +3,17 @@ const path = require('path');
 const { test, expect } = require('@playwright/test');
 
 test('v2 routes DOM events through input adapter only', async () => {
-  const app = fs.readFileSync(path.join(__dirname, '..', 'v2', 'app.ts'), 'utf8');
-  const listeners = app.split('\n').filter(line => line.includes('addEventListener'));
+  const v2Dir = path.join(__dirname, '..', 'v2');
+  const files = fs.readdirSync(v2Dir).filter(file => file.endsWith('.ts'));
+  const listeners = files.flatMap(file => fs
+    .readFileSync(path.join(v2Dir, file), 'utf8')
+    .split('\n')
+    .filter(line => line.includes('addEventListener'))
+    .map(line => `${file}: ${line.trim()}`));
 
   expect(listeners).toHaveLength(2);
-  expect(listeners[0]).toContain('root.addEventListener(type, route');
-  expect(listeners[1]).toContain("window.addEventListener('DOMContentLoaded'");
+  expect(listeners).toContain("app.ts: window.addEventListener('DOMContentLoaded', () => {");
+  expect(listeners.some(line => line.includes('core.ts:') && line.includes('root.addEventListener(type, route'))).toBe(true);
 });
 
 test('v2 help rejects duplicate shortcuts without saving', async ({ page }) => {
