@@ -10,7 +10,7 @@ export function registerMain(system: Registry) {
         const root = contexts.templates.clone('toolbar');
         const start = contexts.templates.slot(root, 'start');
         const end = contexts.templates.slot(root, 'end');
-        contexts.affordances.for('top').forEach(aff => {
+        contexts.affordances.system('top').forEach(aff => {
           const button = document.createElement('button');
           button.type = 'button';
           button.dataset.command = aff.command;

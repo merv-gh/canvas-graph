@@ -118,7 +118,7 @@ describe('v2 principles (enforced)', () => {
     await settle();
 
     expect(ctx.contexts.commands.get('view.zoom.in')).toBeUndefined();
-    expect(ctx.contexts.affordances.for('top').some(aff => aff.command === 'view.zoom.in')).toBe(false);
+    expect(ctx.contexts.affordances.system('top').some(aff => aff.command === 'view.zoom.in')).toBe(false);
     expect(ctx.contexts.itemModes.all().some(mode => mode.source === 'view.zoom')).toBe(false);
     expect(ctx.contexts.itemOverlays.all()).toEqual([]);
     expect(ctx.contexts.itemTargets.all().some(target => target.label === 'Z')).toBe(false);

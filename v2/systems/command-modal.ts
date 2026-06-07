@@ -20,7 +20,7 @@ const commandModals: Record<CommandModalDef['id'], CommandModalDef> = {
 const NUMBERED_ROWS = 5;
 
 export function registerCommandModal(system: Registry) {
-  system('commandModal', ({ on, emit, contexts, contribute }) => {
+  system('commandModal', ({ on, emit, contexts, contribute, flags }) => {
     contribute({ surface: 'top', command: 'palette.open', kind: 'button', text: 'Palette', order: 30 });
     contribute({ surface: 'top', command: 'help.open', kind: 'button', text: 'Help', order: 40 });
     const queries = new Map<CommandModalDef['id'], string>();
@@ -89,12 +89,45 @@ export function registerCommandModal(system: Registry) {
         .forEach(([group, commands]) => fragment.append(commandSection(modal, group, commands, nextNumber)));
       return fragment;
     };
+    /** Flag toggle rows shown at the top of Help. Flags are grouped by kind
+     *  (system / ability / feature); flipping a checkbox emits `flag.toggle`,
+     *  which calls flags.set and persists via the io adapter. The single Help
+     *  panel becomes the place a user goes to disable any non-core piece. */
+    const renderFlagsSection = () => {
+      const section = contexts.templates.clone('command-section');
+      const rows = contexts.templates.slot(section, 'rows');
+      contexts.templates.text(section, 'group', 'Feature flags');
+      ([
+        { kind: 'system' as const, label: 'System' },
+        { kind: 'ability' as const, label: 'Ability' },
+        { kind: 'feature' as const, label: 'Feature' },
+      ]).forEach(g => flags.declared(g.kind).forEach(name => {
+        const row = document.createElement('label');
+        row.className = 'help-row flag-row';
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'flag-toggle';
+        checkbox.dataset.flag = name;
+        checkbox.checked = flags.isOn(name);
+        const meta = document.createElement('span');
+        const title = document.createElement('b');
+        title.textContent = name;
+        const subtitle = document.createElement('small');
+        subtitle.textContent = g.label;
+        meta.append(title, subtitle);
+        row.append(checkbox, meta);
+        rows.append(row);
+      }));
+      return section;
+    };
     const renderCommandModal = (modal: CommandModalDef) => {
       const palette = contexts.templates.clone('palette');
       palette.dataset.commandModal = modal.id;
       const input = palette.querySelector('.palette-search');
       if (input instanceof HTMLInputElement) input.placeholder = modal.placeholder;
-      contexts.templates.slot(palette, 'commands').append(renderList(modal));
+      const slot = contexts.templates.slot(palette, 'commands');
+      if (modal.id === 'help') slot.append(renderFlagsSection());
+      slot.append(renderList(modal));
       return palette;
     };
     contexts.commands.register([
@@ -157,6 +190,18 @@ export function registerCommandModal(system: Registry) {
         input: { on: 'change', selector: '.shortcut-edit' },
         payload: ({ target }) => ({ id: (target as HTMLElement).dataset.shortcutCommand!, shortcut: (target as HTMLInputElement).value }),
       },
+      {
+        id: 'flag.toggle',
+        label: 'Toggle feature flag',
+        event: 'flag.toggle',
+        group: 'modal',
+        hidden: true,
+        input: { on: 'change', selector: '.flag-toggle' },
+        payload: ({ target }) => ({
+          name: (target as HTMLElement).dataset.flag ?? '',
+          on: (target as HTMLInputElement).checked,
+        }),
+      },
     ]);
     const open = (modal: CommandModalDef) => emit('modal.open', {
       title: modal.title,
@@ -170,7 +215,7 @@ export function registerCommandModal(system: Registry) {
     on('commandModal.run', ({ commandId }) => {
       if (!contexts.commands.get(commandId)) return;
       emit('modal.close');
-      contexts.commands.run(commandId);
+      contexts.commands.run(commandId, { origin: 'palette' });
     });
     on('commandModal.search.changed', ({ modalId, query }) => {
       const modal = commandModals[modalId as CommandModalDef['id']];
@@ -188,5 +233,6 @@ export function registerCommandModal(system: Registry) {
       if (!(input instanceof HTMLInputElement) || !syncShortcutConflict(input)) return;
       contexts.commands.setShortcut(id, input.value);
     });
+    on('flag.toggle', ({ name, on: enabled }) => { if (name) flags.set(name, enabled); });
   });
 }

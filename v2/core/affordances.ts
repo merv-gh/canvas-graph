@@ -1,8 +1,21 @@
-import type { AffordanceSurface, Bus, SystemAffordance } from '../types';
+import type {
+  ActionDef,
+  AffordanceDef,
+  AffordanceSurface,
+  Bus,
+  EntityDef,
+  SystemAffordance,
+} from '../types';
 
-/** System-level affordances (toolbar buttons, side-bar entries, list contributions).
- *  Entity affordances stay on EntityDef.abilities — they need per-item context.
- *  System affordances are context-free, so any system can contribute one. */
+/** Unified affordance lookup. Two kinds, one context:
+ *
+ *  - **system affordances** (toolbar buttons, sidebar entries) — context-free,
+ *    contributed at boot via `contribute()`, retrieved by surface.
+ *  - **entity affordances** (per-item buttons + handlers on a rendered card) —
+ *    declared on `EntityDef.abilities[].actions[].ui`, retrieved by entity + slot.
+ *
+ *  Both flow through this one context so render reads from a single API and a
+ *  future plugin can swap either side without touching the other. */
 export function affordancesContext(bus: Bus) {
   const surfaceAffordances = new Map<AffordanceSurface, SystemAffordance[]>();
   return {
@@ -12,9 +25,18 @@ export function affordancesContext(bus: Bus) {
       surfaceAffordances.set(aff.surface, list);
       bus.emit('affordance.contributed', { surface: aff.surface });
     },
-    for(surface: AffordanceSurface) {
+    /** Context-free affordances contributed for the given surface (toolbar, list, …). */
+    system(surface: AffordanceSurface) {
       const list = [...(surfaceAffordances.get(surface) ?? [])];
       return list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    },
+    /** Per-entity affordances declared on its abilities, optionally filtered by slot. */
+    entity<T>(entityDef: EntityDef<T>, slot?: string) {
+      return entityDef.abilities.flatMap(abilityDef => abilityDef.actions.flatMap(actionDef =>
+        actionDef.ui
+          .filter(ui => ui.surface === 'entity' && (slot == null || ui.slot === slot))
+          .map(ui => ({ action: actionDef as ActionDef<T>, ui: ui as AffordanceDef<T> })),
+      ));
     },
     unregisterOrigin(origin: string) {
       for (const [surface, list] of surfaceAffordances) {

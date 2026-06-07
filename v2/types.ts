@@ -50,6 +50,17 @@ export type ItemRef = { kind: ItemKind; id: Id; parent?: Id[] };
  *  Bus.emit / on become aware of the augmented event name automatically. */
 export interface CustomEvents {}
 
+/** Extension hook for typed devtool/test surfaces published via `ctx.expose(key, value)`.
+ *  Augment to add a new key without editing AppCtx:
+ *
+ *    declare module './types' {
+ *      interface CustomExposable { myThing?: { count(): number } }
+ *    }
+ *
+ *  AppCtx merges built-in keys (`dx`, `render`, …) with CustomExposable, so
+ *  `window.v2.myThing` becomes typed in both producer and consumer code. */
+export interface CustomExposable {}
+
 interface BuiltinEvents {
   'app.start': void;
   'app.notice': { message: string; level?: 'info' | 'warn' | 'error' };
@@ -58,6 +69,10 @@ interface BuiltinEvents {
   'render.shell': void;
   'render.view.set': { place: Place; key?: string; view: Renderable };
   'render.view.clear': { place: Place; key?: string };
+  /** Request that the stage redraws its items (nodes/edges/overlays). The render
+   *  scheduler emits this once per RAF when the nodes scope is dirty. Stage
+   *  renderers (HTML, canvas, …) subscribe; multiple may coexist. */
+  'render.stage.draw': void;
   'modal.open': { title?: string; body?: Renderable; visual?: ModalVisual };
   'modal.close': void;
   'palette.open': void;
@@ -70,6 +85,7 @@ interface BuiltinEvents {
   'commandModal.search.changed': { modalId: string; query: string };
   'shortcut.edit.preview': { id: string; shortcut: string };
   'shortcut.edit.commit': { id: string; shortcut: string };
+  'flag.toggle': { name: string; on: boolean };
   'view.changed': ViewState;
   'view.zoom.by': { screen: Position; factor: number };
   'view.zoom.in': void;
@@ -77,6 +93,7 @@ interface BuiltinEvents {
   'view.zoom.reset': void;
   'view.fit.all': void;
   'view.fit.selected': void;
+  'view.fit.item': ItemRef;
   'layout.apply.radial': void;
   'layout.apply.grid': void;
   'layout.apply.tidy': void;
@@ -152,7 +169,13 @@ export const FACT_SUFFIXES = ['.created', '.updated', '.deleted', '.switched', '
 export type FactSuffix = typeof FACT_SUFFIXES[number];
 export type RedrawScope = 'nodes' | 'outline' | 'both';
 
-export type CommandSource = { event?: Event; target?: Element | null };
+/** Where a command run originated. 'keyboard' / 'pointer' come from the input
+ *  router; 'palette' from command modal rows; 'feature' when one system runs
+ *  another; 'programmatic' is the default for direct `commands.run(id)` calls
+ *  (devtools, tests, boot wiring). Lets handlers and `available` filters
+ *  discriminate without sniffing CommandSource.event. */
+export type CommandOrigin = 'keyboard' | 'pointer' | 'palette' | 'feature' | 'programmatic';
+export type CommandSource = { event?: Event; target?: Element | null; origin?: CommandOrigin };
 export type CommandFormOption = { value: string; label: string };
 export type CommandFormField = {
   id: string;
@@ -253,12 +276,51 @@ export type ActionDef<T = unknown> = {
   ui: AffordanceDef<T>[];
 };
 export type AbilityDef<T = unknown> = { id: string; actions: NonEmptyArray<ActionDef<T>> };
+
+/** Structural slice of the live graph that an entity renderer needs to resolve
+ *  cross-item state (e.g. an edge resolving its endpoints). Render passes the
+ *  current graph here without leaking the full GraphStore type. */
+export type EntityRenderGraph = {
+  getNode(id: Id): NodeEntity | undefined;
+  getEdge(id: Id): EdgeEntity | undefined;
+};
+
+/** Per-item render scope. The render system constructs this once per item and
+ *  passes it to `entity.render.draw`. Renderers stay declarative — they do not
+ *  reach for the DOM, item-modes, or affordances directly. */
+export type EntityRenderCtx = {
+  graph: EntityRenderGraph;
+  tagItem(el: Element, ref: ItemRef): void;
+  applyItemModes(el: Element, ref: ItemRef): void;
+  /** Wire ability affordances (handlers + buttons) for this item's entity into
+   *  any [data-slot=...] holes on the cloned element. No-op on non-HTML returns. */
+  wireAffordances(el: HTMLElement): void;
+  cloneTemplate<T extends Element = HTMLElement>(name: string): T;
+  templateSlot(root: Element, name: string): Element;
+  templateText(root: Element, name: string, value: unknown): void;
+};
+
+export type EntityRenderer<T = unknown> = {
+  /** Which paint layer the result belongs in. HTML → the transformed node layer;
+   *  SVG → the edges <svg> child of that layer. */
+  layer: 'html' | 'svg';
+  /** Return null to skip this item this frame (e.g. an edge with missing endpoints). */
+  draw(item: T, ctx: EntityRenderCtx): Element | null;
+  /** Optional culling bounds in graph-space. When provided, render skips items
+   *  whose bounds don't intersect the visible rect. */
+  bounds?(item: T): Rect | null;
+};
+
 export type EntityDef<T, Patch = unknown> = {
   kind: string;
   label: string;
   labelOf: (item: T) => string;
   abilities: AbilityDef<T>[];
   properties?: PropertyDef<T, Patch>[];
+  /** Optional renderer. When set, render iterates this entity's items through it
+   *  blindly — adding a new entity kind (group, container, …) needs zero render
+   *  edits. When unset, the entity is data-only (no stage representation). */
+  render?: EntityRenderer<T>;
 };
 export type CollectionToolbar = {
   /** Override the button text. Default: `+ ${entity.label ?? collection.label-singular}`. */

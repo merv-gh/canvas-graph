@@ -34,6 +34,27 @@ describe('v2 redraw suffix convention', () => {
     expect(ctx.graphs.current.nodes()).toHaveLength(N);
   }, 15000);
 
+  // PRINCIPLE 8 — render-on-demand budget. 100 rapid creates should not balloon
+  // into 100 paint calls per layer; the scheduler must coalesce so every
+  // `render.view.set` scope (stage:nodes, stage:overlays, left:outline, …) flips
+  // at most twice (one initial + one post-burst).
+  it('100 rapid node creates → ≤ 2 render.view.set per scope', async () => {
+    const ctx = bootV2();
+    await settle();
+    const setCalls = new Map<string, number>();
+    ctx.bus.on('render.view.set', ({ place, key }) => {
+      const scope = `${place}:${key ?? 'default'}`;
+      setCalls.set(scope, (setCalls.get(scope) ?? 0) + 1);
+    });
+    const N = 100;
+    for (let i = 0; i < N; i++) ctx.bus.emit('editing.node.create', { Label: { text: `n${i}` } });
+    await settle();
+    expect(ctx.graphs.current.nodes()).toHaveLength(N);
+    setCalls.forEach((count, scope) => {
+      expect(count, `${scope} repaint budget`).toBeLessThanOrEqual(2);
+    });
+  }, 15000);
+
   it('triggers a redraw for any past-tense event, even one not hardcoded before', async () => {
     const ctx = bootV2();
     await settle();

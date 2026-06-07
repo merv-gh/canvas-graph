@@ -69,7 +69,7 @@ export type AppCtx = {
   sim: SimApi;
   dx?: DxApi;
   render?: RenderApi;
-};
+} & import('./types').CustomExposable;
 export type AppCollectionDef<T> = CollectionDef<T, ModelCtx, CollectionCommandsApi>;
 type Disposer = () => void;
 export type SystemCtx = AppCtx & Pick<Bus, 'on' | 'emit' | 'forward'> & {
@@ -141,6 +141,8 @@ import { shortcutOf as shortcutOfImported } from './core/shortcuts';
 export const uiValue = <T,>(value: UiValue<T> | undefined, item: T, fallback = '') =>
   typeof value === 'function' ? value(item) : value ?? fallback;
 
+/** @deprecated since the affordances merge — prefer `contexts.affordances.entity(entityDef, slot)`.
+ *  Kept as a thin wrapper to avoid breaking external imports until callers migrate. */
 export const entityUi = <T,>(entityDef: EntityDef<T>, slot?: string) =>
   entityDef.abilities.flatMap(abilityDef => abilityDef.actions.flatMap(actionDef =>
     actionDef.ui
@@ -312,7 +314,7 @@ export function registry(kind: FlagKind = 'system'): Registry {
         forward: ctx.bus.forward,
         origin: entry.name,
         contribute: (aff) => ctx.contexts.affordances.contribute({ ...aff, origin: aff.origin ?? entry.name }),
-        expose: (key, value) => { (ctx as Record<string, unknown>)[key as string] = value; },
+        expose: <K extends keyof AppCtx>(key: K, value: AppCtx[K]) => { ctx[key] = value; },
       };
       // Adapt register so commands without `origin` get tagged with the current system name.
       const original = ctx.contexts.commands.register;

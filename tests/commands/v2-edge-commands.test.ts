@@ -8,13 +8,15 @@ const createNode = async (ctx: ReturnType<typeof bootV2>) => {
 };
 
 describe('v2 edge commands', () => {
-  it('opens an explanatory form when edge creation has too few nodes', () => {
+  it('opens an explanatory form when edge creation has too few nodes', async () => {
     const ctx = bootV2();
 
     expect(runCommand(ctx, 'graph.edge.create')).toBe(true);
 
     expect(modalText()).toContain('Create edge');
     expect(document.querySelector('.form-error')?.textContent).toBe('Create at least two nodes before creating an edge.');
+    // log is rAF-coalesced (principle 8) — wait for the next frame to read it.
+    await settle();
     expect(document.querySelector('.log-row')?.textContent).toContain('Create at least two nodes before creating an edge.');
   });
 

@@ -105,7 +105,7 @@ button.icon:hover { color: var(--ink); }
 .edges .edge-line.selected { stroke: var(--accent); stroke-width: 2px; }
 .edges .edge-line.focused { stroke: var(--accent); stroke-dasharray: 4 3; }
 .edges .edge-label { fill: var(--text-muted); font: 11px ui-monospace, monospace; }
-.item-overlays { position: absolute; inset: 0; pointer-events: none; }
+.item-overlays { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
 .item-overlay {
   position: absolute;
   transform: translate(-50%, -140%);
@@ -117,6 +117,13 @@ button.icon:hover { color: var(--ink); }
   box-shadow: var(--shadow-sm);
   font: 11px ui-monospace, monospace;
   white-space: nowrap;
+}
+.item-overlay.jump-letter {
+  font-weight: 600;
+  background: var(--accent);
+  color: white;
+  letter-spacing: .05em;
+  text-transform: uppercase;
 }
 .node {
   position: absolute;
@@ -365,6 +372,14 @@ button.icon:hover { color: var(--ink); }
   background: var(--panel);
 }
 .help-row.has-conflict { background: var(--danger-soft); }
+.flag-row { cursor: pointer; }
+.flag-row input.flag-toggle {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent);
+}
 .shortcut-edit.is-conflict { border-color: var(--danger) !important; color: var(--danger); }
 .editable-inline { border: 1px solid transparent !important; background: transparent !important; }
 .editable-inline:hover { background: var(--panel-2) !important; }

@@ -1,6 +1,7 @@
-import type { GraphNode } from '../model';
+import type { GraphEdge, GraphNode } from '../model';
 import type { Registry } from '../core';
-import { Places } from '../types';
+import { itemRefFrom } from '../core';
+import { Places, type ItemRef } from '../types';
 
 export function registerViewZoom(system: Registry) {
   system('view.zoom', ({ on, emit, contexts, graphs, selection, contribute }) => {
@@ -36,6 +37,15 @@ export function registerViewZoom(system: Registry) {
       { id: 'view.zoom.reset', label: 'Reset view', event: 'view.zoom.reset', group: 'view', shortcut: '0', input: { on: 'keydown', key: '0', prevent: true } },
       { id: 'view.fit.all', label: 'Fit all to view', event: 'view.fit.all', group: 'view', shortcut: 'Z', input: { on: 'keydown', key: 'z', prevent: true } },
       { id: 'view.fit.selected', label: 'Fit selected to view', event: 'view.fit.selected', group: 'view', shortcut: 'Shift+Z', input: { on: 'keydown', key: 'Z', shift: true, prevent: true }, available: () => !!selection.selected() },
+      {
+        id: 'view.fit.item',
+        label: 'Fit item to view',
+        event: 'view.fit.item',
+        group: 'view',
+        hidden: true,
+        available: source => !!itemRefFrom(source?.target) || !!selection.selected(),
+        payload: source => itemRefFrom(source.target) ?? selection.selected() ?? undefined,
+      },
     ]);
 
     on('view.zoom.by', ({ screen, factor }) => { contexts.view.zoomAtScreen(screen, factor); commit(); });
@@ -73,14 +83,38 @@ export function registerViewZoom(system: Registry) {
       });
       commit();
     };
+    /** Resolve any ItemRef to a graph-space bounds. Falls back to itemTargets
+     *  anchor for items whose canonical entity lookup fails (overlays, ghosts). */
+    const itemBounds = (ref: ItemRef) => {
+      if (ref.kind === 'node') {
+        const node = graphs.current.getNode(ref.id) as GraphNode | undefined;
+        if (node) return nodesBounds([node]);
+      }
+      if (ref.kind === 'edge') {
+        const edge = graphs.current.getEdge(ref.id) as GraphEdge | undefined;
+        const from = edge && graphs.current.getNode(edge.From);
+        const to = edge && graphs.current.getNode(edge.To);
+        if (from && to) {
+          const nodes = [from, to].filter(n => n.Position) as GraphNode[];
+          if (nodes.length) return nodesBounds(nodes);
+        }
+      }
+      const anchor = contexts.itemTargets.anchor(ref);
+      if (!anchor) return null;
+      return { minX: anchor.x - 80, minY: anchor.y - 32, maxX: anchor.x + 80, maxY: anchor.y + 32 };
+    };
+
     on('view.fit.all', () => {
       const b = nodesBounds(graphs.current.nodes() as GraphNode[]);
       if (b) fitToBounds(b);
     });
     on('view.fit.selected', () => {
-      const node = selection.selectedNode() as GraphNode | undefined;
-      if (!node) return;
-      const b = nodesBounds([node]);
+      const ref = selection.selected();
+      const b = ref ? itemBounds(ref) : null;
+      if (b) fitToBounds(b, 180);
+    });
+    on('view.fit.item', ref => {
+      const b = itemBounds(ref);
       if (b) fitToBounds(b, 180);
     });
   });

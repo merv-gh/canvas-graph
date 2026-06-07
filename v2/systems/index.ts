@@ -7,17 +7,20 @@ import { registerDx } from './dx';
 import { registerFocus } from './focus';
 import { registerGraph } from './graph';
 import { registerInput } from './input';
+import { registerJump } from './jump';
 import { registerLayout } from './layout';
 import { registerLog } from './log';
 import { registerMain } from './main';
 import { registerModal } from './modal';
 import { registerOutline } from './outline';
 import { registerRender } from './render';
+import { registerRenderStage } from './render-stage';
 import { registerViewPan } from './view-pan';
 import { registerViewZoom } from './view-zoom';
 
 export function registerSystems(system: Registry) {
   registerRender(system);
+  registerRenderStage(system);
   registerInput(system);
   registerMain(system);
   registerLog(system);
@@ -25,6 +28,10 @@ export function registerSystems(system: Registry) {
   registerModal(system);
   registerCommandForm(system);
   registerCommandModal(system);
+  // Jump must register before `collections` so its `g` binding sits earlier in
+  // the input router's enabled() iteration — combined with `stop: true` it then
+  // shadows `graph.switch.next` instead of doubling up.
+  registerJump(system);
   registerCollections(system);
   registerGraph(system);
   registerViewZoom(system);
@@ -36,6 +43,8 @@ export function registerSystems(system: Registry) {
 
   const deps: Record<string, string[]> = {
     render: ['input'],
+    'render.stage': ['render', 'graph'],
+    jump: ['render.stage', 'graph', 'focus', 'view.zoom'],
     main: ['render'],
     log: ['render'],
     outline: ['render', 'graph'],

@@ -1,7 +1,15 @@
-import type { Bus, CommandSource, CommandSpec, EventName } from '../types';
+import type { Bus, CommandOrigin, CommandSource, CommandSpec, EventName } from '../types';
 import type { IoApi } from './io';
 import { STORAGE_KEYS } from './io';
 import { bindingParsed, keyMatchesEvent, parseShortcut, shortcutOf } from './shortcuts';
+
+const POINTER_TYPES = new Set(['click', 'pointerdown', 'pointermove', 'pointerup', 'wheel']);
+const originFromEvent = (event?: Event): CommandOrigin => {
+  if (!event) return 'programmatic';
+  if (event instanceof KeyboardEvent) return 'keyboard';
+  if (POINTER_TYPES.has(event.type)) return 'pointer';
+  return 'programmatic';
+};
 
 /** Owns the command registry: registration, shortcut overrides, conflict checks,
  *  enabled/disabled toggles (persisted via io), and dispatch. */
@@ -77,11 +85,12 @@ export function commandsContext(bus: Bus, isFlagOn: (origin?: string) => boolean
     run(id: string, source: CommandSource = {}) {
       const command = commandMap.get(id);
       if (!command || !isEnabled(command) || command.available?.(source) === false) return false;
-      const payload = command.payload?.(source);
-      if (command.form?.shouldOpen?.(payload, source)) {
+      const resolved: CommandSource = source.origin ? source : { ...source, origin: originFromEvent(source.event) };
+      const payload = command.payload?.(resolved);
+      if (command.form?.shouldOpen?.(payload, resolved)) {
         bus.emit('commandForm.open', {
           commandId: id,
-          seed: command.form.seed?.(payload, source) ?? {},
+          seed: command.form.seed?.(payload, resolved) ?? {},
         });
         return true;
       }
