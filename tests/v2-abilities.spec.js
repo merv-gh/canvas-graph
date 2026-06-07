@@ -19,7 +19,7 @@ test('v2 routes DOM events through input adapter only', async () => {
 
   expect(listeners).toHaveLength(2);
   expect(listeners).toContain("app.ts: window.addEventListener('DOMContentLoaded', () => {");
-  expect(listeners.some(line => line.includes('core.ts:') && line.includes('root.addEventListener(type, route'))).toBe(true);
+  expect(listeners.some(line => line.includes('core/commands.ts:') && line.includes('root.addEventListener(type, route'))).toBe(true);
 });
 
 test('v2 help rejects duplicate shortcuts without saving', async ({ page }) => {

@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { bootV2, settle } from './v2-testkit';
+import { bootV2, commandButton, settle } from './v2-testkit';
 
 const V2 = resolve(process.cwd(), 'v2');
 
@@ -100,5 +100,23 @@ describe('v2 principles (enforced)', () => {
     const ctx = bootV2();
     const orphans = ctx.contexts.commands.all().filter(c => !c.origin);
     expect(orphans.map(c => c.id)).toEqual([]);
+  });
+
+  it('registry.stop tears down commands, affordances, and listeners by origin', async () => {
+    const ctx = bootV2();
+    await settle();
+    const before = ctx.contexts.view.get().scale;
+
+    expect(ctx.contexts.commands.get('view.zoom.in')).toBeTruthy();
+    expect(commandButton('view.zoom.in')).not.toBeNull();
+
+    ctx.registries.systems.stop(ctx, 'view.zoom');
+    await settle();
+
+    expect(ctx.contexts.commands.get('view.zoom.in')).toBeUndefined();
+    expect(ctx.contexts.affordances.for('top').some(aff => aff.command === 'view.zoom.in')).toBe(false);
+    expect(commandButton('view.zoom.in')).toBeNull();
+    ctx.bus.emit('view.zoom.in');
+    expect(ctx.contexts.view.get().scale).toBe(before);
   });
 });

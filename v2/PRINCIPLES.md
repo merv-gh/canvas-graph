@@ -17,9 +17,9 @@ the core.
 > **Test:** `core.ts` size ≤ 400 lines. New core APIs require deleting at least
 > as many lines elsewhere.
 
-Current debt: `core.ts` is above this target. IO, DX, and selection have been
-extracted; property renderers and affordance storage are the next core-adjacent
-pieces to move before adding new core APIs.
+Current status: `core.ts` is below this target after extracting IO, flags, DX,
+selection, and other small adapters. New core APIs should keep paying their way
+with equal or greater deletions.
 
 ## 2. Systems are self-sufficient and independent
 

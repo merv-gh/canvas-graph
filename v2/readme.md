@@ -254,16 +254,16 @@ There are no hidden archetype defaults or capability merges. If a future capabil
 
 The declaration/validation layer grew the total v2 code, but the entrypoint is now tiny and each concept has a narrower home:
 
-- `v2/app.ts`: `44` lines / `1,696` bytes
-- `v2/core.ts`: `579` lines / `25,673` bytes
-- `v2/core/`: `73` lines / `2,730` bytes
-- `v2/systems.ts`: `1` line / `33` bytes, plus `v2/systems/`: `1,267` lines / `55,373` bytes
-- `v2/abilities.ts`: `1` line / `35` bytes, plus `v2/abilities/`: `429` lines / `16,998` bytes
-- `v2/features.ts`: `32` lines / `1,691` bytes
-- `v2/model.ts`: `269` lines / `8,989` bytes
-- `v2/types.ts`: `226` lines / `9,404` bytes
+- `v2/app.ts`: `32` lines
+- `v2/core.ts`: `324` lines
+- `v2/core/`: `556` lines across focused adapters
+- `v2/systems.ts`: `1` line, plus `v2/systems/`: `1,159` lines
+- `v2/abilities.ts`: `1` line, plus `v2/abilities/`: `440` lines
+- `v2/features.ts`: `32` lines
+- `v2/model.ts`: `396` lines
+- `v2/types.ts`: `283` lines
 
-The current tradeoff is explicitness over smallest total line count. `core.ts` is still above target, but IO, selection, and DX are no longer owned by it. The next low-risk extractions are property renderers and affordance storage.
+The current tradeoff is explicitness over smallest total line count. `core.ts` is below target; new foundation work should keep shrinking or move into focused adapters.
 
 ## Render Boundary
 

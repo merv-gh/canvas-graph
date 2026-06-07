@@ -18,7 +18,9 @@ export function affordancesContext(bus: Bus) {
     },
     unregisterOrigin(origin: string) {
       for (const [surface, list] of surfaceAffordances) {
-        surfaceAffordances.set(surface, list.filter(a => a.origin !== origin));
+        const next = list.filter(a => a.origin !== origin);
+        surfaceAffordances.set(surface, next);
+        if (next.length !== list.length) bus.emit('affordance.contributed', { surface });
       }
     },
   };

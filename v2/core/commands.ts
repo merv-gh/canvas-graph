@@ -112,7 +112,7 @@ export function inputRouter(commands: ReturnType<typeof commandsContext>) {
         for (const command of commands.enabled()) {
           const binding = command.input;
           if (!binding || binding.on !== event.type) continue;
-          if (binding.key && !keyMatchesEvent(event, bindingParsed(binding))) continue;
+          if (event instanceof KeyboardEvent && (!binding.key || !keyMatchesEvent(event, bindingParsed(binding)))) continue;
           const target = rawTarget && binding.selector ? rawTarget.closest(binding.selector) : rawTarget;
           if (!(target instanceof Element) || (binding.selector && !target)) continue;
           if (typing && !binding.global && !binding.selector) continue;
@@ -124,6 +124,7 @@ export function inputRouter(commands: ReturnType<typeof commandsContext>) {
       };
       const types: EventName[] | string[] = ['click', 'keydown', 'pointerdown', 'pointermove', 'pointerup', 'wheel', 'input', 'change', 'focusout'];
       types.forEach(type => root.addEventListener(type, route, type === 'wheel' ? { passive: false } : undefined));
+      return () => types.forEach(type => root.removeEventListener(type, route));
     },
   };
 }

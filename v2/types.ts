@@ -123,8 +123,8 @@ export type EventName = keyof AppEvents;
 export type EventOf<K extends EventName = EventName> = { name: K; data: AppEvents[K]; at: number };
 export type AnyEvent = { [K in EventName]: EventOf<K> }[EventName];
 export type Bus = {
-  on<K extends EventName>(name: K, fn: (data: AppEvents[K], event: EventOf<K>) => void): void;
-  onAny(fn: (event: AnyEvent) => void): void;
+  on<K extends EventName>(name: K, fn: (data: AppEvents[K], event: EventOf<K>) => void): () => void;
+  onAny(fn: (event: AnyEvent) => void): () => void;
   emit<K extends EventName>(name: K, ...data: AppEvents[K] extends void ? [] : [AppEvents[K]]): void;
   /** Escape hatch for code that holds a (name, data) pair where the connection
    *  between them is dynamic (form submission, command dispatch, plugin bridges).

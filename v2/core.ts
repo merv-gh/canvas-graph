@@ -2,7 +2,8 @@ import type { GraphStore } from './model';
 import { affordancesContext } from './core/affordances';
 import { commandsContext, inputRouter } from './core/commands';
 import { itemIdFrom, itemRefFrom, appendRenderable } from './core/dom';
-import { localStorageIo, STORAGE_KEYS, type IoApi } from './core/io';
+import { createFlags, type FlagKind, type FlagsApi } from './core/flags';
+import { localStorageIo, type IoApi } from './core/io';
 import { propertiesContext } from './core/properties';
 import { createSelectionStore, type SelectionStore } from './core/selection';
 import { createSim, type SimApi } from './core/sim';
@@ -18,7 +19,6 @@ import {
   type CommandSpec,
   type EntityDef,
   type EventName,
-  type FeatureFlags,
   type ItemRef,
   type ModelDef,
   type Place,
@@ -29,6 +29,7 @@ import {
 
 // Re-exports (keep the public surface stable for systems/abilities).
 export { localStorageIo, memoryIo, STORAGE_KEYS, type IoApi } from './core/io';
+export { createFlags, type FlagKind, type FlagsApi } from './core/flags';
 export { createSelectionStore, type SelectionStore } from './core/selection';
 export { createSim, type SimApi, type Trace, type TraceEvent } from './core/sim';
 export { parseShortcut, shortcutOf } from './core/shortcuts';
@@ -61,6 +62,7 @@ export type AppCtx = {
   render?: RenderApi;
 };
 export type AppCollectionDef<T> = CollectionDef<T, ModelCtx, CollectionCommandsApi>;
+type Disposer = () => void;
 export type SystemCtx = AppCtx & Pick<Bus, 'on' | 'emit' | 'forward'> & {
   /** Stable name of the currently-starting system / ability — used to tag commands for unregister. */
   origin: string;
@@ -69,7 +71,7 @@ export type SystemCtx = AppCtx & Pick<Bus, 'on' | 'emit' | 'forward'> & {
   /** Publish a typed devtools/test surface on window.v2 without app.ts knowing the system. */
   expose<K extends keyof AppCtx>(key: K, value: AppCtx[K]): void;
 };
-export type AppSystem = (ctx: SystemCtx) => void;
+export type AppSystem = (ctx: SystemCtx) => void | Disposer;
 export type RegistryEntryOptions = {
   /** Other system / ability / feature names that must be enabled for this entry to function well.
    *  DX will warn if this entry is enabled but a required dep is off. */
@@ -77,28 +79,12 @@ export type RegistryEntryOptions = {
 };
 export type Registry = ((name: string, setup: AppSystem, opts?: RegistryEntryOptions) => void) & {
   start(ctx: AppCtx): void;
+  stop(ctx: AppCtx, name: string): void;
   names(): string[];
   enabledNames(flags: FlagsApi): string[];
   requires(name: string): string[];
   /** Post-register the requires list for an already-declared entry. */
   setRequires(name: string, requires: string[]): void;
-};
-
-/** What a flag controls. Set by the registry that declares it.
- *  - 'system'  → infrastructure (render, input, modal, ...)
- *  - 'ability' → entity-attached capability (selectable, draggable, ...)
- *  - 'feature' → cross-system orchestration (nodeLifecycle, ...)
- *  Used by demo, DX, and devtools to group/inspect flags without hardcoded lists. */
-export type FlagKind = 'system' | 'ability' | 'feature';
-export type FlagsApi = {
-  all(): FeatureFlags;
-  isOn(name: string): boolean;
-  set(name: string, on: boolean): void;
-  declared(kind?: FlagKind): string[];
-  declare(name: string, defaultOn?: boolean, requires?: string[], kind?: FlagKind): void;
-  kind(name: string): FlagKind | undefined;
-  /** Names the given flag depends on. Populated by registry.start. */
-  requires(name: string): string[];
 };
 
 declare global { interface Window { v2?: AppCtx } }
@@ -181,20 +167,50 @@ type InstrumentedBus = Bus & { _subscribed: Set<string>; _emitted: Set<string> }
 function eventBus(): InstrumentedBus {
   const listeners = new Map<EventName, ((data: unknown, event: AnyEvent) => void)[]>();
   const any: ((event: AnyEvent) => void)[] = [];
+  const listenerCounts = new Map<string, number>();
   const subscribed = new Set<string>();
   const emitted = new Set<string>();
+  const addSubscribed = (name: string) => {
+    listenerCounts.set(name, (listenerCounts.get(name) ?? 0) + 1);
+    subscribed.add(name);
+  };
+  const removeSubscribed = (name: string) => {
+    const next = (listenerCounts.get(name) ?? 0) - 1;
+    if (next > 0) listenerCounts.set(name, next);
+    else { listenerCounts.delete(name); subscribed.delete(name); }
+  };
+  const remove = <T,>(list: T[], item: T) => {
+    const index = list.indexOf(item);
+    if (index >= 0) list.splice(index, 1);
+  };
   const dispatch = (name: EventName, data: unknown) => {
     emitted.add(name);
     const event = { name, data, at: performance.now() } as AnyEvent;
-    any.forEach(fn => fn(event));
-    (listeners.get(name) || []).forEach(fn => fn(event.data, event));
+    [...any].forEach(fn => fn(event));
+    [...(listeners.get(name) || [])].forEach(fn => fn(event.data, event));
   };
   return {
     on(name, fn) {
-      subscribed.add(name);
-      (listeners.get(name) || listeners.set(name, []).get(name)!).push(fn as (data: unknown, event: AnyEvent) => void);
+      let active = true;
+      const wrapped = fn as (data: unknown, event: AnyEvent) => void;
+      addSubscribed(name);
+      (listeners.get(name) || listeners.set(name, []).get(name)!).push(wrapped);
+      return () => {
+        if (!active) return;
+        active = false;
+        remove(listeners.get(name) ?? [], wrapped);
+        removeSubscribed(name);
+      };
     },
-    onAny(fn) { any.push(fn); },
+    onAny(fn) {
+      let active = true;
+      any.push(fn);
+      return () => {
+        if (!active) return;
+        active = false;
+        remove(any, fn);
+      };
+    },
     emit(name, ...args) { dispatch(name, args[0]); },
     forward(name, data) { dispatch(name, data); },
     _subscribed: subscribed,
@@ -229,16 +245,39 @@ function createContexts(bus: Bus, flags: FlagsApi, io: IoApi) {
  *  without hardcoded name lists. */
 export function registry(kind: FlagKind = 'system'): Registry {
   const entries: { name: string; setup: AppSystem; requires: string[] }[] = [];
+  const running = new Map<string, Disposer[]>();
   const register = ((name: string, setup: AppSystem, opts: RegistryEntryOptions = {}) => {
     entries.push({ name, setup, requires: opts.requires ?? [] });
   }) as Registry;
+  const stopEntry = (ctx: AppCtx, name: string) => {
+    [...(running.get(name) ?? [])].reverse().forEach(dispose => dispose());
+    running.delete(name);
+    ctx.contexts.commands.unregisterOrigin(name);
+    ctx.contexts.affordances.unregisterOrigin(name);
+  };
   register.start = (ctx) => {
     entries.forEach(entry => {
       ctx.flags.declare(entry.name, true, entry.requires, kind);
-      if (!ctx.flags.isOn(entry.name)) return;
+      if (!ctx.flags.isOn(entry.name) || running.has(entry.name)) return;
+      const disposers: Disposer[] = [];
+      const scopedBus: Bus = {
+        on(name, fn) {
+          const off = ctx.bus.on(name, fn);
+          disposers.push(off);
+          return off;
+        },
+        onAny(fn) {
+          const off = ctx.bus.onAny(fn);
+          disposers.push(off);
+          return off;
+        },
+        emit: ctx.bus.emit,
+        forward: ctx.bus.forward,
+      };
       const api: SystemCtx = {
         ...ctx,
-        on: ctx.bus.on,
+        bus: scopedBus,
+        on: scopedBus.on,
         emit: ctx.bus.emit,
         forward: ctx.bus.forward,
         origin: entry.name,
@@ -250,9 +289,14 @@ export function registry(kind: FlagKind = 'system'): Registry {
       const taggedRegister = (specs: CommandSpec[]) => original(specs, entry.name);
       const restore = ctx.contexts.commands.register;
       ctx.contexts.commands.register = taggedRegister as typeof original;
-      try { entry.setup(api); } finally { ctx.contexts.commands.register = restore; }
+      try {
+        const dispose = entry.setup(api);
+        if (dispose) disposers.push(dispose);
+        running.set(entry.name, disposers);
+      } finally { ctx.contexts.commands.register = restore; }
     });
   };
+  register.stop = stopEntry;
   register.names = () => entries.map(entry => entry.name);
   register.enabledNames = (flags) => entries.map(e => e.name).filter(name => flags.isOn(name));
   register.requires = (name) => entries.find(e => e.name === name)?.requires ?? [];
@@ -261,26 +305,6 @@ export function registry(kind: FlagKind = 'system'): Registry {
     if (e) e.requires = requires;
   };
   return register;
-}
-
-export function createFlags(initial: FeatureFlags = {}, io: IoApi = localStorageIo()): FlagsApi {
-  const persisted = io.get<FeatureFlags>(STORAGE_KEYS.flags, {});
-  const state: FeatureFlags = { ...initial, ...persisted };
-  const deps = new Map<string, string[]>();
-  const kinds = new Map<string, FlagKind>();
-  return {
-    all: () => ({ ...state }),
-    isOn: (name) => state[name] !== false,
-    declare(name, defaultOn = true, requires, kind) {
-      if (!(name in state)) state[name] = defaultOn;
-      if (requires?.length) deps.set(name, requires);
-      if (kind) kinds.set(name, kind);
-    },
-    set(name, on) { state[name] = on; io.set(STORAGE_KEYS.flags, state); },
-    declared: (kind) => kind == null ? Object.keys(state) : Object.keys(state).filter(name => kinds.get(name) === kind),
-    kind: (name) => kinds.get(name),
-    requires: (name) => deps.get(name) ?? [],
-  };
 }
 
 export function createAppContext(

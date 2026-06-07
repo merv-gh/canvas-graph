@@ -10,7 +10,7 @@ import {
 } from '../../v2/core';
 import { Graph, graphStore } from '../../v2/model';
 import type { CommandSpec } from '../../v2/types';
-import { bootV2, runCommand } from './v2-testkit';
+import { bootV2, runCommand, settle } from './v2-testkit';
 
 describe('v2 selection polymorphism', () => {
   it('holds an ItemRef of any kind, with typed node/edge projections', async () => {
@@ -107,5 +107,20 @@ describe('v2 model and core helpers', () => {
 
     expect(commands.unregister('help.open')).toBeUndefined();
     expect(commands.get('help.open')).toBeUndefined();
+  });
+
+  it('treats a blank shortcut override as unbound, not wildcard', async () => {
+    const ctx = bootV2();
+    const commands = ctx.contexts.commands;
+
+    expect(commands.setShortcut('help.open', '')).toBe(true);
+    expect(commandShortcut(commands, 'help.open')).toBe('');
+
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '?', bubbles: true, cancelable: true }));
+    await settle();
+
+    expect(document.querySelector('.modal-layer')).toBeNull();
+    expect(runCommand(ctx, 'help.open')).toBe(true);
+    expect(document.querySelector('.modal-layer')).not.toBeNull();
   });
 });

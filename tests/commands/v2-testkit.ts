@@ -37,7 +37,8 @@ export function bootV2(flags: FeatureFlags = {}) {
   abilities.start(ctx);
   features.start(ctx);
   ctx.bus.emit('app.start');
-  window.v2 = ctx;
+  const booted = Object.assign(ctx, { registries: { systems, abilities, features } });
+  window.v2 = booted;
   const stage = ctx.contexts.places.el(Places.Stage);
   if (stage) {
     stage.getBoundingClientRect = () => ({
@@ -45,7 +46,7 @@ export function bootV2(flags: FeatureFlags = {}) {
       toJSON: () => ({}),
     } as DOMRect);
   }
-  return ctx;
+  return booted;
 }
 
 export const settle = async () => {
