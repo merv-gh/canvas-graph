@@ -61,6 +61,7 @@ export function registerRender(system: Registry) {
       const el = contexts.templates.clone('node');
       const pos = node.Position ?? { x: 0, y: 0 };
       el.dataset.nodeId = node.id;
+      el.tabIndex = -1;
       el.classList.toggle('selected', selection.selectedNode()?.id === node.id);
       el.classList.toggle('focused', selection.focusedNode()?.id === node.id);
       el.classList.toggle('collapsed', !!node.Collapsed);
@@ -145,12 +146,20 @@ export function registerRender(system: Registry) {
     const dirty = new Set<RenderScope>();
     let scheduled = false;
     let flushes = 0;
+    let pendingFocusId: string | null = null;
+    const focusPendingNode = () => {
+      if (!pendingFocusId) return;
+      const node = contexts.places.el(Places.Stage)?.querySelector(`[data-node-id="${pendingFocusId}"]`);
+      pendingFocusId = null;
+      if (node instanceof HTMLElement) node.focus({ preventScroll: true });
+    };
     const flushDirty = () => {
       scheduled = false;
       flushes++;
       if (dirty.has('nodes')) drawNodes();
       if (dirty.has('outline')) emit('outline.draw');
       dirty.clear();
+      queueMicrotask(focusPendingNode);
     };
     const mark = (...scopes: RenderScope[]) => {
       scopes.forEach(s => dirty.add(s));
@@ -163,6 +172,7 @@ export function registerRender(system: Registry) {
     // Devtools/test surface — read flush count to assert coalescing budgets.
     ctx.expose('render', { flushes: () => flushes });
     on('app.start', () => mark('nodes'));
+    on('focus.node.focused', ({ id }) => { pendingFocusId = id; });
     bus.onAny(({ name }) => {
       const scope = factScope(name);
       if (scope) applyScope(scope);

@@ -71,7 +71,7 @@ test('edge command asks for source and target even when only two nodes exist', a
   expect(box.stroke).not.toBe('none');
 });
 
-test('edge command opens source target modal when selected source has several possible targets', async ({ page }) => {
+test('edge command prefills first valid target when selected source has several possible targets', async ({ page }) => {
   await boot(page);
   const nodes = await createNodes(page, ['A', 'B', 'C']);
 
@@ -83,7 +83,7 @@ test('edge command opens source target modal when selected source has several po
   await page.locator('.toolbar [data-command="graph.edge.create"]').click();
   await expect(page.locator('.modal-head')).toContainText('Create edge');
   await expect(page.locator('[data-form-field="From"]')).toHaveValue(nodes[0].id);
-  await expect(page.locator('[data-form-field="To"]')).toHaveValue('');
+  await expect(page.locator('[data-form-field="To"]')).toHaveValue(nodes[1].id);
   await expect(page.locator('datalist option')).toHaveCount(6);
 
   await page.locator('[data-form-field="To"]').fill(nodes[2].id);

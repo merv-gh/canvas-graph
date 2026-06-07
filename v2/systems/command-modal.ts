@@ -17,11 +17,19 @@ const commandModals: Record<CommandModalDef['id'], CommandModalDef> = {
   palette: { id: 'palette', title: 'Palette', event: 'palette.open', label: 'Open palette', shortcut: 'P', key: 'p', editableHotkeys: false, availableOnly: true, placeholder: 'Search commands' },
   help: { id: 'help', title: 'Help', event: 'help.open', label: 'Open help', shortcut: '?', key: '?', editableHotkeys: true, availableOnly: false, placeholder: 'Search shortcuts' },
 };
+const NUMBERED_ROWS = 5;
 
 export function registerCommandModal(system: Registry) {
   system('commandModal', ({ on, emit, contexts, contribute }) => {
     contribute({ surface: 'top', command: 'palette.open', kind: 'button', text: 'Palette', order: 30 });
     contribute({ surface: 'top', command: 'help.open', kind: 'button', text: 'Help', order: 40 });
+    const queries = new Map<CommandModalDef['id'], string>();
+    const modalEl = () => contexts.places.el(Places.Modal);
+    const activePalette = () => !!modalEl()?.querySelector('[data-command-modal="palette"]');
+    const queryOf = (modalId: CommandModalDef['id']) => {
+      const input = modalEl()?.querySelector(`[data-command-modal="${modalId}"] .palette-search`);
+      return input instanceof HTMLInputElement ? input.value : queries.get(modalId) ?? '';
+    };
     const syncShortcutConflict = (input: HTMLInputElement) => {
       const conflict = contexts.commands.shortcutConflict(input.dataset.shortcutCommand!, input.value);
       input.classList.toggle('is-conflict', !!conflict);
@@ -37,14 +45,26 @@ export function registerCommandModal(system: Registry) {
         .filter(command => !modal.availableOnly || !!q || command.available?.() !== false)
         .filter(command => !q || `${command.id} ${command.label} ${command.group ?? ''} ${shortcutOf(command)}`.toLowerCase().includes(q));
     };
-    const commandSection = (modal: CommandModalDef, group: string, commands: CommandSpec[]) => {
+    const orderedCommands = (modal: CommandModalDef, query = '') => {
+      const ordered: CommandSpec[] = [];
+      grouped(visibleCommands(modal, query), command => command.group ?? systemOf(command.id))
+        .forEach(([, commands]) => ordered.push(...commands));
+      return ordered;
+    };
+    const numberedCommandId = (index: number) =>
+      orderedCommands(commandModals.palette, queryOf('palette'))[index]?.id ?? '';
+    const commandSection = (modal: CommandModalDef, group: string, commands: CommandSpec[], nextNumber?: () => number | null) => {
       const section = contexts.templates.clone('command-section');
       const rows = contexts.templates.slot(section, 'rows');
       contexts.templates.text(section, 'group', group);
       commands.forEach(command => {
         const shortcut = shortcutOf(command);
+        const number = nextNumber?.() ?? null;
         const row = contexts.templates.clone<HTMLElement>(modal.editableHotkeys ? 'help-row' : 'command-row');
-        if (!modal.editableHotkeys) row.dataset.command = command.id;
+        if (!modal.editableHotkeys) {
+          row.dataset.command = 'commandModal.run';
+          row.dataset.commandId = command.id;
+        }
         contexts.templates.text(row, 'label', command.label);
         contexts.templates.text(row, 'id', command.id);
         if (modal.editableHotkeys) {
@@ -55,7 +75,7 @@ export function registerCommandModal(system: Registry) {
             input.setAttribute('aria-label', `${command.label} shortcut`);
             syncShortcutConflict(input);
           }
-        } else if (shortcut) contexts.templates.text(row, 'shortcut', shortcut);
+        } else if (number || shortcut) contexts.templates.text(row, 'shortcut', [number, shortcut].filter(Boolean).join(' · '));
         else row.querySelector('kbd')?.remove();
         rows.append(row);
       });
@@ -63,8 +83,10 @@ export function registerCommandModal(system: Registry) {
     };
     const renderList = (modal: CommandModalDef, query = '') => {
       const fragment = document.createDocumentFragment();
-      grouped(visibleCommands(modal, query), command => command.group ?? systemOf(command.id))
-        .forEach(([group, commands]) => fragment.append(commandSection(modal, group, commands)));
+      let row = 0;
+      const nextNumber = () => modal.id === 'palette' && row < NUMBERED_ROWS ? ++row : null;
+      grouped(orderedCommands(modal, query), command => command.group ?? systemOf(command.id))
+        .forEach(([group, commands]) => fragment.append(commandSection(modal, group, commands, nextNumber)));
       return fragment;
     };
     const renderCommandModal = (modal: CommandModalDef) => {
@@ -84,6 +106,24 @@ export function registerCommandModal(system: Registry) {
         shortcut: modal.shortcut,
         input: { on: 'keydown', key: modal.key, prevent: true },
       }) satisfies CommandSpec),
+      {
+        id: 'commandModal.run',
+        label: 'Run command modal item',
+        event: 'commandModal.run',
+        group: 'modal',
+        hidden: true,
+        payload: ({ target }) => ({ commandId: target?.closest('[data-command-id]')?.getAttribute('data-command-id') ?? '' }),
+      },
+      ...Array.from({ length: NUMBERED_ROWS }, (_, i) => ({
+        id: `commandModal.run.${i + 1}`,
+        label: `Run palette item ${i + 1}`,
+        event: 'commandModal.run' as const,
+        group: 'modal',
+        hidden: true,
+        input: { on: 'keydown' as const, key: String(i + 1), global: true, prevent: true, stop: true, when: activePalette },
+        available: () => !!numberedCommandId(i),
+        payload: () => ({ commandId: numberedCommandId(i) }),
+      })),
       {
         id: 'commandModal.search.change',
         label: 'Search command modal',
@@ -123,13 +163,18 @@ export function registerCommandModal(system: Registry) {
       visual: 'command',
       body: () => renderCommandModal(modal),
     });
-    const modalEl = () => contexts.places.el(Places.Modal);
     const shortcutInput = (id: string) =>
       modalEl()?.querySelector(`.shortcut-edit[data-shortcut-command="${id}"]`) ?? null;
-    on('palette.open', () => open(commandModals.palette));
-    on('help.open', () => open(commandModals.help));
+    on('palette.open', () => { queries.set('palette', ''); open(commandModals.palette); });
+    on('help.open', () => { queries.set('help', ''); open(commandModals.help); });
+    on('commandModal.run', ({ commandId }) => {
+      if (!contexts.commands.get(commandId)) return;
+      emit('modal.close');
+      contexts.commands.run(commandId);
+    });
     on('commandModal.search.changed', ({ modalId, query }) => {
       const modal = commandModals[modalId as CommandModalDef['id']];
+      if (modal) queries.set(modal.id, query);
       const root = modalEl()?.querySelector(`[data-command-modal="${modalId}"]`);
       const list = root?.querySelector('[data-slot="commands"]');
       if (modal && list) list.replaceChildren(renderList(modal, query));

@@ -44,7 +44,9 @@ export const keyMatchesEvent = (event: Event, parsed: ParsedShortcut) => {
   if (event.altKey !== parsed.alt) return false;
   if (event.metaKey !== parsed.meta) return false;
   const isLetter = /^[a-z]$/i.test(parsed.key);
+  const isNamedKey = parsed.key.length > 1;
   if (isLetter && event.shiftKey !== parsed.shift) return false;
+  if (isNamedKey && event.shiftKey !== parsed.shift) return false;
   if (!isLetter && parsed.shift && !event.shiftKey) return false;
   return event.key.toLowerCase() === parsed.key.toLowerCase();
 };

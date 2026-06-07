@@ -39,9 +39,12 @@ describe('v2 defensive command branches', () => {
     await settle();
     const ids = ctx.graphs.current.nodes().map(node => node.id);
 
-    expect(runCommand(ctx, 'selection.node.next')).toBe(true);
-    expect(ctx.selection.selectedNode()?.id).toBe(ids[0]);
-    expect(runCommand(ctx, 'selection.node.clear')).toBe(true);
+	    expect(runCommand(ctx, 'selection.node.next')).toBe(true);
+	    expect(ctx.selection.selectedNode()?.id).toBe(ids[0]);
+	    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+	    await settle();
+	    expect(ctx.selection.selectedNode()?.id).toBe(ids[1]);
+	    expect(runCommand(ctx, 'selection.node.clear')).toBe(true);
     expect(ctx.selection.selected()).toBeNull();
   });
 

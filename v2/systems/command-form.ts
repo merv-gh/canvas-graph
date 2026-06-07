@@ -74,6 +74,7 @@ export function registerCommandForm(system: Registry) {
       event: 'commandForm.submit',
       group: 'modal',
       hidden: true,
+      input: { on: 'keydown', key: 'Enter', selector: '.command-form input', prevent: true, stop: true },
       payload: ({ target }) => {
         const root = target?.closest('[data-command-form]') as HTMLElement | null;
         return { commandId: root?.dataset.commandForm ?? '', values: root ? collectValues(root) : {} };

@@ -18,8 +18,8 @@ describe('v2 edge commands', () => {
     expect(document.querySelector('.log-row')?.textContent).toContain('Create at least two nodes before creating an edge.');
   });
 
-  it('prefills source and target, then submits through commandForm', async () => {
-    const ctx = bootV2();
+	  it('prefills source and target, then submits through commandForm', async () => {
+	    const ctx = bootV2();
     const source = await createNode(ctx);
     const target = await createNode(ctx);
 
@@ -32,8 +32,27 @@ describe('v2 edge commands', () => {
 
     expect(ctx.graphs.current.edges().map(edge => ({ From: edge.From, To: edge.To })))
       .toEqual([{ From: source.id, To: target.id }]);
-    expect(document.querySelector('.modal-layer')).toBeNull();
-  });
+	    expect(document.querySelector('.modal-layer')).toBeNull();
+	  });
+
+	  it('prefills a target for three-plus nodes and submits with Enter', async () => {
+	    const ctx = bootV2();
+	    const source = await createNode(ctx);
+	    const middle = await createNode(ctx);
+	    await createNode(ctx);
+
+	    ctx.bus.emit('selection.node.select', { id: source.id });
+	    expect(runCommand(ctx, 'graph.edge.create')).toBe(true);
+	    expect(field('From')?.value).toBe(source.id);
+	    expect(field('To')?.value).toBe(middle.id);
+
+	    field('To')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+	    await settle();
+
+	    expect(ctx.graphs.current.edges().map(edge => ({ From: edge.From, To: edge.To })))
+	      .toEqual([{ From: source.id, To: middle.id }]);
+	    expect(document.querySelector('.modal-layer')).toBeNull();
+	  });
 
   it('validates source and target before storing an edge', async () => {
     const ctx = bootV2();

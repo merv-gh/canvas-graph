@@ -19,6 +19,11 @@ export function registerSelectable(system: Registry) {
       const index = Math.max(0, nodes.findIndex(node => node.id === selectedNodeId()));
       return nodes[(index + 1) % nodes.length]?.id ?? nodes[0]?.id ?? '';
     };
+    const previousNodeId = () => {
+      const nodes = graphs.current.nodes();
+      const index = nodes.findIndex(node => node.id === selectedNodeId());
+      return nodes[(index <= 0 ? nodes.length : index) - 1]?.id ?? nodes[0]?.id ?? '';
+    };
 
     contexts.commands.register([
       {
@@ -39,6 +44,16 @@ export function registerSelectable(system: Registry) {
         input: { on: 'keydown', key: 'Tab', prevent: true },
         available: () => graphs.current.nodes().length > 0,
         payload: () => ({ id: nextNodeId() }),
+      },
+      {
+        id: 'selection.node.previous',
+        label: 'Select previous node',
+        event: 'selection.node.select',
+        group: 'selection',
+        shortcut: 'Shift+Tab',
+        input: { on: 'keydown', key: 'Tab', shift: true, prevent: true },
+        available: () => graphs.current.nodes().length > 0,
+        payload: () => ({ id: previousNodeId() }),
       },
       {
         id: 'selection.node.clear',

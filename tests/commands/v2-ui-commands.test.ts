@@ -35,9 +35,25 @@ describe('v2 UI command surfaces', () => {
     expect([...document.querySelectorAll('.command-row b')].some(row => row.textContent?.includes('Create edge'))).toBe(true);
 
     const row = [...document.querySelectorAll<HTMLElement>('.command-row')]
-      .find(candidate => candidate.dataset.command === 'graph.edge.create')!;
+      .find(candidate => candidate.dataset.commandId === 'graph.edge.create')!;
+    expect(row.querySelector('kbd')?.textContent).toContain('1');
     row.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     expect(document.querySelector('.modal-head')?.textContent).toContain('Create edge');
+  });
+
+  it('runs numbered palette rows and closes after simple actions', async () => {
+    const ctx = bootV2();
+
+    expect(runCommand(ctx, 'palette.open')).toBe(true);
+    const search = document.querySelector<HTMLInputElement>('.palette-search')!;
+    search.value = 'create node';
+    expect(runCommand(ctx, 'commandModal.search.change', { target: search })).toBe(true);
+
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: '1', bubbles: true, cancelable: true }));
+    await settle();
+
+    expect(ctx.graphs.current.nodes()).toHaveLength(1);
+    expect(document.querySelector('.modal-layer')).toBeNull();
   });
 
   it('opens help and blocks duplicate shortcut edits', () => {

@@ -64,9 +64,10 @@ interface BuiltinEvents {
   'help.open': void;
   'commandForm.open': { commandId: string; seed?: Record<string, string> };
   'commandForm.submit': { commandId: string; values: Record<string, string> };
-  'outline.draw': void;
-  'outline.search.changed': { collectionId: Id; query: string };
-  'commandModal.search.changed': { modalId: string; query: string };
+	  'outline.draw': void;
+	  'outline.search.changed': { collectionId: Id; query: string };
+	  'commandModal.run': { commandId: string };
+	  'commandModal.search.changed': { modalId: string; query: string };
   'shortcut.edit.preview': { id: string; shortcut: string };
   'shortcut.edit.commit': { id: string; shortcut: string };
   'view.changed': ViewState;

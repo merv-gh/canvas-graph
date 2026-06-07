@@ -10,9 +10,10 @@ describe('v2 node commands', () => {
 
     const node = ctx.graphs.current.nodes()[0];
     expect(node.Label.text).toBe('Node 1');
-    expect(ctx.selection.selectedNode()?.id).toBe(node.id);
-    expect(ctx.selection.focusedNode()?.id).toBe(node.id);
-    expect(document.querySelector('.node-title')?.textContent).toBe('Node 1');
+	    expect(ctx.selection.selectedNode()?.id).toBe(node.id);
+	    expect(ctx.selection.focusedNode()?.id).toBe(node.id);
+	    expect(document.querySelector('.node-title')?.textContent).toBe('Node 1');
+	    expect((document.activeElement as HTMLElement | null)?.dataset.nodeId).toBe(node.id);
 
     expect(runCommand(ctx, 'node.collapse.toggle')).toBe(true);
     expect(node.Collapsed).toBe(true);

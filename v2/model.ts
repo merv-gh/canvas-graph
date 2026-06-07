@@ -345,7 +345,7 @@ export const appModel: ModelDef<ModelCtx, CollectionCommandsApi> = {
           const ids = graphs.current.nodes().map(node => node.id);
           const from = nodeRef(source) || selection.selectedNode()?.id || ids[0] || '';
           const others = ids.filter(id => id !== from);
-          return { From: from, To: ids.length === 2 ? others[0] ?? '' : '' };
+          return { From: from, To: others[0] ?? '' };
         };
         const edgeFormValues = (payload: unknown) => {
           const seed = payload as EdgeCreateDraft | undefined;
