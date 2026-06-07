@@ -138,4 +138,26 @@ describe('v2 edge commands', () => {
     expect(runCommand(ctx, 'graph.edge.delete', { target: fakeRow })).toBe(true);
     expect(ctx.graphs.current.edges()).toHaveLength(0);
   });
+
+  it('deletes a selected edge from command or X shortcut', async () => {
+    const ctx = bootV2();
+    const source = await createNode(ctx);
+    const target = await createNode(ctx);
+    ctx.bus.emit('graph.edge.create', { From: source.id, To: target.id });
+    let edge = ctx.graphs.current.edges()[0];
+
+    ctx.bus.emit('selection.item.select', { kind: 'edge', id: edge.id });
+    expect(runCommand(ctx, 'graph.edge.delete')).toBe(true);
+    expect(ctx.graphs.current.edges()).toHaveLength(0);
+    expect(ctx.selection.selected()).toBeNull();
+
+    ctx.bus.emit('graph.edge.create', { From: source.id, To: target.id });
+    edge = ctx.graphs.current.edges()[0];
+    ctx.bus.emit('selection.item.select', { kind: 'edge', id: edge.id });
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', bubbles: true, cancelable: true }));
+    await settle();
+
+    expect(ctx.graphs.current.edges()).toHaveLength(0);
+    expect(ctx.selection.selected()).toBeNull();
+  });
 });

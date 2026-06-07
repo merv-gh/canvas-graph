@@ -173,6 +173,8 @@ describe('v2 model and core helpers', () => {
     const commands = ctx.contexts.commands;
     const help = commands.get('help.open') as CommandSpec;
     expect(commandShortcut(commands, 'help.open')).toBe('?');
+    expect(commandShortcut(commands, 'selection.item.delete')).toBe('X');
+    expect(commandShortcut(commands, 'graph.node.delete.selected')).toBe('');
     expect(commands.shortcutConflict('help.open', 'P')?.id).toBe('palette.open');
     expect(commands.setShortcut('help.open', 'P')).toBe(false);
     expect(commands.setShortcut('help.open', 'H')).toBe(true);

@@ -77,6 +77,18 @@ export function registerSelectable(system: Registry) {
         available: () => !!selection.selected(),
         input: { on: 'pointerdown', selector: `[data-place="${Places.Stage}"]`, when: isStageSurface },
       },
+      {
+        id: 'selection.item.delete',
+        label: 'Delete selection',
+        event: 'selection.item.delete',
+        group: 'selection',
+        shortcut: 'X',
+        input: { on: 'keydown', key: 'x', prevent: true },
+        available: () => {
+          const ref = selection.selected();
+          return ref?.kind === 'node' || ref?.kind === 'edge';
+        },
+      },
     ]);
 
     on('selection.node.select', ({ id }) => emit('selection.item.select', nodeRef(id)));
@@ -94,6 +106,11 @@ export function registerSelectable(system: Registry) {
       emit('selection.item.selected', null);
       emit('selection.node.selected', { id: null });
       emit('focus.item.clear');
+    });
+    on('selection.item.delete', () => {
+      const ref = selection.selected();
+      if (ref?.kind === 'node') emit('graph.node.delete', { id: ref.id });
+      if (ref?.kind === 'edge') emit('graph.edge.delete', { id: ref.id });
     });
   });
 }

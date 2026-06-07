@@ -146,4 +146,19 @@ describe('v2 node commands', () => {
     expect(ctx.graphs.current.getNode(a.id)).toBeUndefined();
     expect(ctx.graphs.current.edges()).toHaveLength(0);
   });
+
+  it('deletes a selected node with the general X shortcut', async () => {
+    const ctx = bootV2();
+    const a = await (async () => { runCommand(ctx, 'editing.node.create'); await settle(); return ctx.graphs.current.nodes().at(-1)!; })();
+    const b = await (async () => { runCommand(ctx, 'editing.node.create'); await settle(); return ctx.graphs.current.nodes().at(-1)!; })();
+    ctx.bus.emit('graph.edge.create', { From: a.id, To: b.id });
+    ctx.bus.emit('selection.node.select', { id: a.id });
+
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', bubbles: true, cancelable: true }));
+    await settle();
+
+    expect(ctx.graphs.current.getNode(a.id)).toBeUndefined();
+    expect(ctx.graphs.current.edges()).toHaveLength(0);
+    expect(ctx.selection.selected()).toBeNull();
+  });
 });

@@ -99,7 +99,8 @@ button.icon:hover { color: var(--ink); }
 .nodes { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; }
 .edges { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 .edges line { vector-effect: non-scaling-stroke; }
-.edges .edge-hit { stroke: transparent; stroke-width: 14px; opacity: 1; pointer-events: stroke; cursor: pointer; }
+.edges .edge-hit { stroke: var(--ink); stroke-opacity: .001; stroke-width: 14px; opacity: 1; pointer-events: stroke; cursor: pointer; }
+.edges .edge-hit:focus, .edges .edge-hit:focus-visible { outline: none; }
 .edges .edge-line { stroke: var(--edge); stroke-width: 2px; opacity: .9; pointer-events: none; }
 .edges .edge-line.selected { stroke: var(--accent); stroke-width: 2px; }
 .edges .edge-line.focused { stroke: var(--accent); stroke-dasharray: 4 3; }

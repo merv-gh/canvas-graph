@@ -96,6 +96,22 @@ test('edge command prefills first valid target when selected source has several 
   await expect(page.locator('.edges .edge-line')).toHaveCount(1);
 });
 
+test('focused edge uses graph styling without a browser focus rectangle', async ({ page }) => {
+  await boot(page);
+  const nodes = await createNodes(page, ['A', 'B']);
+  const edgeId = await page.evaluate(([from, to]) => {
+    const v = window.v2;
+    v.bus.emit('graph.edge.create', { From: from.id, To: to.id });
+    return v.graphs.current.edges()[0].id;
+  }, nodes);
+
+  const hit = page.locator(`.edge-hit[data-edge-id="${edgeId}"]`);
+  await expect(hit).toHaveCount(1);
+  await hit.dispatchEvent('pointerdown', { bubbles: true, cancelable: true });
+  await expect(page.locator(`.edge-line.focused[data-edge-id="${edgeId}"]`)).toHaveCount(1);
+  await expect(hit).toHaveCSS('outline-style', 'none');
+});
+
 test('graph storage rejects self-loop and missing-endpoint edge creates', async ({ page }) => {
   await boot(page);
   const nodes = await createNodes(page, ['A']);

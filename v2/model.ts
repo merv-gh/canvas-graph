@@ -317,8 +317,6 @@ export const appModel: ModelDef<ModelCtx, CollectionCommandsApi> = {
             label: 'Delete node',
             event: 'graph.node.delete',
             group: 'graph',
-            shortcut: 'Delete',
-            input: { on: 'keydown', key: 'Delete', prevent: true },
             available: source => !!itemIdFrom(source?.target) || !!api.selection.selectedNode(),
             payload: source => ({ id: targetId(source) }),
           },
@@ -337,6 +335,10 @@ export const appModel: ModelDef<ModelCtx, CollectionCommandsApi> = {
       search: true,
       order: 'created',
       commands: ({ graphs, selection }) => {
+        const selectedEdgeId = () => {
+          const ref = selection.selected();
+          return ref?.kind === 'edge' ? ref.id : '';
+        };
         const nodeRef = (source: CommandSource) => {
           const id = itemIdFrom(source.target);
           return id && graphs.current.getNode(id) ? id : '';
@@ -387,8 +389,8 @@ export const appModel: ModelDef<ModelCtx, CollectionCommandsApi> = {
             label: 'Delete edge',
             event: 'graph.edge.delete',
             group: 'edge',
-            available: source => !!itemIdFrom(source?.target),
-            payload: source => ({ id: itemIdFrom(source.target) }),
+            available: source => !!itemIdFrom(source?.target) || !!selectedEdgeId(),
+            payload: source => ({ id: itemIdFrom(source.target) || selectedEdgeId() }),
           },
         ];
       },

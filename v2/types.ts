@@ -112,6 +112,7 @@ interface BuiltinEvents {
   'properties.item.toggle': { ref: ItemRef; field: string; checked: boolean };
   'selection.item.select': ItemRef;
   'selection.item.clear': void;
+  'selection.item.delete': void;
   'selection.item.selected': ItemRef | null;
   'selection.node.select': { id: Id };
   'selection.node.clear': void;
