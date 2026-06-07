@@ -6,7 +6,13 @@ import { ability, action } from './shared';
 export const draggable = <T extends NodeEntity>() => ability<T>('draggable', [action<T>({
   id: 'node.drag',
   label: 'Drag node with pointer',
-  ui: [{ surface: 'entity', command: 'drag.node.start', kind: 'handler', slot: 'header', attrs: { 'data-drag-handle': '' } }],
+  ui: [{
+    surface: 'entity',
+    command: 'drag.node.start',
+    kind: 'handler',
+    slot: 'drag',
+    attrs: { 'data-drag-handle': '', role: 'button', 'aria-label': 'Drag node', title: 'Drag node' },
+  }],
 })]);
 
 export function registerDraggable(system: Registry) {

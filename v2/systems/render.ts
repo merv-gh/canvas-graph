@@ -31,12 +31,9 @@ export function registerRender(system: Registry) {
     const wireNodeAffordances = (el: HTMLElement, node: GraphNode) => {
       const entityDef = model.entity<GraphNode>(node.kind);
       if (!entityDef) return;
-      entityUi(entityDef, 'header')
+      (['header', 'title', 'drag'] as const).forEach(slot => entityUi(entityDef, slot)
         .filter(({ ui }) => ui.kind === 'handler')
-        .forEach(({ ui }) => applyAffordance(contexts.templates.slot(el, 'header'), node, ui));
-      entityUi(entityDef, 'title')
-        .filter(({ ui }) => ui.kind === 'handler')
-        .forEach(({ ui }) => applyAffordance(contexts.templates.slot(el, 'title'), node, ui));
+        .forEach(({ ui }) => applyAffordance(contexts.templates.slot(el, slot), node, ui)));
       (['header:start', 'header:end'] as const).forEach(slot => {
         const target = contexts.templates.slot(el, slot);
         entityUi(entityDef, slot)

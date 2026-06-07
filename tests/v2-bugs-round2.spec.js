@@ -13,9 +13,9 @@ const boot = async (page) => {
 
 test('outline lists an "edges" section (edge collection in model)', async ({ page }) => {
   await boot(page);
-  const headings = await page.locator('.outline-section .panel-title').allTextContents();
-  // Currently RED: only Graphs and Nodes.
-  expect(headings.map(h => h.toLowerCase())).toContain('edges');
+  const headings = await page.locator('.outline-section .outline-title-search').evaluateAll(inputs =>
+    inputs.map(input => input.getAttribute('placeholder')?.toLowerCase()));
+  expect(headings).toContain('edges');
 });
 
 test('graph.edge.create is a registered command, not only an event', async ({ page }) => {

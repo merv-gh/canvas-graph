@@ -109,8 +109,18 @@ button.icon:hover { color: var(--ink); }
 }
 .node:hover { box-shadow: var(--shadow-md); border-color: var(--accent); }
 .node.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft), var(--shadow-md); }
-.node-header { display: flex; align-items: center; gap: 6px; padding: 8px 10px 4px; cursor: grab; }
+.node-header { display: flex; align-items: center; gap: 6px; padding: 8px 10px 4px; }
 .node-affordances { display: flex; align-items: center; gap: 2px; }
+.node-drag-handle {
+  width: 16px;
+  color: var(--text-muted);
+  cursor: grab;
+  line-height: 1;
+  text-align: center;
+  user-select: none;
+}
+.node-drag-handle:not([data-drag-handle]) { display: none; }
+.node-drag-handle:hover { color: var(--ink); }
 .node-action, .node-toggle, .node-config {
   width: 20px; height: 20px;
   padding: 0;
@@ -164,22 +174,35 @@ button.icon:hover { color: var(--ink); }
   gap: 6px;
   margin-bottom: 2px;
 }
-.outline-search {
-  width: 100%;
+.outline-title-search {
+  flex: 1;
+  min-width: 0;
   border: 1px solid transparent;
   background: transparent;
   border-radius: var(--radius);
   padding: 4px 6px;
-  font: 12px/1.35 ui-monospace, monospace;
-  color: var(--ink);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-muted);
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: .08em;
 }
-.outline-search:hover { background: var(--panel); }
-.outline-search:focus { background: var(--panel); border-color: var(--line); outline: none; }
-.outline-search::placeholder { color: var(--text-muted); }
+.outline-title-search:hover { background: var(--panel); }
+.outline-title-search:focus {
+  background: var(--panel);
+  border-color: var(--line);
+  color: var(--ink);
+  outline: none;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.outline-title-search::placeholder { color: var(--text-muted); opacity: 1; }
 .outline-list { display: grid; gap: 1px; }
 .outline-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 4px;
   border-radius: var(--radius);

@@ -19,18 +19,16 @@ export function registerOutline(system: Registry) {
     const renderCollection = (collectionDef: AppCollectionDef<unknown>) => {
       const section = el('section', 'outline-section');
       const head = el('div', 'outline-head');
-      const title = el('h2', 'panel-title', collectionDef.label);
+      const query = searches.get(collectionDef.id) ?? '';
+      const title = el('input', 'panel-title outline-title-search') as HTMLInputElement;
+      title.placeholder = collectionDef.label;
+      title.value = query;
+      title.dataset.collectionId = collectionDef.id;
+      title.setAttribute('aria-label', `Search ${collectionDef.label.toLowerCase()}`);
       const createButton = el('button', 'icon-button', '+') as HTMLButtonElement;
       createButton.dataset.command = collectionDef.crud.create;
       head.append(title, createButton);
       section.append(head);
-
-      const query = searches.get(collectionDef.id) ?? '';
-      const search = el('input', 'outline-search') as HTMLInputElement;
-      search.placeholder = `Search ${collectionDef.label.toLowerCase()}`;
-      search.value = query;
-      search.dataset.collectionId = collectionDef.id;
-      section.append(search);
 
       const list = el('div', 'outline-list');
       const filtered = collectionDef.items(ctx)
@@ -77,7 +75,7 @@ export function registerOutline(system: Registry) {
       event: 'outline.search.changed',
       group: 'outline',
       hidden: true,
-      input: { on: 'input', selector: '.outline-search' },
+      input: { on: 'input', selector: '.outline-title-search' },
       payload: ({ target }) => ({
         collectionId: (target as HTMLElement).dataset.collectionId!,
         query: (target as HTMLInputElement).value,
@@ -89,7 +87,7 @@ export function registerOutline(system: Registry) {
       searches.set(collectionId, query);
       draw();
       queueMicrotask(() => {
-        const next = contexts.places.el(Places.Left)?.querySelector(`[data-collection-id="${collectionId}"]`) as HTMLInputElement | null;
+        const next = contexts.places.el(Places.Left)?.querySelector(`.outline-title-search[data-collection-id="${collectionId}"]`) as HTMLInputElement | null;
         next?.focus();
         next?.setSelectionRange(next.value.length, next.value.length);
       });
