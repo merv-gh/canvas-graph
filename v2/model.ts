@@ -39,7 +39,7 @@ export class GraphNode implements NodeEntity {
 export class GraphEdge implements EdgeEntity {
   kind = 'edge' as const;
   Label?: Label;
-  constructor(readonly id: Id, public From: Id, public To: Id, label?: Label) {
+  constructor(readonly graph: Graph, readonly id: Id, public From: Id, public To: Id, label?: Label) {
     this.Label = label;
   }
 }
@@ -57,7 +57,7 @@ export class Graph {
   // ----- Edges -----
   createEdge(draft: EdgeDraft) {
     const id = `r${this.nextEdge++}`;             // 'r' = relation, to keep ids distinct from nodes (e1, e2, ...).
-    const edge = new GraphEdge(id, draft.From, draft.To, draft.Label);
+    const edge = new GraphEdge(this, id, draft.From, draft.To, draft.Label);
     this.edgeMap.set(id, edge);
     return edge;
   }
@@ -154,6 +154,24 @@ type ModelCtx = { graphs: ReturnType<typeof graphStore> };
 type ModelCollectionDef<T> = CollectionDef<T, ModelCtx>;
 const collection = <T,>(id: string, def: Omit<ModelCollectionDef<T>, 'id'>): ModelCollectionDef<T> => ({ id, ...def });
 
+// Edge entity: pure data + label property (configurable later). No abilities yet —
+// edges don't carry their own affordances. When edges grow features (e.g., delete via X
+// while selected), declare them as abilities here.
+export const edgeEntity = entity<GraphEdge, EdgePatch>('edge', {
+  label: 'Edge',
+  labelOf: edge => edge.Label?.text ?? `${edge.From}→${edge.To}`,
+  abilities: [],
+  properties: [
+    property<GraphEdge, EdgePatch>({
+      id: 'label',
+      label: 'Label',
+      input: 'text',
+      value: edge => edge.Label?.text ?? '',
+      patch: (_edge, value) => ({ Label: { text: String(value) } }),
+    }),
+  ],
+});
+
 export const nodeEntity = entity<GraphNode, NodePatch>('node', {
   label: 'Node',
   labelOf: node => node.Label.text,
@@ -208,7 +226,7 @@ export const nodeEntity = entity<GraphNode, NodePatch>('node', {
 });
 
 export const appModel = {
-  entities: [nodeEntity as EntityDef<unknown>],
+  entities: [nodeEntity as EntityDef<unknown>, edgeEntity as EntityDef<unknown>],
   collections: [
     collection<Graph>('graphs', {
       label: 'Graphs',
@@ -228,6 +246,16 @@ export const appModel = {
       itemLabel: node => node.Label.text,
       selectCommand: 'selection.node.select',
       crud: { create: 'editing.node.create', delete: 'graph.node.delete.selected' },
+      search: true,
+      order: 'created',
+    }) as CollectionDef<unknown, ModelCtx>,
+    collection<GraphEdge>('edges', {
+      label: 'Edges',
+      entity: edgeEntity,
+      items: ctx => ctx.graphs.current.edges(),
+      itemId: edge => edge.id,
+      itemLabel: edge => edge.Label?.text ?? `${edge.From} → ${edge.To}`,
+      crud: { create: 'graph.edge.create', delete: 'graph.edge.delete.selected' },
       search: true,
       order: 'created',
     }) as CollectionDef<unknown, ModelCtx>,

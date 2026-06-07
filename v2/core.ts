@@ -726,6 +726,26 @@ export function runDx(ctx: AppCtx): DxIssue[] {
     }
   });
 
+  // RULE 10: every `graph.<kind>.*` event must have an entity declaration in the model
+  // AND a collection. Otherwise the kind is a half-citizen — invisible to outline/palette/properties.
+  // Triggered by edges in round-2 work; keep around so future kinds (groups, comments) don't slip.
+  const busInst = ctx.bus as unknown as InstrumentedBus;
+  const knownKinds = new Set(ctx.model.entities().map(e => e.kind));
+  const collectionKinds = new Set(ctx.model.collections().map(c => c.entity?.kind).filter(Boolean) as string[]);
+  const eventKinds = new Set<string>();
+  ([...busInst._subscribed, ...busInst._emitted] as string[]).forEach(name => {
+    const m = name.match(/^graph\.([a-z]+)\.(?:create|created|update|updated|delete|deleted)$/);
+    if (m) eventKinds.add(m[1]);
+  });
+  eventKinds.forEach(kind => {
+    if (!knownKinds.has(kind)) {
+      warn('entity.kind-no-declaration', `bus emits/handles graph.${kind}.* but no entity is declared for "${kind}"`);
+    }
+    if (!collectionKinds.has(kind)) {
+      warn('entity.kind-no-collection', `kind "${kind}" has no collection — it won't appear in outline / palette`);
+    }
+  });
+
   return issues;
 }
 /** Back-compat shim for any caller that still imports validateModel. */

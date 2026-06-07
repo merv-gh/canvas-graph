@@ -565,6 +565,28 @@ export function registerSystems(system: Registry) {
         available: source => graphs.all().length > 1 && (!!itemIdFrom(source?.target) || !!graphs.current.id),
         payload: source => ({ id: graphId(source) }),
       },
+      // Edge CRUD. Surfaced as commands so the palette can find them and DX won't warn.
+      // `graph.edge.create` with no source defaults to a self-loop on the selected node, which is
+      // useful as a smoke trigger; UI to pick From/To deserves its own picker modal (future work).
+      {
+        id: 'graph.edge.create',
+        label: 'Create edge',
+        event: 'graph.edge.create',
+        group: 'edge',
+        available: source => !!itemIdFrom(source?.target) || !!selection.selected(),
+        payload: source => {
+          const id = itemIdFrom(source.target) || selection.selected() || '';
+          return { From: id, To: id };
+        },
+      },
+      {
+        id: 'graph.edge.delete.selected',
+        label: 'Delete edge',
+        event: 'graph.edge.delete',
+        group: 'edge',
+        available: source => !!itemIdFrom(source?.target),
+        payload: source => ({ id: itemIdFrom(source.target) }),
+      },
     ]);
   });
 
@@ -669,15 +691,21 @@ export function registerSystems(system: Registry) {
       });
       return isFinite(minX) ? { minX, minY, maxX, maxY } : null;
     };
-    /** Set camera so the given world-space bbox fills the visible stage area, with padding. */
-    const fitToBounds = (b: { minX: number; minY: number; maxX: number; maxY: number }, padding = 60) => {
+    /** Set camera so the given world-space bbox fills the visible stage area.
+     *  Padding is in stage *pixels*, NOT world units — that's the only way to guarantee a
+     *  uniform reserved gutter at every zoom level (the old world-space padding shrank with
+     *  scale, so nodes on the bbox edge stuck out behind whatever framed the stage). */
+    const fitToBounds = (b: { minX: number; minY: number; maxX: number; maxY: number }, pixelPadding = 40) => {
       const stage = contexts.places.el(Places.Stage);
       if (!stage) return;
       const rect = stage.getBoundingClientRect();
-      const w = (b.maxX - b.minX) + padding * 2;
-      const h = (b.maxY - b.minY) + padding * 2;
-      // Cap zoom-in at 2× but let zoom-out go down to 0.1× so wide bboxes still fit.
-      const scale = Math.max(0.1, Math.min(2, Math.min(rect.width / w, rect.height / h)));
+      // Reserve `pixelPadding` on every side of the stage. If the stage is smaller than the
+      // padding we'd reserve, give up and use what we have.
+      const fittableW = Math.max(1, rect.width - 2 * pixelPadding);
+      const fittableH = Math.max(1, rect.height - 2 * pixelPadding);
+      const bw = Math.max(1, b.maxX - b.minX);
+      const bh = Math.max(1, b.maxY - b.minY);
+      const scale = Math.min(2, Math.min(fittableW / bw, fittableH / bh));
       const cx = (b.minX + b.maxX) / 2;
       const cy = (b.minY + b.maxY) / 2;
       contexts.view.set({
@@ -866,10 +894,9 @@ export function registerSystems(system: Registry) {
 
       groups.forEach(({ prefix, items }) => items.forEach(name => {
         const flagName = prefix + name;
-        const deps = flags.requires(flagName);
-        const label = flagName + (deps.length ? `\n→ ${deps.join(', ')}` : '');
+        // Just the system name — relationship is carried by the real edge, not a text hint.
         emit('editing.node.create', {
-          Label: { text: label },
+          Label: { text: flagName },
           connectFrom: root,
           keepFocus: true,
         });
