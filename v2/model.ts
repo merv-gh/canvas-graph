@@ -6,6 +6,7 @@ import type {
   EdgePatch,
   EntityDef,
   Id,
+  ItemRef,
   Label,
   ModelDef,
   NodeCreateOptions,
@@ -62,6 +63,11 @@ export class Graph {
     return edge;
   }
   getEdge(id: Id) { return this.edgeMap.get(id); }
+  getItem(ref: ItemRef) {
+    if (ref.kind === 'node') return this.getNode(ref.id);
+    if (ref.kind === 'edge') return this.getEdge(ref.id);
+    return undefined;
+  }
   edges() { return [...this.edgeMap.values()]; }
   edgesOf(nodeId: Id) { return this.edges().filter(e => e.From === nodeId || e.To === nodeId); }
   updateEdge(id: Id, patch: EdgePatch) {
@@ -255,7 +261,7 @@ export const appModel = {
       items: ctx => ctx.graphs.current.edges(),
       itemId: edge => edge.id,
       itemLabel: edge => edge.Label?.text ?? `${edge.From} → ${edge.To}`,
-      crud: { create: 'graph.edge.create', delete: 'graph.edge.delete.selected' },
+      crud: { create: 'graph.edge.create', delete: 'graph.edge.delete' },
       search: true,
       order: 'created',
     }) as CollectionDef<unknown, ModelCtx>,

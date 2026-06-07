@@ -1,5 +1,5 @@
 import { registerAbilitySystems } from './abilities';
-import { createAppContext, createFlags, localStorageIo, memoryIo, registry, runDx } from './core';
+import { createAppContext, createFlags, localStorageIo, memoryIo, registry } from './core';
 import { registerFeatures } from './features';
 import { appModel, graphStore } from './model';
 import { registerSystems } from './systems';
@@ -39,8 +39,6 @@ window.addEventListener('DOMContentLoaded', () => {
   features.start(ctx);
   ctx.bus.emit('app.start');
   window.v2 = ctx;
-  // Expose for tests/devtools — call `v2.dx.run()` to re-validate.
-  (ctx as unknown as { dx: { run: typeof runDx } }).dx = { run: () => runDx(ctx) };
 });
 
 export {};

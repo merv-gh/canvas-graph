@@ -1,4 +1,6 @@
 import type { GraphStore } from './model';
+import { localStorageIo, STORAGE_KEYS, type IoApi } from './core/io';
+import { createSelectionStore, type SelectionStore } from './core/selection';
 import type {
   ActionDef,
   AffordanceDef,
@@ -19,14 +21,17 @@ import type {
   Position,
   PropertyDef,
   PropertyRenderer,
-  PropertyValue,
   RawInput,
   Rect,
   Renderable,
   SystemAffordance,
   UiValue,
   ViewState,
+  DxIssue,
 } from './types';
+
+export { localStorageIo, memoryIo, STORAGE_KEYS, type IoApi } from './core/io';
+export { createSelectionStore, type SelectionStore } from './core/selection';
 
 export type Contexts = ReturnType<typeof createContexts>;
 export type Models = ReturnType<typeof createModelRegistry>;
@@ -39,6 +44,7 @@ export type AppCtx = {
   flags: FlagsApi;
   selection: SelectionStore;
   io: IoApi;
+  dx?: { run(): DxIssue[] };
 };
 export type AppCollectionDef<T> = CollectionDef<T, ModelCtx>;
 export type SystemCtx = AppCtx & Pick<Bus, 'on' | 'emit'> & {
@@ -46,6 +52,8 @@ export type SystemCtx = AppCtx & Pick<Bus, 'on' | 'emit'> & {
   origin: string;
   /** Shorthand: contribute an affordance tagged with this system's origin. */
   contribute(aff: SystemAffordance): void;
+  /** Publish a typed devtools/test surface on window.v2 without app.ts knowing the system. */
+  expose<K extends keyof AppCtx>(key: K, value: AppCtx[K]): void;
 };
 export type AppSystem = (ctx: SystemCtx) => void;
 export type RegistryEntryOptions = {
@@ -71,14 +79,6 @@ export type FlagsApi = {
   /** Names the given flag depends on. Populated by registry.start. */
   requires(name: string): string[];
 };
-export type SelectionStore = {
-  selected(graphId?: Id): Id | null;
-  focused(graphId?: Id): Id | null;
-  selectedNode(graphId?: Id): NodeEntity | undefined;
-  select(id: Id | null, graphId?: Id): void;
-  focus(id: Id | null, graphId?: Id): void;
-};
-
 declare global { interface Window { v2?: AppCtx } }
 
 export const systemOf = (id: string) => id.split('.')[0] || 'app';
@@ -175,11 +175,18 @@ export const entityUi = <T,>(entityDef: EntityDef<T>, slot?: string) =>
 export const itemIdFrom = (target?: Element | null) =>
   target?.closest('[data-item-id]')?.getAttribute('data-item-id')
   ?? target?.closest('[data-node-id]')?.getAttribute('data-node-id')
+  ?? target?.closest('[data-edge-id]')?.getAttribute('data-edge-id')
   ?? target?.closest('[data-graph-id]')?.getAttribute('data-graph-id')
   ?? '';
 export const itemRefFrom = (target?: Element | null): ItemRef | null => {
+  const item = target?.closest('[data-item-kind][data-item-id]');
+  const kind = item?.getAttribute('data-item-kind') as ItemRef['kind'] | null;
+  const id = item?.getAttribute('data-item-id');
+  if (kind && id) return { kind, id };
   const node = target?.closest('[data-node-id]')?.getAttribute('data-node-id');
   if (node) return { kind: 'node', id: node };
+  const edge = target?.closest('[data-edge-id]')?.getAttribute('data-edge-id');
+  if (edge) return { kind: 'edge', id: edge };
   const graph = target?.closest('[data-graph-id]')?.getAttribute('data-graph-id');
   if (graph) return { kind: 'graph', id: graph };
   return null;
@@ -304,50 +311,6 @@ function eventBus(): InstrumentedBus {
     _emitted: emitted,
   };
 }
-
-/** Persistence keys used across core. Owned here so the io system can audit them. */
-export const STORAGE_KEYS = {
-  shortcuts: 'v2.shortcuts',
-  flags: 'v2.flags',
-  disabledCommands: 'v2.commands.disabled',
-} as const;
-
-/** IoApi is the swap point between localStorage, an in-memory map, IndexedDB, an HTTP server, etc.
- *  Pass a different implementation to `createAppContext` to test or to boot kiosk-style. */
-export type IoApi = {
-  get<T>(key: string, fallback: T): T;
-  set(key: string, value: unknown): void;
-  del(key: string): void;
-  keys(): string[];
-};
-
-export const localStorageIo = (): IoApi => ({
-  get<T>(key: string, fallback: T): T {
-    try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) as T : fallback; }
-    catch { return fallback; }
-  },
-  set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode */ } },
-  del(key) { try { localStorage.removeItem(key); } catch { /* */ } },
-  keys() {
-    try {
-      const keys: string[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i); if (k) keys.push(k);
-      }
-      return keys;
-    } catch { return []; }
-  },
-});
-
-export const memoryIo = (): IoApi => {
-  const store = new Map<string, unknown>();
-  return {
-    get<T>(key: string, fallback: T) { return store.has(key) ? store.get(key) as T : fallback; },
-    set(key, value) { store.set(key, value); },
-    del(key) { store.delete(key); },
-    keys: () => [...store.keys()],
-  };
-};
 
 function createContexts(bus: Bus, flags: FlagsApi, io: IoApi) {
   const commandMap = new Map<string, CommandSpec>();
@@ -556,6 +519,7 @@ export function registry(): Registry {
         emit: ctx.bus.emit,
         origin: entry.name,
         contribute: (aff) => ctx.contexts.affordances.contribute({ ...aff, origin: aff.origin ?? entry.name }),
+        expose: (key, value) => { (ctx as Record<string, unknown>)[key as string] = value; },
       };
       // Adapt register so commands without `origin` get tagged with the current system name.
       const original = ctx.contexts.commands.register;
@@ -592,29 +556,6 @@ export function createFlags(initial: FeatureFlags = {}, io: IoApi = localStorage
   };
 }
 
-/** Selection and focus live OUTSIDE Graph so a graph can be displayed without one,
- *  and so multiple stores (e.g. per-view) can coexist. Keyed by graph id. */
-export function createSelectionStore(graphs: GraphStore, bus: Bus): SelectionStore {
-  const sel = new Map<Id, Id | null>();
-  const foc = new Map<Id, Id | null>();
-  const gid = (override?: Id) => override ?? graphs.current.id;
-  // Stale selection cleanup when the underlying node disappears.
-  bus.on('graph.node.deleted', ({ graphId, id }) => {
-    if (sel.get(graphId) === id) { sel.set(graphId, null); bus.emit('selection.node.selected', { id: null }); }
-    if (foc.get(graphId) === id) { foc.set(graphId, null); bus.emit('focus.node.focused', { id: null }); }
-  });
-  return {
-    selected: (graphId) => sel.get(gid(graphId)) ?? null,
-    focused: (graphId) => foc.get(gid(graphId)) ?? null,
-    selectedNode: (graphId) => {
-      const id = sel.get(gid(graphId)); if (!id) return undefined;
-      return graphs.get(gid(graphId))?.node(id);
-    },
-    select(id, graphId) { sel.set(gid(graphId), id); },
-    focus(id, graphId) { foc.set(gid(graphId), id); },
-  };
-}
-
 export function createAppContext(
   graphs: GraphStore,
   model: ModelDef<ModelCtx>,
@@ -629,124 +570,3 @@ export function createAppContext(
     model: createModelRegistry(model, flags),
   };
 }
-
-export type DxIssue = { level: 'error' | 'warn'; rule: string; message: string };
-/** Run DX checks against the *live* app context — model + commands + flags + observed runtime activity.
- *  Called from the `dx` system at `app.start`. */
-export function runDx(ctx: AppCtx): DxIssue[] {
-  const issues: DxIssue[] = [];
-  const error = (rule: string, message: string) => issues.push({ level: 'error', rule, message });
-  const warn = (rule: string, message: string) => issues.push({ level: 'warn', rule, message });
-
-  const commands = ctx.contexts.commands.all();
-  const commandIds = new Set(commands.map(c => c.id));
-  const visibleCommandIds = new Set(commands.filter(c => !c.hidden).map(c => c.id));
-
-  // RULE 1: ability/action contract (existing).
-  ctx.model.entities().forEach(entityDef => entityDef.abilities.forEach(abilityDef => {
-    if (!abilityDef.actions.length) error('ability.no-actions', `${entityDef.kind}.${abilityDef.id} has no actions`);
-    if (abilityDef.id === 'configurable' && !entityDef.properties?.length) {
-      error('configurable.no-properties', `${entityDef.kind}.configurable declares no properties`);
-    }
-    abilityDef.actions.forEach(actionDef => {
-      if (actionDef.paletteCommand != null && !visibleCommandIds.has(actionDef.paletteCommand)) {
-        error('action.palette-missing', `${actionDef.id} missing visible palette command ${actionDef.paletteCommand}`);
-      }
-      if (!actionDef.ui.length) error('action.no-ui', `${actionDef.id} has no UI affordance`);
-      actionDef.ui.forEach(ui => {
-        if (!commandIds.has(ui.command)) error('action.ui-command-missing', `${actionDef.id} UI missing command ${ui.command}`);
-      });
-    });
-  }));
-
-  // RULE 2: collections must have CRUD + search + order.
-  ctx.model.collections().forEach(collectionDef => {
-    if (!commandIds.has(collectionDef.crud.create)) error('collection.no-create', `${collectionDef.id} missing create command ${collectionDef.crud.create}`);
-    if (!commandIds.has(collectionDef.crud.delete)) error('collection.no-delete', `${collectionDef.id} missing delete command ${collectionDef.crud.delete}`);
-    if (!collectionDef.search) error('collection.no-search', `${collectionDef.id} missing search`);
-    if (!collectionDef.order) error('collection.no-order', `${collectionDef.id} missing order`);
-  });
-
-  // RULE 3: declared-but-disabled ability (entity asks for X, flag turned off).
-  if ('rawEntities' in ctx.model) {
-    const raw = (ctx.model as Models).rawEntities();
-    raw.forEach(entityDef => entityDef.abilities.forEach(abilityDef => {
-      if (!ctx.flags.isOn(`ability.${abilityDef.id}`)) {
-        warn('ability.disabled', `${entityDef.kind}.${abilityDef.id} is declared but its flag 'ability.${abilityDef.id}' is off`);
-      }
-    }));
-  }
-
-  // RULE 4: duplicate input bindings — same `on` + `key` + mods + selector. Predicate `when` ignored.
-  const bindingKey = (c: CommandSpec) => {
-    const b = c.input; if (!b) return null;
-    return [b.on, b.key ?? '', b.ctrl ? 'C' : '', b.shift ? 'S' : '', b.alt ? 'A' : '', b.meta ? 'M' : '', b.selector ?? ''].join('|');
-  };
-  const seenBindings = new Map<string, CommandSpec>();
-  ctx.contexts.commands.enabled().forEach(c => {
-    const key = bindingKey(c); if (!key) return;
-    const prev = seenBindings.get(key);
-    if (prev) warn('binding.duplicate', `commands "${prev.id}" and "${c.id}" share input binding ${key}`);
-    else seenBindings.set(key, c);
-  });
-
-  // RULE 5: paletteCommand collisions — same command id used as canonical action for 2+ actions.
-  const paletteOwners = new Map<string, string>();
-  ctx.model.entities().forEach(entityDef => entityDef.abilities.forEach(abilityDef => {
-    abilityDef.actions.forEach(actionDef => {
-      if (!actionDef.paletteCommand) return;
-      const prev = paletteOwners.get(actionDef.paletteCommand);
-      if (prev) error('action.palette-shared', `paletteCommand "${actionDef.paletteCommand}" is the canonical for both "${prev}" and "${actionDef.id}"`);
-      else paletteOwners.set(actionDef.paletteCommand, actionDef.id);
-    });
-  }));
-
-  // RULE 6: template existence — any name passed to templates.clone must have <template id="tpl-X">.
-  const seenClones = (ctx.contexts.templates as ReturnType<typeof templateContext>)._cloned;
-  seenClones.forEach(name => {
-    if (!document.getElementById(`tpl-${name}`)) error('template.missing', `templates.clone("${name}") but no <template id="tpl-${name}"> exists`);
-  });
-
-  // (event.no-emit rule deferred — request events are often emitted inside handlers, which
-  //  the validator can't statically discover. A future enhancement could mark used-emit names
-  //  by wrapping emit per call-site, but for now we rely on runtime usage to confirm wiring.)
-
-  // RULE 8: every command has an origin tag so we can unregister/inspect ownership.
-  commands.forEach(c => {
-    if (!c.origin) warn('command.no-origin', `command "${c.id}" has no origin — won't unregister when its system flag flips`);
-  });
-
-  // RULE 9: declared `requires` dependencies must be enabled.
-  // A system that is on but whose dep is off will silently misbehave.
-  ctx.flags.declared().forEach(name => {
-    if (!ctx.flags.isOn(name)) return;
-    const missing = ctx.flags.requires(name).filter(dep => !ctx.flags.isOn(dep));
-    if (missing.length) {
-      warn('requires.unmet', `"${name}" is on but its dependencies are off: ${missing.join(', ')}`);
-    }
-  });
-
-  // RULE 10: every `graph.<kind>.*` event must have an entity declaration in the model
-  // AND a collection. Otherwise the kind is a half-citizen — invisible to outline/palette/properties.
-  // Triggered by edges in round-2 work; keep around so future kinds (groups, comments) don't slip.
-  const busInst = ctx.bus as unknown as InstrumentedBus;
-  const knownKinds = new Set(ctx.model.entities().map(e => e.kind));
-  const collectionKinds = new Set(ctx.model.collections().map(c => c.entity?.kind).filter(Boolean) as string[]);
-  const eventKinds = new Set<string>();
-  ([...busInst._subscribed, ...busInst._emitted] as string[]).forEach(name => {
-    const m = name.match(/^graph\.([a-z]+)\.(?:create|created|update|updated|delete|deleted)$/);
-    if (m) eventKinds.add(m[1]);
-  });
-  eventKinds.forEach(kind => {
-    if (!knownKinds.has(kind)) {
-      warn('entity.kind-no-declaration', `bus emits/handles graph.${kind}.* but no entity is declared for "${kind}"`);
-    }
-    if (!collectionKinds.has(kind)) {
-      warn('entity.kind-no-collection', `kind "${kind}" has no collection — it won't appear in outline / palette`);
-    }
-  });
-
-  return issues;
-}
-/** Back-compat shim for any caller that still imports validateModel. */
-export const validateModel = <Ctx>(_model: ModelDef<Ctx>, _commands: CommandSpec[]) => [] as string[];

@@ -4,12 +4,18 @@ const { test, expect } = require('@playwright/test');
 
 test('v2 routes DOM events through input adapter only', async () => {
   const v2Dir = path.join(__dirname, '..', 'v2');
-  const files = fs.readdirSync(v2Dir).filter(file => file.endsWith('.ts'));
+  const files = [];
+  const walk = dir => fs.readdirSync(dir, { withFileTypes: true }).forEach(entry => {
+    const abs = path.join(dir, entry.name);
+    if (entry.isDirectory()) walk(abs);
+    else if (entry.name.endsWith('.ts')) files.push(abs);
+  });
+  walk(v2Dir);
   const listeners = files.flatMap(file => fs
-    .readFileSync(path.join(v2Dir, file), 'utf8')
+    .readFileSync(file, 'utf8')
     .split('\n')
     .filter(line => line.includes('addEventListener'))
-    .map(line => `${file}: ${line.trim()}`));
+    .map(line => `${path.relative(v2Dir, file)}: ${line.trim()}`));
 
   expect(listeners).toHaveLength(2);
   expect(listeners).toContain("app.ts: window.addEventListener('DOMContentLoaded', () => {");

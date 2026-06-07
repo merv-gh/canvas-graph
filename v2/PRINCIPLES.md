@@ -17,6 +17,10 @@ the core.
 > **Test:** `core.ts` size ≤ 400 lines. New core APIs require deleting at least
 > as many lines elsewhere.
 
+Current debt: `core.ts` is above this target. IO, DX, and selection have been
+extracted; property renderers and affordance storage are the next core-adjacent
+pieces to move before adding new core APIs.
+
 ## 2. Systems are self-sufficient and independent
 
 A system owns its data, its commands, its events, its render contributions, and
@@ -123,10 +127,10 @@ them; nothing else has to.
 The same way render is swappable, persistence is swappable. `localStorage`,
 `IndexedDB`, an HTTP server, an `:memory:` for tests — pick one at boot via flag.
 
-Currently the persistence concerns are scattered: shortcut overrides, disabled
-commands, and feature flags each read/write `localStorage` directly inside core.
-That's debt. Eventually this becomes an `io` system the rest of the app talks
-to by events: `io.read`, `io.write`, `io.changed`.
+Currently persistence goes through an `IoApi` adapter, but command overrides,
+disabled commands, and feature flags still call that adapter directly from core
+contexts. That's debt. Eventually this becomes an `io` system the rest of the
+app talks to by events: `io.read`, `io.write`, `io.changed`.
 
 > **Test:** Setting `io: false` removes all `localStorage` access; the app boots
 > with in-memory defaults.

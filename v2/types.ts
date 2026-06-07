@@ -77,6 +77,8 @@ export type AppEvents = {
   'graph.node.deleted': { graphId: Id; id: Id };
   'graph.edge.create': EdgeDraft;
   'graph.edge.created': { graphId: Id; id: Id; edge: EdgeEntity };
+  'graph.edge.update': { id: Id; patch: EdgePatch };
+  'graph.edge.updated': { graphId: Id; id: Id };
   'graph.edge.delete': { id: Id };
   'graph.edge.deleted': { graphId: Id; id: Id };
   'node.title.edit': { id: Id };
@@ -103,6 +105,7 @@ export type Bus = {
   onAny(fn: (event: AnyEvent) => void): void;
   emit<K extends EventName>(name: K, ...data: AppEvents[K] extends void ? [] : [AppEvents[K]]): void;
 };
+export type DxIssue = { level: 'error' | 'warn'; rule: string; message: string };
 
 export type CommandSource = { event?: Event; target?: Element | null };
 export type CommandInput = {
