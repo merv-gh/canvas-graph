@@ -32,10 +32,26 @@ export const selectable = <T extends NodeEntity>() => ability<T>('selectable', [
 
 export const draggable = <T extends NodeEntity>() => ability<T>('draggable', [action<T>({
   id: 'node.drag',
-  label: 'Move node',
-  paletteCommand: 'graph.node.nudge.right',
+  label: 'Drag node with pointer',
+  // No paletteCommand — pointer-only action; nothing to surface in the palette.
   ui: [{ surface: 'entity', command: 'drag.node.start', kind: 'handler', slot: 'header', attrs: { 'data-drag-handle': '' } }],
 })]);
+
+/** Keyboard nudge — split from draggable so it can be flagged off independently of mouse drag. */
+const NUDGE_DIRECTIONS = [
+  { dir: 'right', key: 'ArrowRight', dx: 24, dy: 0 },
+  { dir: 'left',  key: 'ArrowLeft',  dx: -24, dy: 0 },
+  { dir: 'up',    key: 'ArrowUp',    dx: 0, dy: -24 },
+  { dir: 'down',  key: 'ArrowDown',  dx: 0, dy: 24 },
+] as const;
+export const nudgeable = <T extends NodeEntity>() => ability<T>('nudgeable',
+  NUDGE_DIRECTIONS.map(({ dir, key }) => action<T>({
+    id: `node.nudge.${dir}`,
+    label: `Nudge node ${dir}`,
+    paletteCommand: `graph.node.nudge.${dir}`,
+    ui: [{ surface: 'palette', command: `graph.node.nudge.${dir}`, kind: 'shortcut' }],
+  })) as NonEmptyArray<ActionDef<T>>,
+);
 
 export const collapsible = <T extends NodeEntity>() => ability<T>('collapsible', [action<T>({
   id: 'node.collapse',
@@ -82,11 +98,11 @@ export const configurable = <T extends NodeEntity>() => ability<T>('configurable
 })]);
 
 export function registerAbilitySystems(system: Registry) {
-  system('ability.selectable', ({ on, emit, contexts, graphs }) => {
-    const nodeId = (source: CommandSource) => itemIdFrom(source.target) || graphs.current.selected || '';
+  system('ability.selectable', ({ on, emit, contexts, graphs, selection }) => {
+    const nodeId = (source: CommandSource) => itemIdFrom(source.target) || selection.selected() || '';
     const nextNodeId = () => {
       const nodes = graphs.current.nodes();
-      const index = Math.max(0, nodes.findIndex(node => node.id === graphs.current.selected));
+      const index = Math.max(0, nodes.findIndex(node => node.id === selection.selected()));
       return nodes[(index + 1) % nodes.length]?.id ?? nodes[0]?.id ?? '';
     };
 
@@ -115,34 +131,19 @@ export function registerAbilitySystems(system: Registry) {
         label: 'Clear selection',
         event: 'selection.node.clear',
         group: 'selection',
-        available: () => !!graphs.current.selected,
+        available: () => !!selection.selected(),
         input: { on: 'pointerdown', selector: `[data-place="${Places.Stage}"]`, when: isStageSurface },
       },
     ]);
 
-    on('selection.node.select', ({ id }) => { graphs.current.selected = id; emit('selection.node.selected', { id }); });
-    on('selection.node.clear', () => { graphs.current.selected = null; emit('selection.node.selected', { id: null }); });
+    on('selection.node.select', ({ id }) => { selection.select(id); emit('selection.node.selected', { id }); });
+    on('selection.node.clear', () => { selection.select(null); emit('selection.node.selected', { id: null }); });
   });
 
-  system('ability.draggable', ({ on, emit, contexts, graphs }) => {
+  system('ability.draggable', ({ on, emit, contexts, graphs, selection }) => {
     let drag: { id: Id; pointer: Position; start: Position } | null = null;
-    const selectedNode = () => graphs.current.selectedNode();
 
     contexts.commands.register([
-      {
-        id: 'graph.node.nudge.right',
-        label: 'Nudge node right',
-        event: 'graph.node.update',
-        group: 'node',
-        shortcut: 'ArrowRight',
-        input: { on: 'keydown', key: 'ArrowRight', prevent: true },
-        available: () => !!selectedNode(),
-        payload: () => {
-          const node = selectedNode()!;
-          const pos = node.Position ?? { x: 0, y: 0 };
-          return { id: node.id, patch: { Position: { x: pos.x + 24, y: pos.y } } };
-        },
-      },
       {
         id: 'drag.node.start',
         label: 'Start drag',
@@ -165,7 +166,7 @@ export function registerAbilitySystems(system: Registry) {
     ]);
 
     on('drag.node.start', ({ id, x, y }) => {
-      const node = graphs.current.node(id);
+      const node = graphs.current.getNode(id);
       if (node?.Position) drag = { id, pointer: contexts.view.clientToSpace(Places.Stage, { x, y }), start: { ...node.Position } };
     });
     on('drag.node.move', ({ x, y }) => {
@@ -177,9 +178,29 @@ export function registerAbilitySystems(system: Registry) {
     on('drag.node.end', () => { drag = null; });
   });
 
-  system('ability.collapsible', ({ contexts, graphs }) => {
-    const selectedNode = () => graphs.current.selectedNode();
-    const nodeId = (source: CommandSource) => itemIdFrom(source.target) || graphs.current.selected || '';
+  system('ability.nudgeable', ({ contexts, graphs, selection }) => {
+    const selectedNode = () => selection.selectedNode() as GraphNode | undefined;
+    contexts.commands.register(
+      NUDGE_DIRECTIONS.map(({ dir, key, dx, dy }) => ({
+        id: `graph.node.nudge.${dir}`,
+        label: `Nudge node ${dir}`,
+        event: 'graph.node.update' as const,
+        group: 'node',
+        shortcut: key,
+        input: { on: 'keydown' as const, key, prevent: true },
+        available: () => !!selectedNode(),
+        payload: () => {
+          const node = selectedNode()!;
+          const pos = node.Position ?? { x: 0, y: 0 };
+          return { id: node.id, patch: { Position: { x: pos.x + dx, y: pos.y + dy } } };
+        },
+      })),
+    );
+  });
+
+  system('ability.collapsible', ({ contexts, graphs, selection }) => {
+    const selectedNode = () => selection.selectedNode();
+    const nodeId = (source: CommandSource) => itemIdFrom(source.target) || selection.selected() || '';
 
     contexts.commands.register([{
       id: 'node.collapse.toggle',
@@ -190,16 +211,16 @@ export function registerAbilitySystems(system: Registry) {
       input: { on: 'keydown', key: 'c', prevent: true },
       available: source => !!nodeId(source ?? {}) || !!selectedNode(),
       payload: source => {
-        const id = nodeId(source) || graphs.current.selected || graphs.current.nodes()[0]?.id || '';
-        const node = graphs.current.node(id)!;
+        const id = nodeId(source) || selection.selected() || graphs.current.nodes()[0]?.id || '';
+        const node = graphs.current.getNode(id)!;
         return { id, patch: { Collapsed: !node.Collapsed } };
       },
     }]);
   });
 
-  system('ability.editable', ({ on, emit, contexts, graphs }) => {
+  system('ability.editable', ({ on, emit, contexts, graphs, selection }) => {
     const titleEl = (id: Id) => document.querySelector(`.node[data-node-id="${id}"] .node-title`);
-    const nodeId = (source: CommandSource) => itemIdFrom(source.target) || graphs.current.selected || '';
+    const nodeId = (source: CommandSource) => itemIdFrom(source.target) || selection.selected() || '';
     const titleCommit = (target?: Element | null, finish = false) => ({
       id: itemIdFrom(target),
       text: target?.textContent?.trim() ?? '',
@@ -214,8 +235,8 @@ export function registerAbilitySystems(system: Registry) {
         group: 'node',
         shortcut: 'Enter',
         input: { on: 'keydown', key: 'Enter', prevent: true },
-        available: source => !!nodeId(source ?? {}) || !!graphs.current.selectedNode(),
-        payload: source => ({ id: nodeId(source) || graphs.current.selected || '' }),
+        available: source => !!nodeId(source ?? {}) || !!selection.selectedNode(),
+        payload: source => ({ id: nodeId(source) || selection.selected() || '' }),
       },
       {
         id: 'node.title.commit.enter',
@@ -248,7 +269,7 @@ export function registerAbilitySystems(system: Registry) {
       selection?.addRange(range);
     }));
     on('node.title.commit', ({ id, text, finish }) => {
-      const node = graphs.current.node(id);
+      const node = graphs.current.getNode(id);
       if (!node) return;
       if (text && text !== node.Label.text) emit('graph.node.update', { id, patch: { Label: { text } } });
       if (!text) {
@@ -262,7 +283,7 @@ export function registerAbilitySystems(system: Registry) {
     });
   });
 
-  system('ability.configurable', ({ on, emit, contexts, graphs, model }) => {
+  system('ability.configurable', ({ on, emit, contexts, graphs, model, selection }) => {
     const formRef = (target?: Element | null): ItemRef => {
       const form = target?.closest('.properties');
       return {
@@ -270,32 +291,28 @@ export function registerAbilitySystems(system: Registry) {
         id: form?.getAttribute('data-item-id') ?? '',
       };
     };
-    const item = (ref: ItemRef) => ref.kind === 'node' ? graphs.current.node(ref.id) : undefined;
+    const item = (ref: ItemRef) => ref.kind === 'node' ? graphs.current.getNode(ref.id) : undefined;
     const entityDef = (ref: ItemRef) => ref.kind === 'node' ? model.entity<GraphNode, NodePatch>('node') : undefined;
-    const propertyInput = (node: GraphNode, prop: PropertyDef<GraphNode, NodePatch>) => {
-      const label = document.createElement('label');
-      const input = document.createElement('input');
-      input.dataset.field = prop.id;
-      input.type = prop.input === 'checkbox' ? 'checkbox' : prop.input;
-      if (prop.min != null) input.min = `${prop.min}`;
-      if (prop.step != null) input.step = `${prop.step}`;
-      if (prop.input === 'checkbox') {
-        label.className = 'check-row';
-        input.checked = Boolean(prop.value(node));
-        label.append(input, prop.label);
-      } else {
-        if (prop.input === 'text') input.classList.add('editable-inline');
-        input.value = String(prop.value(node));
-        label.append(prop.label, input);
-      }
-      return label;
-    };
     const renderProperties = (ref: ItemRef, node: GraphNode, properties: PropertyDef<GraphNode, NodePatch>[]) => {
       const form = contexts.templates.clone('properties');
       form.dataset.itemKind = ref.kind;
       form.dataset.itemId = ref.id;
       const fields = contexts.templates.slot(form, 'fields');
-      properties.forEach(prop => fields.append(propertyInput(node, prop)));
+      // Section by group. Order: declaration order of first property per group.
+      const byGroup = new Map<string, PropertyDef<GraphNode, NodePatch>[]>();
+      properties.forEach(prop => {
+        const g = prop.group ?? 'default';
+        (byGroup.get(g) ?? byGroup.set(g, []).get(g)!).push(prop);
+      });
+      byGroup.forEach((props, group) => {
+        if (group !== 'default') {
+          const heading = document.createElement('div');
+          heading.className = 'property-group';
+          heading.textContent = group;
+          fields.append(heading);
+        }
+        props.forEach(prop => fields.append(contexts.properties.render(prop, node)));
+      });
       return form;
     };
     const applyProperty = (ref: ItemRef, field: string, value: PropertyValue) => {
@@ -304,7 +321,7 @@ export function registerAbilitySystems(system: Registry) {
       const patch = node && prop?.patch(node, value);
       if (node && patch) emit('graph.node.update', { id: node.id, patch });
     };
-    const selectedNode = () => graphs.current.selectedNode();
+    const selectedNode = () => selection.selectedNode();
 
     contexts.commands.register([
       {
@@ -313,7 +330,7 @@ export function registerAbilitySystems(system: Registry) {
         event: 'item.properties.open',
         group: 'item',
         available: source => !!itemRefFrom(source?.target) || !!selectedNode(),
-        payload: source => itemRefFrom(source.target) ?? { kind: 'node', id: graphs.current.selected || '' },
+        payload: source => itemRefFrom(source.target) ?? { kind: 'node', id: selection.selected() || '' },
       },
       {
         id: 'properties.item.input',
@@ -334,7 +351,8 @@ export function registerAbilitySystems(system: Registry) {
         event: 'properties.item.toggle',
         group: 'properties',
         hidden: true,
-        input: { on: 'change', selector: '.properties [data-field="collapsed"]' },
+        // Any checkbox-typed property field, regardless of name.
+        input: { on: 'change', selector: '.properties input[type="checkbox"][data-field]' },
         payload: ({ target }) => ({
           ref: formRef(target),
           field: target?.getAttribute('data-field') ?? '',
@@ -357,4 +375,15 @@ export function registerAbilitySystems(system: Registry) {
     on('properties.item.input', ({ ref, field, value }) => applyProperty(ref, field, value));
     on('properties.item.toggle', ({ ref, field, checked }) => applyProperty(ref, field, checked));
   });
+
+  // Ability dependency map. All abilities operate on a selected node, so they depend on selectable.
+  // configurable additionally requires modal (it opens the properties modal).
+  const deps: Record<string, string[]> = {
+    // draggable uses contexts.view (core math), not the view systems — no dep.
+    'ability.nudgeable': ['ability.selectable'],
+    'ability.collapsible': ['ability.selectable'],
+    'ability.editable': ['ability.selectable'],
+    'ability.configurable': ['ability.selectable', 'modal'],
+  };
+  Object.entries(deps).forEach(([name, list]) => system.setRequires(name, list));
 }

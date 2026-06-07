@@ -21,6 +21,7 @@ export type ItemRef = { kind: ItemKind; id: Id };
 
 export type AppEvents = {
   'app.start': void;
+  'affordance.contributed': { surface: AffordanceSurface };
   'render.shell': void;
   'render.view.set': { place: Place; key?: string; view: Renderable };
   'render.view.clear': { place: Place; key?: string };
@@ -84,6 +85,11 @@ export type CommandSource = { event?: Event; target?: Element | null };
 export type CommandInput = {
   on: RawInput;
   key?: string;
+  /** Modifier requirements. Omitted = not required AND must not be held. */
+  ctrl?: boolean;
+  shift?: boolean;
+  alt?: boolean;
+  meta?: boolean;
   selector?: string;
   global?: boolean;
   prevent?: boolean;
@@ -98,12 +104,16 @@ export type CommandSpec<K extends EventName = EventName> = {
   group?: string;
   hidden?: boolean;
   shortcut?: string;
+  enabled?: boolean;        // explicit toggle. Default true.
+  origin?: string;          // system/ability name that registered the command (for unregister + DX)
   available?: (source?: CommandSource) => boolean;
   payload?: (source: CommandSource) => AppEvents[K];
 };
+export type FeatureFlags = Record<string, boolean>;
 
 export type UiValue<T = unknown> = string | ((item: T) => string);
-export type PropertyInput = 'text' | 'number' | 'checkbox';
+/** PropertyInput is open: any registered renderer name. 'text' | 'number' | 'checkbox' ship as defaults. */
+export type PropertyInput = string;
 export type PropertyValue = string | number | boolean;
 export type PropertyDef<T = unknown, Patch = unknown> = {
   id: string;
@@ -113,9 +123,13 @@ export type PropertyDef<T = unknown, Patch = unknown> = {
   patch: (item: T, value: PropertyValue) => Patch | undefined;
   min?: number;
   step?: number;
+  /** Section the property is rendered under in the modal. Default 'default'. */
+  group?: string;
 };
+export type PropertyRenderer<T = unknown> = (prop: PropertyDef<T>, item: T) => HTMLElement;
+export type AffordanceSurface = 'palette' | 'list' | 'entity' | 'top';
 export type AffordanceDef<T = unknown> = {
-  surface: 'palette' | 'list' | 'entity';
+  surface: AffordanceSurface;
   command: string;
   kind: 'button' | 'handler' | 'shortcut';
   slot?: string;
@@ -123,8 +137,22 @@ export type AffordanceDef<T = unknown> = {
   label?: UiValue<T>;
   className?: string;
   attrs?: Record<string, UiValue<T>>;
+  /** Sort hint for surfaces that have a sequence (top bar, list). Lower = earlier. */
+  order?: number;
 };
-export type ActionDef<T = unknown> = { id: string; label: string; paletteCommand: string; ui: NonEmptyArray<AffordanceDef<T>> };
+/** System-scoped affordance contribution (no per-item context). */
+export type SystemAffordance = Omit<AffordanceDef<void>, 'text' | 'label'> & {
+  text?: string;
+  label?: string;
+  origin?: string;
+};
+export type ActionDef<T = unknown> = {
+  id: string;
+  label: string;
+  /** Canonical command shown in the palette. Optional for pointer-only actions (e.g. "Drag with mouse"). */
+  paletteCommand?: string;
+  ui: NonEmptyArray<AffordanceDef<T>>;
+};
 export type AbilityDef<T = unknown> = { id: string; actions: NonEmptyArray<ActionDef<T>> };
 export type EntityDef<T, Patch = unknown> = {
   kind: string;

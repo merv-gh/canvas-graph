@@ -69,6 +69,22 @@ button:hover { border-color: var(--accent); }
 .log { display: grid; gap: 5px; font: 12px/1.35 ui-monospace, monospace; }
 .log-row { padding: 5px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .outline { display: grid; gap: 14px; margin-bottom: 14px; }
+.empty {
+  display: grid; gap: 4px; padding: 14px 16px; margin-top: 6px;
+  border: 1px dashed var(--line); border-radius: 8px;
+  color: var(--muted); background: transparent; text-align: center;
+}
+.empty-title { font-weight: 500; color: var(--text); font-size: 13px; }
+.empty-hint { font-size: 12px; }
+.empty kbd {
+  font-family: ui-monospace, monospace; font-size: 11px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 3px;
+  padding: 0 5px; margin: 0 2px;
+}
+.stage .empty {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  min-width: 240px;
+}
 .outline-section { display: grid; gap: 7px; }
 .outline-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .outline-head .panel-title { margin: 0; }

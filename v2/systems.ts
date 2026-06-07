@@ -2,15 +2,17 @@ import type { GraphNode } from './model';
 import {
   appendRenderable,
   clientPoint,
+  commandShortcut,
+  emptyState,
   entityUi,
   grouped,
   isStageSurface,
   itemIdFrom,
   nodeRect,
+  runDx,
   shortcutOf,
   systemOf,
   uiValue,
-  validateModel,
   type AppCollectionDef,
   type Registry,
 } from './core';
@@ -44,7 +46,7 @@ const commandModals: Record<CommandModalDef['id'], CommandModalDef> = {
 };
 
 export function registerSystems(system: Registry) {
-  system('render', ({ on, emit, graphs, contexts, model }) => {
+  system('render', ({ on, emit, bus, graphs, contexts, model, selection }) => {
     const root = document.getElementById('app')!;
     const views = new Map<Place, Map<string, Renderable>>();
     const applyAffordance = (el: HTMLElement, node: GraphNode, ui: AffordanceDef<GraphNode>) => {
@@ -91,12 +93,11 @@ export function registerSystems(system: Registry) {
       [...parts.values()].forEach(view => appendRenderable(slot, view));
     };
     const nodeView = (node: GraphNode) => {
-      const graph = graphs.current;
       const el = contexts.templates.clone('node');
       const pos = node.Position ?? { x: 0, y: 0 };
       el.dataset.nodeId = node.id;
-      el.classList.toggle('selected', graph.selected === node.id);
-      el.classList.toggle('focused', graph.focused === node.id);
+      el.classList.toggle('selected', selection.selected() === node.id);
+      el.classList.toggle('focused', selection.focused() === node.id);
       el.classList.toggle('collapsed', !!node.Collapsed);
       el.style.left = `${pos.x}px`;
       el.style.top = `${pos.y}px`;
@@ -107,20 +108,37 @@ export function registerSystems(system: Registry) {
       wireNodeAffordances(el, node);
       return el;
     };
-    const drawNodes = () => emit('render.view.set', {
-      place: Places.Stage,
-      key: 'nodes',
-      view: () => {
-        syncStageView();
-        const view = contexts.view.get();
-        const layer = contexts.templates.clone('nodes');
-        layer.style.transform = `translate(${-view.x * view.scale}px, ${-view.y * view.scale}px) scale(${view.scale})`;
-        graphs.current.nodes()
-          .filter(node => contexts.view.isVisible(Places.Stage, nodeRect(node), 160))
-          .forEach(node => layer.append(nodeView(node)));
-        return layer;
-      },
-    });
+    const drawNodes = () => {
+      emit('render.view.set', {
+        place: Places.Stage,
+        key: 'nodes',
+        view: () => {
+          syncStageView();
+          const view = contexts.view.get();
+          const layer = contexts.templates.clone('nodes');
+          layer.style.transform = `translate(${-view.x * view.scale}px, ${-view.y * view.scale}px) scale(${view.scale})`;
+          graphs.current.nodes()
+            .filter(node => contexts.view.isVisible(Places.Stage, nodeRect(node), 160))
+            .forEach(node => layer.append(nodeView(node)));
+          return layer;
+        },
+      });
+      // Empty-state hint (rendered outside the transformed node layer so it stays centered).
+      const all = graphs.current.nodes();
+      if (!all.length) {
+        emit('render.view.set', {
+          place: Places.Stage,
+          key: 'empty',
+          view: () => {
+            const shortcut = commandShortcut(contexts.commands, 'editing.node.create');
+            const hint = shortcut ? `Press <kbd>${shortcut}</kbd> to add a node` : '';
+            return emptyState(contexts, 'No nodes in this graph yet', hint) ?? '';
+          },
+        });
+      } else {
+        emit('render.view.clear', { place: Places.Stage, key: 'empty' });
+      }
+    };
 
     on('render.shell', () => {
       root.replaceChildren(contexts.templates.clone('shell'));
@@ -133,8 +151,38 @@ export function registerSystems(system: Registry) {
       flush(place);
     });
     on('render.view.clear', ({ place, key }) => { key ? views.get(place)?.delete(key) : views.delete(place); flush(place); });
-    on('render.nodes.draw', drawNodes);
-    on('view.changed', drawNodes);
+
+    /* ----- dirty-flag scheduler -----
+       One rAF per frame, coalesces every data mutation into at most one redraw.
+       Event-name patterns drive scope; explicit `render.*.draw` events still work as escape hatches.
+       This is what lets features.ts stay short — it no longer ferries redraw events. */
+    const dirty = new Set<'nodes' | 'outline'>();
+    let scheduled = false;
+    const flushDirty = () => {
+      scheduled = false;
+      if (dirty.has('nodes')) drawNodes();
+      if (dirty.has('outline')) emit('outline.draw');
+      dirty.clear();
+    };
+    const mark = (...scopes: ('nodes' | 'outline')[]) => {
+      scopes.forEach(s => dirty.add(s));
+      if (scheduled) return;
+      scheduled = true;
+      requestAnimationFrame(flushDirty);
+    };
+    // Initial draw at app.start so the empty state shows before any data mutation happens.
+    on('app.start', () => mark('nodes'));
+    bus.onAny(({ name }) => {
+      if (name === 'render.nodes.draw') return mark('nodes');
+      if (name === 'outline.draw') return; // already a redraw signal — outline handles it
+      if (name.startsWith('render.')) return;
+      if (name === 'view.changed') return mark('nodes');
+      // Data mutations + selection/focus changes refresh both surfaces.
+      if (/(?:^graph\.(?:switched|deleted)$|^graph\.node\.(?:created|updated|deleted)$|^(?:selection|focus)\.node\.(?:selected|focused)$)/.test(name)) {
+        return mark('nodes', 'outline');
+      }
+      if (name === 'graph.created') return mark('outline');
+    });
   });
 
   system('input', ({ on, contexts }) => {
@@ -142,14 +190,29 @@ export function registerSystems(system: Registry) {
   });
 
   system('main', ({ on, emit, contexts }) => {
-    on('app.start', () => {
-      emit('render.shell');
-      emit('render.view.set', {
-        place: Places.Top,
-        key: 'toolbar',
-        view: () => contexts.templates.clone('toolbar'),
-      });
+    const drawToolbar = () => emit('render.view.set', {
+      place: Places.Top,
+      key: 'toolbar',
+      view: () => {
+        const root = contexts.templates.clone('toolbar');
+        const start = contexts.templates.slot(root, 'start');
+        const end = contexts.templates.slot(root, 'end');
+        contexts.affordances.for('top').forEach(aff => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.dataset.command = aff.command;
+          button.textContent = aff.text ?? aff.command;
+          if (aff.label) button.setAttribute('aria-label', aff.label);
+          if (aff.className) button.classList.add(...aff.className.split(/\s+/).filter(Boolean));
+          // Convention: slot=='end' aligns right; everything else lands in start.
+          (aff.slot === 'end' ? end : start).append(button);
+        });
+        return root;
+      },
     });
+    on('app.start', () => { emit('render.shell'); drawToolbar(); });
+    // Re-render when a system contributes a new affordance after boot.
+    on('affordance.contributed', ({ surface }) => { if (surface === 'top') drawToolbar(); });
   });
 
   system('log', ({ bus, emit, contexts }) => {
@@ -176,6 +239,7 @@ export function registerSystems(system: Registry) {
     });
   });
 
+  // Re-declare outline with requires below.
   system('outline', ctx => {
     const { on, emit, contexts, model } = ctx;
     const searches = new Map<string, string>();
@@ -202,22 +266,30 @@ export function registerSystems(system: Registry) {
       section.append(search);
 
       const list = el('div', 'outline-list');
-      collectionDef.items(ctx)
-        .filter(item => collectionDef.itemLabel(item).toLowerCase().includes(query.toLowerCase()))
-        .forEach(item => {
-          const id = collectionDef.itemId(item);
-          const row = el('div', 'outline-row');
-          row.dataset.itemId = id;
-          if (collectionDef.id === 'graphs') row.dataset.graphId = id;
-          if (collectionDef.id === 'nodes') row.dataset.nodeId = id;
-          const main = el('button', 'outline-main', collectionDef.itemLabel(item)) as HTMLButtonElement;
-          if (collectionDef.selectCommand) main.dataset.command = collectionDef.selectCommand;
-          const remove = el('button', 'icon-button', 'x') as HTMLButtonElement;
-          remove.dataset.command = collectionDef.crud.delete;
-          row.append(main, remove);
-          list.append(row);
-        });
+      const filtered = collectionDef.items(ctx)
+        .filter(item => collectionDef.itemLabel(item).toLowerCase().includes(query.toLowerCase()));
+      filtered.forEach(item => {
+        const id = collectionDef.itemId(item);
+        const row = el('div', 'outline-row');
+        row.dataset.itemId = id;
+        if (collectionDef.id === 'graphs') row.dataset.graphId = id;
+        if (collectionDef.id === 'nodes') row.dataset.nodeId = id;
+        const main = el('button', 'outline-main', collectionDef.itemLabel(item)) as HTMLButtonElement;
+        if (collectionDef.selectCommand) main.dataset.command = collectionDef.selectCommand;
+        const remove = el('button', 'icon-button', 'x') as HTMLButtonElement;
+        remove.dataset.command = collectionDef.crud.delete;
+        row.append(main, remove);
+        list.append(row);
+      });
       section.append(list);
+      // Empty-state when the collection has no items (or query produced no matches).
+      if (!filtered.length) {
+        const shortcut = commandShortcut(contexts.commands, collectionDef.crud.create);
+        const title = query ? `No matches for "${query}"` : `No ${collectionDef.label.toLowerCase()} yet`;
+        const hint = !query && shortcut ? `Press <kbd>${shortcut}</kbd> or click +` : '';
+        const empty = emptyState(contexts, title, hint);
+        if (empty) section.append(empty);
+      }
       return section;
     };
     const renderOutline = () => {
@@ -251,8 +323,9 @@ export function registerSystems(system: Registry) {
     });
   });
 
-  system('modal', ({ on, emit, contexts }) => {
+  system('modal', ({ on, emit, contexts, contribute }) => {
     let open = false;
+    contribute({ surface: 'top', command: 'modal.open', kind: 'button', text: 'Modal', order: 50 });
     contexts.commands.register([
       {
         id: 'modal.open',
@@ -285,7 +358,9 @@ export function registerSystems(system: Registry) {
     });
   });
 
-  system('commandModal', ({ on, emit, contexts }) => {
+  system('commandModal', ({ on, emit, contexts, contribute }) => {
+    contribute({ surface: 'top', command: 'palette.open', kind: 'button', text: 'Palette', order: 30 });
+    contribute({ surface: 'top', command: 'help.open', kind: 'button', text: 'Help', order: 40 });
     const syncShortcutConflict = (input: HTMLInputElement) => {
       const conflict = contexts.commands.shortcutConflict(input.dataset.shortcutCommand!, input.value);
       input.classList.toggle('is-conflict', !!conflict);
@@ -406,8 +481,10 @@ export function registerSystems(system: Registry) {
     });
   });
 
-  system('domain', ({ contexts, graphs }) => {
+  system('domain', ({ contexts, graphs, selection, contribute }) => {
     let count = 1;
+    contribute({ surface: 'top', command: 'editing.node.create', kind: 'button', text: '+ Node', order: 10 });
+    contribute({ surface: 'top', command: 'graph.create', kind: 'button', text: '+ Graph', order: 20 });
     const graphId = (source: CommandSource) => itemIdFrom(source.target) || graphs.current.id;
     const nextGraphId = () => graphs.all().find(graph => graph.id !== graphs.current.id)?.id ?? `g${graphs.all().length + 1}`;
 
@@ -453,8 +530,8 @@ export function registerSystems(system: Registry) {
         group: 'graph',
         shortcut: 'Delete',
         input: { on: 'keydown', key: 'Delete', prevent: true },
-        available: source => !!itemIdFrom(source?.target) || !!graphs.current.selected,
-        payload: source => ({ id: itemIdFrom(source.target) || graphs.current.selected || '' }),
+        available: source => !!itemIdFrom(source?.target) || !!selection.selected(),
+        payload: source => ({ id: itemIdFrom(source.target) || selection.selected() || '' }),
       },
       {
         id: 'graph.delete.current',
@@ -467,7 +544,7 @@ export function registerSystems(system: Registry) {
     ]);
   });
 
-  system('graph', ({ on, emit, graphs, contexts }) => {
+  system('graph', ({ on, emit, graphs, contexts, selection }) => {
     on('graph.create', () => {
       const graph = graphs.create();
       graphs.switch(graph.id);
@@ -479,7 +556,12 @@ export function registerSystems(system: Registry) {
       emit('graph.switched', { id: graph.id });
     });
     on('graph.node.create', draft => {
-      const node = graphs.current.node(draft, { at: contexts.view.spaceCenter(Places.Stage) });
+      // Place near current selection if there is one; otherwise view-center.
+      const nearNode = selection.selectedNode() as GraphNode | undefined;
+      const node = graphs.current.createNode(draft, {
+        at: contexts.view.spaceCenter(Places.Stage),
+        nearPosition: nearNode?.Position,
+      });
       emit('graph.node.created', { graphId: graphs.current.id, id: node.id });
     });
     on('graph.node.update', ({ id, patch }) => {
@@ -495,8 +577,11 @@ export function registerSystems(system: Registry) {
     });
   });
 
-  system('view', ({ on, emit, contexts }) => {
-    let pan: { pointer: { x: number; y: number }; view: ViewState } | null = null;
+  // Camera (zoom). Keyboard + wheel + toolbar. Independent of pan.
+  system('view.zoom', ({ on, emit, contexts, contribute }) => {
+    contribute({ surface: 'top', command: 'view.zoom.out', kind: 'button', text: '−', slot: 'end', order: 10 });
+    contribute({ surface: 'top', command: 'view.zoom.reset', kind: 'button', text: '100%', slot: 'end', order: 20 });
+    contribute({ surface: 'top', command: 'view.zoom.in', kind: 'button', text: '+', slot: 'end', order: 30 });
     const stageSelector = `[data-place="${Places.Stage}"]`;
     const commit = () => emit('view.changed', contexts.view.get());
     const centerZoom = (factor: number) => {
@@ -523,6 +608,21 @@ export function registerSystems(system: Registry) {
       { id: 'view.zoom.in', label: 'Zoom in', event: 'view.zoom.in', group: 'view', shortcut: '+', input: { on: 'keydown', key: '+', prevent: true } },
       { id: 'view.zoom.out', label: 'Zoom out', event: 'view.zoom.out', group: 'view', shortcut: '-', input: { on: 'keydown', key: '-', prevent: true } },
       { id: 'view.zoom.reset', label: 'Reset view', event: 'view.zoom.reset', group: 'view', shortcut: '0', input: { on: 'keydown', key: '0', prevent: true } },
+    ]);
+
+    on('view.zoom.by', ({ screen, factor }) => { contexts.view.zoomAtScreen(screen, factor); commit(); });
+    on('view.zoom.in', () => centerZoom(1.2));
+    on('view.zoom.out', () => centerZoom(1 / 1.2));
+    on('view.zoom.reset', () => { contexts.view.set({ x: 0, y: 0, scale: 1 }); commit(); });
+  });
+
+  // Camera (pan). Pointer drag on the stage background. Independent of zoom.
+  system('view.pan', ({ on, emit, contexts }) => {
+    let pan: { pointer: { x: number; y: number }; view: ViewState } | null = null;
+    const stageSelector = `[data-place="${Places.Stage}"]`;
+    const commit = () => emit('view.changed', contexts.view.get());
+
+    contexts.commands.register([
       {
         id: 'view.pan.start',
         label: 'Start canvas pan',
@@ -544,10 +644,6 @@ export function registerSystems(system: Registry) {
       { id: 'view.pan.end', label: 'End canvas pan', event: 'view.pan.end', group: 'view', hidden: true, input: { on: 'pointerup', when: () => !!pan } },
     ]);
 
-    on('view.zoom.by', ({ screen, factor }) => { contexts.view.zoomAtScreen(screen, factor); commit(); });
-    on('view.zoom.in', () => centerZoom(1.2));
-    on('view.zoom.out', () => centerZoom(1 / 1.2));
-    on('view.zoom.reset', () => { contexts.view.set({ x: 0, y: 0, scale: 1 }); commit(); });
     on('view.pan.start', pointer => {
       pan = { pointer, view: contexts.view.get() };
       contexts.places.el(Places.Stage)?.classList.add('panning');
@@ -566,15 +662,48 @@ export function registerSystems(system: Registry) {
     });
   });
 
-  system('focus', ({ on, emit, graphs }) => {
-    on('focus.node.focus', ({ id }) => { graphs.current.focused = id; emit('focus.node.focused', { id }); });
-    on('focus.node.clear', () => { graphs.current.focused = null; emit('focus.node.focused', { id: null }); });
+  system('focus', ({ on, emit, selection }) => {
+    on('focus.node.focus', ({ id }) => { selection.focus(id); emit('focus.node.focused', { id }); });
+    on('focus.node.clear', () => { selection.focus(null); emit('focus.node.focused', { id: null }); });
   });
 
-  system('dx', ({ on, contexts, model }) => {
-    on('app.start', () => {
-      const issues = validateModel({ entities: model.entities(), collections: model.collections() }, contexts.commands.all());
-      if (issues.length) throw new Error(`DX model contract failed:\n${issues.join('\n')}`);
+  // Dependency map — colocated for readability. setRequires patches the entry post-hoc.
+  // Only declare deps the system *actively uses*; soft "would be nice" deps stay implicit.
+  const deps: Record<string, string[]> = {
+    render: ['input'],
+    main: ['render'],
+    log: ['render'],
+    outline: ['render', 'graph'],
+    modal: ['render'],
+    commandModal: ['modal'],
+    domain: ['graph'],
+    'view.zoom': ['render'],
+    'view.pan': ['render'],
+    focus: ['graph'],
+  };
+  Object.entries(deps).forEach(([name, list]) => system.setRequires(name, list));
+
+  system('dx', (ctx) => {
+    // Run synchronously after all `app.start` handlers have had a chance to subscribe.
+    // We run as a microtask so we go AFTER the rest of the `app.start` callback chain.
+    ctx.on('app.start', () => {
+      queueMicrotask(() => {
+        const issues = runDx(ctx);
+        ctx.contexts.dx._set(issues);
+        const errors = issues.filter(i => i.level === 'error');
+        const warns = issues.filter(i => i.level === 'warn');
+        if (errors.length) {
+          console.error('[dx] errors:');
+          errors.forEach(i => console.error(`  ${i.rule}: ${i.message}`));
+          throw new Error(`DX contract failed (${errors.length} error${errors.length > 1 ? 's' : ''}). See console.`);
+        }
+        if (warns.length) {
+          console.warn(`[dx] ${warns.length} warning(s):`);
+          warns.forEach(i => console.warn(`  ${i.rule}: ${i.message}`));
+        } else {
+          console.info('[dx] all checks passed');
+        }
+      });
     });
   });
 }

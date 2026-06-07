@@ -1,4 +1,4 @@
-import { collapsible, configurable, draggable, editable, selectable } from './abilities';
+import { collapsible, configurable, draggable, editable, nudgeable, selectable } from './abilities';
 import type {
   CollectionDef,
   EntityDef,
@@ -36,49 +36,45 @@ export class GraphNode implements NodeEntity {
 export class Graph {
   static new(id: Id) { return new Graph(id); }
 
-  selected: Id | null = null;
-  focused: Id | null = null;
   private nextNode = 1;
   private items = new Map<Id, GraphNode>();
 
   private constructor(readonly id: Id) {}
 
-  node(draft?: NodeDraft, options?: NodeCreateOptions): GraphNode;
-  node(id: Id): GraphNode | undefined;
-  node(value: NodeDraft | Id = {}, options: NodeCreateOptions = {}) {
-    if (typeof value === 'string') return this.items.get(value);
+  getNode(id: Id) { return this.items.get(id); }
+  /** Create-or-place-near. `nearPosition` is the caller's job — Graph stays unaware of selection. */
+  createNode(draft: NodeDraft = {}, options: NodeCreateOptions & { nearPosition?: Position } = {}) {
     const id = `e${this.nextNode++}`;
-    const node = new GraphNode(this, id, this.withDefaults(value, options));
+    const node = new GraphNode(this, id, this.withDefaults(draft, options));
     this.items.set(id, node);
     return node;
   }
-
+  /** Backwards-compatible overload: `node(id)` reads, `node(draft, opts)` creates.
+   *  Prefer `getNode` / `createNode` in new code. */
+  node(draft?: NodeDraft, options?: NodeCreateOptions & { nearPosition?: Position }): GraphNode;
+  node(id: Id): GraphNode | undefined;
+  node(value: NodeDraft | Id = {}, options: NodeCreateOptions & { nearPosition?: Position } = {}) {
+    if (typeof value === 'string') return this.items.get(value);
+    return this.createNode(value, options);
+  }
   nodes() { return [...this.items.values()]; }
-  selectedNode() { return this.selected ? this.node(this.selected) : undefined; }
-  createNode(draft: NodeDraft = {}, options: NodeCreateOptions = {}) { return this.node(draft, options).id; }
   updateNode(id: Id, patch: NodePatch) {
-    const node = this.node(id);
+    const node = this.items.get(id);
     if (!node) return false;
     Object.assign(node, patch);
     return true;
   }
-  deleteNode(id: Id) {
-    const deleted = this.items.delete(id);
-    if (this.selected === id) this.selected = null;
-    if (this.focused === id) this.focused = null;
-    return deleted;
-  }
+  deleteNode(id: Id) { return this.items.delete(id); }
 
-  private withDefaults(draft: NodeDraft, options: NodeCreateOptions): NodeDraft {
-    const nearId = options.near ?? this.selected;
-    const selected = options.near === null || !nearId ? undefined : this.node(nearId);
-    const anchor = selected?.Position ?? options.at ?? { x: 0, y: 0 };
+  private withDefaults(draft: NodeDraft, options: NodeCreateOptions & { nearPosition?: Position }): NodeDraft {
+    const anchor = options.nearPosition ?? options.at ?? { x: 0, y: 0 };
+    const hasAnchor = options.nearPosition != null;
     const spread = this.items.size % 4;
     return {
       ...draft,
       Position: draft.Position ?? {
-        x: anchor.x + (selected ? 180 : spread * 24),
-        y: anchor.y + (selected ? 0 : (this.items.size % 3) * 18),
+        x: anchor.x + (hasAnchor ? 180 : spread * 24),
+        y: anchor.y + (hasAnchor ? 0 : (this.items.size % 3) * 18),
       },
     };
   }
@@ -126,7 +122,14 @@ const collection = <T,>(id: string, def: Omit<ModelCollectionDef<T>, 'id'>): Mod
 export const nodeEntity = entity<GraphNode, NodePatch>('node', {
   label: 'Node',
   labelOf: node => node.Label.text,
-  abilities: [selectable<GraphNode>(), draggable<GraphNode>(), collapsible<GraphNode>(), editable<GraphNode>(), configurable<GraphNode>()],
+  abilities: [
+    selectable<GraphNode>(),
+    draggable<GraphNode>(),
+    nudgeable<GraphNode>(),
+    collapsible<GraphNode>(),
+    editable<GraphNode>(),
+    configurable<GraphNode>(),
+  ],
   properties: [
     property<GraphNode, NodePatch>({
       id: 'title',

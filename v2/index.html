@@ -22,14 +22,9 @@
   <template id="tpl-toolbar">
     <nav class="toolbar" aria-label="App commands">
       <span class="brand">ECS Graph v2</span>
-      <button data-command="editing.node.create">+ Node</button>
-      <button data-command="palette.open">Palette</button>
-      <button data-command="help.open">Help</button>
-      <button data-command="modal.open" data-title="Modal" data-body="Ready.">Modal</button>
+      <div class="toolbar-start" data-slot="start"></div>
       <span class="toolbar-spacer"></span>
-      <button data-command="view.zoom.out">-</button>
-      <button data-command="view.zoom.reset">100%</button>
-      <button data-command="view.zoom.in">+</button>
+      <div class="toolbar-end" data-slot="end"></div>
     </nav>
   </template>
 
@@ -46,6 +41,13 @@
 
   <template id="tpl-nodes">
     <div class="nodes"></div>
+  </template>
+
+  <template id="tpl-empty">
+    <div class="empty" role="status" aria-live="polite">
+      <div class="empty-title" data-text="title"></div>
+      <div class="empty-hint" data-text="hint"></div>
+    </div>
   </template>
 
   <template id="tpl-node">
