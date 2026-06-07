@@ -1,4 +1,4 @@
-import { isStageSurface, itemIdFrom, type Registry } from '../core';
+import { isStageSurface, itemIdFrom, nodeRef, type Registry } from '../core';
 import { Places } from '../types';
 import type { CommandSource, NodeEntity } from '../types';
 import { ability, action } from './shared';
@@ -11,7 +11,7 @@ export const selectable = <T extends NodeEntity>() => ability<T>('selectable', [
 })]);
 
 export function registerSelectable(system: Registry) {
-  system('ability.selectable', ({ on, emit, contexts, graphs, selection }) => {
+  system('ability.selectable', ({ on, emit, contexts, graphs, selection, origin }) => {
     const selectedNodeId = () => selection.selectedNode()?.id ?? null;
     const nodeId = (source: CommandSource) => itemIdFrom(source.target) || selectedNodeId() || '';
     const nextNodeId = () => {
@@ -65,7 +65,19 @@ export function registerSelectable(system: Registry) {
       },
     ]);
 
-    on('selection.node.select', ({ id }) => { selection.select({ kind: 'node', id }); emit('selection.node.selected', { id }); });
-    on('selection.node.clear', () => { selection.select(null); emit('selection.node.selected', { id: null }); });
+    on('selection.node.select', ({ id }) => emit('selection.item.select', nodeRef(id)));
+    on('selection.node.clear', () => emit('selection.item.clear'));
+    on('selection.item.select', ref => {
+      selection.select(ref);
+      contexts.itemModes.set(origin, 'selected', [ref]);
+      emit('selection.item.selected', ref);
+      emit('selection.node.selected', { id: ref.kind === 'node' ? ref.id : null });
+    });
+    on('selection.item.clear', () => {
+      selection.select(null);
+      contexts.itemModes.clear(origin);
+      emit('selection.item.selected', null);
+      emit('selection.node.selected', { id: null });
+    });
   });
 }

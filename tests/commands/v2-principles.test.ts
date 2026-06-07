@@ -109,12 +109,20 @@ describe('v2 principles (enforced)', () => {
 
     expect(ctx.contexts.commands.get('view.zoom.in')).toBeTruthy();
     expect(commandButton('view.zoom.in')).not.toBeNull();
+    ctx.contexts.itemModes.set('view.zoom', 'focused', [{ kind: 'node', id: 'e-test' }]);
+    ctx.contexts.itemOverlays.set('view.zoom', [{ ref: { kind: 'node', id: 'e-test' }, text: 'Z' }]);
+    ctx.contexts.itemTargets.register('view.zoom', () => [{ ref: { kind: 'node', id: 'e-test' }, label: 'Z', anchor: { x: 0, y: 0 } }]);
+    ctx.contexts.keyboard.capture('view.zoom');
 
     ctx.registries.systems.stop(ctx, 'view.zoom');
     await settle();
 
     expect(ctx.contexts.commands.get('view.zoom.in')).toBeUndefined();
     expect(ctx.contexts.affordances.for('top').some(aff => aff.command === 'view.zoom.in')).toBe(false);
+    expect(ctx.contexts.itemModes.all().some(mode => mode.source === 'view.zoom')).toBe(false);
+    expect(ctx.contexts.itemOverlays.all()).toEqual([]);
+    expect(ctx.contexts.itemTargets.all().some(target => target.label === 'Z')).toBe(false);
+    expect(ctx.contexts.keyboard.active()).toBeNull();
     expect(commandButton('view.zoom.in')).toBeNull();
     ctx.bus.emit('view.zoom.in');
     expect(ctx.contexts.view.get().scale).toBe(before);

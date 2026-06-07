@@ -2,19 +2,21 @@ import type { GraphNode } from '../model';
 import {
   appendRenderable,
   commandShortcut,
+  edgeRef,
   emptyState,
   entityUi,
   factScope,
+  nodeRef,
   nodeRect,
   uiValue,
   type Registry,
 } from '../core';
 import { Places } from '../types';
-import type { ActionDef, AffordanceDef, Place, RedrawScope, Renderable } from '../types';
+import type { ActionDef, AffordanceDef, ItemRef, Place, RedrawScope, Renderable } from '../types';
 
 export function registerRender(system: Registry) {
   system('render', ctx => {
-    const { on, emit, bus, graphs, contexts, model, selection } = ctx;
+    const { on, emit, bus, graphs, contexts, model } = ctx;
     const root = document.getElementById('app')!;
     const views = new Map<Place, Map<string, Renderable>>();
     const applyAffordance = (el: HTMLElement, node: GraphNode, ui: AffordanceDef<GraphNode>) => {
@@ -43,6 +45,36 @@ export function registerRender(system: Registry) {
           .forEach(({ action, ui }) => target.append(affordanceButton(node, action, ui)));
       });
     };
+    const tagItem = (el: HTMLElement | SVGElement, ref: ItemRef) => {
+      el.setAttribute('data-item-kind', ref.kind);
+      el.setAttribute('data-item-id', ref.id);
+    };
+    const applyItemModes = (el: HTMLElement | SVGElement, ref: ItemRef) => {
+      const classes = [...new Set(contexts.itemModes.for(ref).map(mode => mode.className ?? mode.mode).filter(Boolean))];
+      if (!classes.length) return;
+      el.classList.add(...classes);
+      el.setAttribute('data-item-modes', classes.join(' '));
+    };
+    const itemSelector = (ref: ItemRef) =>
+      `[data-item-kind="${ref.kind}"][data-item-id="${ref.id.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"]`;
+    const drawOverlays = (layer: HTMLElement) => {
+      const overlayLayer = document.createElement('div');
+      overlayLayer.className = 'item-overlays';
+      contexts.itemOverlays.all().forEach(overlay => {
+        const anchor = contexts.itemTargets.anchor(overlay.ref);
+        if (!anchor) return;
+        const el = document.createElement('div');
+        el.className = 'item-overlay';
+        if (overlay.className) el.classList.add(...overlay.className.split(/\s+/).filter(Boolean));
+        tagItem(el, overlay.ref);
+        if (overlay.id) el.dataset.overlayId = overlay.id;
+        el.textContent = overlay.text;
+        el.style.left = `${anchor.x}px`;
+        el.style.top = `${anchor.y}px`;
+        overlayLayer.append(el);
+      });
+      layer.append(overlayLayer);
+    };
     const syncStageView = () => {
       const stage = contexts.places.el(Places.Stage), view = contexts.view.get();
       if (!stage) return;
@@ -60,10 +92,11 @@ export function registerRender(system: Registry) {
     const nodeView = (node: GraphNode) => {
       const el = contexts.templates.clone('node');
       const pos = node.Position ?? { x: 0, y: 0 };
+      const ref = nodeRef(node.id);
       el.dataset.nodeId = node.id;
+      tagItem(el, ref);
       el.tabIndex = -1;
-      el.classList.toggle('selected', selection.selectedNode()?.id === node.id);
-      el.classList.toggle('focused', selection.focusedNode()?.id === node.id);
+      applyItemModes(el, ref);
       el.classList.toggle('collapsed', !!node.Collapsed);
       el.style.left = `${pos.x}px`;
       el.style.top = `${pos.y}px`;
@@ -94,9 +127,11 @@ export function registerRender(system: Registry) {
             line.setAttribute('y1', String(from.Position.y));
             line.setAttribute('x2', String(to.Position.x));
             line.setAttribute('y2', String(to.Position.y));
+            line.setAttribute('tabindex', '-1');
             line.dataset.edgeId = edge.id;
-            line.dataset.itemId = edge.id;
-            line.dataset.itemKind = edge.kind;
+            const ref = edgeRef(edge.id);
+            tagItem(line, ref);
+            applyItemModes(line, ref);
             svg.append(line);
             if (edge.Label?.text) {
               const text = document.createElementNS(SVG_NS, 'text');
@@ -111,6 +146,7 @@ export function registerRender(system: Registry) {
           graphs.current.nodes()
             .filter(node => contexts.view.isVisible(Places.Stage, nodeRect(node), 160))
             .forEach(node => layer.append(nodeView(node)));
+          drawOverlays(layer);
           return layer;
         },
       });
@@ -146,12 +182,13 @@ export function registerRender(system: Registry) {
     const dirty = new Set<RenderScope>();
     let scheduled = false;
     let flushes = 0;
-    let pendingFocusId: string | null = null;
-    const focusPendingNode = () => {
-      if (!pendingFocusId) return;
-      const node = contexts.places.el(Places.Stage)?.querySelector(`[data-node-id="${pendingFocusId}"]`);
-      pendingFocusId = null;
-      if (node instanceof HTMLElement) node.focus({ preventScroll: true });
+    let pendingFocusRef: ItemRef | null = null;
+    const focusPendingItem = () => {
+      if (!pendingFocusRef) return;
+      const item = contexts.places.el(Places.Stage)?.querySelector(itemSelector(pendingFocusRef));
+      pendingFocusRef = null;
+      const focusable = item as (Element & { focus?: (options?: FocusOptions) => void }) | null;
+      if (typeof focusable?.focus === 'function') focusable.focus({ preventScroll: true });
     };
     const flushDirty = () => {
       scheduled = false;
@@ -159,7 +196,7 @@ export function registerRender(system: Registry) {
       if (dirty.has('nodes')) drawNodes();
       if (dirty.has('outline')) emit('outline.draw');
       dirty.clear();
-      queueMicrotask(focusPendingNode);
+      queueMicrotask(focusPendingItem);
     };
     const mark = (...scopes: RenderScope[]) => {
       scopes.forEach(s => dirty.add(s));
@@ -172,7 +209,7 @@ export function registerRender(system: Registry) {
     // Devtools/test surface — read flush count to assert coalescing budgets.
     ctx.expose('render', { flushes: () => flushes });
     on('app.start', () => mark('nodes'));
-    on('focus.node.focused', ({ id }) => { pendingFocusId = id; });
+    on('focus.item.focused', ref => { pendingFocusRef = ref; });
     bus.onAny(({ name }) => {
       const scope = factScope(name);
       if (scope) applyScope(scope);

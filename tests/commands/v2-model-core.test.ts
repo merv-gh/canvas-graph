@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   commandShortcut,
+  edgeRef,
   grouped,
   itemRefFrom,
   memoryIo,
@@ -34,6 +35,59 @@ describe('v2 selection polymorphism', () => {
     // Deleting the edge clears the selection
     ctx.bus.emit('graph.edge.delete', { id: edge.id });
     expect(ctx.selection.selected()).toBeNull();
+  });
+
+  it('focuses and highlights any ItemRef through item modes', async () => {
+    const ctx = bootV2();
+    runCommand(ctx, 'editing.node.create');
+    runCommand(ctx, 'editing.node.create');
+    await settle();
+    const [a, b] = ctx.graphs.current.nodes();
+    ctx.bus.emit('graph.edge.create', { From: a.id, To: b.id });
+    await settle();
+    const ref = edgeRef(ctx.graphs.current.edges()[0].id);
+
+    ctx.bus.emit('focus.item.focus', ref);
+    await settle();
+
+    expect(ctx.selection.focused()).toEqual(ref);
+    expect(ctx.contexts.itemModes.has(ref, 'focused')).toBe(true);
+    expect(document.querySelector(`.edges [data-edge-id="${ref.id}"]`)?.classList.contains('focused')).toBe(true);
+  });
+
+  it('exposes ItemRef targets, overlays, and keyboard capture for future modes', async () => {
+    const ctx = bootV2();
+    runCommand(ctx, 'editing.node.create');
+    runCommand(ctx, 'editing.node.create');
+    await settle();
+    const [a, b] = ctx.graphs.current.nodes();
+    ctx.bus.emit('graph.edge.create', { From: a.id, To: b.id });
+    await settle();
+    const edge = ctx.graphs.current.edges()[0];
+
+    expect(ctx.contexts.itemTargets.all().map(target => target.ref)).toEqual([
+      { kind: 'node', id: a.id },
+      { kind: 'node', id: b.id },
+      { kind: 'edge', id: edge.id },
+    ]);
+
+    ctx.contexts.itemOverlays.set('test', [{ ref: edgeRef(edge.id), text: 'AA' }]);
+    await settle();
+    const overlay = document.querySelector<HTMLElement>('.item-overlay')!;
+    expect(overlay.textContent).toBe('AA');
+    expect(overlay.dataset.itemKind).toBe('edge');
+    expect(overlay.dataset.itemId).toBe(edge.id);
+
+    const capture = ctx.contexts.keyboard.capture('jump');
+    expect(ctx.contexts.keyboard.active()).toBe('jump');
+    expect(document.activeElement).toBe(capture.input);
+    capture.input.value = 'e';
+    expect(capture.value()).toBe('e');
+    capture.clear();
+    expect(capture.value()).toBe('');
+    capture.stop();
+    expect(ctx.contexts.keyboard.active()).toBeNull();
+    expect(document.querySelector('[data-keyboard-mode="jump"]')).toBeNull();
   });
 });
 

@@ -4,6 +4,10 @@ import { commandsContext, inputRouter } from './core/commands';
 import { itemIdFrom, itemRefFrom, appendRenderable } from './core/dom';
 import { createFlags, type FlagKind, type FlagsApi } from './core/flags';
 import { localStorageIo, type IoApi } from './core/io';
+import { itemModesContext } from './core/item-modes';
+import { itemOverlaysContext } from './core/item-overlays';
+import { itemTargetsContext } from './core/item-targets';
+import { keyboardCaptureContext } from './core/keyboard';
 import { propertiesContext } from './core/properties';
 import { createSelectionStore, type SelectionStore } from './core/selection';
 import { createSim, type SimApi } from './core/sim';
@@ -34,6 +38,11 @@ export { createSelectionStore, type SelectionStore } from './core/selection';
 export { createSim, type SimApi, type Trace, type TraceEvent } from './core/sim';
 export { parseShortcut, shortcutOf } from './core/shortcuts';
 export { itemIdFrom, itemRefFrom, appendRenderable } from './core/dom';
+export { edgeRef, itemKey, nodeRef, sameItemRef } from './core/item-ref';
+export { itemModesContext, type ItemMode } from './core/item-modes';
+export { itemOverlaysContext, type ItemOverlay } from './core/item-overlays';
+export { itemTargetsContext, type ItemTarget, type ItemTargetProvider } from './core/item-targets';
+export { keyboardCaptureContext, type KeyboardCapture } from './core/keyboard';
 export { clamp, nodeRect, clientPoint, isStageSurface } from './core/view';
 
 export type Contexts = ReturnType<typeof createContexts>;
@@ -224,6 +233,10 @@ function createContexts(bus: Bus, flags: FlagsApi, io: IoApi) {
   const view = viewContext(places);
   const properties = propertiesContext();
   const affordances = affordancesContext(bus);
+  const itemModes = itemModesContext(bus);
+  const itemOverlays = itemOverlaysContext(bus);
+  const itemTargets = itemTargetsContext();
+  const keyboard = keyboardCaptureContext();
   const commands = commandsContext(bus, origin => !origin || flags.isOn(origin), io);
   const input = inputRouter(commands);
   const placeContext = {
@@ -236,7 +249,20 @@ function createContexts(bus: Bus, flags: FlagsApi, io: IoApi) {
     issues: () => lastDxIssues,
     _set(issues: DxIssue[]) { lastDxIssues = issues; },
   };
-  return { commands, input, places: placeContext, templates, view, properties, dx, affordances };
+  return {
+    commands,
+    input,
+    places: placeContext,
+    templates,
+    view,
+    properties,
+    dx,
+    affordances,
+    itemModes,
+    itemOverlays,
+    itemTargets,
+    keyboard,
+  };
 }
 
 /** Registry runs setup functions in insertion order, filtering by feature flag.
@@ -254,6 +280,10 @@ export function registry(kind: FlagKind = 'system'): Registry {
     running.delete(name);
     ctx.contexts.commands.unregisterOrigin(name);
     ctx.contexts.affordances.unregisterOrigin(name);
+    ctx.contexts.itemModes.clear(name);
+    ctx.contexts.itemOverlays.clear(name);
+    ctx.contexts.itemTargets.unregisterSource(name);
+    ctx.contexts.keyboard.release(name);
   };
   register.start = (ctx) => {
     entries.forEach(entry => {

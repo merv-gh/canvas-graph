@@ -1,9 +1,9 @@
 import type { GraphNode } from '../model';
-import type { Registry } from '../core';
+import { edgeRef, nodeRef, type Registry } from '../core';
 import { Places } from '../types';
 
 export function registerGraph(system: Registry) {
-  system('graph', ({ on, emit, graphs, contexts, selection }) => {
+  system('graph', ({ on, emit, graphs, contexts, selection, origin }) => {
     on('graph.create', () => {
       const graph = graphs.create();
       graphs.switch(graph.id);
@@ -49,6 +49,27 @@ export function registerGraph(system: Registry) {
       const next = graphs.delete(id);
       emit('graph.deleted', { id, nextId: next.id });
       emit('graph.switched', { id: next.id });
+    });
+    return contexts.itemTargets.register(origin, () => {
+      const nodes = graphs.current.nodes().map(node => ({
+        ref: nodeRef(node.id),
+        label: node.Label.text || node.id,
+        anchor: node.Position ?? { x: 0, y: 0 },
+      }));
+      const edges = graphs.current.edges().flatMap(edge => {
+        const from = graphs.current.getNode(edge.From);
+        const to = graphs.current.getNode(edge.To);
+        if (!from?.Position || !to?.Position) return [];
+        return [{
+          ref: edgeRef(edge.id),
+          label: edge.Label?.text || `${from.Label.text} to ${to.Label.text}`,
+          anchor: {
+            x: (from.Position.x + to.Position.x) / 2,
+            y: (from.Position.y + to.Position.y) / 2,
+          },
+        }];
+      });
+      return [...nodes, ...edges];
     });
   });
 }

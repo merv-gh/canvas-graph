@@ -76,6 +76,13 @@ button.icon:hover { color: var(--ink); }
   touch-action: none;
 }
 .stage.panning { cursor: grabbing; }
+.keyboard-capture {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
 .stage::before {
   content: "";
   position: absolute;
@@ -93,7 +100,21 @@ button.icon:hover { color: var(--ink); }
 .edges { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 .edges line { stroke: var(--edge); stroke-width: 2px; opacity: .9; vector-effect: non-scaling-stroke; }
 .edges line.selected { stroke: var(--accent); stroke-width: 2px; }
+.edges line.focused { stroke: var(--accent); stroke-dasharray: 4 3; }
 .edges .edge-label { fill: var(--text-muted); font: 11px ui-monospace, monospace; }
+.item-overlays { position: absolute; inset: 0; pointer-events: none; }
+.item-overlay {
+  position: absolute;
+  transform: translate(-50%, -140%);
+  padding: 1px 5px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+  font: 11px ui-monospace, monospace;
+  white-space: nowrap;
+}
 .node {
   position: absolute;
   min-width: 140px;
@@ -109,6 +130,7 @@ button.icon:hover { color: var(--ink); }
 }
 .node:hover { box-shadow: var(--shadow-md); border-color: var(--accent); }
 .node.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft), var(--shadow-md); }
+.node.focused { outline: 2px solid var(--accent); outline-offset: 2px; }
 .node-header { display: flex; align-items: center; gap: 6px; padding: 8px 10px 4px; }
 .node-affordances { display: flex; align-items: center; gap: 2px; }
 .node-drag-handle {
