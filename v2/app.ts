@@ -23,7 +23,7 @@ window.addEventListener('DOMContentLoaded', () => {
     // systems
     render: true, input: true, main: true, log: true, outline: true,
     modal: true, commandModal: true, domain: true, graph: true,
-    'view.zoom': true, 'view.pan': true, focus: true, dx: true,
+    'view.zoom': true, 'view.pan': true, focus: true, dx: true, demo: true,
     // abilities
     'ability.selectable': true,
     'ability.draggable': true,

@@ -667,6 +667,89 @@ export function registerSystems(system: Registry) {
     on('focus.node.clear', () => { selection.focus(null); emit('focus.node.focused', { id: null }); });
   });
 
+  /* `demo` is dogfood: render the running system as a graph of its own concepts.
+     It intentionally exercises the create path enough times to surface what's missing —
+     edges (we encode deps as body text), layout (we hand-pick positions), and batch ops
+     (a create-with-edge command would halve the script). All three should become next
+     systems; this demo is the receipt. */
+  system('demo', ({ on, emit, contexts, graphs, flags, contribute }) => {
+    contribute({ surface: 'top', command: 'demo.render-self', kind: 'button', text: '★ Self', order: 60 });
+    contexts.commands.register([{
+      id: 'demo.render-self',
+      label: 'Render self-graph',
+      event: 'demo.run-self',
+      group: 'demo',
+    }]);
+
+    // Hand-rolled radial placement until a `layout` system lands.
+    const place = (cx: number, cy: number, i: number, ring: number, radius = 240) => {
+      const angle = (i / ring) * Math.PI * 2 - Math.PI / 2;
+      return { x: cx + Math.cos(angle) * radius, y: cy + Math.sin(angle) * radius };
+    };
+
+    on('demo.run-self', () => {
+      const cx = 0, cy = 0;
+      const g = graphs.current;
+      g.nodes().slice().forEach(node => g.deleteNode(node.id));
+
+      const stats = { creates: 0, wouldBeEdges: 0, positionHacks: 0 };
+      const make = (label: string, body: string, position: { x: number; y: number }, size = { w: 140, h: 56 }) => {
+        // Deps text is the "edge as string" hack — replace with a real Edge entity later.
+        g.createNode({ Label: { text: label + (body ? '\n' + body : '') }, Position: position, Size: size });
+        stats.creates++;
+        stats.positionHacks++;
+      };
+
+      make('core', 'bus / commands / flags / io / view', { x: cx, y: cy }, { w: 180, h: 64 });
+
+      // Systems ring.
+      const systems = ['render', 'input', 'main', 'log', 'outline', 'modal', 'commandModal',
+        'domain', 'graph', 'view.zoom', 'view.pan', 'focus', 'dx', 'demo'];
+      systems.forEach((name, i) => {
+        const deps = flags.requires(name);
+        stats.wouldBeEdges += 1 + deps.length;
+        make(name, deps.length ? `→ ${deps.join(', ')}` : '', place(cx, cy, i, systems.length, 280), { w: 140, h: 56 });
+      });
+
+      // Abilities ring (below).
+      const abilities = ['selectable', 'draggable', 'nudgeable', 'collapsible', 'editable', 'configurable'];
+      abilities.forEach((name, i) => {
+        const deps = flags.requires(`ability.${name}`);
+        stats.wouldBeEdges += 1 + deps.length;
+        make(`ability.${name}`, deps.length ? `→ ${deps.join(', ')}` : '', place(cx, cy + 540, i, abilities.length, 200), { w: 140, h: 48 });
+      });
+
+      // Features (right cluster).
+      const features = ['nodeLifecycle'];
+      features.forEach((name, i) => {
+        const deps = flags.requires(name);
+        stats.wouldBeEdges += deps.length;
+        make(`feature.${name}`, `→ ${deps.join(', ')}`, { x: cx + 700, y: cy + i * 80 - 100 }, { w: 180, h: 56 });
+      });
+
+      // The direct g.createNode/deleteNode calls bypass the bus, so the scheduler has no
+      // signal to redraw. One explicit nudge is fine — it's the *price* of using the
+      // low-level Graph API and another vote for a batch `graph.script.run` command.
+      emit('render.nodes.draw');
+
+      console.info('[demo] self-graph rendered', {
+        ...stats,
+        gaps: {
+          edgesNeeded: stats.wouldBeEdges,
+          positionsHardcoded: stats.positionHacks,
+          commandsPerNode: 1,
+        },
+        hints: [
+          'Edges are encoded as text only — need a first-class Edge entity.',
+          'Positions are hand-rolled — need a `layout` system (radial/grid/tidy-tree).',
+          'Each node is one create; a `graph.node.createWithEdge` command would batch.',
+          'Selection lands on the last create — need "create-keeping-focus" for the script.',
+          'Direct g.createNode bypasses the bus → scheduler misses the mutation. A `graph.script` system that wraps emits would be cleaner.',
+        ],
+      });
+    });
+  });
+
   // Dependency map — colocated for readability. setRequires patches the entry post-hoc.
   // Only declare deps the system *actively uses*; soft "would be nice" deps stay implicit.
   const deps: Record<string, string[]> = {
@@ -680,6 +763,7 @@ export function registerSystems(system: Registry) {
     'view.zoom': ['render'],
     'view.pan': ['render'],
     focus: ['graph'],
+    demo: ['graph', 'render'],
   };
   Object.entries(deps).forEach(([name, list]) => system.setRequires(name, list));
 

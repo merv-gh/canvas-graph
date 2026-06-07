@@ -21,6 +21,7 @@ export type ItemRef = { kind: ItemKind; id: Id };
 
 export type AppEvents = {
   'app.start': void;
+  'demo.run-self': void;
   'affordance.contributed': { surface: AffordanceSurface };
   'render.shell': void;
   'render.view.set': { place: Place; key?: string; view: Renderable };
