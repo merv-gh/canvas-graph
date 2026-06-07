@@ -1,0 +1,98 @@
+import { describe, expect, it } from 'vitest';
+import { bootV2, commandButton, runCommand, settle } from './v2-testkit';
+
+const createNodes = async (ctx: ReturnType<typeof bootV2>, count: number) => {
+  for (let i = 0; i < count; i++) runCommand(ctx, 'editing.node.create');
+  await settle();
+  return ctx.graphs.current.nodes();
+};
+
+describe('v2 UI command surfaces', () => {
+  it('renders toolbar, outline title-search, and event log from command metadata', async () => {
+    const ctx = bootV2();
+    await createNodes(ctx, 2);
+
+    expect(commandButton('editing.node.create')?.textContent).toBe('+ Node');
+    expect(commandButton('graph.edge.create')?.textContent).toBe('+ Edge');
+    expect(document.querySelectorAll('.outline-search')).toHaveLength(0);
+
+    const search = document.querySelector<HTMLInputElement>('.outline-title-search[placeholder="Nodes"]')!;
+    search.value = 'node 2';
+    expect(runCommand(ctx, 'outline.search.change', { target: search })).toBe(true);
+    expect([...document.querySelectorAll('.outline-section:has(.outline-title-search[placeholder="Nodes"]) .outline-main')]
+      .map(row => row.textContent)).toEqual(['Node 2']);
+    expect(document.querySelector('.log-row')?.textContent).toContain('outline.search.changed');
+  });
+
+  it('opens palette, filters commands, and runs a command row', async () => {
+    const ctx = bootV2();
+
+    expect(runCommand(ctx, 'palette.open')).toBe(true);
+    expect(document.querySelector('.modal-head')?.textContent).toContain('Palette');
+    const search = document.querySelector<HTMLInputElement>('.palette-search')!;
+    search.value = 'edge';
+    expect(runCommand(ctx, 'commandModal.search.change', { target: search })).toBe(true);
+    expect([...document.querySelectorAll('.command-row b')].some(row => row.textContent?.includes('Create edge'))).toBe(true);
+
+    const row = [...document.querySelectorAll<HTMLElement>('.command-row')]
+      .find(candidate => candidate.dataset.command === 'graph.edge.create')!;
+    row.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(document.querySelector('.modal-head')?.textContent).toContain('Create edge');
+  });
+
+  it('opens help and blocks duplicate shortcut edits', () => {
+    const ctx = bootV2();
+
+    expect(runCommand(ctx, 'help.open')).toBe(true);
+    const help = document.querySelector<HTMLInputElement>('.shortcut-edit[data-shortcut-command="help.open"]')!;
+    help.value = 'P';
+    expect(runCommand(ctx, 'shortcut.edit.preview', { target: help })).toBe(true);
+    expect(help.classList.contains('is-conflict')).toBe(true);
+    expect(runCommand(ctx, 'shortcut.edit.commit', { target: help })).toBe(true);
+    expect(ctx.contexts.commands.get('help.open')?.shortcut).toBe('?');
+
+    help.value = 'H';
+    expect(runCommand(ctx, 'shortcut.edit.preview', { target: help })).toBe(true);
+    expect(help.classList.contains('is-conflict')).toBe(false);
+    expect(runCommand(ctx, 'shortcut.edit.commit', { target: help })).toBe(true);
+    expect(ctx.contexts.commands.get('help.open')?.shortcut).toBe('H');
+  });
+
+  it('updates view through zoom, pan, fit, and layout commands', async () => {
+    const ctx = bootV2();
+    const nodes = await createNodes(ctx, 4);
+    ctx.bus.emit('selection.node.select', { id: nodes[0].id });
+    ctx.bus.emit('focus.node.focus', { id: nodes[0].id });
+    ctx.bus.emit('graph.edge.create', { From: nodes[0].id, To: nodes[1].id });
+    ctx.bus.emit('graph.edge.create', { From: nodes[1].id, To: nodes[2].id });
+
+    const start = ctx.contexts.view.get();
+    expect(runCommand(ctx, 'view.zoom.in')).toBe(true);
+    expect(ctx.contexts.view.get().scale).toBeGreaterThan(start.scale);
+    expect(runCommand(ctx, 'view.zoom.out')).toBe(true);
+    expect(runCommand(ctx, 'view.zoom.reset')).toBe(true);
+    expect(ctx.contexts.view.get()).toEqual({ x: 0, y: 0, scale: 1 });
+
+    ctx.bus.emit('view.pan.start', { x: 10, y: 10 });
+    ctx.bus.emit('view.pan.move', { x: 90, y: 50 });
+    expect(ctx.contexts.view.get().x).toBeLessThan(0);
+    ctx.bus.emit('view.pan.end');
+
+    expect(runCommand(ctx, 'layout.apply.grid')).toBe(true);
+    expect(runCommand(ctx, 'layout.apply.radial')).toBe(true);
+    expect(runCommand(ctx, 'layout.apply.tidy')).toBe(true);
+    expect(runCommand(ctx, 'view.fit.all')).toBe(true);
+    expect(ctx.contexts.view.get().scale).toBeGreaterThan(0);
+    expect(runCommand(ctx, 'view.fit.selected')).toBe(true);
+  });
+
+  it('renders the demo self graph through commands', async () => {
+    const ctx = bootV2();
+
+    expect(runCommand(ctx, 'demo.render-self')).toBe(true);
+    await settle();
+
+    expect(ctx.graphs.current.nodes().length).toBeGreaterThan(10);
+    expect(ctx.graphs.current.edges().length).toBeGreaterThan(5);
+  });
+});

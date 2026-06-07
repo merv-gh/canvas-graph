@@ -26,6 +26,17 @@ npm run dev
 
 V2 serves at `http://127.0.0.1:5174/`.
 
+## Tests
+
+- `npm run test:commands` runs fast jsdom command tests from `tests/commands/`.
+- `npm run test:commands:coverage` runs the same tests with v2-only V8 coverage.
+- `npm test` enforces v2 coverage first, then runs the Playwright browser suite.
+
+Coverage thresholds are 80% global minimums for statements, functions, and lines.
+Branch coverage is reported and should be ratcheted separately. New command cases should usually use `bootV2()` and `runCommand()` from
+`tests/commands/v2-testkit.ts`; keep Playwright for browser layout, screenshots,
+and full Vite serving.
+
 ## Current Shape
 
 - `app.ts` is only the composition entrypoint.

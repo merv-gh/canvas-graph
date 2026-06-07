@@ -2,6 +2,7 @@ const { defineConfig } = require('@playwright/test');
 
 module.exports = defineConfig({
   testDir: './tests',
+  testIgnore: ['**/commands/**'],
   timeout: 30_000,
   fullyParallel: true,
   reporter: [['./tests/screenshot-reporter.cjs']],

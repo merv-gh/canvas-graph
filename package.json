@@ -6,13 +6,19 @@
     "dev": "vite --host 127.0.0.1 --port 5173",
     "dev:v1": "vite --host 127.0.0.1 --port 5173",
     "dev:v2": "vite v2 --host 127.0.0.1 --port 5174",
-    "test": "playwright test",
+    "test": "npm run test:commands:coverage && npm run test:browser",
+    "test:browser": "playwright test",
+    "test:commands": "vitest run",
+    "test:commands:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@playwright/test": "^1.44.0",
+    "@vitest/coverage-v8": "^4.1.8",
+    "jsdom": "^27.0.1",
     "pngjs": "^7.0.0",
     "typescript": "^5.8.3",
-    "vite": "^8.0.16"
+    "vite": "^8.0.16",
+    "vitest": "^4.1.8"
   }
 }
