@@ -4,15 +4,17 @@ import {
   commandShortcut,
   emptyState,
   entityUi,
+  factScope,
   nodeRect,
   uiValue,
   type Registry,
 } from '../core';
 import { Places } from '../types';
-import type { ActionDef, AffordanceDef, Place, Renderable } from '../types';
+import type { ActionDef, AffordanceDef, Place, RedrawScope, Renderable } from '../types';
 
 export function registerRender(system: Registry) {
-  system('render', ({ on, emit, bus, graphs, contexts, model, selection }) => {
+  system('render', ctx => {
+    const { on, emit, bus, graphs, contexts, model, selection } = ctx;
     const root = document.getElementById('app')!;
     const views = new Map<Place, Map<string, Renderable>>();
     const applyAffordance = (el: HTMLElement, node: GraphNode, ui: AffordanceDef<GraphNode>) => {
@@ -59,8 +61,8 @@ export function registerRender(system: Registry) {
       const el = contexts.templates.clone('node');
       const pos = node.Position ?? { x: 0, y: 0 };
       el.dataset.nodeId = node.id;
-      el.classList.toggle('selected', selection.selected() === node.id);
-      el.classList.toggle('focused', selection.focused() === node.id);
+      el.classList.toggle('selected', selection.selectedNode()?.id === node.id);
+      el.classList.toggle('focused', selection.focusedNode()?.id === node.id);
       el.classList.toggle('collapsed', !!node.Collapsed);
       el.style.left = `${pos.x}px`;
       el.style.top = `${pos.y}px`;
@@ -139,30 +141,31 @@ export function registerRender(system: Registry) {
     });
     on('render.view.clear', ({ place, key }) => { key ? views.get(place)?.delete(key) : views.delete(place); flush(place); });
 
-    const dirty = new Set<'nodes' | 'outline'>();
+    type RenderScope = 'nodes' | 'outline';
+    const dirty = new Set<RenderScope>();
     let scheduled = false;
+    let flushes = 0;
     const flushDirty = () => {
       scheduled = false;
+      flushes++;
       if (dirty.has('nodes')) drawNodes();
       if (dirty.has('outline')) emit('outline.draw');
       dirty.clear();
     };
-    const mark = (...scopes: ('nodes' | 'outline')[]) => {
+    const mark = (...scopes: RenderScope[]) => {
       scopes.forEach(s => dirty.add(s));
       if (scheduled) return;
       scheduled = true;
       requestAnimationFrame(flushDirty);
     };
+    const applyScope = (scope: RedrawScope) =>
+      scope === 'both' ? mark('nodes', 'outline') : mark(scope as RenderScope);
+    // Devtools/test surface — read flush count to assert coalescing budgets.
+    ctx.expose('render', { flushes: () => flushes });
     on('app.start', () => mark('nodes'));
     bus.onAny(({ name }) => {
-      if (name === 'render.nodes.draw') return mark('nodes');
-      if (name === 'outline.draw') return;
-      if (name.startsWith('render.')) return;
-      if (name === 'view.changed') return mark('nodes');
-      if (/(?:^graph\.(?:switched|deleted)$|^graph\.node\.(?:created|updated|deleted)$|^graph\.edge\.(?:created|updated|deleted)$|^(?:selection|focus)\.node\.(?:selected|focused)$)/.test(name)) {
-        return mark('nodes', 'outline');
-      }
-      if (name === 'graph.created') return mark('outline');
+      const scope = factScope(name);
+      if (scope) applyScope(scope);
     });
   });
 }

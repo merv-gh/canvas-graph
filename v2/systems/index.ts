@@ -1,8 +1,8 @@
 import type { Registry } from '../core';
+import { registerCollections } from './collections';
 import { registerCommandModal } from './command-modal';
 import { registerCommandForm } from './command-form';
 import { registerDemo } from './demo';
-import { registerDomain } from './domain';
 import { registerDx } from './dx';
 import { registerFocus } from './focus';
 import { registerGraph } from './graph';
@@ -25,7 +25,7 @@ export function registerSystems(system: Registry) {
   registerModal(system);
   registerCommandForm(system);
   registerCommandModal(system);
-  registerDomain(system);
+  registerCollections(system);
   registerGraph(system);
   registerViewZoom(system);
   registerViewPan(system);
@@ -42,7 +42,7 @@ export function registerSystems(system: Registry) {
     modal: ['render'],
     commandForm: ['modal'],
     commandModal: ['modal'],
-    domain: ['graph'],
+    collections: ['graph'],
     'view.zoom': ['render'],
     'view.pan': ['render'],
     focus: ['graph'],

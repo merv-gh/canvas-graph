@@ -10,12 +10,13 @@ const NUDGE_DIRECTIONS = [
   { dir: 'down',  key: 'ArrowDown',  dx: 0, dy: 24 },
 ] as const;
 
+// Nudge is keyboard-only — the affordance is the shortcut on the paletteCommand.
+// DX recognises that and doesn't require a UI button.
 export const nudgeable = <T extends NodeEntity>() => ability<T>('nudgeable',
-  NUDGE_DIRECTIONS.map(({ dir, key }) => action<T>({
+  NUDGE_DIRECTIONS.map(({ dir }) => action<T>({
     id: `node.nudge.${dir}`,
     label: `Nudge node ${dir}`,
     paletteCommand: `graph.node.nudge.${dir}`,
-    ui: [{ surface: 'palette', command: `graph.node.nudge.${dir}`, kind: 'shortcut' }],
   })) as NonEmptyArray<ActionDef<T>>,
 );
 

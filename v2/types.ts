@@ -31,9 +31,26 @@ export type CreateHints = {
 export type NonEmptyArray<T> = [T, ...T[]];
 export type ModalVisual = 'panel' | 'command' | 'properties';
 export type ItemKind = 'graph' | 'node' | 'edge';
-export type ItemRef = { kind: ItemKind; id: Id };
+/** Addresses an item in the model. `parent` is the optional ancestor chain for
+ *  nested-graph addressing — outermost graph first. A flat node lives at
+ *  `{ kind: 'node', id: 'e1' }`; a node inside a container graph lives at
+ *  `{ kind: 'node', id: 'e1', parent: ['g1', 'g2'] }`. The container ability
+ *  (future) is what populates parent. Selection/focus stores treat refs by deep
+ *  equality so nested vs flat ids don't collide. */
+export type ItemRef = { kind: ItemKind; id: Id; parent?: Id[] };
 
-export type AppEvents = {
+/** Extension hook for third-party systems and plugins.
+ *  Augment via module declaration to add new typed events without editing this file:
+ *
+ *    declare module './types' {
+ *      interface CustomEvents { 'my.event': { foo: string } }
+ *    }
+ *
+ *  AppEvents is the merge of BuiltinEvents (declared below) and CustomEvents.
+ *  Bus.emit / on become aware of the augmented event name automatically. */
+export interface CustomEvents {}
+
+interface BuiltinEvents {
   'app.start': void;
   'app.notice': { message: string; level?: 'info' | 'warn' | 'error' };
   'demo.run-self': void;
@@ -41,7 +58,6 @@ export type AppEvents = {
   'render.shell': void;
   'render.view.set': { place: Place; key?: string; view: Renderable };
   'render.view.clear': { place: Place; key?: string };
-  'render.nodes.draw': void;
   'modal.open': { title?: string; body?: Renderable; visual?: ModalVisual };
   'modal.close': void;
   'palette.open': void;
@@ -101,7 +117,8 @@ export type AppEvents = {
   'drag.node.move': { x: number; y: number };
   'drag.node.end': void;
   'drag.node.moved': { id: Id };
-};
+}
+export type AppEvents = BuiltinEvents & CustomEvents;
 export type EventName = keyof AppEvents;
 export type EventOf<K extends EventName = EventName> = { name: K; data: AppEvents[K]; at: number };
 export type AnyEvent = { [K in EventName]: EventOf<K> }[EventName];
@@ -109,8 +126,21 @@ export type Bus = {
   on<K extends EventName>(name: K, fn: (data: AppEvents[K], event: EventOf<K>) => void): void;
   onAny(fn: (event: AnyEvent) => void): void;
   emit<K extends EventName>(name: K, ...data: AppEvents[K] extends void ? [] : [AppEvents[K]]): void;
+  /** Escape hatch for code that holds a (name, data) pair where the connection
+   *  between them is dynamic (form submission, command dispatch, plugin bridges).
+   *  Loses payload typing — prefer `emit` whenever the name is statically known. */
+  forward(name: EventName, data?: unknown): void;
 };
 export type DxIssue = { level: 'error' | 'warn'; rule: string; message: string };
+
+/** Past-tense suffixes that mark an event as a fact (something already happened).
+ *  Convention rule: imperative names ('graph.node.create') are requests; fact names
+ *  ('graph.node.created') are emitted by the owning system after the change lands.
+ *  Other systems subscribe to facts, never to requests. The render scheduler reads
+ *  facts as redraw triggers via factScope. */
+export const FACT_SUFFIXES = ['.created', '.updated', '.deleted', '.switched', '.selected', '.focused', '.changed'] as const;
+export type FactSuffix = typeof FACT_SUFFIXES[number];
+export type RedrawScope = 'nodes' | 'outline' | 'both';
 
 export type CommandSource = { event?: Event; target?: Element | null };
 export type CommandFormOption = { value: string; label: string };
@@ -120,6 +150,7 @@ export type CommandFormField = {
   input?: 'text';
   placeholder?: string;
   required?: boolean;
+  autofocus?: boolean;
   options?: () => CommandFormOption[];
 };
 export type CommandFormSpec = {
@@ -178,10 +209,16 @@ export type PropertyDef<T = unknown, Patch = unknown> = {
 };
 export type PropertyRenderer<T = unknown> = (prop: PropertyDef<T>, item: T) => HTMLElement;
 export type AffordanceSurface = 'palette' | 'list' | 'entity' | 'top';
+/** AffordanceKind enumerates how a user touches the affordance.
+ *  - 'button'  → renders as a clickable button
+ *  - 'handler' → wired to an existing template node via attrs (no new element)
+ *  Keyboard shortcuts are NOT affordances here — they live on CommandSpec.input.
+ *  DX treats an input-bound command as the keyboard affordance for its action. */
+export type AffordanceKind = 'button' | 'handler';
 export type AffordanceDef<T = unknown> = {
   surface: AffordanceSurface;
   command: string;
-  kind: 'button' | 'handler' | 'shortcut';
+  kind: AffordanceKind;
   slot?: string;
   text?: UiValue<T>;
   label?: UiValue<T>;
@@ -201,7 +238,9 @@ export type ActionDef<T = unknown> = {
   label: string;
   /** Canonical command shown in the palette. Optional for pointer-only actions (e.g. "Drag with mouse"). */
   paletteCommand?: string;
-  ui: NonEmptyArray<AffordanceDef<T>>;
+  /** Mouse/touch affordances. Empty array is legal IF the action's paletteCommand
+   *  has an input binding (DX treats that as the keyboard affordance). */
+  ui: AffordanceDef<T>[];
 };
 export type AbilityDef<T = unknown> = { id: string; actions: NonEmptyArray<ActionDef<T>> };
 export type EntityDef<T, Patch = unknown> = {
@@ -211,7 +250,17 @@ export type EntityDef<T, Patch = unknown> = {
   abilities: AbilityDef<T>[];
   properties?: PropertyDef<T, Patch>[];
 };
-export type CollectionDef<T, Ctx = unknown> = {
+export type CollectionToolbar = {
+  /** Override the button text. Default: `+ ${entity.label ?? collection.label-singular}`. */
+  text?: string;
+  surface?: AffordanceSurface;
+  order?: number;
+};
+/** A collection declares the IDs of its CRUD commands (DX checks they exist).
+ *  The actual commands are produced by `commands(api)` below — simple collections
+ *  can omit it and the `collections` system will synthesize defaults. The api type
+ *  is supplied by core.ts (CollectionCommandsApi) to avoid a circular import. */
+export type CollectionDef<T, Ctx = unknown, Api = unknown> = {
   id: string;
   label: string;
   entity?: EntityDef<T>;
@@ -220,7 +269,15 @@ export type CollectionDef<T, Ctx = unknown> = {
   itemLabel: (item: T) => string;
   selectCommand?: string;
   crud: { create: string; delete: string };
+  /** Factory called once at boot with the live app api. Returns command specs the
+   *  collection owns (create, delete, navigation). Lets the collection close over
+   *  graphs/selection/view without leaking state. */
+  commands?: (api: Api) => CommandSpec[];
+  toolbar?: CollectionToolbar | false;
   search: true;
   order: 'created';
 };
-export type ModelDef<Ctx = unknown> = { entities: EntityDef<unknown, unknown>[]; collections: CollectionDef<unknown, Ctx>[] };
+export type ModelDef<Ctx = unknown, Api = unknown> = {
+  entities: EntityDef<unknown, unknown>[];
+  collections: CollectionDef<unknown, Ctx, Api>[];
+};

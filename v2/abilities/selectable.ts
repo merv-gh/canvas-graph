@@ -12,10 +12,11 @@ export const selectable = <T extends NodeEntity>() => ability<T>('selectable', [
 
 export function registerSelectable(system: Registry) {
   system('ability.selectable', ({ on, emit, contexts, graphs, selection }) => {
-    const nodeId = (source: CommandSource) => itemIdFrom(source.target) || selection.selected() || '';
+    const selectedNodeId = () => selection.selectedNode()?.id ?? null;
+    const nodeId = (source: CommandSource) => itemIdFrom(source.target) || selectedNodeId() || '';
     const nextNodeId = () => {
       const nodes = graphs.current.nodes();
-      const index = Math.max(0, nodes.findIndex(node => node.id === selection.selected()));
+      const index = Math.max(0, nodes.findIndex(node => node.id === selectedNodeId()));
       return nodes[(index + 1) % nodes.length]?.id ?? nodes[0]?.id ?? '';
     };
 
@@ -49,7 +50,7 @@ export function registerSelectable(system: Registry) {
       },
     ]);
 
-    on('selection.node.select', ({ id }) => { selection.select(id); emit('selection.node.selected', { id }); });
+    on('selection.node.select', ({ id }) => { selection.select({ kind: 'node', id }); emit('selection.node.selected', { id }); });
     on('selection.node.clear', () => { selection.select(null); emit('selection.node.selected', { id: null }); });
   });
 }

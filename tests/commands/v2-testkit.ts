@@ -16,20 +16,8 @@ import { Places, type CommandSource, type FeatureFlags } from '../../v2/types';
 const html = readFileSync(resolve(process.cwd(), 'v2/index.html'), 'utf8')
   .replace(/<script\b[^>]*><\/script>/g, '');
 
-export const defaultFlags: FeatureFlags = {
-  render: true, input: true, main: true, log: true, outline: true,
-  modal: true, commandForm: true, commandModal: true, domain: true, graph: true,
-  'view.zoom': true, 'view.pan': true, focus: true, layout: true, dx: true, demo: true,
-  'ability.selectable': true,
-  'ability.draggable': true,
-  'ability.nudgeable': true,
-  'ability.collapsible': true,
-  'ability.editable': true,
-  'ability.configurable': true,
-  nodeLifecycle: true,
-  edgeLifecycle: true,
-};
-
+/** Flag overrides only. Registry declares each system/ability/feature ON at boot,
+ *  so an empty object boots everything. Pass `{ render: false }` to disable. */
 export function bootV2(flags: FeatureFlags = {}) {
   if (!globalThis.requestAnimationFrame) {
     globalThis.requestAnimationFrame = callback => setTimeout(() => callback(performance.now()), 0) as unknown as number;
@@ -37,14 +25,16 @@ export function bootV2(flags: FeatureFlags = {}) {
   }
   document.documentElement.innerHTML = html;
   localStorage.clear();
-  const systems = registry();
-  const features = registry();
+  const systems = registry('system');
+  const abilities = registry('ability');
+  const features = registry('feature');
   registerSystems(systems);
-  registerAbilitySystems(systems);
+  registerAbilitySystems(abilities);
   registerFeatures(features);
   const io = memoryIo();
-  const ctx = createAppContext(graphStore(), appModel, createFlags({ ...defaultFlags, ...flags }, io), io);
+  const ctx = createAppContext(graphStore(), appModel, createFlags(flags, io), io);
   systems.start(ctx);
+  abilities.start(ctx);
   features.start(ctx);
   ctx.bus.emit('app.start');
   window.v2 = ctx;

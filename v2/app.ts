@@ -4,11 +4,12 @@ import { registerFeatures } from './features';
 import { appModel, graphStore } from './model';
 import { registerSystems } from './systems';
 
-const systems = registry();
-const features = registry();
+const systems = registry('system');
+const abilities = registry('ability');
+const features = registry('feature');
 
 registerSystems(systems);
-registerAbilitySystems(systems);
+registerAbilitySystems(abilities);
 registerFeatures(features);
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -17,25 +18,12 @@ window.addEventListener('DOMContentLoaded', () => {
   const useMemoryIo = new URLSearchParams(location.search).get('io') === 'memory';
   const io = useMemoryIo ? memoryIo() : localStorageIo();
 
-  // Single source of truth — flip a key here (or via window.v2.flags.set) to disable a system or ability.
-  // Persistence: any change writes via the io adapter (default localStorage 'v2.flags').
-  const flags = createFlags({
-    // systems
-    render: true, input: true, main: true, log: true, outline: true,
-    modal: true, commandForm: true, commandModal: true, domain: true, graph: true,
-    'view.zoom': true, 'view.pan': true, focus: true, layout: true, dx: true, demo: true,
-    // abilities
-    'ability.selectable': true,
-    'ability.draggable': true,
-    'ability.nudgeable': true,
-    'ability.collapsible': true,
-    'ability.editable': true,
-    'ability.configurable': true,
-    // features
-    nodeLifecycle: true,
-  }, io);
+  // Flags default to ON via registry.declare. Persisted overrides (via io adapter)
+  // win. To force a flag off at boot, pass it here or call window.v2.flags.set(...).
+  const flags = createFlags({}, io);
   const ctx = createAppContext(graphStore(), appModel, flags, io);
   systems.start(ctx);
+  abilities.start(ctx);
   features.start(ctx);
   ctx.bus.emit('app.start');
   window.v2 = ctx;

@@ -1,5 +1,5 @@
 import { grouped, shortcutOf, systemOf, type Registry } from '../core';
-import type { CommandSpec } from '../types';
+import { Places, type CommandSpec } from '../types';
 
 type CommandModalDef = {
   id: 'palette' | 'help';
@@ -123,20 +123,23 @@ export function registerCommandModal(system: Registry) {
       visual: 'command',
       body: () => renderCommandModal(modal),
     });
+    const modalEl = () => contexts.places.el(Places.Modal);
+    const shortcutInput = (id: string) =>
+      modalEl()?.querySelector(`.shortcut-edit[data-shortcut-command="${id}"]`) ?? null;
     on('palette.open', () => open(commandModals.palette));
     on('help.open', () => open(commandModals.help));
     on('commandModal.search.changed', ({ modalId, query }) => {
       const modal = commandModals[modalId as CommandModalDef['id']];
-      const root = document.querySelector(`[data-command-modal="${modalId}"]`);
+      const root = modalEl()?.querySelector(`[data-command-modal="${modalId}"]`);
       const list = root?.querySelector('[data-slot="commands"]');
       if (modal && list) list.replaceChildren(renderList(modal, query));
     });
     on('shortcut.edit.preview', ({ id }) => {
-      const input = document.querySelector(`.shortcut-edit[data-shortcut-command="${id}"]`);
+      const input = shortcutInput(id);
       if (input instanceof HTMLInputElement) syncShortcutConflict(input);
     });
     on('shortcut.edit.commit', ({ id }) => {
-      const input = document.querySelector(`.shortcut-edit[data-shortcut-command="${id}"]`);
+      const input = shortcutInput(id);
       if (!(input instanceof HTMLInputElement) || !syncShortcutConflict(input)) return;
       contexts.commands.setShortcut(id, input.value);
     });

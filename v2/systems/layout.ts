@@ -12,7 +12,7 @@ export function registerLayout(system: Registry) {
 
     on('layout.apply.radial', () => {
       const g = graphs.current;
-      const focusedId = selection.focused() ?? selection.selected();
+      const focusedId = selection.focusedNode()?.id ?? selection.selectedNode()?.id;
       const all = g.nodes();
       const root = focusedId ? g.getNode(focusedId) : all[0];
       if (!root) return;

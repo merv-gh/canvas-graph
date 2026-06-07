@@ -45,10 +45,17 @@ export function runDx(ctx: AppCtx): DxIssue[] {
       error('configurable.no-properties', `${entityDef.kind}.configurable declares no properties`);
     }
     abilityDef.actions.forEach(actionDef => {
-      if (actionDef.paletteCommand != null && !visibleCommandIds.has(actionDef.paletteCommand)) {
+      const paletteCmd = actionDef.paletteCommand != null ? ctx.contexts.commands.get(actionDef.paletteCommand) : undefined;
+      if (actionDef.paletteCommand != null && (!paletteCmd || !visibleCommandIds.has(actionDef.paletteCommand))) {
         error('action.palette-missing', `${actionDef.id} missing visible palette command ${actionDef.paletteCommand}`);
       }
-      if (!actionDef.ui.length) error('action.no-ui', `${actionDef.id} has no UI affordance`);
+      // An action is "reachable" if it has at least one UI affordance OR its palette command
+      // has an input binding (keyboard shortcut, click selector, pointer gesture, etc).
+      const hasUi = actionDef.ui.length > 0;
+      const hasInputBinding = !!paletteCmd?.input;
+      if (!hasUi && !hasInputBinding) {
+        error('action.no-affordance', `${actionDef.id} has neither a UI affordance nor an input-bound palette command`);
+      }
       actionDef.ui.forEach(ui => {
         if (!commandIds.has(ui.command)) error('action.ui-command-missing', `${actionDef.id} UI missing command ${ui.command}`);
       });
@@ -96,7 +103,7 @@ export function runDx(ctx: AppCtx): DxIssue[] {
   });
 
   commands.forEach(c => {
-    if (!c.origin) warn('command.no-origin', `command "${c.id}" has no origin — won't unregister when its system flag flips`);
+    if (!c.origin) error('command.no-origin', `command "${c.id}" has no origin — won't unregister when its system flag flips`);
   });
 
   ctx.flags.declared().forEach(name => {

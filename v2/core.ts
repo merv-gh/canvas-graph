@@ -1,41 +1,53 @@
 import type { GraphStore } from './model';
+import { affordancesContext } from './core/affordances';
+import { commandsContext, inputRouter } from './core/commands';
+import { itemIdFrom, itemRefFrom, appendRenderable } from './core/dom';
 import { localStorageIo, STORAGE_KEYS, type IoApi } from './core/io';
+import { propertiesContext } from './core/properties';
 import { createSelectionStore, type SelectionStore } from './core/selection';
-import type {
-  ActionDef,
-  AffordanceDef,
-  AffordanceSurface,
-  AnyEvent,
-  Bus,
-  CollectionDef,
-  CommandSource,
-  CommandSpec,
-  EntityDef,
-  EventName,
-  FeatureFlags,
-  Id,
-  ItemRef,
-  ModelDef,
-  NodeEntity,
-  Place,
-  Position,
-  PropertyDef,
-  PropertyRenderer,
-  RawInput,
-  Rect,
-  Renderable,
-  SystemAffordance,
-  UiValue,
-  ViewState,
-  DxIssue,
+import { createSim, type SimApi } from './core/sim';
+import { templateContext } from './core/templates';
+import { clamp, nodeRect, viewContext, clientPoint, isStageSurface } from './core/view';
+import {
+  FACT_SUFFIXES,
+  type ActionDef,
+  type AffordanceDef,
+  type AnyEvent,
+  type Bus,
+  type CollectionDef,
+  type CommandSpec,
+  type EntityDef,
+  type EventName,
+  type FeatureFlags,
+  type ItemRef,
+  type ModelDef,
+  type Place,
+  type RedrawScope,
+  type UiValue,
+  type DxIssue,
 } from './types';
 
+// Re-exports (keep the public surface stable for systems/abilities).
 export { localStorageIo, memoryIo, STORAGE_KEYS, type IoApi } from './core/io';
 export { createSelectionStore, type SelectionStore } from './core/selection';
+export { createSim, type SimApi, type Trace, type TraceEvent } from './core/sim';
+export { parseShortcut, shortcutOf } from './core/shortcuts';
+export { itemIdFrom, itemRefFrom, appendRenderable } from './core/dom';
+export { clamp, nodeRect, clientPoint, isStageSurface } from './core/view';
 
 export type Contexts = ReturnType<typeof createContexts>;
 export type Models = ReturnType<typeof createModelRegistry>;
 export type ModelCtx = { graphs: GraphStore };
+/** Narrow slice of AppCtx that collection.commands() factories receive. Keeps the
+ *  collection author from depending on the full ctx — only stable hooks. */
+export type CollectionCommandsApi = {
+  graphs: GraphStore;
+  selection: SelectionStore;
+  view: Contexts['view'];
+  contexts: Contexts;
+};
+export type RenderApi = { flushes(): number };
+export type DxApi = { run(): DxIssue[] };
 export type AppCtx = {
   bus: Bus;
   graphs: GraphStore;
@@ -44,14 +56,16 @@ export type AppCtx = {
   flags: FlagsApi;
   selection: SelectionStore;
   io: IoApi;
-  dx?: { run(): DxIssue[] };
+  sim: SimApi;
+  dx?: DxApi;
+  render?: RenderApi;
 };
-export type AppCollectionDef<T> = CollectionDef<T, ModelCtx>;
-export type SystemCtx = AppCtx & Pick<Bus, 'on' | 'emit'> & {
+export type AppCollectionDef<T> = CollectionDef<T, ModelCtx, CollectionCommandsApi>;
+export type SystemCtx = AppCtx & Pick<Bus, 'on' | 'emit' | 'forward'> & {
   /** Stable name of the currently-starting system / ability — used to tag commands for unregister. */
   origin: string;
   /** Shorthand: contribute an affordance tagged with this system's origin. */
-  contribute(aff: SystemAffordance): void;
+  contribute(aff: import('./types').SystemAffordance): void;
   /** Publish a typed devtools/test surface on window.v2 without app.ts knowing the system. */
   expose<K extends keyof AppCtx>(key: K, value: AppCtx[K]): void;
 };
@@ -66,88 +80,49 @@ export type Registry = ((name: string, setup: AppSystem, opts?: RegistryEntryOpt
   names(): string[];
   enabledNames(flags: FlagsApi): string[];
   requires(name: string): string[];
-  /** Post-register the requires list for an already-declared entry. Useful when the entry table is built top-down
-   *  and the dep map is colocated at the bottom for readability. */
+  /** Post-register the requires list for an already-declared entry. */
   setRequires(name: string, requires: string[]): void;
 };
+
+/** What a flag controls. Set by the registry that declares it.
+ *  - 'system'  → infrastructure (render, input, modal, ...)
+ *  - 'ability' → entity-attached capability (selectable, draggable, ...)
+ *  - 'feature' → cross-system orchestration (nodeLifecycle, ...)
+ *  Used by demo, DX, and devtools to group/inspect flags without hardcoded lists. */
+export type FlagKind = 'system' | 'ability' | 'feature';
 export type FlagsApi = {
   all(): FeatureFlags;
   isOn(name: string): boolean;
   set(name: string, on: boolean): void;
-  declared(): string[];
-  declare(name: string, defaultOn?: boolean, requires?: string[]): void;
+  declared(kind?: FlagKind): string[];
+  declare(name: string, defaultOn?: boolean, requires?: string[], kind?: FlagKind): void;
+  kind(name: string): FlagKind | undefined;
   /** Names the given flag depends on. Populated by registry.start. */
   requires(name: string): string[];
 };
+
 declare global { interface Window { v2?: AppCtx } }
 
 export const systemOf = (id: string) => id.split('.')[0] || 'app';
-export const shortcutOf = (command: CommandSpec) =>
-  command.shortcut ?? (command.input?.key ? shortcutLabel(command.input) : '');
-/** Parse a shortcut string into key + modifier requirements.
- *  Format: `Mod+Mod+Key` e.g. `Ctrl+Shift+P`, `Cmd+K`, `Alt+ArrowRight`, `?`. */
-type ParsedShortcut = { key: string; ctrl: boolean; shift: boolean; alt: boolean; meta: boolean };
-export const parseShortcut = (shortcut: string): ParsedShortcut => {
-  const parts = shortcut.split('+').map(p => p.trim()).filter(Boolean);
-  const result: ParsedShortcut = { key: '', ctrl: false, shift: false, alt: false, meta: false };
-  const rawKey = parts.pop() ?? '';
-  result.key = rawKey.toLowerCase() === 'esc' ? 'Escape' : rawKey;
-  for (const part of parts) {
-    const m = part.toLowerCase();
-    if (m === 'ctrl' || m === 'control') result.ctrl = true;
-    else if (m === 'shift') result.shift = true;
-    else if (m === 'alt' || m === 'option') result.alt = true;
-    else if (m === 'meta' || m === 'cmd' || m === 'command') result.meta = true;
-  }
-  return result;
-};
-/** Render a shortcut input back to a label string for display. */
-const shortcutLabel = (input: NonNullable<CommandSpec['input']>) => {
-  const parts = [
-    input.ctrl ? 'Ctrl' : null,
-    input.meta ? 'Cmd' : null,
-    input.alt ? 'Alt' : null,
-    input.shift ? 'Shift' : null,
-    input.key,
-  ].filter(Boolean);
-  return parts.join('+');
-};
-const keyMatchesEvent = (event: Event, parsed: ParsedShortcut) => {
-  if (!(event instanceof KeyboardEvent)) return false;
-  if (event.ctrlKey !== parsed.ctrl) return false;
-  if (event.altKey !== parsed.alt) return false;
-  if (event.metaKey !== parsed.meta) return false;
-  // For letter keys the shortcut MUST specify shift correctly (so 'a' and 'A' are distinct).
-  // For non-letter keys we trust event.key to already encode shift output (so '?' matches Shift+/).
-  const isLetter = /^[a-z]$/i.test(parsed.key);
-  if (isLetter && event.shiftKey !== parsed.shift) return false;
-  if (!isLetter && parsed.shift && !event.shiftKey) return false;
-  return event.key.toLowerCase() === parsed.key.toLowerCase();
-};
-const bindingParsed = (input: NonNullable<CommandSpec['input']>): ParsedShortcut => ({
-  key: input.key ?? '',
-  ctrl: !!input.ctrl, shift: !!input.shift, alt: !!input.alt, meta: !!input.meta,
-});
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-const rectsIntersect = (a: Rect, b: Rect) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
-export const nodeRect = (node: NodeEntity): Rect => {
-  const pos = node.Position ?? { x: 0, y: 0 };
-  return { x: pos.x - node.Size.w / 2, y: pos.y - node.Size.h / 2, w: node.Size.w, h: node.Size.h };
+/** Classify an event name by suffix.
+ *  - '.changed'  → 'nodes'  (camera/view repaint only, no entity churn)
+ *  - any other fact suffix → 'both' (data changed; lists + canvas both need refresh)
+ *  - non-fact     → null    (request events, render.*, app.start etc.) */
+export const factScope = (name: string): RedrawScope | null => {
+  for (const suffix of FACT_SUFFIXES) {
+    if (!name.endsWith(suffix)) continue;
+    return suffix === '.changed' ? 'nodes' : 'both';
+  }
+  return null;
 };
-export const clientPoint = (event: Event): Position => ({ x: (event as PointerEvent).clientX, y: (event as PointerEvent).clientY });
-export const isStageSurface = (event: Event, stage: Element) =>
-  event.target === stage || (event.target instanceof Element && event.target.classList.contains('nodes'));
-export const appendRenderable = (slot: Element, view: Renderable) => {
-  const value = typeof view === 'function' ? view() : view;
-  if (typeof value === 'string') slot.insertAdjacentHTML('beforeend', value);
-  else slot.append(value);
-};
+
 export const grouped = <T,>(items: T[], keyOf: (item: T) => string) => {
   const groups = new Map<string, T[]>();
   items.forEach(item => (groups.get(keyOf(item)) || groups.set(keyOf(item), []).get(keyOf(item))!).push(item));
   return [...groups.entries()];
 };
+
 /** Build an empty-state DOM block. Hint is HTML-safe: pass <kbd> markup if you want a keycap.
  *  Returns null when no template adapter is reachable (kiosk mode). */
 export const emptyState = (ctx: Contexts, title: string, hintHtml = '') => {
@@ -159,38 +134,24 @@ export const emptyState = (ctx: Contexts, title: string, hintHtml = '') => {
     return el;
   } catch { return null; }
 };
+
 /** Shortcut label for a registered command, or null if it can't be triggered from keys. */
 export const commandShortcut = (commands: Contexts['commands'], id: string) => {
   const c = commands.get(id);
-  return c ? shortcutOf(c) : null;
+  return c ? shortcutOfImported(c) : null;
 };
+// Local alias to avoid pulling shortcuts.ts into the public re-export path twice.
+import { shortcutOf as shortcutOfImported } from './core/shortcuts';
+
 export const uiValue = <T,>(value: UiValue<T> | undefined, item: T, fallback = '') =>
   typeof value === 'function' ? value(item) : value ?? fallback;
+
 export const entityUi = <T,>(entityDef: EntityDef<T>, slot?: string) =>
   entityDef.abilities.flatMap(abilityDef => abilityDef.actions.flatMap(actionDef =>
     actionDef.ui
       .filter(ui => ui.surface === 'entity' && (slot == null || ui.slot === slot))
       .map(ui => ({ action: actionDef as ActionDef<T>, ui: ui as AffordanceDef<T> })),
   ));
-export const itemIdFrom = (target?: Element | null) =>
-  target?.closest('[data-item-id]')?.getAttribute('data-item-id')
-  ?? target?.closest('[data-node-id]')?.getAttribute('data-node-id')
-  ?? target?.closest('[data-edge-id]')?.getAttribute('data-edge-id')
-  ?? target?.closest('[data-graph-id]')?.getAttribute('data-graph-id')
-  ?? '';
-export const itemRefFrom = (target?: Element | null): ItemRef | null => {
-  const item = target?.closest('[data-item-kind][data-item-id]');
-  const kind = item?.getAttribute('data-item-kind') as ItemRef['kind'] | null;
-  const id = item?.getAttribute('data-item-id');
-  if (kind && id) return { kind, id };
-  const node = target?.closest('[data-node-id]')?.getAttribute('data-node-id');
-  if (node) return { kind: 'node', id: node };
-  const edge = target?.closest('[data-edge-id]')?.getAttribute('data-edge-id');
-  if (edge) return { kind: 'edge', id: edge };
-  const graph = target?.closest('[data-graph-id]')?.getAttribute('data-graph-id');
-  if (graph) return { kind: 'graph', id: graph };
-  return null;
-};
 
 export const createModelRegistry = <Ctx,>(model: ModelDef<Ctx>, flags?: FlagsApi) => {
   const entities = new Map(model.entities.map(entityDef => [entityDef.kind, entityDef]));
@@ -216,314 +177,70 @@ export const createModelRegistry = <Ctx,>(model: ModelDef<Ctx>, flags?: FlagsApi
   };
 };
 
-function templateContext() {
-  const find = (root: ParentNode, selector: string) =>
-    root instanceof Element && root.matches(selector) ? root : root.querySelector(selector);
-  const cloned = new Set<string>();
-  const clone = <T extends HTMLElement = HTMLElement>(name: string) => {
-    cloned.add(name);
-    const template = document.getElementById(`tpl-${name}`);
-    const node = template instanceof HTMLTemplateElement ? template.content.firstElementChild?.cloneNode(true) : null;
-    if (!(node instanceof HTMLElement)) throw new Error(`Missing template: ${name}`);
-    return node as T;
-  };
-  const text = (root: ParentNode, name: string, value: unknown) => {
-    const el = find(root, `[data-text="${name}"]`);
-    if (el) el.textContent = String(value ?? '');
-    return root;
-  };
-  const slot = (root: ParentNode, name: string) => {
-    const el = find(root, `[data-slot="${name}"]`);
-    // Accept any Element (HTML or SVG) — the SVG edges slot uses the same API.
-    if (!(el instanceof Element)) throw new Error(`Missing slot: ${name}`);
-    return el as HTMLElement;
-  };
-  return { clone, text, slot, _cloned: cloned };
-}
-
-function viewContext(places: Map<Place, HTMLElement>) {
-  let state: ViewState = { x: 0, y: 0, scale: 1 };
-  const localRect = (place: Place) => places.get(place)?.getBoundingClientRect();
-  const get = () => ({ ...state });
-  const set = (next: Partial<ViewState>) => {
-    state = {
-      x: next.x ?? state.x,
-      y: next.y ?? state.y,
-      // Wide clamp so fit-view can shrink for big graphs and zoom-in deep on a single node.
-      scale: clamp(next.scale ?? state.scale, 0.05, 5),
-    };
-    return get();
-  };
-  const zoomAtScreen = (screen: Position, factor: number) => {
-    const before = screenToSpace(screen);
-    const scale = clamp(state.scale * factor, 0.05, 5);
-    return set({ scale, x: before.x - screen.x / scale, y: before.y - screen.y / scale });
-  };
-  const clientToScreen = (place: Place, point: Position) => {
-    const rect = localRect(place);
-    return rect ? { x: point.x - rect.left, y: point.y - rect.top } : point;
-  };
-  const screenToSpace = (point: Position) => ({ x: state.x + point.x / state.scale, y: state.y + point.y / state.scale });
-  const spaceToScreen = (point: Position) => ({ x: (point.x - state.x) * state.scale, y: (point.y - state.y) * state.scale });
-  const clientToSpace = (place: Place, point: Position) => screenToSpace(clientToScreen(place, point));
-  const screenCenter = (place: Place) => {
-    const rect = localRect(place);
-    return rect ? { x: rect.width / 2, y: rect.height / 2 } : { x: innerWidth / 2, y: innerHeight / 2 };
-  };
-  const spaceCenter = (place: Place) => screenToSpace(screenCenter(place));
-  const visibleRect = (place: Place, margin = 0): Rect | null => {
-    const rect = localRect(place);
-    if (!rect) return null;
-    return {
-      x: state.x - margin,
-      y: state.y - margin,
-      w: rect.width / state.scale + margin * 2,
-      h: rect.height / state.scale + margin * 2,
-    };
-  };
-  const isVisible = (place: Place, rect: Rect, margin = 0) => {
-    const visible = visibleRect(place, margin);
-    return !visible || rectsIntersect(visible, rect);
-  };
-  return { get, set, clientToScreen, screenToSpace, spaceToScreen, clientToSpace, screenCenter, spaceCenter, visibleRect, isVisible, zoomAtScreen };
-}
-
 type InstrumentedBus = Bus & { _subscribed: Set<string>; _emitted: Set<string> };
 function eventBus(): InstrumentedBus {
   const listeners = new Map<EventName, ((data: unknown, event: AnyEvent) => void)[]>();
   const any: ((event: AnyEvent) => void)[] = [];
-  // Dev-time event vocabulary tracking — feeds the DX orphan-event check.
   const subscribed = new Set<string>();
   const emitted = new Set<string>();
+  const dispatch = (name: EventName, data: unknown) => {
+    emitted.add(name);
+    const event = { name, data, at: performance.now() } as AnyEvent;
+    any.forEach(fn => fn(event));
+    (listeners.get(name) || []).forEach(fn => fn(event.data, event));
+  };
   return {
     on(name, fn) {
       subscribed.add(name);
       (listeners.get(name) || listeners.set(name, []).get(name)!).push(fn as (data: unknown, event: AnyEvent) => void);
     },
     onAny(fn) { any.push(fn); },
-    emit(name, ...args) {
-      emitted.add(name);
-      const event = { name, data: args[0], at: performance.now() } as AnyEvent;
-      any.forEach(fn => fn(event));
-      (listeners.get(name) || []).forEach(fn => fn(event.data, event));
-    },
+    emit(name, ...args) { dispatch(name, args[0]); },
+    forward(name, data) { dispatch(name, data); },
     _subscribed: subscribed,
     _emitted: emitted,
   };
 }
 
 function createContexts(bus: Bus, flags: FlagsApi, io: IoApi) {
-  const commandMap = new Map<string, CommandSpec>();
   const places = new Map<Place, HTMLElement>();
   const templates = templateContext();
   const view = viewContext(places);
-  const shortcutOverrides = io.get<Record<string, string>>(STORAGE_KEYS.shortcuts, {});
-  const disabledCommands = new Set<string>(io.get<string[]>(STORAGE_KEYS.disabledCommands, []));
-  const isEnabled = (command: CommandSpec) =>
-    command.enabled !== false
-    && !disabledCommands.has(command.id)
-    && (!command.origin || flags.isOn(command.origin));
-
-  const normalizeShortcut = (shortcut: string) => {
-    const p = parseShortcut(shortcut);
-    return [p.ctrl && 'ctrl', p.meta && 'meta', p.alt && 'alt', p.shift && 'shift', p.key.toLowerCase()].filter(Boolean).join('+');
-  };
-  const shortcutConflict = (id: string, shortcut: string) => {
-    const norm = normalizeShortcut(shortcut);
-    if (!norm.endsWith('+') && !parseShortcut(shortcut).key) return undefined;
-    return [...commandMap.values()].find(command =>
-      command.id !== id && isEnabled(command) && normalizeShortcut(shortcutOf(command)) === norm,
-    );
-  };
-  const applyOverrides = (command: CommandSpec) => {
-    const override = shortcutOverrides[command.id];
-    if (override == null) return;
-    command.shortcut = override;
-    if (command.input?.on === 'keydown') {
-      const p = parseShortcut(override);
-      command.input.key = p.key;
-      command.input.ctrl = p.ctrl;
-      command.input.shift = p.shift;
-      command.input.alt = p.alt;
-      command.input.meta = p.meta;
-    }
-  };
-
-  const commands = {
-    register: (specs: CommandSpec[], origin?: string) => specs.forEach(command => {
-      if (origin && !command.origin) command.origin = origin;
-      applyOverrides(command);
-      commandMap.set(command.id, command);
-    }),
-    unregister(id: string) { commandMap.delete(id); },
-    unregisterOrigin(origin: string) {
-      for (const [id, command] of commandMap) if (command.origin === origin) commandMap.delete(id);
-    },
-    get: (id: string) => commandMap.get(id),
-    all: () => [...commandMap.values()],
-    enabled: () => [...commandMap.values()].filter(isEnabled),
-    isEnabled,
-    shortcutConflict,
-    setShortcut(id: string, shortcut: string) {
-      const command = commandMap.get(id);
-      if (!command) return false;
-      const next = shortcut.trim();
-      if (shortcutConflict(id, next)) return false;
-      command.shortcut = next;
-      if (command.input?.on === 'keydown') {
-        const p = parseShortcut(next);
-        command.input.key = p.key;
-        command.input.ctrl = p.ctrl;
-        command.input.shift = p.shift;
-        command.input.alt = p.alt;
-        command.input.meta = p.meta;
-      }
-      shortcutOverrides[id] = next;
-      io.set(STORAGE_KEYS.shortcuts, shortcutOverrides);
-      return true;
-    },
-    setEnabled(id: string, enabled: boolean) {
-      const command = commandMap.get(id);
-      if (!command) return false;
-      if (enabled) disabledCommands.delete(id); else disabledCommands.add(id);
-      io.set(STORAGE_KEYS.disabledCommands, [...disabledCommands]);
-      return true;
-    },
-    run(id: string, source: CommandSource = {}) {
-      const command = commandMap.get(id);
-      if (!command || !isEnabled(command) || command.available?.(source) === false) return false;
-      const payload = command.payload?.(source);
-      if (command.form?.shouldOpen?.(payload, source)) {
-        bus.emit('commandForm.open', {
-          commandId: id,
-          seed: command.form.seed?.(payload, source) ?? {},
-        });
-        return true;
-      }
-      (bus.emit as (name: EventName, data?: unknown) => void)(command.event, payload);
-      return true;
-    },
-  };
-
-  const input = {
-    start(root: Document | HTMLElement = document) {
-      const route = (event: Event) => {
-        const rawTarget = event.target instanceof Element ? event.target : null;
-        const typing = event instanceof KeyboardEvent
-          && (/input|textarea|select/i.test(rawTarget?.tagName ?? '') || (rawTarget instanceof HTMLElement && rawTarget.isContentEditable));
-
-        const button = event.type === 'click' ? rawTarget?.closest('[data-command]') : null;
-        if (button instanceof HTMLElement) {
-          event.preventDefault();
-          commands.run(button.dataset.command!, { event, target: button });
-          return;
-        }
-
-        for (const command of commands.enabled()) {
-          const binding = command.input;
-          if (!binding || binding.on !== event.type) continue;
-          if (binding.key && !keyMatchesEvent(event, bindingParsed(binding))) continue;
-          const target = rawTarget && binding.selector ? rawTarget.closest(binding.selector) : rawTarget;
-          if (!(target instanceof Element) || (binding.selector && !target)) continue;
-          if (typing && !binding.global && !binding.selector) continue;
-          if (binding.when && !binding.when(event, target)) continue;
-          if (binding.prevent) event.preventDefault();
-          commands.run(command.id, { event, target });
-          if (binding.stop) break;
-        }
-      };
-      (['click', 'keydown', 'pointerdown', 'pointermove', 'pointerup', 'wheel', 'input', 'change', 'focusout'] as RawInput[])
-        .forEach(type => root.addEventListener(type, route, type === 'wheel' ? { passive: false } : undefined));
-    },
-  };
-
+  const properties = propertiesContext();
+  const affordances = affordancesContext(bus);
+  const commands = commandsContext(bus, origin => !origin || flags.isOn(origin), io);
+  const input = inputRouter(commands);
   const placeContext = {
     set: (place: Place, el: HTMLElement | null) => { if (el) places.set(place, el); },
     el: (place: Place) => places.get(place) ?? null,
   };
-
-  /** Property input registry — turns `prop.input` (a string) into an HTMLElement.
-   *  New input kinds (color picker, select, etc.) register here without touching core.
-   *  Default renderers for 'text', 'number', 'checkbox' are seeded below. */
-  const renderers = new Map<string, PropertyRenderer<any>>();
-  const defaultRender = <T,>(prop: PropertyDef<T>, item: T): HTMLElement => {
-    const label = document.createElement('label');
-    const input = document.createElement('input');
-    input.dataset.field = prop.id;
-    input.type = prop.input;
-    if (prop.min != null) input.min = `${prop.min}`;
-    if (prop.step != null) input.step = `${prop.step}`;
-    if (prop.input === 'checkbox') {
-      label.className = 'check-row';
-      input.checked = Boolean(prop.value(item));
-      label.append(input, prop.label);
-    } else {
-      if (prop.input === 'text') input.classList.add('editable-inline');
-      input.value = String(prop.value(item));
-      label.append(prop.label, input);
-    }
-    return label;
-  };
-  renderers.set('text', defaultRender);
-  renderers.set('number', defaultRender);
-  renderers.set('checkbox', defaultRender);
-  const properties = {
-    register(name: string, render: PropertyRenderer) { renderers.set(name, render); },
-    has(name: string) { return renderers.has(name); },
-    render<T>(prop: PropertyDef<T>, item: T): HTMLElement {
-      const renderer = renderers.get(prop.input) ?? defaultRender;
-      return renderer(prop, item);
-    },
-    names: () => [...renderers.keys()],
-  };
-
   // DX inspection surface — `dx` system writes here at boot for tests/devtools to read.
   let lastDxIssues: DxIssue[] = [];
   const dx = {
     issues: () => lastDxIssues,
     _set(issues: DxIssue[]) { lastDxIssues = issues; },
   };
-
-  // System-level affordances (toolbar buttons, side-bar entries, list contributions).
-  // Entity affordances stay on EntityDef.abilities — they need item context. System
-  // affordances are context-free, so any system can contribute one.
-  const surfaceAffordances = new Map<AffordanceSurface, SystemAffordance[]>();
-  const affordances = {
-    contribute(aff: SystemAffordance) {
-      const list = surfaceAffordances.get(aff.surface) ?? [];
-      list.push(aff);
-      surfaceAffordances.set(aff.surface, list);
-      bus.emit('affordance.contributed', { surface: aff.surface });
-    },
-    for(surface: AffordanceSurface) {
-      const list = [...(surfaceAffordances.get(surface) ?? [])];
-      return list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    },
-    unregisterOrigin(origin: string) {
-      for (const [surface, list] of surfaceAffordances) {
-        surfaceAffordances.set(surface, list.filter(a => a.origin !== origin));
-      }
-    },
-  };
-
   return { commands, input, places: placeContext, templates, view, properties, dx, affordances };
 }
 
 /** Registry runs setup functions in insertion order, filtering by feature flag.
- *  Each setup gets `origin: <name>` injected so any commands it registers are tagged. */
-export function registry(): Registry {
+ *  Each setup gets `origin: <name>` injected so any commands it registers are tagged.
+ *  The `kind` tags every flag the registry declares — lets demo/DX group entries
+ *  without hardcoded name lists. */
+export function registry(kind: FlagKind = 'system'): Registry {
   const entries: { name: string; setup: AppSystem; requires: string[] }[] = [];
   const register = ((name: string, setup: AppSystem, opts: RegistryEntryOptions = {}) => {
     entries.push({ name, setup, requires: opts.requires ?? [] });
   }) as Registry;
   register.start = (ctx) => {
     entries.forEach(entry => {
-      ctx.flags.declare(entry.name, true, entry.requires);
+      ctx.flags.declare(entry.name, true, entry.requires, kind);
       if (!ctx.flags.isOn(entry.name)) return;
       const api: SystemCtx = {
         ...ctx,
         on: ctx.bus.on,
         emit: ctx.bus.emit,
+        forward: ctx.bus.forward,
         origin: entry.name,
         contribute: (aff) => ctx.contexts.affordances.contribute({ ...aff, origin: aff.origin ?? entry.name }),
         expose: (key, value) => { (ctx as Record<string, unknown>)[key as string] = value; },
@@ -550,22 +267,25 @@ export function createFlags(initial: FeatureFlags = {}, io: IoApi = localStorage
   const persisted = io.get<FeatureFlags>(STORAGE_KEYS.flags, {});
   const state: FeatureFlags = { ...initial, ...persisted };
   const deps = new Map<string, string[]>();
+  const kinds = new Map<string, FlagKind>();
   return {
     all: () => ({ ...state }),
     isOn: (name) => state[name] !== false,
-    declare(name, defaultOn = true, requires) {
+    declare(name, defaultOn = true, requires, kind) {
       if (!(name in state)) state[name] = defaultOn;
       if (requires?.length) deps.set(name, requires);
+      if (kind) kinds.set(name, kind);
     },
     set(name, on) { state[name] = on; io.set(STORAGE_KEYS.flags, state); },
-    declared: () => Object.keys(state),
+    declared: (kind) => kind == null ? Object.keys(state) : Object.keys(state).filter(name => kinds.get(name) === kind),
+    kind: (name) => kinds.get(name),
     requires: (name) => deps.get(name) ?? [],
   };
 }
 
 export function createAppContext(
   graphs: GraphStore,
-  model: ModelDef<ModelCtx>,
+  model: ModelDef<ModelCtx, CollectionCommandsApi>,
   flags: FlagsApi = createFlags(),
   io: IoApi = localStorageIo(),
 ): AppCtx {
@@ -573,7 +293,8 @@ export function createAppContext(
   const selection = createSelectionStore(graphs, bus);
   return {
     bus, graphs, flags, selection, io,
+    sim: createSim(bus),
     contexts: createContexts(bus, flags, io),
-    model: createModelRegistry(model, flags),
+    model: createModelRegistry(model as ModelDef<ModelCtx>, flags),
   };
 }

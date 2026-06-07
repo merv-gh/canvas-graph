@@ -1,12 +1,12 @@
 import type { Registry } from '../core';
 import { Places } from '../types';
-import type { CommandFormField, EventName } from '../types';
+import type { CommandFormField } from '../types';
 
 const fieldId = (commandId: string, field: CommandFormField) =>
   `form-${commandId.replace(/[^a-z0-9_-]/gi, '-')}-${field.id}`;
 
 export function registerCommandForm(system: Registry) {
-  system('commandForm', ({ on, emit, contexts }) => {
+  system('commandForm', ({ on, emit, forward, contexts }) => {
     const collectValues = (root: HTMLElement) => {
       const values: Record<string, string> = {};
       root.querySelectorAll<HTMLInputElement>('[data-form-field]')
@@ -26,7 +26,7 @@ export function registerCommandForm(system: Registry) {
       input.value = value;
       input.required = field.required !== false;
       input.placeholder = field.placeholder ?? '';
-      if (field.id === 'From') input.autofocus = true;
+      if (field.autofocus) input.autofocus = true;
       label.append(field.label, input);
       const options = field.options?.() ?? [];
       if (!options.length) return label;
@@ -109,7 +109,7 @@ export function registerCommandForm(system: Registry) {
         emit('app.notice', { message, level: 'warn' });
         return;
       }
-      (emit as (name: EventName, data?: unknown) => void)(command.event, payload);
+      forward(command.event, payload);
       emit('modal.close');
     });
   });

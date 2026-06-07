@@ -12,6 +12,31 @@ import { Graph, graphStore } from '../../v2/model';
 import type { CommandSpec } from '../../v2/types';
 import { bootV2, runCommand } from './v2-testkit';
 
+describe('v2 selection polymorphism', () => {
+  it('holds an ItemRef of any kind, with typed node/edge projections', async () => {
+    const ctx = bootV2();
+    runCommand(ctx, 'editing.node.create');
+    runCommand(ctx, 'editing.node.create');
+    await new Promise(r => setTimeout(r, 0));
+    const [a, b] = ctx.graphs.current.nodes();
+    ctx.bus.emit('graph.edge.create', { From: a.id, To: b.id });
+    const edge = ctx.graphs.current.edges()[0];
+
+    // Default selection after creation is node
+    expect(ctx.selection.selected()?.kind).toBe('node');
+    expect(ctx.selection.selectedNode()?.id).toBe(b.id);
+
+    // Polymorphic store accepts edge selection — even though no ability exposes it yet
+    ctx.selection.select({ kind: 'edge', id: edge.id });
+    expect(ctx.selection.selected()).toEqual({ kind: 'edge', id: edge.id });
+    expect(ctx.selection.selectedNode()).toBeUndefined();
+
+    // Deleting the edge clears the selection
+    ctx.bus.emit('graph.edge.delete', { id: edge.id });
+    expect(ctx.selection.selected()).toBeNull();
+  });
+});
+
 describe('v2 model and core helpers', () => {
   it('creates nodes, edges, updates, deletes, and cascades incident edges', () => {
     const graph = Graph.new('g-test');

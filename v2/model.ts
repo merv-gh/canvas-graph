@@ -1,6 +1,9 @@
 import { collapsible, configurable, draggable, editable, nudgeable, selectable } from './abilities';
+import { clamp, itemIdFrom, type CollectionCommandsApi } from './core';
 import type {
   CollectionDef,
+  CommandSource,
+  EdgeCreateDraft,
   EdgeDraft,
   EdgeEntity,
   EdgePatch,
@@ -17,8 +20,6 @@ import type {
   PropertyDef,
   Size,
 } from './types';
-
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const property = <T, Patch>(def: PropertyDef<T, Patch>) => def;
 const entity = <T, Patch = unknown>(kind: string, def: Omit<EntityDef<T, Patch>, 'kind'>): EntityDef<T, Patch> => ({ kind, ...def });
 
@@ -157,8 +158,11 @@ export function graphStore() {
 export type GraphStore = ReturnType<typeof graphStore>;
 
 type ModelCtx = { graphs: ReturnType<typeof graphStore> };
-type ModelCollectionDef<T> = CollectionDef<T, ModelCtx>;
+type ModelCollectionDef<T> = CollectionDef<T, ModelCtx, CollectionCommandsApi>;
 const collection = <T,>(id: string, def: Omit<ModelCollectionDef<T>, 'id'>): ModelCollectionDef<T> => ({ id, ...def });
+
+const nextGraphId = (graphs: ReturnType<typeof graphStore>) =>
+  graphs.all().find(g => g.id !== graphs.current.id)?.id ?? `g${graphs.all().length + 1}`;
 
 // Edge entity: pure data + label property (configurable later). No abilities yet —
 // edges don't carry their own affordances. When edges grow features (e.g., delete via X
@@ -231,7 +235,12 @@ export const nodeEntity = entity<GraphNode, NodePatch>('node', {
   ],
 });
 
-export const appModel = {
+/** Resolve a target id for a node-targeted command — prefers explicit interaction
+ *  source (clicked row), falls back to current selection. */
+const nodeIdFromSource = (api: CollectionCommandsApi) => (source: CommandSource) =>
+  itemIdFrom(source.target) || api.selection.selectedNode()?.id || '';
+
+export const appModel: ModelDef<ModelCtx, CollectionCommandsApi> = {
   entities: [nodeEntity as EntityDef<unknown>, edgeEntity as EntityDef<unknown>],
   collections: [
     collection<Graph>('graphs', {
@@ -241,9 +250,45 @@ export const appModel = {
       itemLabel: graph => graph.id,
       selectCommand: 'graph.switch.item',
       crud: { create: 'graph.create', delete: 'graph.delete.current' },
+      toolbar: { text: '+ Graph', order: 20 },
       search: true,
       order: 'created',
-    }) as CollectionDef<unknown, ModelCtx>,
+      commands: ({ graphs }) => [
+        {
+          id: 'graph.create',
+          label: 'Create graph',
+          event: 'graph.create',
+          group: 'graph',
+          shortcut: 'N',
+          input: { on: 'keydown', key: 'n', prevent: true },
+        },
+        {
+          id: 'graph.switch.next',
+          label: 'Switch graph',
+          event: 'graph.switch',
+          group: 'graph',
+          shortcut: 'G',
+          input: { on: 'keydown', key: 'g', prevent: true },
+          payload: () => ({ id: nextGraphId(graphs) }),
+        },
+        {
+          id: 'graph.switch.item',
+          label: 'Switch graph item',
+          event: 'graph.switch',
+          group: 'graph',
+          hidden: true,
+          payload: source => ({ id: itemIdFrom(source.target) || graphs.current.id }),
+        },
+        {
+          id: 'graph.delete.current',
+          label: 'Delete graph',
+          event: 'graph.delete',
+          group: 'graph',
+          available: source => graphs.all().length > 1 && (!!itemIdFrom(source?.target) || !!graphs.current.id),
+          payload: source => ({ id: itemIdFrom(source.target) || graphs.current.id }),
+        },
+      ],
+    }) as CollectionDef<unknown, ModelCtx, CollectionCommandsApi>,
     collection<GraphNode>('nodes', {
       label: 'Nodes',
       entity: nodeEntity,
@@ -252,9 +297,34 @@ export const appModel = {
       itemLabel: node => node.Label.text,
       selectCommand: 'selection.node.select',
       crud: { create: 'editing.node.create', delete: 'graph.node.delete.selected' },
+      toolbar: { text: '+ Node', order: 10 },
       search: true,
       order: 'created',
-    }) as CollectionDef<unknown, ModelCtx>,
+      commands: (api) => {
+        const targetId = nodeIdFromSource(api);
+        return [
+          {
+            id: 'editing.node.create',
+            label: 'Create node',
+            event: 'editing.node.create',
+            group: 'editing',
+            shortcut: 'A',
+            input: { on: 'keydown', key: 'a', prevent: true },
+            payload: () => ({ Label: { text: `Node ${api.graphs.current.nodes().length + 1}` } }),
+          },
+          {
+            id: 'graph.node.delete.selected',
+            label: 'Delete node',
+            event: 'graph.node.delete',
+            group: 'graph',
+            shortcut: 'Delete',
+            input: { on: 'keydown', key: 'Delete', prevent: true },
+            available: source => !!itemIdFrom(source?.target) || !!api.selection.selectedNode(),
+            payload: source => ({ id: targetId(source) }),
+          },
+        ];
+      },
+    }) as CollectionDef<unknown, ModelCtx, CollectionCommandsApi>,
     collection<GraphEdge>('edges', {
       label: 'Edges',
       entity: edgeEntity,
@@ -262,8 +332,65 @@ export const appModel = {
       itemId: edge => edge.id,
       itemLabel: edge => edge.Label?.text ?? `${edge.From} → ${edge.To}`,
       crud: { create: 'graph.edge.create', delete: 'graph.edge.delete' },
+      toolbar: { text: '+ Edge', order: 15 },
       search: true,
       order: 'created',
-    }) as CollectionDef<unknown, ModelCtx>,
+      commands: ({ graphs, selection }) => {
+        const nodeRef = (source: CommandSource) => {
+          const id = itemIdFrom(source.target);
+          return id && graphs.current.getNode(id) ? id : '';
+        };
+        const nodeOptions = () => graphs.current.nodes().map(node => ({ value: node.id, label: `${node.id} · ${node.Label.text}` }));
+        const edgeSeed = (source: CommandSource): EdgeCreateDraft => {
+          const ids = graphs.current.nodes().map(node => node.id);
+          const from = nodeRef(source) || selection.selectedNode()?.id || ids[0] || '';
+          const others = ids.filter(id => id !== from);
+          return { From: from, To: ids.length === 2 ? others[0] ?? '' : '' };
+        };
+        const edgeFormValues = (payload: unknown) => {
+          const seed = payload as EdgeCreateDraft | undefined;
+          return { From: seed?.From ?? '', To: seed?.To ?? '' };
+        };
+        const edgeFormError = (values: Record<string, string>) => {
+          if (graphs.current.nodes().length < 2) return 'Create at least two nodes before creating an edge.';
+          if (!values.From || !values.To) return 'Choose source and target nodes.';
+          if (values.From === values.To) return 'Source and target must be different nodes.';
+          if (!graphs.current.getNode(values.From)) return `Unknown source node "${values.From}".`;
+          if (!graphs.current.getNode(values.To)) return `Unknown target node "${values.To}".`;
+          return undefined;
+        };
+        return [
+          {
+            id: 'graph.edge.create',
+            label: 'Create edge',
+            event: 'editing.edge.create',
+            group: 'edge',
+            shortcut: 'E',
+            input: { on: 'keydown', key: 'e', prevent: true },
+            payload: edgeSeed,
+            form: {
+              title: 'Create edge',
+              submitLabel: 'Create edge',
+              fields: [
+                { id: 'From', label: 'Source node', placeholder: 'e1', autofocus: true, options: nodeOptions },
+                { id: 'To', label: 'Target node', placeholder: 'e2', options: nodeOptions },
+              ],
+              seed: edgeFormValues,
+              shouldOpen: () => true,
+              validate: edgeFormError,
+              payload: values => ({ From: values.From, To: values.To }),
+            },
+          },
+          {
+            id: 'graph.edge.delete',
+            label: 'Delete edge',
+            event: 'graph.edge.delete',
+            group: 'edge',
+            available: source => !!itemIdFrom(source?.target),
+            payload: source => ({ id: itemIdFrom(source.target) }),
+          },
+        ];
+      },
+    }) as CollectionDef<unknown, ModelCtx, CollectionCommandsApi>,
   ],
-} satisfies ModelDef<ModelCtx>;
+};

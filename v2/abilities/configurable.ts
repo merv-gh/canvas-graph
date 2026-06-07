@@ -76,7 +76,7 @@ export function registerConfigurable(system: Registry) {
         event: 'item.properties.open',
         group: 'item',
         available: source => !!itemRefFrom(source?.target) || !!selectedNode(),
-        payload: source => itemRefFrom(source.target) ?? { kind: 'node', id: selection.selected() || '' },
+        payload: source => itemRefFrom(source.target) ?? { kind: 'node', id: selectedNode()?.id ?? '' },
       },
       {
         id: 'properties.item.input',

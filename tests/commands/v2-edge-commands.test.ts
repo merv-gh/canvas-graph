@@ -82,6 +82,7 @@ describe('v2 edge commands', () => {
       label: 'Null form command',
       event: 'app.notice',
       group: 'test',
+      origin: 'test',
       form: {
         fields: [],
         shouldOpen: () => true,

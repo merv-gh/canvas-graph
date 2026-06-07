@@ -1,4 +1,5 @@
 import { itemIdFrom, type Registry } from '../core';
+import { Places } from '../types';
 import type { CommandSource, Id, NodeEntity } from '../types';
 import { ability, action } from './shared';
 
@@ -18,8 +19,9 @@ export const editable = <T extends NodeEntity>() => ability<T>('editable', [acti
 
 export function registerEditable(system: Registry) {
   system('ability.editable', ({ on, emit, contexts, graphs, selection }) => {
-    const titleEl = (id: Id) => document.querySelector(`.node[data-node-id="${id}"] .node-title`);
-    const nodeId = (source: CommandSource) => itemIdFrom(source.target) || selection.selected() || '';
+    const titleEl = (id: Id) =>
+      contexts.places.el(Places.Stage)?.querySelector(`.node[data-node-id="${id}"] .node-title`) ?? null;
+    const nodeId = (source: CommandSource) => itemIdFrom(source.target) || selection.selectedNode()?.id || '';
     const titleCommit = (target?: Element | null, finish = false) => ({
       id: itemIdFrom(target),
       text: target?.textContent?.trim() ?? '',
@@ -35,7 +37,7 @@ export function registerEditable(system: Registry) {
         shortcut: 'Enter',
         input: { on: 'keydown', key: 'Enter', prevent: true },
         available: source => !!nodeId(source ?? {}) || !!selection.selectedNode(),
-        payload: source => ({ id: nodeId(source) || selection.selected() || '' }),
+        payload: source => ({ id: nodeId(source) || selection.selectedNode()?.id || '' }),
       },
       {
         id: 'node.title.commit.enter',

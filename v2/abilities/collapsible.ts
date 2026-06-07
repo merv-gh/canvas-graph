@@ -20,7 +20,7 @@ export const collapsible = <T extends NodeEntity>() => ability<T>('collapsible',
 export function registerCollapsible(system: Registry) {
   system('ability.collapsible', ({ contexts, graphs, selection }) => {
     const selectedNode = () => selection.selectedNode();
-    const nodeId = (source: CommandSource) => itemIdFrom(source.target) || selection.selected() || '';
+    const nodeId = (source: CommandSource) => itemIdFrom(source.target) || selectedNode()?.id || '';
 
     contexts.commands.register([{
       id: 'node.collapse.toggle',
@@ -31,7 +31,7 @@ export function registerCollapsible(system: Registry) {
       input: { on: 'keydown', key: 'c', prevent: true },
       available: source => !!nodeId(source ?? {}) || !!selectedNode(),
       payload: source => {
-        const id = nodeId(source) || selection.selected() || graphs.current.nodes()[0]?.id || '';
+        const id = nodeId(source) || selectedNode()?.id || graphs.current.nodes()[0]?.id || '';
         const node = graphs.current.getNode(id)!;
         return { id, patch: { Collapsed: !node.Collapsed } };
       },

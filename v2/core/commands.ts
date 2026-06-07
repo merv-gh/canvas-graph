@@ -1,0 +1,129 @@
+import type { Bus, CommandSource, CommandSpec, EventName } from '../types';
+import type { IoApi } from './io';
+import { STORAGE_KEYS } from './io';
+import { bindingParsed, keyMatchesEvent, parseShortcut, shortcutOf } from './shortcuts';
+
+/** Owns the command registry: registration, shortcut overrides, conflict checks,
+ *  enabled/disabled toggles (persisted via io), and dispatch. */
+export function commandsContext(bus: Bus, isFlagOn: (origin?: string) => boolean, io: IoApi) {
+  const commandMap = new Map<string, CommandSpec>();
+  const shortcutOverrides = io.get<Record<string, string>>(STORAGE_KEYS.shortcuts, {});
+  const disabledCommands = new Set<string>(io.get<string[]>(STORAGE_KEYS.disabledCommands, []));
+
+  const isEnabled = (command: CommandSpec) =>
+    command.enabled !== false
+    && !disabledCommands.has(command.id)
+    && isFlagOn(command.origin);
+
+  const normalizeShortcut = (shortcut: string) => {
+    const p = parseShortcut(shortcut);
+    return [p.ctrl && 'ctrl', p.meta && 'meta', p.alt && 'alt', p.shift && 'shift', p.key.toLowerCase()].filter(Boolean).join('+');
+  };
+  const shortcutConflict = (id: string, shortcut: string) => {
+    const norm = normalizeShortcut(shortcut);
+    if (!norm.endsWith('+') && !parseShortcut(shortcut).key) return undefined;
+    return [...commandMap.values()].find(command =>
+      command.id !== id && isEnabled(command) && normalizeShortcut(shortcutOf(command)) === norm,
+    );
+  };
+  const applyShortcut = (command: CommandSpec, shortcut: string) => {
+    command.shortcut = shortcut;
+    if (command.input?.on === 'keydown') {
+      const p = parseShortcut(shortcut);
+      command.input.key = p.key;
+      command.input.ctrl = p.ctrl;
+      command.input.shift = p.shift;
+      command.input.alt = p.alt;
+      command.input.meta = p.meta;
+    }
+  };
+  const applyOverrides = (command: CommandSpec) => {
+    const override = shortcutOverrides[command.id];
+    if (override != null) applyShortcut(command, override);
+  };
+
+  return {
+    register: (specs: CommandSpec[], origin?: string) => specs.forEach(command => {
+      if (origin && !command.origin) command.origin = origin;
+      applyOverrides(command);
+      commandMap.set(command.id, command);
+    }),
+    unregister(id: string) { commandMap.delete(id); },
+    unregisterOrigin(origin: string) {
+      for (const [id, command] of commandMap) if (command.origin === origin) commandMap.delete(id);
+    },
+    get: (id: string) => commandMap.get(id),
+    all: () => [...commandMap.values()],
+    enabled: () => [...commandMap.values()].filter(isEnabled),
+    isEnabled,
+    shortcutConflict,
+    setShortcut(id: string, shortcut: string) {
+      const command = commandMap.get(id);
+      if (!command) return false;
+      const next = shortcut.trim();
+      if (shortcutConflict(id, next)) return false;
+      applyShortcut(command, next);
+      shortcutOverrides[id] = next;
+      io.set(STORAGE_KEYS.shortcuts, shortcutOverrides);
+      return true;
+    },
+    setEnabled(id: string, enabled: boolean) {
+      const command = commandMap.get(id);
+      if (!command) return false;
+      if (enabled) disabledCommands.delete(id); else disabledCommands.add(id);
+      io.set(STORAGE_KEYS.disabledCommands, [...disabledCommands]);
+      return true;
+    },
+    run(id: string, source: CommandSource = {}) {
+      const command = commandMap.get(id);
+      if (!command || !isEnabled(command) || command.available?.(source) === false) return false;
+      const payload = command.payload?.(source);
+      if (command.form?.shouldOpen?.(payload, source)) {
+        bus.emit('commandForm.open', {
+          commandId: id,
+          seed: command.form.seed?.(payload, source) ?? {},
+        });
+        return true;
+      }
+      bus.forward(command.event, payload);
+      return true;
+    },
+  };
+}
+
+/** Routes raw DOM events to commands. Click → `[data-command]`; key/pointer/wheel
+ *  → match against registered command.input bindings. Typing in inputs blocks
+ *  global shortcuts unless the binding sets `global: true` or has a `selector`. */
+export function inputRouter(commands: ReturnType<typeof commandsContext>) {
+  return {
+    start(root: Document | HTMLElement = document) {
+      const route = (event: Event) => {
+        const rawTarget = event.target instanceof Element ? event.target : null;
+        const typing = event instanceof KeyboardEvent
+          && (/input|textarea|select/i.test(rawTarget?.tagName ?? '') || (rawTarget instanceof HTMLElement && rawTarget.isContentEditable));
+
+        const button = event.type === 'click' ? rawTarget?.closest('[data-command]') : null;
+        if (button instanceof HTMLElement) {
+          event.preventDefault();
+          commands.run(button.dataset.command!, { event, target: button });
+          return;
+        }
+
+        for (const command of commands.enabled()) {
+          const binding = command.input;
+          if (!binding || binding.on !== event.type) continue;
+          if (binding.key && !keyMatchesEvent(event, bindingParsed(binding))) continue;
+          const target = rawTarget && binding.selector ? rawTarget.closest(binding.selector) : rawTarget;
+          if (!(target instanceof Element) || (binding.selector && !target)) continue;
+          if (typing && !binding.global && !binding.selector) continue;
+          if (binding.when && !binding.when(event, target)) continue;
+          if (binding.prevent) event.preventDefault();
+          commands.run(command.id, { event, target });
+          if (binding.stop) break;
+        }
+      };
+      const types: EventName[] | string[] = ['click', 'keydown', 'pointerdown', 'pointermove', 'pointerup', 'wheel', 'input', 'change', 'focusout'];
+      types.forEach(type => root.addEventListener(type, route, type === 'wheel' ? { passive: false } : undefined));
+    },
+  };
+}

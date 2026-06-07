@@ -40,7 +40,7 @@ describe('v2 defensive command branches', () => {
     const ids = ctx.graphs.current.nodes().map(node => node.id);
 
     expect(runCommand(ctx, 'selection.node.next')).toBe(true);
-    expect(ctx.selection.selected()).toBe(ids[0]);
+    expect(ctx.selection.selectedNode()?.id).toBe(ids[0]);
     expect(runCommand(ctx, 'selection.node.clear')).toBe(true);
     expect(ctx.selection.selected()).toBeNull();
   });
