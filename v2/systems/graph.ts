@@ -34,6 +34,8 @@ export function registerGraph(system: Registry) {
       }
     });
     on('graph.edge.create', draft => {
+      if (!draft.From || !draft.To || draft.From === draft.To) return;
+      if (!graphs.current.getNode(draft.From) || !graphs.current.getNode(draft.To)) return;
       const edge = graphs.current.createEdge(draft);
       emit('graph.edge.created', { graphId: graphs.current.id, id: edge.id, edge });
     });

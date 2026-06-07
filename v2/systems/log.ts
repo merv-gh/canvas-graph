@@ -16,7 +16,7 @@ export function registerLog(system: Registry) {
     };
     bus.onAny(event => {
       if (event.name.startsWith('render.')) return;
-      rows.unshift(event.name);
+      rows.unshift(event.name === 'app.notice' ? `${event.name}: ${event.data.message}` : event.name);
       rows.length = Math.min(rows.length, 12);
       emit('render.view.set', { place: Places.Left, key: 'log', view: renderLog });
     });

@@ -1,6 +1,7 @@
 export type Id = string;
 export type EdgeEntity = { id: Id; kind: 'edge'; From: Id; To: Id; Label?: Label };
 export type EdgeDraft = { From: Id; To: Id; Label?: Label };
+export type EdgeCreateDraft = Partial<EdgeDraft>;
 export type EdgePatch = Partial<Pick<EdgeEntity, 'Label'>>;
 export type Renderable = string | globalThis.Node | (() => string | globalThis.Node);
 export type RawInput = 'click' | 'keydown' | 'pointerdown' | 'pointermove' | 'pointerup' | 'wheel' | 'input' | 'change' | 'focusout';
@@ -34,6 +35,7 @@ export type ItemRef = { kind: ItemKind; id: Id };
 
 export type AppEvents = {
   'app.start': void;
+  'app.notice': { message: string; level?: 'info' | 'warn' | 'error' };
   'demo.run-self': void;
   'affordance.contributed': { surface: AffordanceSurface };
   'render.shell': void;
@@ -44,6 +46,8 @@ export type AppEvents = {
   'modal.close': void;
   'palette.open': void;
   'help.open': void;
+  'commandForm.open': { commandId: string; seed?: Record<string, string> };
+  'commandForm.submit': { commandId: string; values: Record<string, string> };
   'outline.draw': void;
   'outline.search.changed': { collectionId: Id; query: string };
   'commandModal.search.changed': { modalId: string; query: string };
@@ -63,6 +67,7 @@ export type AppEvents = {
   'view.pan.move': Position;
   'view.pan.end': void;
   'editing.node.create': NodeDraft & CreateHints;
+  'editing.edge.create': EdgeCreateDraft;
   'graph.create': void;
   'graph.created': { id: Id };
   'graph.delete': { id: Id };
@@ -108,6 +113,24 @@ export type Bus = {
 export type DxIssue = { level: 'error' | 'warn'; rule: string; message: string };
 
 export type CommandSource = { event?: Event; target?: Element | null };
+export type CommandFormOption = { value: string; label: string };
+export type CommandFormField = {
+  id: string;
+  label: string;
+  input?: 'text';
+  placeholder?: string;
+  required?: boolean;
+  options?: () => CommandFormOption[];
+};
+export type CommandFormSpec = {
+  title?: string;
+  submitLabel?: string;
+  fields: CommandFormField[];
+  seed?: (payload: unknown, source: CommandSource) => Record<string, string>;
+  shouldOpen?: (payload: unknown, source: CommandSource) => boolean;
+  payload: (values: Record<string, string>, source: CommandSource) => unknown;
+  validate?: (values: Record<string, string>, source: CommandSource) => string | undefined;
+};
 export type CommandInput = {
   on: RawInput;
   key?: string;
@@ -133,7 +156,8 @@ export type CommandSpec<K extends EventName = EventName> = {
   enabled?: boolean;        // explicit toggle. Default true.
   origin?: string;          // system/ability name that registered the command (for unregister + DX)
   available?: (source?: CommandSource) => boolean;
-  payload?: (source: CommandSource) => AppEvents[K];
+  payload?: (source: CommandSource) => AppEvents[K] | undefined;
+  form?: CommandFormSpec;
 };
 export type FeatureFlags = Record<string, boolean>;
 

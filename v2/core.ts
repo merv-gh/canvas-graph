@@ -393,6 +393,13 @@ function createContexts(bus: Bus, flags: FlagsApi, io: IoApi) {
       const command = commandMap.get(id);
       if (!command || !isEnabled(command) || command.available?.(source) === false) return false;
       const payload = command.payload?.(source);
+      if (command.form?.shouldOpen?.(payload, source)) {
+        bus.emit('commandForm.open', {
+          commandId: id,
+          seed: command.form.seed?.(payload, source) ?? {},
+        });
+        return true;
+      }
       (bus.emit as (name: EventName, data?: unknown) => void)(command.event, payload);
       return true;
     },

@@ -53,6 +53,7 @@ V2 serves at `http://127.0.0.1:5174/`.
 - `log`: observes events and renders the event log.
 - `outline`: renders collection lists/search/create/delete from `ctx.model.collections()`.
 - `modal`: registers modal commands and renders modal contents.
+- `commandForm`: renders command-required input forms, then emits the command event after validation.
 - `commandModal`: renders Palette and Help from the same searchable grouped command modal definition.
 - `domain`: registers app/domain commands implied by collections.
 - `view.zoom`: owns zoom, fit-all, and fit-selected.
@@ -81,6 +82,7 @@ This keeps the add/remove test simple: if an entity no longer has an ability, it
 - Domain declarations live in `model.ts`; runtime contexts live in `core.ts`; app composition lives in `app.ts`.
 - Raw DOM events enter through the input adapter only; systems register commands and listen to bus events.
 - Systems register command arrays, even when they currently own one command.
+- Commands that need missing input declare a `form`; `commandForm` owns the modal, fields, validation, and submit flow.
 - Ability command ownership stays with the ability. App-wide systems should not contain ability-specific command handlers.
 - Cross-system reactions belong in `features.ts`, not in the systems or abilities that happen to emit the event.
 - Test/devtools surfaces are published by owning systems via `ctx.expose(...)`, not special-cased in `app.ts`.
@@ -176,6 +178,8 @@ Node creation flow:
 
 This is more verbose than a direct function call, but the debug story is much cleaner: the event log shows the lifecycle.
 
+`edgeLifecycle` mirrors that split. The visible `graph.edge.create` command always asks for source/target node refs with autocomplete, prefilled from the current selection when possible. If the graph has fewer than two nodes, the form and event log explain why the edge cannot be created. The feature validates real, distinct endpoints and only then emits the storage event `graph.edge.create`.
+
 ## Event Convention
 
 Events are namespaced by owning system or feature domain.
@@ -239,14 +243,14 @@ There are no hidden archetype defaults or capability merges. If a future capabil
 
 The declaration/validation layer grew the total v2 code, but the entrypoint is now tiny and each concept has a narrower home:
 
-- `v2/app.ts`: `44` lines / `1,677` bytes
-- `v2/core.ts`: `572` lines / `25,451` bytes
+- `v2/app.ts`: `44` lines / `1,696` bytes
+- `v2/core.ts`: `579` lines / `25,673` bytes
 - `v2/core/`: `73` lines / `2,730` bytes
-- `v2/systems.ts`: `1` line / `33` bytes, plus `v2/systems/`: `1,093` lines / `48,345` bytes
+- `v2/systems.ts`: `1` line / `33` bytes, plus `v2/systems/`: `1,267` lines / `55,373` bytes
 - `v2/abilities.ts`: `1` line / `35` bytes, plus `v2/abilities/`: `429` lines / `16,998` bytes
-- `v2/features.ts`: `22` lines / `1,266` bytes
+- `v2/features.ts`: `32` lines / `1,691` bytes
 - `v2/model.ts`: `269` lines / `8,989` bytes
-- `v2/types.ts`: `202` lines / `8,386` bytes
+- `v2/types.ts`: `226` lines / `9,404` bytes
 
 The current tradeoff is explicitness over smallest total line count. `core.ts` is still above target, but IO, selection, and DX are no longer owned by it. The next low-risk extractions are property renderers and affordance storage.
 

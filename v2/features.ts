@@ -17,6 +17,16 @@ export function registerFeatures(feature: Registry) {
       if (hints?.connectFrom) emit('graph.edge.create', { From: hints.connectFrom, To: id });
     });
   });
+  feature('edgeLifecycle', ({ on, emit, graphs }) => {
+    on('editing.edge.create', draft => {
+      const From = draft.From ?? '';
+      const To = draft.To ?? '';
+      if (!From || !To || From === To) return;
+      if (!graphs.current.getNode(From) || !graphs.current.getNode(To)) return;
+      emit('graph.edge.create', { From, To, Label: draft.Label });
+    });
+  });
 
   feature.setRequires('nodeLifecycle', ['graph', 'ability.selectable', 'focus']);
+  feature.setRequires('edgeLifecycle', ['graph']);
 }

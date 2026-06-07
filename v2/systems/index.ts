@@ -1,5 +1,6 @@
 import type { Registry } from '../core';
 import { registerCommandModal } from './command-modal';
+import { registerCommandForm } from './command-form';
 import { registerDemo } from './demo';
 import { registerDomain } from './domain';
 import { registerDx } from './dx';
@@ -22,6 +23,7 @@ export function registerSystems(system: Registry) {
   registerLog(system);
   registerOutline(system);
   registerModal(system);
+  registerCommandForm(system);
   registerCommandModal(system);
   registerDomain(system);
   registerGraph(system);
@@ -38,6 +40,7 @@ export function registerSystems(system: Registry) {
     log: ['render'],
     outline: ['render', 'graph'],
     modal: ['render'],
+    commandForm: ['modal'],
     commandModal: ['modal'],
     domain: ['graph'],
     'view.zoom': ['render'],

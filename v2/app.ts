@@ -22,7 +22,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const flags = createFlags({
     // systems
     render: true, input: true, main: true, log: true, outline: true,
-    modal: true, commandModal: true, domain: true, graph: true,
+    modal: true, commandForm: true, commandModal: true, domain: true, graph: true,
     'view.zoom': true, 'view.pan': true, focus: true, layout: true, dx: true, demo: true,
     // abilities
     'ability.selectable': true,
