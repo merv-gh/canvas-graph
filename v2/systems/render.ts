@@ -57,6 +57,11 @@ export function registerRender(system: Registry) {
     };
     const itemSelector = (ref: ItemRef) =>
       `[data-item-kind="${ref.kind}"][data-item-id="${ref.id.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"]`;
+    const activeElement = () => document.activeElement as (Element & { blur?: () => void }) | null;
+    const blurActiveItem = () => {
+      const active = activeElement();
+      if (active?.closest('[data-item-kind][data-item-id]') && typeof active.blur === 'function') active.blur();
+    };
     const drawOverlays = (layer: HTMLElement) => {
       const overlayLayer = document.createElement('div');
       overlayLayer.className = 'item-overlays';
@@ -122,14 +127,25 @@ export function registerRender(system: Registry) {
             const from = graphs.current.getNode(edge.From);
             const to = graphs.current.getNode(edge.To);
             if (!from?.Position || !to?.Position) return;
+            const ref = edgeRef(edge.id);
+            const hit = document.createElementNS(SVG_NS, 'line');
+            hit.setAttribute('class', 'edge-hit');
+            hit.setAttribute('x1', String(from.Position.x));
+            hit.setAttribute('y1', String(from.Position.y));
+            hit.setAttribute('x2', String(to.Position.x));
+            hit.setAttribute('y2', String(to.Position.y));
+            hit.setAttribute('tabindex', '-1');
+            hit.dataset.edgeId = edge.id;
+            tagItem(hit, ref);
+            applyItemModes(hit, ref);
+            svg.append(hit);
             const line = document.createElementNS(SVG_NS, 'line');
+            line.setAttribute('class', 'edge-line');
             line.setAttribute('x1', String(from.Position.x));
             line.setAttribute('y1', String(from.Position.y));
             line.setAttribute('x2', String(to.Position.x));
             line.setAttribute('y2', String(to.Position.y));
-            line.setAttribute('tabindex', '-1');
             line.dataset.edgeId = edge.id;
-            const ref = edgeRef(edge.id);
             tagItem(line, ref);
             applyItemModes(line, ref);
             svg.append(line);
@@ -183,7 +199,12 @@ export function registerRender(system: Registry) {
     let scheduled = false;
     let flushes = 0;
     let pendingFocusRef: ItemRef | null = null;
+    let pendingBlur = false;
     const focusPendingItem = () => {
+      if (pendingBlur) {
+        pendingBlur = false;
+        blurActiveItem();
+      }
       if (!pendingFocusRef) return;
       const item = contexts.places.el(Places.Stage)?.querySelector(itemSelector(pendingFocusRef));
       pendingFocusRef = null;
@@ -209,7 +230,10 @@ export function registerRender(system: Registry) {
     // Devtools/test surface — read flush count to assert coalescing budgets.
     ctx.expose('render', { flushes: () => flushes });
     on('app.start', () => mark('nodes'));
-    on('focus.item.focused', ref => { pendingFocusRef = ref; });
+    on('focus.item.focused', ref => {
+      pendingFocusRef = ref;
+      if (!ref) pendingBlur = true;
+    });
     bus.onAny(({ name }) => {
       const scope = factScope(name);
       if (scope) applyScope(scope);

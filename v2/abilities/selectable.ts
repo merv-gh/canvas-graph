@@ -1,4 +1,4 @@
-import { isStageSurface, itemIdFrom, nodeRef, type Registry } from '../core';
+import { isStageSurface, itemIdFrom, itemRefFrom, nodeRef, type Registry } from '../core';
 import { Places } from '../types';
 import type { CommandSource, NodeEntity } from '../types';
 import { ability, action } from './shared';
@@ -27,12 +27,26 @@ export function registerSelectable(system: Registry) {
 
     contexts.commands.register([
       {
+        id: 'selection.item.select',
+        label: 'Select item',
+        event: 'selection.item.select',
+        group: 'selection',
+        hidden: true,
+        input: {
+          on: 'pointerdown',
+          selector: '[data-item-kind][data-item-id]',
+          when: event => !(event.target as Element).closest('[data-command], [data-drag-handle]'),
+          prevent: true,
+          stop: true,
+        },
+        payload: source => itemRefFrom(source.target) ?? nodeRef(nodeId(source)),
+      },
+      {
         id: 'selection.node.select',
         label: 'Select node',
         event: 'selection.node.select',
         group: 'selection',
         hidden: true,
-        input: { on: 'pointerdown', selector: '[data-node-id]', when: event => !(event.target as Element).closest('[data-command]'), prevent: true },
         payload: source => ({ id: nodeId(source) }),
       },
       {
@@ -72,12 +86,14 @@ export function registerSelectable(system: Registry) {
       contexts.itemModes.set(origin, 'selected', [ref]);
       emit('selection.item.selected', ref);
       emit('selection.node.selected', { id: ref.kind === 'node' ? ref.id : null });
+      emit('focus.item.focus', ref);
     });
     on('selection.item.clear', () => {
       selection.select(null);
       contexts.itemModes.clear(origin);
       emit('selection.item.selected', null);
       emit('selection.node.selected', { id: null });
+      emit('focus.item.clear');
     });
   });
 }

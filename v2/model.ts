@@ -331,6 +331,7 @@ export const appModel: ModelDef<ModelCtx, CollectionCommandsApi> = {
       items: ctx => ctx.graphs.current.edges(),
       itemId: edge => edge.id,
       itemLabel: edge => edge.Label?.text ?? `${edge.From} → ${edge.To}`,
+      selectCommand: 'selection.item.select',
       crud: { create: 'graph.edge.create', delete: 'graph.edge.delete' },
       toolbar: { text: '+ Edge', order: 15 },
       search: true,

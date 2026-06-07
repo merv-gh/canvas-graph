@@ -52,7 +52,31 @@ describe('v2 selection polymorphism', () => {
 
     expect(ctx.selection.focused()).toEqual(ref);
     expect(ctx.contexts.itemModes.has(ref, 'focused')).toBe(true);
-    expect(document.querySelector(`.edges [data-edge-id="${ref.id}"]`)?.classList.contains('focused')).toBe(true);
+    expect(document.querySelector(`.edge-line[data-edge-id="${ref.id}"]`)?.classList.contains('focused')).toBe(true);
+    expect(document.activeElement?.getAttribute('data-item-kind')).toBe('edge');
+    expect(document.activeElement?.getAttribute('data-item-id')).toBe(ref.id);
+  });
+
+  it('selects and focuses canvas edges through the generic item command', async () => {
+    const ctx = bootV2();
+    runCommand(ctx, 'editing.node.create');
+    runCommand(ctx, 'editing.node.create');
+    await settle();
+    const [a, b] = ctx.graphs.current.nodes();
+    ctx.bus.emit('graph.edge.create', { From: a.id, To: b.id });
+    await settle();
+    const ref = edgeRef(ctx.graphs.current.edges()[0].id);
+
+    document.querySelector(`.edge-hit[data-edge-id="${ref.id}"]`)!
+      .dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+    await settle();
+
+    expect(ctx.selection.selected()).toEqual(ref);
+    expect(ctx.selection.focused()).toEqual(ref);
+    expect(document.querySelector(`.edge-line[data-edge-id="${ref.id}"]`)?.classList.contains('selected')).toBe(true);
+    expect(document.querySelector(`.edge-line[data-edge-id="${ref.id}"]`)?.classList.contains('focused')).toBe(true);
+    expect(document.activeElement?.getAttribute('data-item-kind')).toBe('edge');
+    expect(document.activeElement?.getAttribute('data-item-id')).toBe(ref.id);
   });
 
   it('exposes ItemRef targets, overlays, and keyboard capture for future modes', async () => {

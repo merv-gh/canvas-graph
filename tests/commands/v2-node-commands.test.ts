@@ -52,6 +52,36 @@ describe('v2 node commands', () => {
     expect(ctx.graphs.current.nodes()).toHaveLength(2);
   });
 
+  it('moves DOM focus when selecting nodes by pointer or Tab', async () => {
+    const ctx = bootV2();
+    runCommand(ctx, 'editing.node.create');
+    runCommand(ctx, 'editing.node.create');
+    await settle();
+    const [first, second] = ctx.graphs.current.nodes();
+
+    expect((document.activeElement as HTMLElement | null)?.dataset.nodeId).toBe(second.id);
+
+    document.querySelector(`[data-node-id="${first.id}"]`)!
+      .dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+    await settle();
+
+    expect(ctx.selection.selectedNode()?.id).toBe(first.id);
+    expect(ctx.selection.focusedNode()?.id).toBe(first.id);
+    expect((document.activeElement as HTMLElement | null)?.dataset.nodeId).toBe(first.id);
+
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    await settle();
+
+    expect(ctx.selection.selectedNode()?.id).toBe(second.id);
+    expect(ctx.selection.focusedNode()?.id).toBe(second.id);
+    expect((document.activeElement as HTMLElement | null)?.dataset.nodeId).toBe(second.id);
+
+    expect(runCommand(ctx, 'selection.node.clear')).toBe(true);
+    await settle();
+    expect(ctx.selection.selected()).toBeNull();
+    expect((document.activeElement as HTMLElement | null)?.dataset.nodeId).toBeUndefined();
+  });
+
   it('edits title from the rendered node and restores empty commits', async () => {
     const ctx = bootV2();
     runCommand(ctx, 'editing.node.create');

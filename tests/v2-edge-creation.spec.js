@@ -62,8 +62,8 @@ test('edge command asks for source and target even when only two nodes exist', a
   await expect.poll(() => page.evaluate(() =>
     window.v2.graphs.current.edges().map(edge => ({ From: edge.From, To: edge.To })),
   )).toEqual([{ From: nodes[0].id, To: nodes[1].id }]);
-  await expect(page.locator('.edges line')).toHaveCount(1);
-  const box = await page.locator('.edges line').evaluate(line => {
+  await expect(page.locator('.edges .edge-line')).toHaveCount(1);
+  const box = await page.locator('.edges .edge-line').evaluate(line => {
     const rect = line.getBoundingClientRect();
     return { width: rect.width, height: rect.height, stroke: getComputedStyle(line).stroke };
   });
@@ -93,7 +93,7 @@ test('edge command prefills first valid target when selected source has several 
   await expect.poll(() => page.evaluate(() =>
     window.v2.graphs.current.edges().map(edge => ({ From: edge.From, To: edge.To })),
   )).toEqual([{ From: nodes[0].id, To: nodes[2].id }]);
-  await expect(page.locator('.edges line')).toHaveCount(1);
+  await expect(page.locator('.edges .edge-line')).toHaveCount(1);
 });
 
 test('graph storage rejects self-loop and missing-endpoint edge creates', async ({ page }) => {
