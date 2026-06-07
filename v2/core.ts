@@ -227,8 +227,9 @@ function templateContext() {
   };
   const slot = (root: ParentNode, name: string) => {
     const el = find(root, `[data-slot="${name}"]`);
-    if (!(el instanceof HTMLElement)) throw new Error(`Missing slot: ${name}`);
-    return el;
+    // Accept any Element (HTML or SVG) — the SVG edges slot uses the same API.
+    if (!(el instanceof Element)) throw new Error(`Missing slot: ${name}`);
+    return el as HTMLElement;
   };
   return { clone, text, slot, _cloned: cloned };
 }
@@ -241,9 +242,15 @@ function viewContext(places: Map<Place, HTMLElement>) {
     state = {
       x: next.x ?? state.x,
       y: next.y ?? state.y,
-      scale: clamp(next.scale ?? state.scale, 0.25, 3),
+      // Wide clamp so fit-view can shrink for big graphs and zoom-in deep on a single node.
+      scale: clamp(next.scale ?? state.scale, 0.05, 5),
     };
     return get();
+  };
+  const zoomAtScreen = (screen: Position, factor: number) => {
+    const before = screenToSpace(screen);
+    const scale = clamp(state.scale * factor, 0.05, 5);
+    return set({ scale, x: before.x - screen.x / scale, y: before.y - screen.y / scale });
   };
   const clientToScreen = (place: Place, point: Position) => {
     const rect = localRect(place);
@@ -270,11 +277,6 @@ function viewContext(places: Map<Place, HTMLElement>) {
   const isVisible = (place: Place, rect: Rect, margin = 0) => {
     const visible = visibleRect(place, margin);
     return !visible || rectsIntersect(visible, rect);
-  };
-  const zoomAtScreen = (screen: Position, factor: number) => {
-    const before = screenToSpace(screen);
-    const scale = clamp(state.scale * factor, 0.25, 3);
-    return set({ scale, x: before.x - screen.x / scale, y: before.y - screen.y / scale });
   };
   return { get, set, clientToScreen, screenToSpace, spaceToScreen, clientToSpace, screenCenter, spaceCenter, visibleRect, isVisible, zoomAtScreen };
 }

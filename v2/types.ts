@@ -1,4 +1,7 @@
 export type Id = string;
+export type EdgeEntity = { id: Id; kind: 'edge'; From: Id; To: Id; Label?: Label };
+export type EdgeDraft = { From: Id; To: Id; Label?: Label };
+export type EdgePatch = Partial<Pick<EdgeEntity, 'Label'>>;
 export type Renderable = string | globalThis.Node | (() => string | globalThis.Node);
 export type RawInput = 'click' | 'keydown' | 'pointerdown' | 'pointermove' | 'pointerup' | 'wheel' | 'input' | 'change' | 'focusout';
 
@@ -14,9 +17,19 @@ export type NodeDraft = { Label?: Label; Position?: Position; Size?: Size; Colla
 export type NodeEntity = { id: Id; kind: 'node'; Label: Label; Size: Size; Position?: Position; Collapsed?: boolean };
 export type NodePatch = Partial<Pick<NodeEntity, 'Label' | 'Size' | 'Position' | 'Collapsed'>>;
 export type NodeCreateOptions = { at?: Position; near?: Id | null };
+/** Operation-time hints attached to create events. They control the lifecycle around the
+ *  new node — focus behavior, edge creation, placement anchor — without polluting NodeDraft. */
+export type CreateHints = {
+  /** Don't move focus to the new node. Selection still moves (so user can keep editing). */
+  keepFocus?: boolean;
+  /** Place the new node near this id, using the same near-placement heuristic as the graph store. */
+  relativeTo?: Id;
+  /** After the node lands, also create an edge from this id to the new node id. */
+  connectFrom?: Id;
+};
 export type NonEmptyArray<T> = [T, ...T[]];
 export type ModalVisual = 'panel' | 'command' | 'properties';
-export type ItemKind = 'graph' | 'node';
+export type ItemKind = 'graph' | 'node' | 'edge';
 export type ItemRef = { kind: ItemKind; id: Id };
 
 export type AppEvents = {
@@ -41,22 +54,31 @@ export type AppEvents = {
   'view.zoom.in': void;
   'view.zoom.out': void;
   'view.zoom.reset': void;
+  'view.fit.all': void;
+  'view.fit.selected': void;
+  'layout.apply.radial': void;
+  'layout.apply.grid': void;
+  'layout.apply.tidy': void;
   'view.pan.start': Position;
   'view.pan.move': Position;
   'view.pan.end': void;
-  'editing.node.create': NodeDraft;
+  'editing.node.create': NodeDraft & CreateHints;
   'graph.create': void;
   'graph.created': { id: Id };
   'graph.delete': { id: Id };
   'graph.deleted': { id: Id; nextId: Id };
   'graph.switch': { id: Id };
   'graph.switched': { id: Id };
-  'graph.node.create': NodeDraft;
-  'graph.node.created': { graphId: Id; id: Id };
+  'graph.node.create': NodeDraft & CreateHints;
+  'graph.node.created': { graphId: Id; id: Id; hints?: CreateHints };
   'graph.node.update': { id: Id; patch: NodePatch };
   'graph.node.updated': { graphId: Id; id: Id };
   'graph.node.delete': { id: Id };
   'graph.node.deleted': { graphId: Id; id: Id };
+  'graph.edge.create': EdgeDraft;
+  'graph.edge.created': { graphId: Id; id: Id; edge: EdgeEntity };
+  'graph.edge.delete': { id: Id };
+  'graph.edge.deleted': { graphId: Id; id: Id };
   'node.title.edit': { id: Id };
   'node.title.commit': { id: Id; text: string; finish?: boolean };
   'item.properties.open': ItemRef;

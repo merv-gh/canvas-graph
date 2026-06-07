@@ -117,6 +117,30 @@ export function registerSystems(system: Registry) {
           const view = contexts.view.get();
           const layer = contexts.templates.clone('nodes');
           layer.style.transform = `translate(${-view.x * view.scale}px, ${-view.y * view.scale}px) scale(${view.scale})`;
+          // Edges first so they sit behind node DOM (which is appended after).
+          const svg = contexts.templates.slot(layer, 'edges');
+          const SVG_NS = 'http://www.w3.org/2000/svg';
+          graphs.current.edges().forEach(edge => {
+            const from = graphs.current.getNode(edge.From);
+            const to = graphs.current.getNode(edge.To);
+            if (!from?.Position || !to?.Position) return;
+            const line = document.createElementNS(SVG_NS, 'line');
+            line.setAttribute('x1', String(from.Position.x));
+            line.setAttribute('y1', String(from.Position.y));
+            line.setAttribute('x2', String(to.Position.x));
+            line.setAttribute('y2', String(to.Position.y));
+            line.dataset.edgeId = edge.id;
+            svg.append(line);
+            if (edge.Label?.text) {
+              const text = document.createElementNS(SVG_NS, 'text');
+              text.setAttribute('class', 'edge-label');
+              text.setAttribute('x', String((from.Position.x + to.Position.x) / 2));
+              text.setAttribute('y', String((from.Position.y + to.Position.y) / 2 - 4));
+              text.setAttribute('text-anchor', 'middle');
+              text.textContent = edge.Label.text;
+              svg.append(text);
+            }
+          });
           graphs.current.nodes()
             .filter(node => contexts.view.isVisible(Places.Stage, nodeRect(node), 160))
             .forEach(node => layer.append(nodeView(node)));
@@ -178,7 +202,7 @@ export function registerSystems(system: Registry) {
       if (name.startsWith('render.')) return;
       if (name === 'view.changed') return mark('nodes');
       // Data mutations + selection/focus changes refresh both surfaces.
-      if (/(?:^graph\.(?:switched|deleted)$|^graph\.node\.(?:created|updated|deleted)$|^(?:selection|focus)\.node\.(?:selected|focused)$)/.test(name)) {
+      if (/(?:^graph\.(?:switched|deleted)$|^graph\.node\.(?:created|updated|deleted)$|^graph\.edge\.(?:created|updated|deleted)$|^(?:selection|focus)\.node\.(?:selected|focused)$)/.test(name)) {
         return mark('nodes', 'outline');
       }
       if (name === 'graph.created') return mark('outline');
@@ -556,19 +580,33 @@ export function registerSystems(system: Registry) {
       emit('graph.switched', { id: graph.id });
     });
     on('graph.node.create', draft => {
-      // Place near current selection if there is one; otherwise view-center.
-      const nearNode = selection.selectedNode() as GraphNode | undefined;
-      const node = graphs.current.createNode(draft, {
+      const { relativeTo, keepFocus, connectFrom, ...store } = draft as typeof draft & { relativeTo?: string; keepFocus?: boolean; connectFrom?: string };
+      // Explicit relativeTo wins; else last selected; else view center.
+      const anchorNode = relativeTo ? graphs.current.getNode(relativeTo) : (selection.selectedNode() as GraphNode | undefined);
+      const node = graphs.current.createNode(store, {
         at: contexts.view.spaceCenter(Places.Stage),
-        nearPosition: nearNode?.Position,
+        nearPosition: anchorNode?.Position,
       });
-      emit('graph.node.created', { graphId: graphs.current.id, id: node.id });
+      // Pass hints through the fact event so features.nodeLifecycle can act on them.
+      emit('graph.node.created', { graphId: graphs.current.id, id: node.id, hints: { keepFocus, connectFrom, relativeTo } });
     });
     on('graph.node.update', ({ id, patch }) => {
       if (graphs.current.updateNode(id, patch)) emit('graph.node.updated', { graphId: graphs.current.id, id });
     });
     on('graph.node.delete', ({ id }) => {
-      if (graphs.current.deleteNode(id)) emit('graph.node.deleted', { graphId: graphs.current.id, id });
+      // Snapshot incident edges before cascade so we can emit per-edge facts.
+      const incident = graphs.current.edgesOf(id).map(e => e.id);
+      if (graphs.current.deleteNode(id)) {
+        incident.forEach(eid => emit('graph.edge.deleted', { graphId: graphs.current.id, id: eid }));
+        emit('graph.node.deleted', { graphId: graphs.current.id, id });
+      }
+    });
+    on('graph.edge.create', draft => {
+      const edge = graphs.current.createEdge(draft);
+      emit('graph.edge.created', { graphId: graphs.current.id, id: edge.id, edge });
+    });
+    on('graph.edge.delete', ({ id }) => {
+      if (graphs.current.deleteEdge(id)) emit('graph.edge.deleted', { graphId: graphs.current.id, id });
     });
     on('graph.delete', ({ id }) => {
       const next = graphs.delete(id);
@@ -577,11 +615,12 @@ export function registerSystems(system: Registry) {
     });
   });
 
-  // Camera (zoom). Keyboard + wheel + toolbar. Independent of pan.
-  system('view.zoom', ({ on, emit, contexts, contribute }) => {
+  // Camera (zoom + fit). Keyboard + wheel + toolbar. Independent of pan.
+  system('view.zoom', ({ on, emit, contexts, graphs, selection, contribute }) => {
     contribute({ surface: 'top', command: 'view.zoom.out', kind: 'button', text: '−', slot: 'end', order: 10 });
     contribute({ surface: 'top', command: 'view.zoom.reset', kind: 'button', text: '100%', slot: 'end', order: 20 });
     contribute({ surface: 'top', command: 'view.zoom.in', kind: 'button', text: '+', slot: 'end', order: 30 });
+    contribute({ surface: 'top', command: 'view.fit.all', kind: 'button', text: 'Fit', slot: 'end', order: 5 });
     const stageSelector = `[data-place="${Places.Stage}"]`;
     const commit = () => emit('view.changed', contexts.view.get());
     const centerZoom = (factor: number) => {
@@ -608,12 +647,56 @@ export function registerSystems(system: Registry) {
       { id: 'view.zoom.in', label: 'Zoom in', event: 'view.zoom.in', group: 'view', shortcut: '+', input: { on: 'keydown', key: '+', prevent: true } },
       { id: 'view.zoom.out', label: 'Zoom out', event: 'view.zoom.out', group: 'view', shortcut: '-', input: { on: 'keydown', key: '-', prevent: true } },
       { id: 'view.zoom.reset', label: 'Reset view', event: 'view.zoom.reset', group: 'view', shortcut: '0', input: { on: 'keydown', key: '0', prevent: true } },
+      { id: 'view.fit.all', label: 'Fit all to view', event: 'view.fit.all', group: 'view', shortcut: 'Z', input: { on: 'keydown', key: 'z', prevent: true } },
+      { id: 'view.fit.selected', label: 'Fit selected to view', event: 'view.fit.selected', group: 'view', shortcut: 'Shift+Z', input: { on: 'keydown', key: 'Z', shift: true, prevent: true }, available: () => !!selection.selected() },
     ]);
 
     on('view.zoom.by', ({ screen, factor }) => { contexts.view.zoomAtScreen(screen, factor); commit(); });
     on('view.zoom.in', () => centerZoom(1.2));
     on('view.zoom.out', () => centerZoom(1 / 1.2));
     on('view.zoom.reset', () => { contexts.view.set({ x: 0, y: 0, scale: 1 }); commit(); });
+
+    /** Compute the world-space bounding box of a set of nodes. */
+    const nodesBounds = (ns: GraphNode[]) => {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      ns.forEach(n => {
+        if (!n.Position) return;
+        const w = n.Size.w / 2, h = n.Size.h / 2;
+        minX = Math.min(minX, n.Position.x - w);
+        minY = Math.min(minY, n.Position.y - h);
+        maxX = Math.max(maxX, n.Position.x + w);
+        maxY = Math.max(maxY, n.Position.y + h);
+      });
+      return isFinite(minX) ? { minX, minY, maxX, maxY } : null;
+    };
+    /** Set camera so the given world-space bbox fills the visible stage area, with padding. */
+    const fitToBounds = (b: { minX: number; minY: number; maxX: number; maxY: number }, padding = 60) => {
+      const stage = contexts.places.el(Places.Stage);
+      if (!stage) return;
+      const rect = stage.getBoundingClientRect();
+      const w = (b.maxX - b.minX) + padding * 2;
+      const h = (b.maxY - b.minY) + padding * 2;
+      // Cap zoom-in at 2× but let zoom-out go down to 0.1× so wide bboxes still fit.
+      const scale = Math.max(0.1, Math.min(2, Math.min(rect.width / w, rect.height / h)));
+      const cx = (b.minX + b.maxX) / 2;
+      const cy = (b.minY + b.maxY) / 2;
+      contexts.view.set({
+        x: cx - rect.width / (2 * scale),
+        y: cy - rect.height / (2 * scale),
+        scale,
+      });
+      commit();
+    };
+    on('view.fit.all', () => {
+      const b = nodesBounds(graphs.current.nodes() as GraphNode[]);
+      if (b) fitToBounds(b);
+    });
+    on('view.fit.selected', () => {
+      const node = selection.selectedNode() as GraphNode | undefined;
+      if (!node) return;
+      const b = nodesBounds([node]);
+      if (b) fitToBounds(b, 180);
+    });
   });
 
   // Camera (pan). Pointer drag on the stage background. Independent of zoom.
@@ -667,12 +750,88 @@ export function registerSystems(system: Registry) {
     on('focus.node.clear', () => { selection.focus(null); emit('focus.node.focused', { id: null }); });
   });
 
+  /* `layout` arranges existing nodes geometrically. Three strategies cover most cases:
+       radial : ring around focused root (good for fan-out)
+       grid   : sqrt(n) x sqrt(n) grid (good for unsorted inspection)
+       tidy   : level-by-level using edge direction (good for hierarchical graphs)
+     Each emits `graph.node.update` per node so the dirty scheduler picks up one redraw. */
+  system('layout', ({ on, emit, contexts, graphs, selection, contribute }) => {
+    contribute({ surface: 'top', command: 'layout.apply.tidy', kind: 'button', text: 'Tidy', order: 65 });
+    contribute({ surface: 'top', command: 'layout.apply.radial', kind: 'button', text: 'Radial', order: 66 });
+    contexts.commands.register([
+      { id: 'layout.apply.radial', label: 'Radial layout', event: 'layout.apply.radial', group: 'layout', input: { on: 'keydown', key: 'r', prevent: true } },
+      { id: 'layout.apply.grid',   label: 'Grid layout',   event: 'layout.apply.grid',   group: 'layout', input: { on: 'keydown', key: 'G', shift: true, prevent: true } },
+      { id: 'layout.apply.tidy',   label: 'Tidy tree layout', event: 'layout.apply.tidy', group: 'layout', input: { on: 'keydown', key: 't', prevent: true } },
+    ]);
+
+    on('layout.apply.radial', () => {
+      const g = graphs.current;
+      const focusedId = selection.focused() ?? selection.selected();
+      const all = g.nodes();
+      const root = focusedId ? g.getNode(focusedId) : all[0];
+      if (!root) return;
+      const others = all.filter(n => n.id !== root.id);
+      const radius = Math.max(160, 60 + others.length * 22);
+      const center = root.Position ?? { x: 0, y: 0 };
+      others.forEach((n, i) => {
+        const angle = (i / Math.max(1, others.length)) * Math.PI * 2 - Math.PI / 2;
+        emit('graph.node.update', { id: n.id, patch: { Position: { x: center.x + Math.cos(angle) * radius, y: center.y + Math.sin(angle) * radius } } });
+      });
+    });
+
+    on('layout.apply.grid', () => {
+      const all = graphs.current.nodes();
+      const cols = Math.max(1, Math.ceil(Math.sqrt(all.length)));
+      const colSize = 200, rowSize = 100;
+      const startX = -((cols - 1) * colSize) / 2;
+      const startY = -((Math.ceil(all.length / cols) - 1) * rowSize) / 2;
+      all.forEach((n, i) => {
+        const col = i % cols, row = Math.floor(i / cols);
+        emit('graph.node.update', { id: n.id, patch: { Position: { x: startX + col * colSize, y: startY + row * rowSize } } });
+      });
+    });
+
+    on('layout.apply.tidy', () => {
+      // Edge direction = parent → child. Roots have no incoming edges.
+      const g = graphs.current;
+      const all = g.nodes();
+      const inDeg = new Map<string, number>(all.map(n => [n.id, 0]));
+      g.edges().forEach(e => inDeg.set(e.To, (inDeg.get(e.To) ?? 0) + 1));
+      const roots = all.filter(n => (inDeg.get(n.id) ?? 0) === 0);
+      if (!roots.length) return;
+      // BFS to assign levels.
+      const level = new Map<string, number>();
+      const queue: string[] = [];
+      roots.forEach(r => { level.set(r.id, 0); queue.push(r.id); });
+      while (queue.length) {
+        const id = queue.shift()!;
+        const lv = level.get(id)!;
+        g.edges().filter(e => e.From === id).forEach(e => {
+          if (!level.has(e.To)) { level.set(e.To, lv + 1); queue.push(e.To); }
+        });
+      }
+      // Group by level and lay out horizontally, level-by-level.
+      const byLevel = new Map<number, string[]>();
+      all.forEach(n => {
+        const lv = level.get(n.id) ?? 0;
+        (byLevel.get(lv) ?? byLevel.set(lv, []).get(lv)!).push(n.id);
+      });
+      const rowH = 130;
+      byLevel.forEach((ids, lv) => {
+        const spread = (ids.length - 1) * 180;
+        ids.forEach((id, i) => {
+          emit('graph.node.update', { id, patch: { Position: { x: -spread / 2 + i * 180, y: lv * rowH } } });
+        });
+      });
+    });
+  });
+
   /* `demo` is dogfood: render the running system as a graph of its own concepts.
      It intentionally exercises the create path enough times to surface what's missing —
      edges (we encode deps as body text), layout (we hand-pick positions), and batch ops
      (a create-with-edge command would halve the script). All three should become next
      systems; this demo is the receipt. */
-  system('demo', ({ on, emit, contexts, graphs, flags, contribute }) => {
+  system('demo', ({ on, emit, contexts, graphs, flags, selection, contribute }) => {
     contribute({ surface: 'top', command: 'demo.render-self', kind: 'button', text: '★ Self', order: 60 });
     contexts.commands.register([{
       id: 'demo.render-self',
@@ -681,70 +840,61 @@ export function registerSystems(system: Registry) {
       group: 'demo',
     }]);
 
-    // Hand-rolled radial placement until a `layout` system lands.
-    const place = (cx: number, cy: number, i: number, ring: number, radius = 240) => {
-      const angle = (i / ring) * Math.PI * 2 - Math.PI / 2;
-      return { x: cx + Math.cos(angle) * radius, y: cy + Math.sin(angle) * radius };
-    };
-
     on('demo.run-self', () => {
-      const cx = 0, cy = 0;
-      const g = graphs.current;
-      g.nodes().slice().forEach(node => g.deleteNode(node.id));
-
-      const stats = { creates: 0, wouldBeEdges: 0, positionHacks: 0 };
-      const make = (label: string, body: string, position: { x: number; y: number }, size = { w: 140, h: 56 }) => {
-        // Deps text is the "edge as string" hack — replace with a real Edge entity later.
-        g.createNode({ Label: { text: label + (body ? '\n' + body : '') }, Position: position, Size: size });
-        stats.creates++;
-        stats.positionHacks++;
-      };
-
-      make('core', 'bus / commands / flags / io / view', { x: cx, y: cy }, { w: 180, h: 64 });
-
-      // Systems ring.
-      const systems = ['render', 'input', 'main', 'log', 'outline', 'modal', 'commandModal',
-        'domain', 'graph', 'view.zoom', 'view.pan', 'focus', 'dx', 'demo'];
-      systems.forEach((name, i) => {
-        const deps = flags.requires(name);
-        stats.wouldBeEdges += 1 + deps.length;
-        make(name, deps.length ? `→ ${deps.join(', ')}` : '', place(cx, cy, i, systems.length, 280), { w: 140, h: 56 });
+      const stats = { events: 0, nodeEvents: 0, edgeEvents: 0, focusEvents: 0, layoutEvents: 0 };
+      const bus = contexts.commands;                       // alias for readability below
+      // Reset the current graph by deleting every node — cascade removes their edges.
+      graphs.current.nodes().slice().forEach(node => {
+        emit('graph.node.delete', { id: node.id }); stats.events++; stats.nodeEvents++;
       });
+      // Create root, then a node per concept with connectFrom=root and keepFocus so focus
+      // stays anchored. The layout system will position; the view will fit. The script
+      // never touches Position itself — that's a feature, not a workaround.
+      emit('editing.node.create', { Label: { text: 'core' } }); stats.events++; stats.nodeEvents++;
+      // Selection is now on the new root. Capture it.
+      const root = selection.selected();
+      if (!root) return;
+      // Focus root (so layout.radial uses it as center, and the loop has a stable anchor).
+      emit('focus.node.focus', { id: root }); stats.events++; stats.focusEvents++;
 
-      // Abilities ring (below).
-      const abilities = ['selectable', 'draggable', 'nudgeable', 'collapsible', 'editable', 'configurable'];
-      abilities.forEach((name, i) => {
-        const deps = flags.requires(`ability.${name}`);
-        stats.wouldBeEdges += 1 + deps.length;
-        make(`ability.${name}`, deps.length ? `→ ${deps.join(', ')}` : '', place(cx, cy + 540, i, abilities.length, 200), { w: 140, h: 48 });
-      });
+      const groups: Array<{ prefix: string; items: string[] }> = [
+        { prefix: '',         items: ['render', 'input', 'main', 'log', 'outline', 'modal', 'commandModal',
+                                       'domain', 'graph', 'view.zoom', 'view.pan', 'focus', 'layout', 'dx', 'demo'] },
+        { prefix: 'ability.', items: ['selectable', 'draggable', 'nudgeable', 'collapsible', 'editable', 'configurable'] },
+        { prefix: 'feature.', items: ['nodeLifecycle'] },
+      ];
 
-      // Features (right cluster).
-      const features = ['nodeLifecycle'];
-      features.forEach((name, i) => {
-        const deps = flags.requires(name);
-        stats.wouldBeEdges += deps.length;
-        make(`feature.${name}`, `→ ${deps.join(', ')}`, { x: cx + 700, y: cy + i * 80 - 100 }, { w: 180, h: 56 });
-      });
+      groups.forEach(({ prefix, items }) => items.forEach(name => {
+        const flagName = prefix + name;
+        const deps = flags.requires(flagName);
+        const label = flagName + (deps.length ? `\n→ ${deps.join(', ')}` : '');
+        emit('editing.node.create', {
+          Label: { text: label },
+          connectFrom: root,
+          keepFocus: true,
+        });
+        stats.events += 2;                                 // editing.create AND the connectFrom edge
+        stats.nodeEvents++;
+        stats.edgeEvents++;
+      }));
 
-      // The direct g.createNode/deleteNode calls bypass the bus, so the scheduler has no
-      // signal to redraw. One explicit nudge is fine — it's the *price* of using the
-      // low-level Graph API and another vote for a batch `graph.script.run` command.
-      emit('render.nodes.draw');
+      // Hand the layout system the responsibility of placing nodes. Tidy uses the directed
+      // edges we built (root → each child); radial fans them around the focused root.
+      emit('layout.apply.tidy'); stats.events++; stats.layoutEvents++;
+      // Frame what we drew.
+      emit('view.fit.all'); stats.events++;
 
-      console.info('[demo] self-graph rendered', {
+      const refs = bus;                                    // suppress unused warning
+      void refs;
+
+      console.info('[demo] self-graph rendered via bus', {
         ...stats,
-        gaps: {
-          edgesNeeded: stats.wouldBeEdges,
-          positionsHardcoded: stats.positionHacks,
-          commandsPerNode: 1,
-        },
-        hints: [
-          'Edges are encoded as text only — need a first-class Edge entity.',
-          'Positions are hand-rolled — need a `layout` system (radial/grid/tidy-tree).',
-          'Each node is one create; a `graph.node.createWithEdge` command would batch.',
-          'Selection lands on the last create — need "create-keeping-focus" for the script.',
-          'Direct g.createNode bypasses the bus → scheduler misses the mutation. A `graph.script` system that wraps emits would be cleaner.',
+        passedThrough: 'editing.node.create + connectFrom + keepFocus + layout.apply.tidy + view.fit.all',
+        gapsRemaining: [
+          'Edge labels (e.g. "depends-on") not yet set on connectFrom-created edges — need a hint.',
+          'Long titles overflow the fixed node size — need auto-size from content.',
+          'No way yet to encode "this node represents a flag with state X" — could be a properties-driven badge.',
+          '`outline` shows nodes but not edges — edge collection needed in appModel.',
         ],
       });
     });
@@ -763,6 +913,7 @@ export function registerSystems(system: Registry) {
     'view.zoom': ['render'],
     'view.pan': ['render'],
     focus: ['graph'],
+    layout: ['graph'],
     demo: ['graph', 'render'],
   };
   Object.entries(deps).forEach(([name, list]) => system.setRequires(name, list));

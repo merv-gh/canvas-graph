@@ -89,6 +89,10 @@ button.icon:hover { color: var(--ink); }
 
 /* Nodes: lighter card with subtle border and a small drop shadow only on hover/selected. */
 .nodes { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; }
+.edges { position: absolute; left: 0; top: 0; width: 0; height: 0; overflow: visible; pointer-events: none; }
+.edges line { stroke: var(--line-strong); stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
+.edges line.selected { stroke: var(--accent); stroke-width: 2px; }
+.edges .edge-label { fill: var(--text-muted); font: 11px ui-monospace, monospace; }
 .node {
   position: absolute;
   min-width: 140px;

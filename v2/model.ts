@@ -1,6 +1,9 @@
 import { collapsible, configurable, draggable, editable, nudgeable, selectable } from './abilities';
 import type {
   CollectionDef,
+  EdgeDraft,
+  EdgeEntity,
+  EdgePatch,
   EntityDef,
   Id,
   Label,
@@ -33,13 +36,40 @@ export class GraphNode implements NodeEntity {
   }
 }
 
+export class GraphEdge implements EdgeEntity {
+  kind = 'edge' as const;
+  Label?: Label;
+  constructor(readonly id: Id, public From: Id, public To: Id, label?: Label) {
+    this.Label = label;
+  }
+}
+
 export class Graph {
   static new(id: Id) { return new Graph(id); }
 
   private nextNode = 1;
+  private nextEdge = 1;
   private items = new Map<Id, GraphNode>();
+  private edgeMap = new Map<Id, GraphEdge>();
 
   private constructor(readonly id: Id) {}
+
+  // ----- Edges -----
+  createEdge(draft: EdgeDraft) {
+    const id = `r${this.nextEdge++}`;             // 'r' = relation, to keep ids distinct from nodes (e1, e2, ...).
+    const edge = new GraphEdge(id, draft.From, draft.To, draft.Label);
+    this.edgeMap.set(id, edge);
+    return edge;
+  }
+  getEdge(id: Id) { return this.edgeMap.get(id); }
+  edges() { return [...this.edgeMap.values()]; }
+  edgesOf(nodeId: Id) { return this.edges().filter(e => e.From === nodeId || e.To === nodeId); }
+  updateEdge(id: Id, patch: EdgePatch) {
+    const edge = this.edgeMap.get(id); if (!edge) return false;
+    Object.assign(edge, patch);
+    return true;
+  }
+  deleteEdge(id: Id) { return this.edgeMap.delete(id); }
 
   getNode(id: Id) { return this.items.get(id); }
   /** Create-or-place-near. `nearPosition` is the caller's job — Graph stays unaware of selection. */
@@ -64,7 +94,12 @@ export class Graph {
     Object.assign(node, patch);
     return true;
   }
-  deleteNode(id: Id) { return this.items.delete(id); }
+  deleteNode(id: Id) {
+    // Cascade: any edge touching this node is dead too. Callers that need to react to
+    // edge removal should subscribe to graph.edge.deleted, which the graph system emits.
+    [...this.edgeMap.values()].forEach(e => { if (e.From === id || e.To === id) this.edgeMap.delete(e.id); });
+    return this.items.delete(id);
+  }
 
   private withDefaults(draft: NodeDraft, options: NodeCreateOptions & { nearPosition?: Position }): NodeDraft {
     const anchor = options.nearPosition ?? options.at ?? { x: 0, y: 0 };

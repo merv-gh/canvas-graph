@@ -9,9 +9,12 @@ export function registerFeatures(feature: Registry) {
     // editing.node.create is a user intent; graph.node.create is the storage command.
     on('editing.node.create', draft => emit('graph.node.create', draft));
     // After creation, select + focus the new node so the user can edit it immediately.
-    on('graph.node.created', ({ id }) => {
+    // Hints can opt out of focus move (so a script can fan out N children from one root) or
+    // request an edge from a specific node (will be wired once the Edge entity lands).
+    on('graph.node.created', ({ id, hints }) => {
       emit('selection.node.select', { id });
-      emit('focus.node.focus', { id });
+      if (!hints?.keepFocus) emit('focus.node.focus', { id });
+      if (hints?.connectFrom) emit('graph.edge.create', { From: hints.connectFrom, To: id });
     });
   });
 
