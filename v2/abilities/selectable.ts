@@ -70,12 +70,14 @@ export function registerSelectable(system: Registry) {
         payload: () => ({ id: previousNodeId() }),
       },
       {
+        // No own Escape / pointerdown binding — selection registers a
+        // Cancellable so the global cancellation system clears it on Esc or
+        // stage background click. Command stays callable from palette.
         id: 'selection.node.clear',
         label: 'Clear selection',
         event: 'selection.node.clear',
         group: 'selection',
         available: () => !!selection.selected(),
-        input: { on: 'pointerdown', selector: `[data-place="${Places.Stage}"]`, when: isStageSurface },
       },
       {
         id: 'selection.item.delete',
@@ -111,6 +113,14 @@ export function registerSelectable(system: Registry) {
       const ref = selection.selected();
       if (ref?.kind === 'node') emit('graph.node.delete', { id: ref.id });
       if (ref?.kind === 'edge') emit('graph.edge.delete', { id: ref.id });
+    });
+    contexts.cancellation.register({
+      origin,
+      // Background mode — only fires when nothing more specific (modal,
+      // picker, edit, jump) is active for the same Escape / stage click.
+      priority: -10,
+      active: () => !!selection.selected(),
+      cancel: () => emit('selection.item.clear'),
     });
   });
 }

@@ -1,4 +1,5 @@
 import type { Registry } from '../core';
+import { registerCancellation } from './cancellation';
 import { registerCollections } from './collections';
 import { registerCommandModal } from './command-modal';
 import { registerCommandForm } from './command-form';
@@ -23,6 +24,7 @@ export function registerSystems(system: Registry) {
   registerRender(system);
   registerRenderStage(system);
   registerInput(system);
+  registerCancellation(system);
   registerMain(system);
   registerLog(system);
   registerOutline(system);
@@ -46,6 +48,7 @@ export function registerSystems(system: Registry) {
   const deps: Record<string, string[]> = {
     render: ['input'],
     'render.stage': ['render', 'graph'],
+    cancellation: ['input'],
     jump: ['render.stage', 'graph', 'focus', 'view.zoom'],
     main: ['render'],
     log: ['render'],

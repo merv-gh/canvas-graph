@@ -3,7 +3,7 @@ import { Places } from '../types';
 import type { AppEvents } from '../types';
 
 export function registerModal(system: Registry) {
-  system('modal', ({ on, emit, contexts, contribute }) => {
+  system('modal', ({ on, emit, contexts, contribute, origin }) => {
     let open = false;
     contribute({ surface: 'top', command: 'modal.open', kind: 'button', text: 'Modal', order: 50 });
     contexts.commands.register([
@@ -14,8 +14,15 @@ export function registerModal(system: Registry) {
         group: 'modal',
         payload: ({ target }) => ({ title: (target as HTMLElement)?.dataset.title, body: (target as HTMLElement)?.dataset.body, visual: (target as HTMLElement)?.dataset.visual as AppEvents['modal.open']['visual'] }),
       },
-      { id: 'modal.close', label: 'Close modal', event: 'modal.close', group: 'modal', shortcut: 'Esc', input: { on: 'keydown', key: 'Escape', global: true, when: () => open, prevent: true } },
+      // No own Escape binding — modal registers a Cancellable below. The
+      // command stays callable from backdrop click and the Close button.
+      { id: 'modal.close', label: 'Close modal', event: 'modal.close', group: 'modal' },
     ]);
+    contexts.cancellation.register({
+      origin,
+      active: () => open,
+      cancel: () => emit('modal.close'),
+    });
 
     on('modal.close', () => {
       open = false;

@@ -135,7 +135,7 @@ export function inputRouter(commands: ReturnType<typeof commandsContext>) {
           if (binding.stop) break;
         }
       };
-      const types: EventName[] | string[] = ['click', 'keydown', 'pointerdown', 'pointermove', 'pointerup', 'wheel', 'input', 'change', 'focusout'];
+      const types: EventName[] | string[] = ['click', 'dblclick', 'keydown', 'pointerdown', 'pointermove', 'pointerup', 'wheel', 'input', 'change', 'focusout'];
       types.forEach(type => root.addEventListener(type, route, type === 'wheel' ? { passive: false } : undefined));
       return () => types.forEach(type => root.removeEventListener(type, route));
     },

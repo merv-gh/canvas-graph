@@ -1,5 +1,6 @@
 import type { GraphStore } from './model';
 import { affordancesContext } from './core/affordances';
+import { cancellationContext } from './core/cancellation';
 import { commandsContext, inputRouter } from './core/commands';
 import { itemIdFrom, itemRefFrom, appendRenderable } from './core/dom';
 import { createFlags, type FlagKind, type FlagsApi } from './core/flags';
@@ -235,6 +236,7 @@ function createContexts(bus: Bus, flags: FlagsApi, io: IoApi) {
   const view = viewContext(places);
   const properties = propertiesContext();
   const affordances = affordancesContext(bus);
+  const cancellation = cancellationContext(bus);
   const itemModes = itemModesContext(bus);
   const itemOverlays = itemOverlaysContext(bus);
   const itemTargets = itemTargetsContext();
@@ -260,6 +262,7 @@ function createContexts(bus: Bus, flags: FlagsApi, io: IoApi) {
     properties,
     dx,
     affordances,
+    cancellation,
     itemModes,
     itemOverlays,
     itemTargets,
@@ -282,6 +285,7 @@ export function registry(kind: FlagKind = 'system'): Registry {
     running.delete(name);
     ctx.contexts.commands.unregisterOrigin(name);
     ctx.contexts.affordances.unregisterOrigin(name);
+    ctx.contexts.cancellation.unregisterOrigin(name);
     ctx.contexts.itemModes.clear(name);
     ctx.contexts.itemOverlays.clear(name);
     ctx.contexts.itemTargets.unregisterSource(name);

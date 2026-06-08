@@ -191,6 +191,15 @@ button.icon:hover { color: var(--ink); }
   color: var(--ink);
   text-align: center;
 }
+/* Edit mode visual cue — applied only when editable's handler enters the mode.
+   Stays out of the default state so a normal click doesn't suggest editability. */
+.node-title.editing {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 3px;
+  background: var(--panel);
+  cursor: text;
+}
 .node-body { padding: 4px 12px 10px; color: var(--text-muted); font-size: 12px; }
 .node-meta { color: var(--text-muted); font-size: 11px; }
 /* By default the node shows only its title — header chrome and meta line

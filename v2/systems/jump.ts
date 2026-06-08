@@ -27,7 +27,7 @@ declare module '../types' {
 const LETTERS = 'asdfghjklqwertyuiopzxcvbnm';
 
 export function registerJump(system: Registry) {
-  system('jump', ({ on, emit, contexts }) => {
+  system('jump', ({ on, emit, contexts, origin }) => {
     let letterToRef: Map<string, ItemRef> | null = null;
 
     const cancel = () => {
@@ -53,9 +53,14 @@ export function registerJump(system: Registry) {
       });
       letterToRef = next;
       contexts.itemOverlays.set('jump', overlays);
+      // Escape is handled by the global cancellation system; the Cancellable
+      // registered below fires jump.cancel for us. Enter still cancels here
+      // because we treat it as "I'm done, don't pick" — it's a positive intent
+      // distinct from the global cancel signal.
       contexts.keyboard.capture('jump', {
         onKey(event) {
-          if (event.key === 'Escape' || event.key === 'Enter') {
+          if (event.key === 'Escape') return;  // global Esc handles it
+          if (event.key === 'Enter') {
             event.preventDefault();
             emit('jump.cancel');
             return;
@@ -96,6 +101,11 @@ export function registerJump(system: Registry) {
 
     on('jump.start', start);
     on('jump.cancel', cancel);
+    contexts.cancellation.register({
+      origin,
+      active: () => !!letterToRef,
+      cancel: () => emit('jump.cancel'),
+    });
 
     return cancel;
   });

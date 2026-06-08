@@ -15,7 +15,7 @@ const LETTERS = 'asdfghjklqwertyuiopzxcvbnm';
  *  next to commandForm so any single-file system can opt into either UI by
  *  declaring `form` or `picker` on its CommandSpec — no system-level glue. */
 export function registerCommandPicker(system: Registry) {
-  system('commandPicker', ({ on, emit, forward, contexts }) => {
+  system('commandPicker', ({ on, emit, forward, contexts, origin }) => {
     type Active = {
       commandId: string;
       command: CommandSpec;
@@ -102,13 +102,11 @@ export function registerCommandPicker(system: Registry) {
         key: 'picker-prompt',
         view: () => promptBanner(step, active!.stepIndex, active!.picker.steps.length),
       });
+      // No Escape handling here — the global cancellation system fires
+      // app.cancel → cancellationContext routes to our Cancellable below.
       contexts.keyboard.capture('commandPicker', {
         onKey(event) {
-          if (event.key === 'Escape') {
-            event.preventDefault();
-            emit('commandPicker.cancel');
-            return;
-          }
+          if (event.key === 'Escape') return;  // let the global Esc binding fire
           const letter = event.key.toLowerCase();
           if (!/^[a-z]$/.test(letter)) return;
           event.preventDefault();
@@ -139,6 +137,11 @@ export function registerCommandPicker(system: Registry) {
       runStep();
     });
     on('commandPicker.cancel', cancel);
+    contexts.cancellation.register({
+      origin,
+      active: () => !!active,
+      cancel: () => emit('commandPicker.cancel'),
+    });
 
     return cancel;
   });

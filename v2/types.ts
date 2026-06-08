@@ -4,7 +4,7 @@ export type EdgeDraft = { From: Id; To: Id; Label?: Label };
 export type EdgeCreateDraft = Partial<EdgeDraft>;
 export type EdgePatch = Partial<Pick<EdgeEntity, 'Label'>>;
 export type Renderable = string | globalThis.Node | (() => string | globalThis.Node);
-export type RawInput = 'click' | 'keydown' | 'pointerdown' | 'pointermove' | 'pointerup' | 'wheel' | 'input' | 'change' | 'focusout';
+export type RawInput = 'click' | 'dblclick' | 'keydown' | 'pointerdown' | 'pointermove' | 'pointerup' | 'wheel' | 'input' | 'change' | 'focusout';
 
 export const Places = { Top: 'top', Left: 'left', Stage: 'stage', Modal: 'modal' } as const;
 export type Place = typeof Places[keyof typeof Places];
@@ -64,6 +64,9 @@ export interface CustomExposable {}
 interface BuiltinEvents {
   'app.start': void;
   'app.notice': { message: string; level?: 'info' | 'warn' | 'error' };
+  /** Fired by the cancellation system on Escape or stage background click.
+   *  The cancellation context routes it to the topmost active Cancellable. */
+  'app.cancel': void;
   'demo.run-self': void;
   'affordance.contributed': { surface: AffordanceSurface };
   'render.shell': void;
