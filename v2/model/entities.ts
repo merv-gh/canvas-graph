@@ -37,13 +37,14 @@ const edgeRenderer: EntityRenderer<GraphEdge> = {
     const ref: ItemRef = { kind: 'edge', id: edge.id };
     const g = svg('g', {});
     g.setAttribute('class', 'edge');
-    (g as unknown as HTMLElement).dataset.edgeId = edge.id;
+    // Identity rides on the individual <line>s (focus target = edge-hit). The
+    // wrapping <g> stays untagged so querySelector('[data-item-kind=edge]')
+    // returns a focusable line, not the parent group.
     const line = (className: string, extra: Record<string, string | number> = {}) => {
       const el = svg('line', {
         x1: from.Position!.x, y1: from.Position!.y, x2: to.Position!.x, y2: to.Position!.y,
         class: className, ...extra,
       });
-      (el as unknown as HTMLElement).dataset.edgeId = edge.id;
       ctx.tagItem(el, ref);
       ctx.applyItemModes(el, ref);
       return el;
@@ -95,7 +96,6 @@ const nodeRenderer: EntityRenderer<GraphNode> = {
     const el = ctx.cloneTemplate<HTMLElement>('node');
     const pos = node.Position ?? { x: 0, y: 0 };
     const ref: ItemRef = { kind: 'node', id: node.id };
-    el.dataset.nodeId = node.id;
     ctx.tagItem(el, ref);
     el.tabIndex = -1;
     ctx.applyItemModes(el, ref);

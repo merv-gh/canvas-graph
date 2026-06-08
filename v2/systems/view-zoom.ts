@@ -1,7 +1,9 @@
 import type { GraphEdge, GraphNode } from '../model';
 import type { Registry } from '../core';
-import { itemRefFrom } from '../core';
+import { clamp, itemRefFrom } from '../core';
 import { Places, type ItemRef } from '../types';
+
+type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
 
 export function registerViewZoom(system: Registry) {
   system('view.zoom', ({ on, emit, contexts, graphs, selection, contribute }) => {
@@ -12,8 +14,31 @@ export function registerViewZoom(system: Registry) {
     const stageSelector = `[data-place="${Places.Stage}"]`;
     const commit = () => emit('view.changed', contexts.view.get());
     const centerZoom = (factor: number) => {
+      cancelCamera();
       contexts.view.zoomAtScreen(contexts.view.screenCenter(Places.Stage), factor);
       commit();
+    };
+    let cameraFrame = 0;
+    const cancelCamera = () => {
+      if (cameraFrame) cancelAnimationFrame(cameraFrame);
+      cameraFrame = 0;
+    };
+    const animateViewTo = (next: { x: number; y: number; scale: number }, duration = 180) => {
+      cancelCamera();
+      const start = contexts.view.get();
+      const dx = next.x - start.x, dy = next.y - start.y, ds = next.scale - start.scale;
+      if (Math.abs(dx) + Math.abs(dy) + Math.abs(ds) < 0.001) return;
+      const startAt = performance.now();
+      const ease = (t: number) => 1 - Math.pow(1 - t, 3);
+      const step = () => {
+        const t = Math.min(1, Math.max(0, (performance.now() - startAt) / duration));
+        const k = ease(t);
+        contexts.view.set({ x: start.x + dx * k, y: start.y + dy * k, scale: start.scale + ds * k });
+        commit();
+        if (t < 1) cameraFrame = requestAnimationFrame(step);
+        else cameraFrame = 0;
+      };
+      cameraFrame = requestAnimationFrame(step);
     };
 
     contexts.commands.register([
@@ -48,10 +73,10 @@ export function registerViewZoom(system: Registry) {
       },
     ]);
 
-    on('view.zoom.by', ({ screen, factor }) => { contexts.view.zoomAtScreen(screen, factor); commit(); });
+    on('view.zoom.by', ({ screen, factor }) => { cancelCamera(); contexts.view.zoomAtScreen(screen, factor); commit(); });
     on('view.zoom.in', () => centerZoom(1.2));
     on('view.zoom.out', () => centerZoom(1 / 1.2));
-    on('view.zoom.reset', () => { contexts.view.set({ x: 0, y: 0, scale: 1 }); commit(); });
+    on('view.zoom.reset', () => { cancelCamera(); contexts.view.set({ x: 0, y: 0, scale: 1 }); commit(); });
 
     const nodesBounds = (ns: GraphNode[]) => {
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -65,7 +90,8 @@ export function registerViewZoom(system: Registry) {
       });
       return isFinite(minX) ? { minX, minY, maxX, maxY } : null;
     };
-    const fitToBounds = (b: { minX: number; minY: number; maxX: number; maxY: number }, pixelPadding = 40) => {
+    const fitToBounds = (b: Bounds, pixelPadding = 40) => {
+      cancelCamera();
       const stage = contexts.places.el(Places.Stage);
       if (!stage) return;
       const rect = stage.getBoundingClientRect();
@@ -82,6 +108,48 @@ export function registerViewZoom(system: Registry) {
         scale,
       });
       commit();
+    };
+    const gentleScaleFor = (b: Bounds, stage: DOMRect) => {
+      const view = contexts.view.get();
+      const bw = Math.max(1, b.maxX - b.minX), bh = Math.max(1, b.maxY - b.minY);
+      const safeW = Math.max(1, stage.width - 144), safeH = Math.max(1, stage.height - 144);
+      const comfortW = Math.max(1, stage.width * 0.46), comfortH = Math.max(1, stage.height * 0.46);
+      const screenW = bw * view.scale, screenH = bh * view.scale;
+      if (screenW > safeW || screenH > safeH) return Math.min(view.scale, safeW / bw, safeH / bh);
+      if (screenW > comfortW || screenH > comfortH) {
+        const comfortScale = Math.min(comfortW / bw, comfortH / bh);
+        return Math.min(view.scale, Math.max(view.scale * 0.92, comfortScale));
+      }
+      return view.scale;
+    };
+    const gentleOriginForAxis = (
+      min: number,
+      max: number,
+      stageSize: number,
+      scale: number,
+      currentOrigin: number,
+    ) => {
+      const center = (min + max) / 2;
+      const halfScreen = Math.max(0.5, (max - min) * scale / 2);
+      const currentCenterScreen = (center - currentOrigin) * scale;
+      const innerMin = stageSize * 0.38, innerMax = stageSize * 0.62;
+      const safeMin = 72, safeMax = stageSize - 72;
+      let desiredCenter = clamp(currentCenterScreen, innerMin, innerMax);
+      if (halfScreen * 2 <= safeMax - safeMin) desiredCenter = clamp(desiredCenter, safeMin + halfScreen, safeMax - halfScreen);
+      else desiredCenter = stageSize / 2;
+      return center - desiredCenter / scale;
+    };
+    const gentlyFitToBounds = (b: Bounds) => {
+      const stage = contexts.places.el(Places.Stage);
+      if (!stage) return;
+      const rect = stage.getBoundingClientRect();
+      const view = contexts.view.get();
+      const scale = gentleScaleFor(b, rect);
+      animateViewTo({
+        x: gentleOriginForAxis(b.minX, b.maxX, rect.width, scale, view.x),
+        y: gentleOriginForAxis(b.minY, b.maxY, rect.height, scale, view.y),
+        scale,
+      });
     };
     /** Resolve any ItemRef to a graph-space bounds. Falls back to itemTargets
      *  anchor for items whose canonical entity lookup fails (overlays, ghosts). */
@@ -115,7 +183,8 @@ export function registerViewZoom(system: Registry) {
     });
     on('view.fit.item', ref => {
       const b = itemBounds(ref);
-      if (b) fitToBounds(b, 180);
+      if (b) gentlyFitToBounds(b);
     });
+    return cancelCamera;
   });
 }

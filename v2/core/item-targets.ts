@@ -12,8 +12,8 @@ export function itemTargetsContext() {
       providers.set(source, provider);
       return () => providers.delete(source);
     },
-    unregisterSource(source: string) {
-      providers.delete(source);
+    unregisterOrigin(origin: string) {
+      providers.delete(origin);
     },
     all,
     get(ref: ItemRef) {

@@ -12,7 +12,7 @@ export function registerFocus(system: Registry) {
     });
     on('focus.item.clear', () => {
       selection.focus(null);
-      contexts.itemModes.clear(origin);
+      contexts.itemModes.unregisterOrigin(origin);
       emit('focus.item.focused', null);
       emit('focus.node.focused', { id: null });
     });

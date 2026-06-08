@@ -97,10 +97,10 @@ test('focused edge uses graph styling without a browser focus rectangle', async 
     return v.graphs.current.edges()[0].id;
   }, nodes);
 
-  const hit = page.locator(`.edge-hit[data-edge-id="${edgeId}"]`);
+  const hit = page.locator(`.edge-hit[data-item-kind="edge"][data-item-id="${edgeId}"]`);
   await expect(hit).toHaveCount(1);
   await hit.dispatchEvent('pointerdown', { bubbles: true, cancelable: true });
-  await expect(page.locator(`.edge-line.focused[data-edge-id="${edgeId}"]`)).toHaveCount(1);
+  await expect(page.locator(`.edge-line.focused[data-item-kind="edge"][data-item-id="${edgeId}"]`)).toHaveCount(1);
   await expect(hit).toHaveCSS('outline-style', 'none');
 });
 

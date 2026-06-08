@@ -1,6 +1,6 @@
 import { appendRenderable, type Registry } from '../core';
 import { Places } from '../types';
-import type { AppEvents } from '../types';
+import type { AppEvents, Renderable } from '../types';
 
 export function registerModal(system: Registry) {
   system('modal', ({ on, emit, contexts, contribute, origin }) => {
@@ -12,7 +12,7 @@ export function registerModal(system: Registry) {
         label: 'Open modal',
         event: 'modal.open',
         group: 'modal',
-        payload: ({ target }) => ({ title: (target as HTMLElement)?.dataset.title, body: (target as HTMLElement)?.dataset.body, visual: (target as HTMLElement)?.dataset.visual as AppEvents['modal.open']['visual'] }),
+        payload: ({ target }) => ({ title: (target as HTMLElement)?.dataset.title, visual: (target as HTMLElement)?.dataset.visual as AppEvents['modal.open']['visual'] }),
       },
       // No own Escape binding — modal registers a Cancellable below. The
       // command stays callable from backdrop click and the Close button.
@@ -26,10 +26,11 @@ export function registerModal(system: Registry) {
 
     on('modal.close', () => {
       open = false;
-      emit('render.view.set', { place: Places.Modal, key: 'modal', view: '' });
+      emit('render.view.clear', { place: Places.Modal, key: 'modal' });
     });
-    on('modal.open', ({ title = 'Modal', body = '', visual = 'panel' }) => {
+    on('modal.open', ({ title = 'Modal', body, visual = 'panel' }) => {
       open = true;
+      const bodyRenderable: Renderable | undefined = body;
       emit('render.view.set', {
         place: Places.Modal,
         key: 'modal',
@@ -37,7 +38,7 @@ export function registerModal(system: Registry) {
           const modal = contexts.templates.clone('modal');
           modal.dataset.visual = visual;
           contexts.templates.text(modal, 'title', title);
-          appendRenderable(contexts.templates.slot(modal, 'body'), body);
+          if (bodyRenderable) appendRenderable(contexts.templates.slot(modal, 'body'), bodyRenderable);
           return modal;
         },
       });

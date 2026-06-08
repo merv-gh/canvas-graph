@@ -12,7 +12,7 @@ import type { ItemRef } from '../types';
  *    - `contexts.itemOverlays.set()`  → renders the letter chips in screen-space
  *    - `contexts.keyboard.capture(id, {onKey})` → consumes keys without
  *      synthesising a DOM listener outside the input router
- *    - `view.fit.item: ItemRef`       → recentres on the chosen item (any kind)
+ *    - `view.fit.item: ItemRef`       → gently reveals the chosen item (any kind)
  *    - `focus.item.focus`             → standard focus event
  *
  *  Module augmentation declares the two events below so the typed bus accepts
@@ -33,8 +33,8 @@ export function registerJump(system: Registry) {
     const cancel = () => {
       if (!letterToRef) return;
       letterToRef = null;
-      contexts.itemOverlays.clear('jump');
-      contexts.keyboard.release('jump');
+      contexts.itemOverlays.unregisterOrigin('jump');
+      contexts.keyboard.unregisterOrigin('jump');
     };
 
     const start = () => {

@@ -121,7 +121,7 @@ describe('first-class cancellation', () => {
 
     ctx.bus.emit('node.title.edit', { id: node.id });
     await settle();
-    const title = document.querySelector(`.node[data-node-id="${node.id}"] .node-title`) as HTMLElement;
+    const title = document.querySelector(`.node[data-item-kind="node"][data-item-id="${node.id}"] .node-title`) as HTMLElement;
     expect(title.classList.contains('editing')).toBe(true);
     title.textContent = 'new';
 

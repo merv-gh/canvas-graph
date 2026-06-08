@@ -24,3 +24,28 @@ export function templateContext() {
   };
   return { clone, text, slot, _cloned: cloned };
 }
+
+export type TemplateApi = ReturnType<typeof templateContext>;
+
+/** Build an empty-state DOM block. `hint` is a Node — typically text + a <kbd>.
+ *  Use `kbdHint(lead, key, tail)` for "Press <kbd>K</kbd> tail" without HTML strings. */
+export const emptyState = (templates: TemplateApi, title: string, hint?: Node) => {
+  try {
+    const el = templates.clone<HTMLElement>('empty');
+    templates.text(el, 'title', title);
+    if (hint) templates.slot(el, 'hint').append(hint);
+    return el;
+  } catch { return null; }
+};
+
+/** Compose a hint as a DocumentFragment with a <kbd> in the middle.
+ *  `key` is set via textContent, so user-edited shortcuts can't inject HTML. */
+export const kbdHint = (lead: string, key: string, tail = '') => {
+  const fragment = document.createDocumentFragment();
+  if (lead) fragment.append(lead);
+  const kbd = document.createElement('kbd');
+  kbd.textContent = key;
+  fragment.append(kbd);
+  if (tail) fragment.append(tail);
+  return fragment;
+};

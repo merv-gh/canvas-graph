@@ -36,6 +36,15 @@ export const shortcutLabel = (input: NonNullable<CommandSpec['input']>) => {
 export const shortcutOf = (command: CommandSpec) =>
   command.shortcut ?? (command.input?.key ? shortcutLabel(command.input) : '');
 
+/** Shortcut label for a registered command, or null if it can't be triggered from keys. */
+export const commandShortcut = (
+  commands: { get(id: string): CommandSpec | undefined },
+  id: string,
+) => {
+  const command = commands.get(id);
+  return command ? shortcutOf(command) : null;
+};
+
 /** Does this DOM event match the parsed shortcut? Letter keys require shift to
  *  match exactly; non-letter keys trust event.key (so '?' matches Shift+/). */
 export const keyMatchesEvent = (event: Event, parsed: ParsedShortcut) => {

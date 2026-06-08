@@ -16,9 +16,9 @@ export function itemOverlaysContext(bus: Bus) {
       overlays.set(source, next);
       changed(source);
     },
-    clear(source: string) {
-      if (!overlays.delete(source)) return;
-      changed(source);
+    unregisterOrigin(origin: string) {
+      if (!overlays.delete(origin)) return;
+      changed(origin);
     },
     remove(ref: ItemRef) {
       let touched = false;

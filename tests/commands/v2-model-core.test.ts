@@ -63,7 +63,7 @@ describe('v2 selection polymorphism', () => {
 
     expect(ctx.selection.focused()).toEqual(ref);
     expect(ctx.contexts.itemModes.has(ref, 'focused')).toBe(true);
-    expect(document.querySelector(`.edge-line[data-edge-id="${ref.id}"]`)?.classList.contains('focused')).toBe(true);
+    expect(document.querySelector(`.edge-line[data-item-kind="edge"][data-item-id="${ref.id}"]`)?.classList.contains('focused')).toBe(true);
     expect(document.activeElement?.getAttribute('data-item-kind')).toBe('edge');
     expect(document.activeElement?.getAttribute('data-item-id')).toBe(ref.id);
   });
@@ -78,14 +78,14 @@ describe('v2 selection polymorphism', () => {
     await settle();
     const ref = edgeRef(ctx.graphs.current.edges()[0].id);
 
-    document.querySelector(`.edge-hit[data-edge-id="${ref.id}"]`)!
+    document.querySelector(`.edge-hit[data-item-kind="edge"][data-item-id="${ref.id}"]`)!
       .dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
     await settle();
 
     expect(ctx.selection.selected()).toEqual(ref);
     expect(ctx.selection.focused()).toEqual(ref);
-    expect(document.querySelector(`.edge-line[data-edge-id="${ref.id}"]`)?.classList.contains('selected')).toBe(true);
-    expect(document.querySelector(`.edge-line[data-edge-id="${ref.id}"]`)?.classList.contains('focused')).toBe(true);
+    expect(document.querySelector(`.edge-line[data-item-kind="edge"][data-item-id="${ref.id}"]`)?.classList.contains('selected')).toBe(true);
+    expect(document.querySelector(`.edge-line[data-item-kind="edge"][data-item-id="${ref.id}"]`)?.classList.contains('focused')).toBe(true);
     expect(document.activeElement?.getAttribute('data-item-kind')).toBe('edge');
     expect(document.activeElement?.getAttribute('data-item-id')).toBe(ref.id);
   });

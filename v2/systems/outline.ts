@@ -4,6 +4,7 @@ import {
   collectionSelectCommand,
   commandShortcut,
   emptyState,
+  kbdHint,
   type AppCollectionDef,
   type Registry,
 } from '../core';
@@ -43,11 +44,7 @@ export function registerOutline(system: Registry) {
         const id = collectionDef.itemId(item);
         const row = el('div', 'outline-row');
         row.dataset.itemId = id;
-        const kind = collectionDef.kind;
-        row.dataset.itemKind = kind;
-        if (collectionDef.id === 'graphs') row.dataset.graphId = id;
-        if (collectionDef.id === 'nodes') row.dataset.nodeId = id;
-        if (kind === 'edge') row.dataset.edgeId = id;
+        row.dataset.itemKind = collectionDef.kind;
         const main = el('button', 'outline-main', collectionDef.itemLabel(item)) as HTMLButtonElement;
         main.dataset.command = selectCommand;
         const properties = collectionDef.entity?.properties?.length
@@ -63,8 +60,8 @@ export function registerOutline(system: Registry) {
       if (!filtered.length) {
         const shortcut = commandShortcut(contexts.commands, createCommand);
         const title = query ? `No matches for "${query}"` : `No ${collectionDef.label.toLowerCase()} yet`;
-        const hint = !query && shortcut ? `Press <kbd>${shortcut}</kbd> or click +` : '';
-        const empty = emptyState(contexts, title, hint);
+        const hint = !query && shortcut ? kbdHint('Press ', shortcut, ' or click +') : undefined;
+        const empty = emptyState(contexts.templates, title, hint);
         if (empty) section.append(empty);
       }
       return section;

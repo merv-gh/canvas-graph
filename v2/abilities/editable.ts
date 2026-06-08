@@ -24,7 +24,7 @@ export const editable = <T extends NodeEntity>() => ability<T>('editable', [acti
 export function registerEditable(system: Registry) {
   system('ability.editable', ({ on, emit, contexts, graphs, selection, origin }) => {
     const titleEl = (id: Id) =>
-      contexts.places.el(Places.Stage)?.querySelector(`.node[data-node-id="${id}"] .node-title`) ?? null;
+      contexts.places.el(Places.Stage)?.querySelector(`.node[data-item-kind="node"][data-item-id="${id}"] .node-title`) ?? null;
     const nodeId = (source: CommandSource) => itemIdFrom(source.target) || selection.selectedNode()?.id || '';
     const titleCommit = (target?: Element | null, finish = false) => ({
       id: itemIdFrom(target),

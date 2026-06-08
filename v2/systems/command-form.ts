@@ -45,7 +45,7 @@ export function registerCommandForm(system: Registry) {
     const renderForm = (commandId: string, seed: Record<string, string>, initialError = '') => {
       const command = contexts.commands.get(commandId);
       const form = command?.form;
-      if (!command || !form) return '';
+      if (!command || !form) return document.createDocumentFragment();
       const root = document.createElement('section');
       root.className = 'command-form properties';
       root.dataset.commandForm = commandId;

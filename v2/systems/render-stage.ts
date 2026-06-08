@@ -1,4 +1,4 @@
-import { commandShortcut, emptyState, tagItem, type Registry } from '../core';
+import { commandShortcut, emptyState, kbdHint, tagItem, type Registry } from '../core';
 import { Places } from '../types';
 import type { ActionDef, AffordanceDef, EntityDef, EntityRenderCtx, ItemRef } from '../types';
 import { uiValue } from '../core';
@@ -122,8 +122,8 @@ export function registerRenderStage(system: Registry) {
         key: 'empty',
         view: () => {
           const shortcut = commandShortcut(contexts.commands, 'editing.node.create');
-          const hint = shortcut ? `Press <kbd>${shortcut}</kbd> to add a node` : '';
-          return emptyState(contexts, 'No nodes in this graph yet', hint) ?? '';
+          const hint = shortcut ? kbdHint('Press ', shortcut, ' to add a node') : undefined;
+          return emptyState(contexts.templates, 'No nodes in this graph yet', hint) ?? document.createDocumentFragment();
         },
       });
     };

@@ -13,9 +13,9 @@ export function itemModesContext(bus: Bus) {
       modes.set(source, refs.map(ref => ({ source, mode, ref, className })));
       changed(source);
     },
-    clear(source: string) {
-      if (!modes.delete(source)) return;
-      changed(source);
+    unregisterOrigin(origin: string) {
+      if (!modes.delete(origin)) return;
+      changed(origin);
     },
     remove(ref: ItemRef) {
       let touched = false;

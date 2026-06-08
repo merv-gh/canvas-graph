@@ -58,7 +58,7 @@ test('after view.fit.all, no node DOM extends into the left panel', async ({ pag
   const panelRight = await page.locator('.left').evaluate(el => el.getBoundingClientRect().right);
   const intrusions = await page.locator('.stage .node').evaluateAll((nodes, panelRight) =>
     nodes
-      .map(n => ({ rect: n.getBoundingClientRect(), id: n.dataset.nodeId }))
+      .map(n => ({ rect: n.getBoundingClientRect(), id: n.dataset.itemId }))
       .filter(o => o.rect.left < panelRight - 0.5)
       .map(o => ({ id: o.id, left: o.rect.left, panelRight })), panelRight);
   // RED until fit accounts for stage-local pixel padding around bbox.

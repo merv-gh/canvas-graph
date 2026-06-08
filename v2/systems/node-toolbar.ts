@@ -74,7 +74,7 @@ export function registerNodeToolbar(system: Registry) {
       emit('render.view.set', {
         place: Places.Stage,
         key: 'node-toolbar',
-        view: () => buildToolbar(node) ?? '',
+        view: () => buildToolbar(node) ?? document.createDocumentFragment(),
       });
     };
 

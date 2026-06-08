@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest';
+import { nodeRect } from '../../v2/core';
+import { Places } from '../../v2/types';
 import { bootV2, commandButton, field, runCommand, settle } from './v2-testkit';
+
+const containsRect = (
+  outer: { x: number; y: number; w: number; h: number },
+  inner: { x: number; y: number; w: number; h: number },
+) => inner.x >= outer.x
+  && inner.y >= outer.y
+  && inner.x + inner.w <= outer.x + outer.w
+  && inner.y + inner.h <= outer.y + outer.h;
+const waitCamera = async () => {
+  await new Promise(resolve => setTimeout(resolve, 220));
+  await settle();
+};
 
 describe('v2 node commands', () => {
   it('creates, selects, focuses, renders, collapses, nudges, and configures a node', async () => {
@@ -13,7 +27,7 @@ describe('v2 node commands', () => {
 	    expect(ctx.selection.selectedNode()?.id).toBe(node.id);
 	    expect(ctx.selection.focusedNode()?.id).toBe(node.id);
 	    expect(document.querySelector('.node-title')?.textContent).toBe('Node 1');
-	    expect((document.activeElement as HTMLElement | null)?.dataset.nodeId).toBe(node.id);
+	    expect((document.activeElement as HTMLElement | null)?.dataset.itemId).toBe(node.id);
 
     expect(runCommand(ctx, 'node.collapse.toggle')).toBe(true);
     expect(node.Collapsed).toBe(true);
@@ -52,6 +66,25 @@ describe('v2 node commands', () => {
     expect(ctx.graphs.current.nodes()).toHaveLength(2);
   });
 
+  it('fits to a newly created node when attached placement lands offscreen', async () => {
+    const ctx = bootV2();
+    const anchor = ctx.graphs.current.createNode({
+      Label: { text: 'edge anchor' },
+      Position: { x: 840, y: 300 },
+    });
+    ctx.bus.emit('selection.node.select', { id: anchor.id });
+    const before = ctx.contexts.view.get();
+
+    expect(runCommand(ctx, 'editing.node.create')).toBe(true);
+    await waitCamera();
+
+    const created = ctx.graphs.current.nodes().find(node => node.id !== anchor.id)!;
+    expect(created.Position!.x).toBeGreaterThan(900);
+    expect(ctx.contexts.view.get()).not.toEqual(before);
+    expect(ctx.contexts.view.get().scale).toBe(1);
+    expect(containsRect(ctx.contexts.view.visibleRect(Places.Stage)!, nodeRect(created))).toBe(true);
+  });
+
   it('moves DOM focus when selecting nodes by pointer or Tab', async () => {
     const ctx = bootV2();
     runCommand(ctx, 'editing.node.create');
@@ -59,27 +92,27 @@ describe('v2 node commands', () => {
     await settle();
     const [first, second] = ctx.graphs.current.nodes();
 
-    expect((document.activeElement as HTMLElement | null)?.dataset.nodeId).toBe(second.id);
+    expect((document.activeElement as HTMLElement | null)?.dataset.itemId).toBe(second.id);
 
-    document.querySelector(`[data-node-id="${first.id}"]`)!
+    document.querySelector(`[data-item-kind="node"][data-item-id="${first.id}"]`)!
       .dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
     await settle();
 
     expect(ctx.selection.selectedNode()?.id).toBe(first.id);
     expect(ctx.selection.focusedNode()?.id).toBe(first.id);
-    expect((document.activeElement as HTMLElement | null)?.dataset.nodeId).toBe(first.id);
+    expect((document.activeElement as HTMLElement | null)?.dataset.itemId).toBe(first.id);
 
     document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
     await settle();
 
     expect(ctx.selection.selectedNode()?.id).toBe(second.id);
     expect(ctx.selection.focusedNode()?.id).toBe(second.id);
-    expect((document.activeElement as HTMLElement | null)?.dataset.nodeId).toBe(second.id);
+    expect((document.activeElement as HTMLElement | null)?.dataset.itemId).toBe(second.id);
 
     expect(runCommand(ctx, 'selection.node.clear')).toBe(true);
     await settle();
     expect(ctx.selection.selected()).toBeNull();
-    expect((document.activeElement as HTMLElement | null)?.dataset.nodeId).toBeUndefined();
+    expect((document.activeElement as HTMLElement | null)?.dataset.itemId).toBeUndefined();
   });
 
   it('edits title from the rendered node and restores empty commits', async () => {

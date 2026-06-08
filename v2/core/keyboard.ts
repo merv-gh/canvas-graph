@@ -60,8 +60,8 @@ export function keyboardCaptureContext() {
       capture.focus();
       return capture;
     },
-    release(id?: string) {
-      if (id && active?.id !== id) return;
+    unregisterOrigin(origin: string) {
+      if (active?.id !== origin) return;
       remove(active);
       active = null;
     },

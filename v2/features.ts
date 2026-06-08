@@ -1,4 +1,5 @@
-import type { Registry } from './core';
+import { nodeRect, type Registry } from './core';
+import { Places } from './types';
 
 /* features.ts is reserved for cross-system *orchestration* — flows that touch multiple domains.
    It is intentionally NOT where redraws live: the render system installs a bus.onAny scheduler
@@ -6,6 +7,14 @@ import type { Registry } from './core';
    delete the listener; it's already handled. */
 export function registerFeatures(feature: Registry) {
   feature('nodeLifecycle', ({ on, emit, contexts, graphs, selection }) => {
+    const rectContains = (outer: { x: number; y: number; w: number; h: number }, inner: { x: number; y: number; w: number; h: number }) =>
+      inner.x >= outer.x && inner.y >= outer.y && inner.x + inner.w <= outer.x + outer.w && inner.y + inner.h <= outer.y + outer.h;
+    const createdNodeIsOffscreen = (id: string) => {
+      const node = graphs.current.getNode(id);
+      const visible = contexts.view.visibleRect(Places.Stage);
+      return !!node && !!visible && !rectContains(visible, nodeRect(node));
+    };
+
     /** When a node is already selected, A creates a child of it and wires the
      *  edge in one keystroke; the new node becomes the selection so further
      *  A keystrokes build a chain. Shift+A does the same but keeps the
@@ -50,6 +59,7 @@ export function registerFeatures(feature: Registry) {
         emit('focus.node.focus', { id });
       }
       if (hints?.connectFrom) emit('graph.edge.create', { From: hints.connectFrom, To: id });
+      if (createdNodeIsOffscreen(id)) emit('view.fit.item', { kind: 'node', id });
     });
   });
   feature('edgeLifecycle', ({ on, emit, contexts, graphs, selection }) => {

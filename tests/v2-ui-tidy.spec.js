@@ -49,7 +49,7 @@ test('node drag handle is explicit and moves the node', async ({ page }) => {
   await boot(page);
   const ids = await createSmallGraph(page);
 
-  const node = page.locator(`.node[data-node-id="${ids.b}"]`);
+  const node = page.locator(`.node[data-item-kind="node"][data-item-id="${ids.b}"]`);
   const header = node.locator('.node-header');
   const toolbar = page.locator('.node-toolbar');
   const handle = toolbar.locator('.node-drag-handle');

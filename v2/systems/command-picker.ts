@@ -27,8 +27,8 @@ export function registerCommandPicker(system: Registry) {
     let active: Active | null = null;
 
     const clearStageOverlay = () => {
-      contexts.itemOverlays.clear('commandPicker');
-      contexts.keyboard.release('commandPicker');
+      contexts.itemOverlays.unregisterOrigin('commandPicker');
+      contexts.keyboard.unregisterOrigin('commandPicker');
       emit('render.view.clear', { place: Places.Stage, key: 'picker-prompt' });
     };
 
@@ -115,8 +115,8 @@ export function registerCommandPicker(system: Registry) {
           active.values[step.id] = ref;
           active.stepIndex++;
           emit('commandPicker.step', { commandId: active.commandId, step: step.id, ref });
-          contexts.keyboard.release('commandPicker');
-          contexts.itemOverlays.clear('commandPicker');
+          contexts.keyboard.unregisterOrigin('commandPicker');
+          contexts.itemOverlays.unregisterOrigin('commandPicker');
           runStep();
         },
       });
