@@ -1,6 +1,14 @@
 import { clientPoint, isStageSurface, type Registry } from '../core';
 import { Places } from '../types';
-import type { ViewState } from '../types';
+import type { Position, ViewState } from '../types';
+
+declare module '../types' {
+  interface CustomEvents {
+    'view.pan.start': Position;
+    'view.pan.move': Position;
+    'view.pan.end': void;
+  }
+}
 
 export function registerViewPan(system: Registry) {
   system('view.pan', ({ on, emit, contexts }) => {

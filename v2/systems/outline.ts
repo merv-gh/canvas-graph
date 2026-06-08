@@ -9,6 +9,14 @@ import {
   type Registry,
 } from '../core';
 import { Places } from '../types';
+import type { Id } from '../types';
+
+declare module '../types' {
+  interface CustomEvents {
+    'outline.draw': void;
+    'outline.search.changed': { collectionId: Id; query: string };
+  }
+}
 
 export function registerOutline(system: Registry) {
   system('outline', ctx => {

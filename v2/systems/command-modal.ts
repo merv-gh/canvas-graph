@@ -1,6 +1,18 @@
 import { grouped, shortcutOf, systemOf, type Registry } from '../core';
 import { Places, type CommandSpec } from '../types';
 
+declare module '../types' {
+  interface CustomEvents {
+    'palette.open': void;
+    'help.open': void;
+    'commandModal.run': { commandId: string };
+    'commandModal.search.changed': { modalId: string; query: string };
+    'shortcut.edit.preview': { id: string; shortcut: string };
+    'shortcut.edit.commit': { id: string; shortcut: string };
+    'flag.toggle': { name: string; on: boolean };
+  }
+}
+
 type CommandModalDef = {
   id: 'palette' | 'help';
   title: string;

@@ -1,6 +1,6 @@
-import type { GraphNode } from '../model';
+import type { GraphNode, NodeEntity } from '../model';
 import type { Registry } from '../core';
-import type { ActionDef, NodeEntity, NonEmptyArray } from '../types';
+import type { ActionDef, NonEmptyArray } from '../types';
 import { ability, action } from './shared';
 
 const NUDGE_DIRECTIONS = [

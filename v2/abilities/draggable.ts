@@ -1,7 +1,17 @@
 import { itemIdFrom, type Registry } from '../core';
+import type { NodeEntity } from '../model';
 import { Places } from '../types';
-import type { Id, NodeEntity, Position } from '../types';
+import type { Id, Position } from '../types';
 import { ability, action } from './shared';
+
+declare module '../types' {
+  interface CustomEvents {
+    'drag.node.start': { id: Id; x: number; y: number };
+    'drag.node.move': { x: number; y: number };
+    'drag.node.end': void;
+    'drag.node.moved': { id: Id };
+  }
+}
 
 export const draggable = <T extends NodeEntity>() => ability<T>('draggable', [action<T>({
   id: 'node.drag',

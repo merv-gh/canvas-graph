@@ -1,7 +1,19 @@
 import { isStageSurface, itemIdFrom, itemRefFrom, nodeRef, type Registry } from '../core';
-import { Places } from '../types';
-import type { CommandSource, NodeEntity } from '../types';
+import type { NodeEntity } from '../model';
+import type { CommandSource, Id, ItemRef } from '../types';
 import { ability, action } from './shared';
+
+declare module '../types' {
+  interface CustomEvents {
+    'selection.item.select': ItemRef;
+    'selection.item.clear': void;
+    'selection.item.delete': void;
+    'selection.item.selected': ItemRef | null;
+    'selection.node.select': { id: Id };
+    'selection.node.clear': void;
+    'selection.node.selected': { id: Id | null };
+  }
+}
 
 export const selectable = <T extends NodeEntity>() => ability<T>('selectable', [action<T>({
   id: 'node.select',

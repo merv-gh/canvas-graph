@@ -1,6 +1,39 @@
-import type { GraphNode, GraphStore } from '../model';
+import type {
+  CreateHints,
+  EdgeDraft,
+  EdgeEntity,
+  EdgePatch,
+  GraphNode,
+  GraphStore,
+  NodeDraft,
+  NodePatch,
+} from '../model';
 import { edgeRef, itemIdFrom, nodeRef, type Registry } from '../core';
 import { Places } from '../types';
+import type { Id } from '../types';
+
+declare module '../types' {
+  interface CustomEvents {
+    'graph.create': void;
+    'graph.created': { id: Id };
+    'graph.delete': { id: Id };
+    'graph.deleted': { id: Id; nextId: Id };
+    'graph.switch': { id: Id };
+    'graph.switched': { id: Id };
+    'graph.node.create': NodeDraft & CreateHints;
+    'graph.node.created': { graphId: Id; id: Id; hints?: CreateHints };
+    'graph.node.update': { id: Id; patch: NodePatch };
+    'graph.node.updated': { graphId: Id; id: Id };
+    'graph.node.delete': { id: Id };
+    'graph.node.deleted': { graphId: Id; id: Id };
+    'graph.edge.create': EdgeDraft;
+    'graph.edge.created': { graphId: Id; id: Id; edge: EdgeEntity };
+    'graph.edge.update': { id: Id; patch: EdgePatch };
+    'graph.edge.updated': { graphId: Id; id: Id };
+    'graph.edge.delete': { id: Id };
+    'graph.edge.deleted': { graphId: Id; id: Id };
+  }
+}
 
 const nextGraphId = (graphs: GraphStore) =>
   graphs.all().find(g => g.id !== graphs.current.id)?.id ?? `g${graphs.all().length + 1}`;

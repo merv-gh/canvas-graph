@@ -1,5 +1,13 @@
 import { nodeRect, type Registry } from './core';
+import type { CreateHints, EdgeCreateDraft, NodeDraft } from './model';
 import { Places } from './types';
+
+declare module './types' {
+  interface CustomEvents {
+    'editing.node.create': NodeDraft & CreateHints;
+    'editing.edge.create': EdgeCreateDraft;
+  }
+}
 
 /* features.ts is reserved for cross-system *orchestration* — flows that touch multiple domains.
    It is intentionally NOT where redraws live: the render system installs a bus.onAny scheduler

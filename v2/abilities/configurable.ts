@@ -1,14 +1,19 @@
 import { itemParentAttr, itemRefFrom, type Registry } from '../core';
-import type { GraphEdge, GraphNode } from '../model';
+import type { EdgePatch, GraphEdge, GraphNode, NodeEntity, NodePatch } from '../model';
 import type {
-  EdgePatch,
   ItemRef,
-  NodeEntity,
-  NodePatch,
   PropertyDef,
   PropertyValue,
 } from '../types';
 import { ability, action } from './shared';
+
+declare module '../types' {
+  interface CustomEvents {
+    'item.properties.open': ItemRef;
+    'properties.item.input': { ref: ItemRef; field: string; value: string };
+    'properties.item.toggle': { ref: ItemRef; field: string; checked: boolean };
+  }
+}
 
 export const configurable = <T extends NodeEntity>() => ability<T>('configurable', [action<T>({
   id: 'node.configure',

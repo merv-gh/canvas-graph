@@ -1,5 +1,5 @@
-import type { CollectionDef, EdgeEntity, Id, NodeEntity } from '../types';
-import type { Graph, GraphStore } from './graph';
+import type { CollectionDef, Id } from '../types';
+import type { EdgeEntity, Graph, GraphStore, NodeEntity } from './graph';
 
 type Identified = { id: Id };
 export type AppModelCtx = { graphs: GraphStore };

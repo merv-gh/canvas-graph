@@ -1,4 +1,16 @@
 import { nodeRef, type Registry } from '../core';
+import type { Id, ItemRef } from '../types';
+
+declare module '../types' {
+  interface CustomEvents {
+    'focus.item.focus': ItemRef;
+    'focus.item.clear': void;
+    'focus.item.focused': ItemRef | null;
+    'focus.node.focus': { id: Id };
+    'focus.node.clear': void;
+    'focus.node.focused': { id: Id | null };
+  }
+}
 
 export function registerFocus(system: Registry) {
   system('focus', ({ on, emit, selection, contexts, origin }) => {

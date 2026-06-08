@@ -1,15 +1,13 @@
 import { collapsible, configurable, draggable, editable, nudgeable, selectable } from '../abilities';
 import { clamp } from '../core';
 import type {
-  EdgePatch,
   EntityDef,
   EntityRenderer,
   ItemRef,
-  NodePatch,
   PropertyDef,
   Rect,
 } from '../types';
-import { Graph, GraphEdge, GraphNode } from './graph';
+import { Graph, GraphEdge, GraphNode, type EdgePatch, type NodeEntity, type NodePatch } from './graph';
 
 const property = <T, Patch>(def: PropertyDef<T, Patch>) => def;
 const entity = <T, Patch = unknown>(kind: string, def: Omit<EntityDef<T, Patch>, 'kind'>): EntityDef<T, Patch> => ({ kind, ...def });
@@ -31,8 +29,11 @@ export const graphEntity = entity<Graph>('graph', {
 const edgeRenderer: EntityRenderer<GraphEdge> = {
   layer: 'svg',
   draw(edge, ctx) {
-    const from = ctx.graph.getNode(edge.From);
-    const to = ctx.graph.getNode(edge.To);
+    // Kind-agnostic lookup: edge renderer asks the model for nodes via ItemRef,
+    // not a node-specific getter. Containers (or any future "positioned thing")
+    // can resolve through the same path.
+    const from = ctx.graph.getItem({ kind: 'node', id: edge.From }) as NodeEntity | undefined;
+    const to = ctx.graph.getItem({ kind: 'node', id: edge.To }) as NodeEntity | undefined;
     if (!from?.Position || !to?.Position) return null;
     const ref: ItemRef = { kind: 'edge', id: edge.id };
     const g = svg('g', {});

@@ -1,5 +1,5 @@
-import type { GraphStore } from '../model';
-import type { Bus, Id, ItemRef, NodeEntity } from '../types';
+import type { GraphStore, NodeEntity } from '../model';
+import type { Bus, Id, ItemRef } from '../types';
 import { edgeRef, nodeRef, sameItemRef } from './item-ref';
 
 /** Selection and focus are polymorphic: a graph can have a selected node, edge, or

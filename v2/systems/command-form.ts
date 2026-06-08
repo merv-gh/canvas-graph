@@ -2,6 +2,13 @@ import type { Registry } from '../core';
 import { Places } from '../types';
 import type { CommandFormField } from '../types';
 
+declare module '../types' {
+  interface CustomEvents {
+    'commandForm.open': { commandId: string; seed?: Record<string, string> };
+    'commandForm.submit': { commandId: string; values: Record<string, string> };
+  }
+}
+
 const fieldId = (commandId: string, field: CommandFormField) =>
   `form-${commandId.replace(/[^a-z0-9_-]/gi, '-')}-${field.id}`;
 

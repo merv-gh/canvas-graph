@@ -1,7 +1,20 @@
 import type { GraphEdge, GraphNode } from '../model';
 import type { Registry } from '../core';
 import { clamp, itemRefFrom } from '../core';
-import { Places, type ItemRef } from '../types';
+import { Places, type ItemRef, type Position, type ViewState } from '../types';
+
+declare module '../types' {
+  interface CustomEvents {
+    'view.changed': ViewState;
+    'view.zoom.by': { screen: Position; factor: number };
+    'view.zoom.in': void;
+    'view.zoom.out': void;
+    'view.zoom.reset': void;
+    'view.fit.all': void;
+    'view.fit.selected': void;
+    'view.fit.item': ItemRef;
+  }
+}
 
 type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
 

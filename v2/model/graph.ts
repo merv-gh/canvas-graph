@@ -1,17 +1,29 @@
-import type {
-  EdgeDraft,
-  EdgeEntity,
-  EdgePatch,
-  Id,
-  ItemRef,
-  Label,
-  NodeCreateOptions,
-  NodeDraft,
-  NodeEntity,
-  NodePatch,
-  Position,
-  Size,
-} from '../types';
+import type { Id, ItemRef, Label, Position, Size } from '../types';
+
+// ----- Domain types -----
+// Live here, next to the classes implementing them. Anything kind-specific
+// (node, edge, future container) belongs in the model layer, not in types.ts.
+
+export type NodeEntity = { id: Id; kind: 'node'; Label: Label; Size: Size; Position?: Position; Collapsed?: boolean };
+export type NodeDraft = { Label?: Label; Position?: Position; Size?: Size; Collapsed?: boolean };
+export type NodePatch = Partial<Pick<NodeEntity, 'Label' | 'Size' | 'Position' | 'Collapsed'>>;
+export type NodeCreateOptions = { at?: Position; near?: Id | null };
+
+/** Operation-time hints attached to create events. They control the lifecycle around the
+ *  new node — focus behavior, edge creation, placement anchor — without polluting NodeDraft. */
+export type CreateHints = {
+  /** Don't move focus to the new node. Selection still moves (so user can keep editing). */
+  keepFocus?: boolean;
+  /** Place the new node near this id, using the same near-placement heuristic as the graph store. */
+  relativeTo?: Id;
+  /** After the node lands, also create an edge from this id to the new node id. */
+  connectFrom?: Id;
+};
+
+export type EdgeEntity = { id: Id; kind: 'edge'; From: Id; To: Id; Label?: Label };
+export type EdgeDraft = { From: Id; To: Id; Label?: Label };
+export type EdgeCreateDraft = Partial<EdgeDraft>;
+export type EdgePatch = Partial<Pick<EdgeEntity, 'Label'>>;
 
 type StoredItem = { id?: Id; parent?: Id[] };
 type ItemStore<T = unknown> = () => T[];

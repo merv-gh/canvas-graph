@@ -1,7 +1,15 @@
 import { itemIdFrom, type Registry } from '../core';
+import type { NodeEntity } from '../model';
 import { Places } from '../types';
-import type { CommandSource, Id, NodeEntity } from '../types';
+import type { CommandSource, Id } from '../types';
 import { ability, action } from './shared';
+
+declare module '../types' {
+  interface CustomEvents {
+    'node.title.edit': { id: Id };
+    'node.title.commit': { id: Id; text: string; finish?: boolean };
+  }
+}
 
 /** Editable title. The title slot stays plain by default — clicking it does
  *  NOT start an edit, so single-click selection works cleanly. Edit mode is

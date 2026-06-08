@@ -1,8 +1,10 @@
-import type { NodeEntity, Place, Position, Rect, ViewState } from '../types';
+import type { Place, Position, Rect, Size, ViewState } from '../types';
 
 export const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 export const rectsIntersect = (a: Rect, b: Rect) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
-export const nodeRect = (node: NodeEntity): Rect => {
+/** Generic centered-rect of a positioned, sized item. Structural to avoid
+ *  pulling kind-specific types into core/view. */
+export const nodeRect = (node: { Position?: Position; Size: Size }): Rect => {
   const pos = node.Position ?? { x: 0, y: 0 };
   return { x: pos.x - node.Size.w / 2, y: pos.y - node.Size.h / 2, w: node.Size.w, h: node.Size.h };
 };

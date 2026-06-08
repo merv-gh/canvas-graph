@@ -1,5 +1,13 @@
 import type { Registry } from '../core';
 
+declare module '../types' {
+  interface CustomEvents {
+    'layout.apply.radial': void;
+    'layout.apply.grid': void;
+    'layout.apply.tidy': void;
+  }
+}
+
 export function registerLayout(system: Registry) {
   system('layout', ({ on, emit, contexts, graphs, selection, contribute }) => {
     contribute({ surface: 'top', command: 'layout.apply.tidy', kind: 'button', text: 'Tidy', order: 65 });

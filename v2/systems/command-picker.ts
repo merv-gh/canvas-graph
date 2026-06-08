@@ -1,6 +1,15 @@
 import type { Registry } from '../core';
 import { Places, type CommandSource, type CommandSpec, type ItemRef, type PickerSpec, type PickerStep } from '../types';
 
+declare module '../types' {
+  interface CustomEvents {
+    'commandPicker.open': { commandId: string; source?: CommandSource };
+    'commandPicker.step': { commandId: string; step: string; ref: ItemRef };
+    'commandPicker.cancel': void;
+    'commandPicker.submit': { commandId: string; values: Record<string, ItemRef> };
+  }
+}
+
 /** Letter pool. Order matches a US keyboard home-row reach, so the first few
  *  letters are the easiest to hit (matches jump.ts on purpose). */
 const LETTERS = 'asdfghjklqwertyuiopzxcvbnm';

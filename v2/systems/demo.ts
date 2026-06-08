@@ -1,5 +1,11 @@
 import type { Registry } from '../core';
 
+declare module '../types' {
+  interface CustomEvents {
+    'demo.run-self': void;
+  }
+}
+
 /** demo.run-self renders the live composition graph: every system, ability, and
  *  feature flagged ON appears as a node connected to a 'core' root. The list is
  *  derived from flags.declared() — adding a new system or ability shows up here

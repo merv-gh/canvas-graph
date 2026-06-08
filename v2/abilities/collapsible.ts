@@ -1,6 +1,8 @@
 import { itemIdFrom, type Registry } from '../core';
-import type { CommandSource, NodeEntity } from '../types';
+import type { NodeEntity } from '../model';
+import type { CommandSource } from '../types';
 import { ability, action } from './shared';
+// Reuses 'graph.node.update' declared by systems/graph.ts; no CustomEvents add here.
 
 export const collapsible = <T extends NodeEntity>() => ability<T>('collapsible', [action<T>({
   id: 'node.collapse',
