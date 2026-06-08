@@ -118,17 +118,33 @@ button.icon:hover { color: var(--ink); }
   font: 11px ui-monospace, monospace;
   white-space: nowrap;
 }
-.item-overlay.jump-letter {
+.item-overlay.jump-letter,
+.item-overlay.picker-letter {
   font-weight: 600;
   background: var(--accent);
   color: white;
   letter-spacing: .05em;
   text-transform: uppercase;
 }
+.picker-prompt {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  padding: 6px 14px;
+  border-radius: var(--radius);
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  box-shadow: var(--shadow-md);
+  font: 13px system-ui, sans-serif;
+  pointer-events: none;
+}
+.picker-prompt em { color: var(--text-muted); font-style: normal; }
 .node {
   position: absolute;
-  min-width: 140px;
-  min-height: 56px;
+  min-width: 96px;
+  min-height: 36px;
   transform: translate(-50%, -50%);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius);
@@ -136,12 +152,15 @@ button.icon:hover { color: var(--ink); }
   box-shadow: var(--shadow-sm);
   user-select: none;
   touch-action: none;
-  transition: box-shadow .15s, border-color .15s;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  transition: box-shadow .15s, border-color .15s, min-height .12s;
 }
 .node:hover { box-shadow: var(--shadow-md); border-color: var(--accent); }
-.node.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft), var(--shadow-md); }
+.node.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft), var(--shadow-md); min-height: 56px; }
 .node.focused { outline: 2px solid var(--accent); outline-offset: 2px; }
-.node-header { display: flex; align-items: center; gap: 6px; padding: 8px 10px 4px; }
+.node-header { display: flex; align-items: center; gap: 6px; padding: 6px 10px 0; }
 .node-affordances { display: flex; align-items: center; gap: 2px; }
 .node-drag-handle {
   width: 16px;
@@ -166,14 +185,23 @@ button.icon:hover { color: var(--ink); }
   flex: 1; font-weight: 600;
   font-size: 13px;
   min-width: 0;
+  padding: 8px 12px 8px;
   white-space: pre-line;
   line-height: 1.3;
   color: var(--ink);
+  text-align: center;
 }
 .node-body { padding: 4px 12px 10px; color: var(--text-muted); font-size: 12px; }
+.node-meta { color: var(--text-muted); font-size: 11px; }
+/* By default the node shows only its title — header chrome and meta line
+   appear when the node is the active selection. Keeps the canvas calm; reveals
+   the affordances exactly when they become reachable from selection-based
+   commands. */
+.node:not(.selected) .node-header,
+.node:not(.selected) .node-body { display: none; }
+.node.selected .node-title { text-align: left; padding-bottom: 0; }
 .node.collapsed { min-height: 38px; height: 38px !important; }
 .node.collapsed .node-body { display: none; }
-.node-meta { color: var(--text-muted); font-size: 11px; }
 
 /* Side panel typography */
 .panel-title {

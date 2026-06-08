@@ -79,6 +79,10 @@ interface BuiltinEvents {
   'help.open': void;
   'commandForm.open': { commandId: string; seed?: Record<string, string> };
   'commandForm.submit': { commandId: string; values: Record<string, string> };
+  'commandPicker.open': { commandId: string };
+  'commandPicker.step': { commandId: string; step: string; ref: ItemRef };
+  'commandPicker.cancel': void;
+  'commandPicker.submit': { commandId: string; values: Record<string, ItemRef> };
   'outline.draw': void;
   'outline.search.changed': { collectionId: Id; query: string };
   'commandModal.run': { commandId: string };
@@ -195,6 +199,33 @@ export type CommandFormSpec = {
   payload: (values: Record<string, string>, source: CommandSource) => unknown;
   validate?: (values: Record<string, string>, source: CommandSource) => string | undefined;
 };
+
+/** One step in a multi-step keyboard picker. The commandPicker system walks
+ *  these in order: try `seed` first (auto-fills from selection or context, so
+ *  fast paths stay 1-keystroke); otherwise render letter overlays for items
+ *  passing `filter` and capture the next letter as the chosen ref. */
+export type PickerStep = {
+  /** Key under which the chosen ItemRef is stored in `values`. */
+  id: string;
+  /** Banner shown above the stage while this step is active. */
+  prompt?: string;
+  /** Decide which already-known refs are pickable for this step. Receives the
+   *  values picked so far so a step can exclude its predecessor (no self-loops). */
+  filter?: (values: Record<string, ItemRef>, source: CommandSource) => (ref: ItemRef) => boolean;
+  /** Return a ref to skip this step entirely. Lets "From" auto-fill from the
+   *  current selection so edge creation is one keystroke when source is selected. */
+  seed?: (values: Record<string, ItemRef>, source: CommandSource) => ItemRef | null | undefined;
+};
+
+/** A keyboard-driven multi-step picker — same shape as CommandFormSpec but for
+ *  ItemRefs instead of strings. Lives next to the command so the same
+ *  `commands.run(id)` path dispatches it. */
+export type PickerSpec = {
+  title?: string;
+  steps: PickerStep[];
+  payload: (values: Record<string, ItemRef>, source: CommandSource) => unknown;
+  validate?: (values: Record<string, ItemRef>, source: CommandSource) => string | undefined;
+};
 export type CommandInput = {
   on: RawInput;
   key?: string;
@@ -221,7 +252,12 @@ export type CommandSpec<K extends EventName = EventName> = {
   origin?: string;          // system/ability name that registered the command (for unregister + DX)
   available?: (source?: CommandSource) => boolean;
   payload?: (source: CommandSource) => AppEvents[K] | undefined;
+  /** Open a modal form before dispatching. Use for free-form text/number entry. */
   form?: CommandFormSpec;
+  /** Drive a keyboard letter-pick flow before dispatching. Use when the
+   *  command needs to reference items in the graph (source/target, parent,
+   *  jump target) — keeps the action 2-3 keystrokes total. */
+  picker?: PickerSpec;
 };
 export type FeatureFlags = Record<string, boolean>;
 

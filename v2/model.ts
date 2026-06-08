@@ -3,7 +3,6 @@ import { clamp, itemIdFrom, type CollectionCommandsApi } from './core';
 import type {
   CollectionDef,
   CommandSource,
-  EdgeCreateDraft,
   EdgeDraft,
   EdgeEntity,
   EdgePatch,
@@ -384,6 +383,17 @@ export const appModel: ModelDef<ModelCtx, CollectionCommandsApi> = {
       order: 'created',
       commands: (api) => {
         const targetId = nodeIdFromSource(api);
+        /** When a node is already selected, A creates a child of it and wires the
+         *  edge in one keystroke; the new node becomes the selection so further
+         *  A keystrokes build a chain. Shift+A does the same but keeps the
+         *  selection on the source — sequence builders use it to fan out
+         *  multiple children from a single anchor without re-selecting. */
+        const attachedDraft = (keepFocus: boolean) => {
+          const selected = api.selection.selectedNode();
+          const base = { Label: { text: `Node ${api.graphs.current.nodes().length + 1}` } };
+          if (!selected) return base;
+          return { ...base, relativeTo: selected.id, connectFrom: selected.id, ...(keepFocus ? { keepFocus: true } : {}) };
+        };
         return [
           {
             id: 'editing.node.create',
@@ -392,7 +402,17 @@ export const appModel: ModelDef<ModelCtx, CollectionCommandsApi> = {
             group: 'editing',
             shortcut: 'A',
             input: { on: 'keydown', key: 'a', prevent: true },
-            payload: () => ({ Label: { text: `Node ${api.graphs.current.nodes().length + 1}` } }),
+            payload: () => attachedDraft(false),
+          },
+          {
+            id: 'editing.node.create.keep',
+            label: 'Create attached node (keep selection)',
+            event: 'editing.node.create',
+            group: 'editing',
+            shortcut: 'Shift+A',
+            input: { on: 'keydown', key: 'A', shift: true, prevent: true },
+            available: () => !!api.selection.selectedNode(),
+            payload: () => attachedDraft(true),
           },
           {
             id: 'graph.node.delete.selected',
@@ -421,29 +441,6 @@ export const appModel: ModelDef<ModelCtx, CollectionCommandsApi> = {
           const ref = selection.selected();
           return ref?.kind === 'edge' ? ref.id : '';
         };
-        const nodeRef = (source: CommandSource) => {
-          const id = itemIdFrom(source.target);
-          return id && graphs.current.getNode(id) ? id : '';
-        };
-        const nodeOptions = () => graphs.current.nodes().map(node => ({ value: node.id, label: `${node.id} · ${node.Label.text}` }));
-        const edgeSeed = (source: CommandSource): EdgeCreateDraft => {
-          const ids = graphs.current.nodes().map(node => node.id);
-          const from = nodeRef(source) || selection.selectedNode()?.id || ids[0] || '';
-          const others = ids.filter(id => id !== from);
-          return { From: from, To: others[0] ?? '' };
-        };
-        const edgeFormValues = (payload: unknown) => {
-          const seed = payload as EdgeCreateDraft | undefined;
-          return { From: seed?.From ?? '', To: seed?.To ?? '' };
-        };
-        const edgeFormError = (values: Record<string, string>) => {
-          if (graphs.current.nodes().length < 2) return 'Create at least two nodes before creating an edge.';
-          if (!values.From || !values.To) return 'Choose source and target nodes.';
-          if (values.From === values.To) return 'Source and target must be different nodes.';
-          if (!graphs.current.getNode(values.From)) return `Unknown source node "${values.From}".`;
-          if (!graphs.current.getNode(values.To)) return `Unknown target node "${values.To}".`;
-          return undefined;
-        };
         return [
           {
             id: 'graph.edge.create',
@@ -452,18 +449,37 @@ export const appModel: ModelDef<ModelCtx, CollectionCommandsApi> = {
             group: 'edge',
             shortcut: 'E',
             input: { on: 'keydown', key: 'e', prevent: true },
-            payload: edgeSeed,
-            form: {
+            // No `available` filter: the picker itself emits an app.notice when
+            // a step has no candidates (e.g. zero/one nodes). Keeps the
+            // command discoverable from the palette and the failure mode
+            // observable in the event log.
+            picker: {
               title: 'Create edge',
-              submitLabel: 'Create edge',
-              fields: [
-                { id: 'From', label: 'Source node', placeholder: 'e1', autofocus: true, options: nodeOptions },
-                { id: 'To', label: 'Target node', placeholder: 'e2', options: nodeOptions },
+              steps: [
+                {
+                  id: 'From',
+                  prompt: 'Pick source node',
+                  filter: () => ref => ref.kind === 'node',
+                  // Fast path: when a node is already selected it becomes From
+                  // and the user only has to pick To. Edge in 2 keystrokes.
+                  seed: () => {
+                    const ref = selection.selected();
+                    return ref?.kind === 'node' ? ref : null;
+                  },
+                },
+                {
+                  id: 'To',
+                  prompt: 'Pick target node',
+                  filter: (values) => ref => ref.kind === 'node' && ref.id !== values.From?.id,
+                },
               ],
-              seed: edgeFormValues,
-              shouldOpen: () => true,
-              validate: edgeFormError,
-              payload: values => ({ From: values.From, To: values.To }),
+              validate: (values) => {
+                if (graphs.current.nodes().length < 2) return 'Create at least two nodes before creating an edge.';
+                if (!values.From || !values.To) return 'Pick both source and target.';
+                if (values.From.id === values.To.id) return 'Source and target must be different nodes.';
+                return undefined;
+              },
+              payload: (values) => ({ From: values.From?.id ?? '', To: values.To?.id ?? '' }),
             },
           },
           {

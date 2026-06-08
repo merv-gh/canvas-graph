@@ -81,10 +81,11 @@ describe('v2 selection polymorphism', () => {
 
   it('exposes ItemRef targets, overlays, and keyboard capture for future modes', async () => {
     const ctx = bootV2();
-    runCommand(ctx, 'editing.node.create');
-    runCommand(ctx, 'editing.node.create');
-    await settle();
-    const [a, b] = ctx.graphs.current.nodes();
+    // Direct create — smart-A (Principle 17) auto-attaches the second create
+    // to the first, which adds an extra edge. This test only cares about the
+    // targets surface, so go straight to the data layer.
+    const a = ctx.graphs.current.createNode({ Label: { text: 'a' } });
+    const b = ctx.graphs.current.createNode({ Label: { text: 'b' } });
     ctx.bus.emit('graph.edge.create', { From: a.id, To: b.id });
     await settle();
     const edge = ctx.graphs.current.edges()[0];

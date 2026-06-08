@@ -2,6 +2,7 @@ import type { Registry } from '../core';
 import { registerCollections } from './collections';
 import { registerCommandModal } from './command-modal';
 import { registerCommandForm } from './command-form';
+import { registerCommandPicker } from './command-picker';
 import { registerDemo } from './demo';
 import { registerDx } from './dx';
 import { registerFocus } from './focus';
@@ -27,6 +28,7 @@ export function registerSystems(system: Registry) {
   registerOutline(system);
   registerModal(system);
   registerCommandForm(system);
+  registerCommandPicker(system);
   registerCommandModal(system);
   // Jump must register before `collections` so its `g` binding sits earlier in
   // the input router's enabled() iteration — combined with `stop: true` it then
@@ -50,6 +52,7 @@ export function registerSystems(system: Registry) {
     outline: ['render', 'graph'],
     modal: ['render'],
     commandForm: ['modal'],
+    commandPicker: ['render.stage', 'graph'],
     commandModal: ['modal'],
     collections: ['graph'],
     'view.zoom': ['render'],

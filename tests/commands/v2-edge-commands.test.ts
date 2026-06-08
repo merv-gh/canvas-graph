@@ -1,102 +1,106 @@
 import { describe, expect, it } from 'vitest';
-import { bootV2, commandButton, field, modalText, runCommand, settle } from './v2-testkit';
+import { bootV2, commandButton, modalText, runCommand, settle } from './v2-testkit';
+import type { GraphNode } from '../../v2/model';
 
-const createNode = async (ctx: ReturnType<typeof bootV2>) => {
-  runCommand(ctx, 'editing.node.create');
-  await settle();
-  return ctx.graphs.current.nodes().at(-1)!;
-};
+/** Edge creation is driven by `commandPicker` now — keyboard letter overlays
+ *  for source/target, not a modal form. These tests exercise the picker path. */
 
-describe('v2 edge commands', () => {
-  it('opens an explanatory form when edge creation has too few nodes', async () => {
+const createNode = (ctx: ReturnType<typeof bootV2>, text: string): GraphNode =>
+  ctx.graphs.current.createNode({ Label: { text } });
+
+const captureInput = () =>
+  document.querySelector<HTMLInputElement>('input[data-keyboard-mode="commandPicker"]');
+
+const pressLetter = (letter: string) =>
+  captureInput()!.dispatchEvent(new KeyboardEvent('keydown', { key: letter, bubbles: true, cancelable: true }));
+
+describe('v2 edge commands (picker-driven)', () => {
+  it('emits a notice when nothing is pickable for a step', async () => {
     const ctx = bootV2();
-
-    expect(runCommand(ctx, 'graph.edge.create')).toBe(true);
-
-    expect(modalText()).toContain('Create edge');
-    expect(document.querySelector('.form-error')?.textContent).toBe('Create at least two nodes before creating an edge.');
-    // log is rAF-coalesced (principle 8) — wait for the next frame to read it.
+    createNode(ctx, 'lonely');
+    ctx.bus.emit('selection.item.clear');
     await settle();
-    expect(document.querySelector('.log-row')?.textContent).toContain('Create at least two nodes before creating an edge.');
-  });
-
-	  it('prefills source and target, then submits through commandForm', async () => {
-	    const ctx = bootV2();
-    const source = await createNode(ctx);
-    const target = await createNode(ctx);
-
-    ctx.bus.emit('selection.node.select', { id: source.id });
     expect(runCommand(ctx, 'graph.edge.create')).toBe(true);
-    expect(field('From')?.value).toBe(source.id);
-    expect(field('To')?.value).toBe(target.id);
+    await settle();
+    // The "To" step has zero candidates (only one node, From excludes it).
+    // After picking From, the picker cancels with a notice.
+    pressLetter('a');
+    await settle();
+    expect(document.querySelector('.log-row')?.textContent).toContain('Nothing to pick');
+    expect(captureInput()).toBeNull();
+  });
 
-    expect(runCommand(ctx, 'commandForm.submit', { target: commandButton('commandForm.submit') })).toBe(true);
-
-    expect(ctx.graphs.current.edges().map(edge => ({ From: edge.From, To: edge.To })))
-      .toEqual([{ From: source.id, To: target.id }]);
-	    expect(document.querySelector('.modal-layer')).toBeNull();
-	  });
-
-	  it('prefills a target for three-plus nodes and submits with Enter', async () => {
-	    const ctx = bootV2();
-	    const source = await createNode(ctx);
-	    const middle = await createNode(ctx);
-	    await createNode(ctx);
-
-	    ctx.bus.emit('selection.node.select', { id: source.id });
-	    expect(runCommand(ctx, 'graph.edge.create')).toBe(true);
-	    expect(field('From')?.value).toBe(source.id);
-	    expect(field('To')?.value).toBe(middle.id);
-
-	    field('To')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-	    await settle();
-
-	    expect(ctx.graphs.current.edges().map(edge => ({ From: edge.From, To: edge.To })))
-	      .toEqual([{ From: source.id, To: middle.id }]);
-	    expect(document.querySelector('.modal-layer')).toBeNull();
-	  });
-
-  it('validates source and target before storing an edge', async () => {
+  it('seeds From from selection and picks To via letter — 2 keystrokes', async () => {
     const ctx = bootV2();
-    const source = await createNode(ctx);
-    await createNode(ctx);
+    const source = createNode(ctx, 'A');
+    const target = createNode(ctx, 'B');
+    ctx.bus.emit('selection.node.select', { id: source.id });
+    await settle();
 
     runCommand(ctx, 'graph.edge.create');
-    field('From')!.value = source.id;
-    field('To')!.value = source.id;
-    expect(runCommand(ctx, 'commandForm.submit', { target: commandButton('commandForm.submit') })).toBe(true);
+    await settle();
+    pressLetter('a');
+    await settle();
 
-    expect(ctx.graphs.current.edges()).toHaveLength(0);
-    expect(document.querySelector('.form-error')?.textContent).toBe('Source and target must be different nodes.');
+    expect(ctx.graphs.current.edges()).toHaveLength(1);
+    const edge = ctx.graphs.current.edges()[0];
+    expect(edge.From).toBe(source.id);
+    expect(edge.To).toBe(target.id);
+  });
 
-    ctx.bus.emit('graph.edge.create', { From: source.id, To: 'missing' });
-    ctx.bus.emit('graph.edge.create', { From: source.id, To: source.id });
+  it('picks both endpoints when no selection — 3 keystrokes', async () => {
+    const ctx = bootV2();
+    const a = createNode(ctx, 'A');
+    const b = createNode(ctx, 'B');
+    ctx.bus.emit('selection.item.clear');
+    await settle();
+
+    runCommand(ctx, 'graph.edge.create');
+    await settle();
+    pressLetter('a');  // pick A as From
+    await settle();
+    // After From picked, only B is a valid To candidate
+    expect([...document.querySelectorAll('.picker-letter')]).toHaveLength(1);
+    pressLetter('a');  // pick B as To
+    await settle();
+
+    expect(ctx.graphs.current.edges()).toHaveLength(1);
+    const edge = ctx.graphs.current.edges()[0];
+    expect(edge.From).toBe(a.id);
+    expect(edge.To).toBe(b.id);
+  });
+
+  it('filter excludes the From node from the To step', async () => {
+    const ctx = bootV2();
+    createNode(ctx, 'A');
+    createNode(ctx, 'B');
+    createNode(ctx, 'C');
+    ctx.bus.emit('selection.item.clear');
+    await settle();
+
+    runCommand(ctx, 'graph.edge.create');
+    await settle();
+    pressLetter('a');  // From = first
+    await settle();
+    expect([...document.querySelectorAll('.picker-letter')]).toHaveLength(2);
+  });
+
+  it('Escape cancels picker without creating an edge', async () => {
+    const ctx = bootV2();
+    createNode(ctx, 'A');
+    createNode(ctx, 'B');
+    ctx.bus.emit('selection.item.clear');
+    await settle();
+    runCommand(ctx, 'graph.edge.create');
+    await settle();
+    expect(captureInput()).not.toBeNull();
+    captureInput()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    await settle();
+    expect(captureInput()).toBeNull();
     expect(ctx.graphs.current.edges()).toHaveLength(0);
   });
 
-  it('shows specific edge form validation messages for missing and unknown endpoints', async () => {
-    const ctx = bootV2();
-    await createNode(ctx);
-    await createNode(ctx);
-
-    runCommand(ctx, 'graph.edge.create');
-    field('From')!.value = '';
-    field('To')!.value = '';
-    runCommand(ctx, 'commandForm.submit', { target: commandButton('commandForm.submit') });
-    expect(document.querySelector('.form-error')?.textContent).toBe('Choose source and target nodes.');
-
-    field('From')!.value = 'missing-source';
-    field('To')!.value = ctx.graphs.current.nodes()[0].id;
-    runCommand(ctx, 'commandForm.submit', { target: commandButton('commandForm.submit') });
-    expect(document.querySelector('.form-error')?.textContent).toBe('Unknown source node "missing-source".');
-
-    field('From')!.value = ctx.graphs.current.nodes()[0].id;
-    field('To')!.value = 'missing-target';
-    runCommand(ctx, 'commandForm.submit', { target: commandButton('commandForm.submit') });
-    expect(document.querySelector('.form-error')?.textContent).toBe('Unknown target node "missing-target".');
-  });
-
-  it('keeps the form open when form payload cannot be built', () => {
+  it('keeps a form open when form payload cannot be built (form path still supported)', () => {
     const ctx = bootV2();
     ctx.contexts.commands.register([{
       id: 'test.null-form',
@@ -117,10 +121,10 @@ describe('v2 edge commands', () => {
     expect(document.querySelector('.modal-layer')).not.toBeNull();
   });
 
-  it('updates, opens properties for, and deletes an edge', async () => {
+  it('updates, opens properties for, and deletes an edge', () => {
     const ctx = bootV2();
-    const source = await createNode(ctx);
-    const target = await createNode(ctx);
+    const source = createNode(ctx, 'A');
+    const target = createNode(ctx, 'B');
     ctx.bus.emit('graph.edge.create', { From: source.id, To: target.id });
     const edge = ctx.graphs.current.edges()[0];
 
@@ -143,8 +147,8 @@ describe('v2 edge commands', () => {
 
   it('deletes a selected edge from command or X shortcut', async () => {
     const ctx = bootV2();
-    const source = await createNode(ctx);
-    const target = await createNode(ctx);
+    const source = createNode(ctx, 'A');
+    const target = createNode(ctx, 'B');
     ctx.bus.emit('graph.edge.create', { From: source.id, To: target.id });
     let edge = ctx.graphs.current.edges()[0];
 

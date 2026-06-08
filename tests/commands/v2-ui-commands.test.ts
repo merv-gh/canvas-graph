@@ -26,6 +26,10 @@ describe('v2 UI command surfaces', () => {
 
   it('opens palette, filters commands, and runs a command row', async () => {
     const ctx = bootV2();
+    // Edge create command picker needs nodes to pick between — pre-create.
+    ctx.graphs.current.createNode({ Label: { text: 'A' } });
+    ctx.graphs.current.createNode({ Label: { text: 'B' } });
+    await settle();
 
     expect(runCommand(ctx, 'palette.open')).toBe(true);
     expect(document.querySelector('.modal-head')?.textContent).toContain('Palette');
@@ -38,7 +42,11 @@ describe('v2 UI command surfaces', () => {
       .find(candidate => candidate.dataset.commandId === 'graph.edge.create')!;
     expect(row.querySelector('kbd')?.textContent).toContain('1');
     row.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-    expect(document.querySelector('.modal-head')?.textContent).toContain('Create edge');
+    await settle();
+    // Edge create is now picker-driven — the palette closes and a picker
+    // prompt appears asking for the source node.
+    expect(document.querySelector('.picker-prompt')?.textContent).toContain('Pick');
+    expect(document.querySelector('input[data-keyboard-mode="commandPicker"]')).not.toBeNull();
   });
 
   it('runs numbered palette rows and closes after simple actions', async () => {

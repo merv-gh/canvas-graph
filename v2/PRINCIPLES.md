@@ -216,6 +216,48 @@ what lets DX say "this command has no origin, who owns it?".
 
 > **Test:** `command.no-origin` warning count = 0.
 
+## 17. Keyboard budget — every common journey ≤ 3 keystrokes
+
+The app is built for users who don't reach for the mouse. That's not a vibe;
+it's a budget. Every canonical journey has a fixed, tested keystroke cost.
+PRs that raise a cost have to either earn the new key with a UX win or trim
+a different path to compensate.
+
+| Journey                                                  | Keys                  | Cost |
+|----------------------------------------------------------|-----------------------|-----:|
+| Create a floating node                                   | `A`                   |    1 |
+| Create a child of the selected node (selection moves)    | `A`                   |    1 |
+| Create a child of the selected node (selection stays)    | `Shift+A`             |    1 |
+| Build a chain of N nodes from one anchor                 | `A` × N               |    N |
+| Build N siblings from one anchor                         | `Shift+A` × N         |    N |
+| Edge from selected to picked target                      | `E` + letter          |    2 |
+| Edge with both endpoints picked                          | `E` + letter + letter |    3 |
+| Jump to any node or edge                                 | `G` + letter          |    2 |
+| Fit-all to view                                          | `Z`                   |    1 |
+| Fit selected                                             | `Shift+Z`             |    1 |
+| Delete selected                                          | `X`                   |    1 |
+| Open palette / Help                                      | `P` / `?`             |    1 |
+| Toggle collapse on selected                              | `C`                   |    1 |
+| Edit title of selected                                   | `Enter`               |    1 |
+| Cycle selection forward / back                           | `Tab` / `Shift+Tab`   |    1 |
+
+Three rules guarantee the budget holds:
+
+1. **Selection is implicit context.** A command that needs a "current item"
+   gets it from `selection.selected()` first, the click target second, and a
+   form/picker only as a last resort. Anything reachable from selection
+   collapses by one keystroke.
+2. **Picker > form.** When a command needs a graph item (source/target,
+   parent, jump target), declare `picker` on the CommandSpec, not `form`.
+   Pickers consume letters; forms consume sentences.
+3. **`seed` is mandatory on picker steps that have an obvious default.**
+   If the user has already given you the answer (e.g. selection = From for
+   edge create), the step skips itself. The fast path is the default path.
+
+> **Test:** `tests/commands/v2-journey-budget.test.ts` enforces each row.
+> When you add a new entity ability, add the corresponding journey row before
+> shipping.
+
 ---
 
 ## Anti-principles (things we explicitly do NOT believe)
@@ -239,3 +281,74 @@ what lets DX say "this command has no origin, who owns it?".
 3. If the codebase passes today, it's a principle. If it doesn't, it's a TODO.
 
 If you can't write the test, the principle is too vague.
+
+---
+
+## Future audit — container system as a single-file add
+
+We want to add containers (nodes that hold child nodes) soon. The single-file
+test is whether `systems/container.ts` + a model declaration are *all* a
+contributor has to write. We checked the current architecture against that
+goal before building anything.
+
+### Already covered
+
+- `ItemRef.parent: Id[]` exists and is honoured by `selection`, `focus`,
+  `itemTargets`, and `itemKey` deep-equality. Nested addressing works
+  end-to-end today.
+- Render iterates `model.entities()` through `EntityDef.render`. A new entity
+  kind (`'container'`) can declare its own renderer with zero render edits.
+  Z-order falls out of declaration order — put `container` before `node` in
+  the model and children paint on top.
+- `affordances.entity(entityDef, slot)` is kind-agnostic. A container's
+  abilities (resize, collapse children, lock layout) project through the same
+  affordance pipeline as nodes.
+- `factScope` reads suffix conventions, so `container.created` /
+  `container.children.changed` register as redraw triggers without scheduler
+  edits.
+- `keyboard.capture({onKey})` + `commandPicker` give a container picker
+  ("Move selection into container ⟨P⟩") for free.
+
+### Must land before containers ship (still single-file friendly)
+
+1. **`Graph.itemsOfKind(kind)` extension point.**
+   Today it switches on `'node' | 'edge'`. A container system needs to plug
+   its own item store in. Replace the switch with a registry on `Graph`:
+   `graph.registerItemStore(kind, () => Item[])`. Container system calls
+   `graph.registerItemStore('container', () => containers)` at boot. No core
+   commit needed for each new kind.
+
+2. **`graph.node.updated` cascade.**
+   Dragging a container has to move its children. The container system listens
+   to `graph.node.updated`, computes the delta, and emits
+   `graph.node.update` for each child. This already works today —
+   `nodeLifecycle` is the proof. So: zero core change, just a feature-style
+   listener in `container.ts`.
+
+3. **`itemTargets` from a side-source.**
+   Containers need to be jump targets and picker candidates. The targets API
+   already accepts a `register(source, provider)` from any system —
+   `container.ts` calls it the same way `graph.ts` does today.
+
+4. **Selection precedence.**
+   Clicking a child should not bubble to the container. Today
+   `selection.item.select` matches `[data-item-kind][data-item-id]` via
+   `closest()`, so the *innermost* tagged element wins — already correct.
+   Containers just need to be rendered *behind* children (rule #1 above).
+
+5. **Layout-awareness (acceptable gap for v1).**
+   `tidy` / `radial` / `grid` walk the flat node list and ignore parenting.
+   We accept the v1 container does not participate in tidy; if a parent has
+   children, layout runs on the parent only and the user lays out children
+   manually (or with a `tidy` invoked while a container is selected).
+   Promote later by adding `layout.scope` plumbing — that's *its own*
+   single-file addition then.
+
+### Bottom line
+
+Containers are one file plus *one* core primitive: `graph.registerItemStore`.
+That core change is small (~10 lines) and pays for any future entity kind, not
+just containers. Once it lands, every new kind ships as a single file.
+
+If we end up needing more than that to ship containers, we got the abstraction
+wrong somewhere. Stop, fix the abstraction, then come back.

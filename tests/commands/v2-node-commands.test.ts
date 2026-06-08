@@ -136,8 +136,11 @@ describe('v2 node commands', () => {
     expect(runCommand(ctx, 'graph.delete.current')).toBe(true);
     expect(ctx.graphs.current).not.toBe(first);
 
-    const a = await (async () => { runCommand(ctx, 'editing.node.create'); await settle(); return ctx.graphs.current.nodes().at(-1)!; })();
-    const b = await (async () => { runCommand(ctx, 'editing.node.create'); await settle(); return ctx.graphs.current.nodes().at(-1)!; })();
+    // Direct create — smart-A would auto-attach the second node and create an
+    // extra edge (Principle 17). This test wants two unconnected nodes plus
+    // exactly one explicit edge.
+    const a = ctx.graphs.current.createNode({ Label: { text: 'a' } });
+    const b = ctx.graphs.current.createNode({ Label: { text: 'b' } });
     ctx.bus.emit('graph.edge.create', { From: a.id, To: b.id });
     expect(ctx.graphs.current.edges()).toHaveLength(1);
 
@@ -149,8 +152,8 @@ describe('v2 node commands', () => {
 
   it('deletes a selected node with the general X shortcut', async () => {
     const ctx = bootV2();
-    const a = await (async () => { runCommand(ctx, 'editing.node.create'); await settle(); return ctx.graphs.current.nodes().at(-1)!; })();
-    const b = await (async () => { runCommand(ctx, 'editing.node.create'); await settle(); return ctx.graphs.current.nodes().at(-1)!; })();
+    const a = ctx.graphs.current.createNode({ Label: { text: 'a' } });
+    const b = ctx.graphs.current.createNode({ Label: { text: 'b' } });
     ctx.bus.emit('graph.edge.create', { From: a.id, To: b.id });
     ctx.bus.emit('selection.node.select', { id: a.id });
 
