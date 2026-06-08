@@ -14,6 +14,7 @@ import { registerLayout } from './layout';
 import { registerLog } from './log';
 import { registerMain } from './main';
 import { registerModal } from './modal';
+import { registerNodeToolbar } from './node-toolbar';
 import { registerOutline } from './outline';
 import { registerRender } from './render';
 import { registerRenderStage } from './render-stage';
@@ -42,6 +43,7 @@ export function registerSystems(system: Registry) {
   registerViewPan(system);
   registerFocus(system);
   registerLayout(system);
+  registerNodeToolbar(system);
   registerDemo(system);
   registerDx(system);
 
@@ -62,6 +64,7 @@ export function registerSystems(system: Registry) {
     'view.pan': ['render'],
     focus: ['graph'],
     layout: ['graph'],
+    'node.toolbar': ['render.stage', 'graph'],
     demo: ['graph', 'render'],
   };
   Object.entries(deps).forEach(([name, list]) => system.setRequires(name, list));

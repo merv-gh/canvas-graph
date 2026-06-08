@@ -74,6 +74,45 @@ describe('first-class cancellation', () => {
     expect(active).toContain('ability.selectable');
   });
 
+  it('modal blocks background hotkeys until closed', async () => {
+    const ctx = bootV2();
+    ctx.graphs.current.createNode({ Label: { text: 'seed' } });
+    ctx.bus.emit('item.properties.open', { kind: 'node', id: 'e1' });
+    await settle();
+    expect(document.querySelector('.modal-layer')).not.toBeNull();
+    const before = ctx.graphs.current.nodes().length;
+
+    // 'a' would normally fire editing.node.create. With a modal mounted the
+    // input router scopes non-global commands to inside the modal — clicking
+    // outside or pressing keys on document.body is a no-op.
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true }));
+    await settle();
+    expect(ctx.graphs.current.nodes().length).toBe(before);
+
+    // Escape still works because it has `global: true`.
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    await settle();
+    expect(document.querySelector('.modal-layer')?.children.length ?? 0).toBe(0);
+  });
+
+  it('clicks on background data-command buttons are blocked while modal is open', async () => {
+    const ctx = bootV2();
+    ctx.graphs.current.createNode({ Label: { text: 'seed' } });
+    ctx.bus.emit('item.properties.open', { kind: 'node', id: 'e1' });
+    await settle();
+    const before = ctx.graphs.current.nodes().length;
+
+    // Toolbar buttons live outside the modal — clicking them while a modal
+    // is up should be a no-op so the modal stays the focus.
+    const outsideButton = document.createElement('button');
+    outsideButton.dataset.command = 'editing.node.create';
+    document.body.append(outsideButton);
+    outsideButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await settle();
+    expect(ctx.graphs.current.nodes().length).toBe(before);
+    outsideButton.remove();
+  });
+
   it('Escape commits an in-progress title edit', async () => {
     const ctx = bootV2();
     const node = ctx.graphs.current.createNode({ Label: { text: 'old' } });

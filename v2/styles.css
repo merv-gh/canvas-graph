@@ -158,20 +158,34 @@ button.icon:hover { color: var(--ink); }
   transition: box-shadow .15s, border-color .15s, min-height .12s;
 }
 .node:hover { box-shadow: var(--shadow-md); border-color: var(--accent); }
-.node.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft), var(--shadow-md); min-height: 56px; }
+.node.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft), var(--shadow-md); }
 .node.focused { outline: 2px solid var(--accent); outline-offset: 2px; }
-.node-header { display: flex; align-items: center; gap: 6px; padding: 6px 10px 0; }
-.node-affordances { display: flex; align-items: center; gap: 2px; }
-.node-drag-handle {
-  width: 16px;
+/* Toolbar sits above the selected node in screen-space — separate from the
+   node template so the node body stays free of chrome. */
+.node-toolbar {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 6px));
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow-md);
+  z-index: 4;
+  pointer-events: auto;
+  user-select: none;
+}
+.node-toolbar .node-drag-handle {
+  width: 14px;
   color: var(--text-muted);
   cursor: grab;
   line-height: 1;
   text-align: center;
-  user-select: none;
+  font-size: 11px;
 }
-.node-drag-handle:not([data-drag-handle]) { display: none; }
-.node-drag-handle:hover { color: var(--ink); }
+.node-toolbar .node-drag-handle:hover { color: var(--ink); }
 .node-action, .node-toggle, .node-config {
   width: 20px; height: 20px;
   padding: 0;
@@ -202,14 +216,9 @@ button.icon:hover { color: var(--ink); }
 }
 .node-body { padding: 4px 12px 10px; color: var(--text-muted); font-size: 12px; }
 .node-meta { color: var(--text-muted); font-size: 11px; }
-/* By default the node shows only its title — header chrome and meta line
-   appear when the node is the active selection. Keeps the canvas calm; reveals
-   the affordances exactly when they become reachable from selection-based
-   commands. */
-.node:not(.selected) .node-header,
+/* Body (meta line) only appears on selection — affordances live in the
+   floating toolbar above, so the resting state is a calm title-only card. */
 .node:not(.selected) .node-body { display: none; }
-.node.selected .node-title { text-align: left; padding-bottom: 0; }
-.node.collapsed { min-height: 38px; height: 38px !important; }
 .node.collapsed .node-body { display: none; }
 
 /* Side panel typography */

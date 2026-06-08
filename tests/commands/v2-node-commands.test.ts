@@ -98,16 +98,19 @@ describe('v2 node commands', () => {
     expect(title.textContent).toBe('Inline');
   });
 
-  it('drags only from the explicit drag handle', async () => {
+  it('drags only from the explicit drag handle (now in ephemeral node-toolbar)', async () => {
     const ctx = bootV2();
     runCommand(ctx, 'editing.node.create');
     await settle();
     const node = ctx.graphs.current.nodes()[0];
     const before = { ...node.Position! };
-    const handle = document.querySelector<HTMLElement>('.node-drag-handle')!;
-
+    // Smart A leaves the new node selected, so the floating toolbar (which
+    // owns the drag handle now that the in-node header is gone) is mounted.
+    const toolbar = document.querySelector<HTMLElement>('.node-toolbar')!;
+    expect(toolbar).not.toBeNull();
+    const handle = toolbar.querySelector<HTMLElement>('.node-drag-handle')!;
     expect(handle.hasAttribute('data-drag-handle')).toBe(true);
-    expect(document.querySelector('.node-header')?.hasAttribute('data-drag-handle')).toBe(false);
+    expect(document.querySelector('.node .node-header')).toBeNull();
 
     runCommand(ctx, 'drag.node.start', { event: new PointerEvent('pointerdown', { clientX: 10, clientY: 10 }), target: handle });
     runCommand(ctx, 'drag.node.move', { event: new PointerEvent('pointermove', { clientX: 70, clientY: 30 }), target: document.body });

@@ -105,18 +105,38 @@ export function commandsContext(bus: Bus, isFlagOn: (origin?: string) => boolean
 }
 
 /** Routes raw DOM events to commands. Click → `[data-command]`; key/pointer/wheel
- *  → match against registered command.input bindings. Typing in inputs blocks
- *  global shortcuts unless the binding sets `global: true` or has a `selector`. */
+ *  → match against registered command.input bindings. Two strictness layers
+ *  shield "in another scope" inputs from spilling into app commands:
+ *
+ *    1. Typing — inside any input/textarea/select/contenteditable, non-global
+ *       commands without a `selector` are skipped (so typing the letter "a"
+ *       in a text field doesn't create a node).
+ *    2. Modal — when a modal is mounted, non-global commands whose event
+ *       target is outside the modal are skipped. Backdrop, form fields, and
+ *       command buttons inside the modal still work; A/E/G/etc on the
+ *       background do nothing until the modal closes. */
 export function inputRouter(commands: ReturnType<typeof commandsContext>) {
   return {
     start(root: Document | HTMLElement = document) {
+      /** A modal is "mounted" when [data-place="modal"] has any rendered children. */
+      const modalScopeEl = (): Element | null => {
+        const placeEl = (root instanceof Document ? root : root).querySelector('[data-place="modal"]');
+        return placeEl?.firstElementChild ? placeEl : null;
+      };
+      const targetInModal = (target: Element | null, modal: Element | null) =>
+        !!modal && !!target && modal.contains(target);
       const route = (event: Event) => {
         const rawTarget = event.target instanceof Element ? event.target : null;
         const typing = event instanceof KeyboardEvent
           && (/input|textarea|select/i.test(rawTarget?.tagName ?? '') || (rawTarget instanceof HTMLElement && rawTarget.isContentEditable));
+        const modal = modalScopeEl();
+        const inModal = targetInModal(rawTarget, modal);
 
         const button = event.type === 'click' ? rawTarget?.closest('[data-command]') : null;
         if (button instanceof HTMLElement) {
+          // Modal strictness for click-driven data-command buttons too —
+          // background toolbar buttons can't fire while a modal is up.
+          if (modal && !modal.contains(button)) return;
           event.preventDefault();
           commands.run(button.dataset.command!, { event, target: button });
           return;
@@ -129,6 +149,7 @@ export function inputRouter(commands: ReturnType<typeof commandsContext>) {
           const target = rawTarget && binding.selector ? rawTarget.closest(binding.selector) : rawTarget;
           if (!(target instanceof Element) || (binding.selector && !target)) continue;
           if (typing && !binding.global && !binding.selector) continue;
+          if (modal && !binding.global && !inModal) continue;
           if (binding.when && !binding.when(event, target)) continue;
           if (binding.prevent) event.preventDefault();
           commands.run(command.id, { event, target });
