@@ -1,4 +1,4 @@
-import { itemIdFrom, type Registry } from '../core';
+import { itemIdFrom, nodeRef, type Registry } from '../core';
 import type { NodeEntity } from '../model';
 import { Places } from '../types';
 import type { CommandSource, Id } from '../types';
@@ -114,7 +114,7 @@ export function registerEditable(system: Registry) {
     on('node.title.commit', ({ id, text, finish }) => {
       const node = graphs.current.getNode(id);
       if (!node) return;
-      if (text && text !== node.Label.text) emit('graph.node.update', { id, patch: { Label: { text } } });
+      if (text && text !== node.Label.text) emit('item.update', { ref: nodeRef(id), patch: { Label: { text } } });
       if (!text) {
         const el = titleEl(id);
         if (el) el.textContent = node.Label.text;

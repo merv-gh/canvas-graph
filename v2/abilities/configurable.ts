@@ -66,8 +66,8 @@ export function registerConfigurable(system: Registry) {
       const prop = entityDef(ref)?.properties?.find(candidate => candidate.id === field);
       const patch = current && prop?.patch(current, value);
       if (!current || !patch) return;
-      if (ref.kind === 'node') emit('graph.node.update', { id: current.id, patch: patch as NodePatch });
-      if (ref.kind === 'edge') emit('graph.edge.update', { id: current.id, patch: patch as EdgePatch });
+      // Single generic dispatch. Storage systems decide how to apply for their kind.
+      emit('item.update', { ref, patch });
     };
     const selectedNode = () => selection.selectedNode();
 

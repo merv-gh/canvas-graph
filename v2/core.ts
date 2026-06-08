@@ -3,6 +3,7 @@ import { affordancesContext } from './core/affordances';
 import { cancellationContext } from './core/cancellation';
 import { commandsContext, inputRouter } from './core/commands';
 import { createFlags, type FlagKind, type FlagsApi } from './core/flags';
+import { hierarchyContext } from './core/hierarchy';
 import { localStorageIo, type IoApi } from './core/io';
 import { itemModesContext } from './core/item-modes';
 import { itemOverlaysContext } from './core/item-overlays';
@@ -38,6 +39,7 @@ export { edgeRef, itemKey, nodeRef, sameItemRef } from './core/item-ref';
 export { itemModesContext, type ItemMode } from './core/item-modes';
 export { itemOverlaysContext, type ItemOverlay } from './core/item-overlays';
 export { itemTargetsContext, type ItemTarget, type ItemTargetProvider } from './core/item-targets';
+export { hierarchyContext, type HierarchyProvider } from './core/hierarchy';
 export { keyboardCaptureContext, type KeyboardCapture } from './core/keyboard';
 export { clamp, nodeRect, clientPoint, isStageSurface } from './core/view';
 export { emptyState, kbdHint } from './core/templates';
@@ -164,6 +166,7 @@ function createContexts(bus: Bus, flags: FlagsApi, io: IoApi) {
   const itemModes = itemModesContext(bus);
   const itemOverlays = itemOverlaysContext(bus);
   const itemTargets = itemTargetsContext();
+  const hierarchy = hierarchyContext();
   const keyboard = keyboardCaptureContext();
   const commands = commandsContext(bus, origin => !origin || flags.isOn(origin), io);
   const input = inputRouter(commands);
@@ -177,7 +180,7 @@ function createContexts(bus: Bus, flags: FlagsApi, io: IoApi) {
     issues: () => lastDxIssues,
     _set(issues: DxIssue[]) { lastDxIssues = issues; },
   };
-  const teardown: OriginScoped[] = [commands, affordances, cancellation, itemModes, itemOverlays, itemTargets, keyboard];
+  const teardown: OriginScoped[] = [commands, affordances, cancellation, itemModes, itemOverlays, itemTargets, hierarchy, keyboard];
   return {
     commands,
     input,
@@ -191,6 +194,7 @@ function createContexts(bus: Bus, flags: FlagsApi, io: IoApi) {
     itemModes,
     itemOverlays,
     itemTargets,
+    hierarchy,
     keyboard,
     teardown,
   };

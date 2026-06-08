@@ -1,5 +1,5 @@
 import type { GraphNode, NodeEntity } from '../model';
-import type { Registry } from '../core';
+import { nodeRef, type Registry } from '../core';
 import type { ActionDef, NonEmptyArray } from '../types';
 import { ability, action } from './shared';
 
@@ -27,7 +27,7 @@ export function registerNudgeable(system: Registry) {
       NUDGE_DIRECTIONS.map(({ dir, key, dx, dy }) => ({
         id: `graph.node.nudge.${dir}`,
         label: `Nudge node ${dir}`,
-        event: 'graph.node.update' as const,
+        event: 'item.update' as const,
         group: 'node',
         shortcut: key,
         input: { on: 'keydown' as const, key, prevent: true },
@@ -35,7 +35,7 @@ export function registerNudgeable(system: Registry) {
         payload: () => {
           const node = selectedNode()!;
           const pos = node.Position ?? { x: 0, y: 0 };
-          return { id: node.id, patch: { Position: { x: pos.x + dx, y: pos.y + dy } } };
+          return { ref: nodeRef(node.id), patch: { Position: { x: pos.x + dx, y: pos.y + dy } } };
         },
       })),
     );

@@ -48,6 +48,11 @@ export function registerRenderStage(system: Registry) {
     };
     const renderCtxFor = <T>(entityDef: EntityDef<T>, item: T): EntityRenderCtx => ({
       graph: graphs.current,
+      refOf: (id) => {
+        const base = { kind: entityDef.kind as ItemRef['kind'], id };
+        const parent = contexts.hierarchy.parentIds(base);
+        return parent ? { ...base, parent } : base;
+      },
       tagItem,
       applyItemModes,
       wireAffordances: el => wireItemAffordances(el, entityDef, item),

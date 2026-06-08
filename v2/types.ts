@@ -147,6 +147,14 @@ interface BuiltinEvents {
    *  redraw stage chrome (selection rings, jump letters, etc.). */
   'itemMode.changed': { source?: string };
   'itemOverlay.changed': { source?: string };
+  /** Generic patch request. The single seam every storage system dispatches on:
+   *  graph.ts handles `kind === 'node' | 'edge'`, the containers system handles
+   *  `kind === 'container'`, and so on. Abilities (draggable, editable,
+   *  configurable, nudgeable) emit this with the ref of the item being mutated;
+   *  no ability ever needs to know which store owns the item. The fact event
+   *  (`graph.node.updated`, `container.updated`, …) is the storage system's
+   *  responsibility after applying. */
+  'item.update': { ref: ItemRef; patch: unknown };
 }
 
 export type AppEvents = BuiltinEvents & CustomEvents;
@@ -355,6 +363,11 @@ export type EntityRenderGraph = {
  *  reach for the DOM, item-modes, or affordances directly. */
 export type EntityRenderCtx = {
   graph: EntityRenderGraph;
+  /** Build a full ItemRef for *this entity's kind* with the parent chain
+   *  populated from the hierarchy context. Use this instead of constructing
+   *  ItemRef literals — containers/groups attach parent automatically, so
+   *  selection / focus / item-modes round-trip correctly through the DOM. */
+  refOf(id: Id): ItemRef;
   tagItem(el: Element, ref: ItemRef): void;
   applyItemModes(el: Element, ref: ItemRef): void;
   /** Wire ability affordances (handlers + buttons) for this item's entity into
@@ -386,6 +399,9 @@ export type EntityDef<T, Patch = unknown> = {
    *  blindly — adding a new entity kind (group, container, …) needs zero render
    *  edits. When unset, the entity is data-only (no stage representation). */
   render?: EntityRenderer<T>;
+  /** Z-order during iteration. Lower paints first (= behind). Default 0.
+   *  Containers want a negative value so they paint behind their children. */
+  order?: number;
 };
 
 // ---------------------------------------------------------------------------

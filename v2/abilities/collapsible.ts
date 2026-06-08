@@ -1,8 +1,8 @@
-import { itemIdFrom, type Registry } from '../core';
+import { itemIdFrom, nodeRef, type Registry } from '../core';
 import type { NodeEntity } from '../model';
 import type { CommandSource } from '../types';
 import { ability, action } from './shared';
-// Reuses 'graph.node.update' declared by systems/graph.ts; no CustomEvents add here.
+// Uses the generic 'item.update' framework event — no CustomEvents add here.
 
 export const collapsible = <T extends NodeEntity>() => ability<T>('collapsible', [action<T>({
   id: 'node.collapse',
@@ -27,7 +27,7 @@ export function registerCollapsible(system: Registry) {
     contexts.commands.register([{
       id: 'node.collapse.toggle',
       label: 'Toggle node collapse',
-      event: 'graph.node.update',
+      event: 'item.update',
       group: 'node',
       shortcut: 'C',
       input: { on: 'keydown', key: 'c', prevent: true },
@@ -35,7 +35,7 @@ export function registerCollapsible(system: Registry) {
       payload: source => {
         const id = nodeId(source) || selectedNode()?.id || graphs.current.nodes()[0]?.id || '';
         const node = graphs.current.getNode(id)!;
-        return { id, patch: { Collapsed: !node.Collapsed } };
+        return { ref: nodeRef(id), patch: { Collapsed: !node.Collapsed } };
       },
     }]);
   });

@@ -35,7 +35,7 @@ const edgeRenderer: EntityRenderer<GraphEdge> = {
     const from = ctx.graph.getItem({ kind: 'node', id: edge.From }) as NodeEntity | undefined;
     const to = ctx.graph.getItem({ kind: 'node', id: edge.To }) as NodeEntity | undefined;
     if (!from?.Position || !to?.Position) return null;
-    const ref: ItemRef = { kind: 'edge', id: edge.id };
+    const ref = ctx.refOf(edge.id);
     const g = svg('g', {});
     g.setAttribute('class', 'edge');
     // Identity rides on the individual <line>s (focus target = edge-hit). The
@@ -96,7 +96,7 @@ const nodeRenderer: EntityRenderer<GraphNode> = {
   draw(node, ctx) {
     const el = ctx.cloneTemplate<HTMLElement>('node');
     const pos = node.Position ?? { x: 0, y: 0 };
-    const ref: ItemRef = { kind: 'node', id: node.id };
+    const ref = ctx.refOf(node.id);
     ctx.tagItem(el, ref);
     el.tabIndex = -1;
     ctx.applyItemModes(el, ref);

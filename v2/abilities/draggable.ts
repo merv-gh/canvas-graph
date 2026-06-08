@@ -1,4 +1,4 @@
-import { itemIdFrom, type Registry } from '../core';
+import { itemIdFrom, nodeRef, type Registry } from '../core';
 import type { NodeEntity } from '../model';
 import { Places } from '../types';
 import type { Id, Position } from '../types';
@@ -58,7 +58,7 @@ export function registerDraggable(system: Registry) {
     on('drag.node.move', ({ x, y }) => {
       if (!drag) return;
       const pointer = contexts.view.clientToSpace(Places.Stage, { x, y });
-      emit('graph.node.update', { id: drag.id, patch: { Position: { x: drag.start.x + pointer.x - drag.pointer.x, y: drag.start.y + pointer.y - drag.pointer.y } } });
+      emit('item.update', { ref: nodeRef(drag.id), patch: { Position: { x: drag.start.x + pointer.x - drag.pointer.x, y: drag.start.y + pointer.y - drag.pointer.y } } });
       emit('drag.node.moved', { id: drag.id });
     });
     on('drag.node.end', () => { drag = null; });

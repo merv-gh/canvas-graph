@@ -4,6 +4,7 @@ import { registerCollections } from './collections';
 import { registerCommandModal } from './command-modal';
 import { registerCommandForm } from './command-form';
 import { registerCommandPicker } from './command-picker';
+import { registerContainers } from './containers';
 import { registerDemo } from './demo';
 import { registerDx } from './dx';
 import { registerFocus } from './focus';
@@ -44,6 +45,7 @@ export function registerSystems(system: Registry) {
   registerFocus(system);
   registerLayout(system);
   registerNodeToolbar(system);
+  registerContainers(system);
   registerDemo(system);
   registerDx(system);
 
@@ -65,6 +67,7 @@ export function registerSystems(system: Registry) {
     focus: ['graph'],
     layout: ['graph'],
     'node.toolbar': ['render.stage', 'graph'],
+    containers: ['render.stage', 'graph'],
     demo: ['graph', 'render'],
   };
   Object.entries(deps).forEach(([name, list]) => system.setRequires(name, list));

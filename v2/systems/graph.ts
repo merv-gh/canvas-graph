@@ -119,6 +119,16 @@ export function registerGraph(system: Registry) {
     on('graph.node.update', ({ id, patch }) => {
       if (graphs.current.updateNode(id, patch)) emit('graph.node.updated', { graphId: graphs.current.id, id });
     });
+    // Generic patch request — dispatch by ref.kind. Each ability emits
+    // `item.update` without knowing whether the target is a node, edge, or
+    // future kind; graph.ts owns node/edge; containers.ts owns container; etc.
+    on('item.update', ({ ref, patch }) => {
+      if (ref.kind === 'node' && graphs.current.updateNode(ref.id, patch as NodePatch)) {
+        emit('graph.node.updated', { graphId: graphs.current.id, id: ref.id });
+      } else if (ref.kind === 'edge' && graphs.current.updateEdge(ref.id, patch as EdgePatch)) {
+        emit('graph.edge.updated', { graphId: graphs.current.id, id: ref.id });
+      }
+    });
     on('graph.node.delete', ({ id }) => {
       const incident = graphs.current.edgesOf(id).map(e => e.id);
       if (graphs.current.deleteNode(id)) {

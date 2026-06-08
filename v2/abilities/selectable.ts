@@ -98,10 +98,10 @@ export function registerSelectable(system: Registry) {
         group: 'selection',
         shortcut: 'X',
         input: { on: 'keydown', key: 'x', prevent: true },
-        available: () => {
-          const ref = selection.selected();
-          return ref?.kind === 'node' || ref?.kind === 'edge';
-        },
+        // Any selection is potentially deletable. Each kind's owner handles its
+        // own delete listener; the command stays open so e.g. containers can
+        // hook in without selectable knowing the kind exists.
+        available: () => !!selection.selected(),
       },
     ]);
 
