@@ -2,7 +2,7 @@
 
 Small TypeScript proof of concept for a composable, event-driven graph app.
 
-This iteration tries a stricter rule: data declarations imply UI and commands. Entities declare abilities, collections declare CRUD/search/order, and a DX system checks that those declarations are actually surfaced.
+This iteration tries a stricter rule: data declarations imply UI and commands. Entities declare abilities, collections declare list shape, the registry derives CRUD/search/order defaults, and a DX system checks that those declarations are actually surfaced.
 
 ## Mental Model
 
@@ -42,7 +42,7 @@ and full Vite serving.
 - `app.ts` is only the composition entrypoint.
 - `core.ts` owns the event bus, contexts, command registry, render helpers, view math, and registry helper.
 - `core/` owns small core-adjacent adapters such as IO and selection storage.
-- `model.ts` is a compatibility barrel; `model/graph.ts` owns storage, `model/entities.ts` owns entity render/property declarations, and `model/collections.ts` owns collection CRUD metadata.
+- `model.ts` is a compatibility barrel; `model/graph.ts` owns storage, `model/entities.ts` owns entity render/property declarations, `model/collections.ts` owns collection declarations, and `model/app.ts` assembles the app model.
 - `abilities/` owns one file per ability; `abilities.ts` is only a compatibility barrel.
 - `systems/` owns one file per system; `systems.ts` is only a compatibility barrel.
 - `features.ts` owns cross-system workflows that intentionally coordinate several domains.
@@ -132,12 +132,18 @@ const nodeEntity = entity('node', {
 
 const appModel = {
   collections: [
-    collection('graphs', { crud, search: true, order: 'created' }),
-    collection('nodes', { entity: nodeEntity, crud, search: true, order: 'created' }),
-    collection('edges', { entity: edgeEntity, crud, search: true, order: 'created' }),
+    { id: 'graphs', label: 'Graphs', kind: 'graph', items: ctx => ctx.graphs.all() },
+    { id: 'nodes', label: 'Nodes', kind: 'node', items: ctx => ctx.graphs.current.nodes() },
+    { id: 'edges', label: 'Edges', kind: 'edge', items: ctx => ctx.graphs.current.edges() },
   ],
 };
 ```
+
+The model registry resolves collection defaults: `itemId` falls back to `item.id`,
+`itemLabel` falls back to the matching entity's `labelOf`, and command ids derive
+from the collection kind (`editing.node.create`, `graph.node.delete`,
+`selection.item.select`). Collection declarations do not store event names or
+shortcut metadata.
 
 `dx` checks this contract at app start:
 
@@ -189,7 +195,7 @@ Node creation flow:
 
 This is more verbose than a direct function call, but the debug story is much cleaner: the event log shows the lifecycle.
 
-`edgeLifecycle` mirrors that split. The visible `graph.edge.create` command asks for source/target node refs with a letter picker, prefilled from the current selection when possible. If a picker step has no candidates, the event log explains why the edge cannot be created. The feature validates real, distinct endpoints and only then emits the storage event `graph.edge.create`.
+`edgeLifecycle` mirrors that split. The visible `editing.edge.create` command asks for source/target node refs with a letter picker, prefilled from the current selection when possible. If a picker step has no candidates, the event log explains why the edge cannot be created. The feature validates real, distinct endpoints and only then emits the storage event `graph.edge.create`.
 
 ## Event Convention
 

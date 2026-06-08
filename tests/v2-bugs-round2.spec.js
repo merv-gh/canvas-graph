@@ -18,12 +18,12 @@ test('outline lists an "edges" section (edge collection in model)', async ({ pag
   expect(headings).toContain('edges');
 });
 
-test('graph.edge.create is a registered command, not only an event', async ({ page }) => {
+test('editing.edge.create is a registered command, while graph.edge.create stays storage', async ({ page }) => {
   await boot(page);
   const registered = await page.evaluate(() => {
     const c = window.v2.contexts.commands.all();
     return {
-      create: !!c.find(x => x.id === 'graph.edge.create'),
+      create: !!c.find(x => x.id === 'editing.edge.create'),
       del:    !!c.find(x => x.id === 'graph.edge.delete'),
     };
   });

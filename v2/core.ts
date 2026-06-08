@@ -2,6 +2,7 @@ import type { GraphStore } from './model';
 import { affordancesContext } from './core/affordances';
 import { cancellationContext } from './core/cancellation';
 import { commandsContext, inputRouter } from './core/commands';
+import { singular } from './core/collection-commands';
 import { itemIdFrom, itemRefFrom, appendRenderable, tagItem } from './core/dom';
 import { createFlags, type FlagKind, type FlagsApi } from './core/flags';
 import { localStorageIo, type IoApi } from './core/io';
@@ -28,12 +29,15 @@ import {
   type ModelDef,
   type Place,
   type RedrawScope,
+  type ResolvedCollectionDef,
   type UiValue,
   type DxIssue,
+  type Id,
 } from './types';
 
 // Re-exports (keep the public surface stable for systems/abilities).
 export { localStorageIo, memoryIo, STORAGE_KEYS, type IoApi } from './core/io';
+export { collectionCreateCommand, collectionDeleteCommand, collectionKind, collectionSelectCommand, singular } from './core/collection-commands';
 export { createFlags, type FlagKind, type FlagsApi } from './core/flags';
 export { createSelectionStore, type SelectionStore } from './core/selection';
 export { createSim, type SimApi, type Trace, type TraceEvent } from './core/sim';
@@ -49,14 +53,6 @@ export { clamp, nodeRect, clientPoint, isStageSurface } from './core/view';
 export type Contexts = ReturnType<typeof createContexts>;
 export type Models = ReturnType<typeof createModelRegistry>;
 export type ModelCtx = { graphs: GraphStore };
-/** Narrow slice of AppCtx that collection.commands() factories receive. Keeps the
- *  collection author from depending on the full ctx — only stable hooks. */
-export type CollectionCommandsApi = {
-  graphs: GraphStore;
-  selection: SelectionStore;
-  view: Contexts['view'];
-  contexts: Contexts;
-};
 export type RenderApi = { flushes(): number };
 export type DxApi = { run(): DxIssue[] };
 export type AppCtx = {
@@ -71,7 +67,7 @@ export type AppCtx = {
   dx?: DxApi;
   render?: RenderApi;
 } & import('./types').CustomExposable;
-export type AppCollectionDef<T> = CollectionDef<T, ModelCtx, CollectionCommandsApi>;
+export type AppCollectionDef<T> = ResolvedCollectionDef<T, ModelCtx>;
 type Disposer = () => void;
 export type SystemCtx = AppCtx & Pick<Bus, 'on' | 'emit' | 'forward'> & {
   /** Stable name of the currently-starting system / ability — used to tag commands for unregister. */
@@ -153,9 +149,28 @@ export const entityUi = <T,>(entityDef: EntityDef<T>, slot?: string) =>
 
 export const createModelRegistry = <Ctx,>(model: ModelDef<Ctx>, flags?: FlagsApi) => {
   const entities = new Map(model.entities.map(entityDef => [entityDef.kind, entityDef]));
-  const collections = new Map(model.collections.map(collectionDef =>
-    [collectionDef.id, collectionDef as unknown as CollectionDef<unknown, unknown>],
-  ));
+  const defaultItemId = <T,>(item: T): Id => {
+    const id = (item as { id?: unknown }).id;
+    return typeof id === 'string' ? id : '';
+  };
+  const resolveCollection = <T,>(collectionDef: CollectionDef<T, Ctx>): ResolvedCollectionDef<T, Ctx> => {
+    const kind = collectionDef.kind ?? collectionDef.entity?.kind ?? singular(collectionDef.id);
+    const entityDef = collectionDef.entity ?? entities.get(kind) as EntityDef<T> | undefined;
+    const itemId = collectionDef.itemId ?? defaultItemId;
+    return {
+      ...collectionDef,
+      kind,
+      entity: entityDef,
+      itemId,
+      itemLabel: collectionDef.itemLabel ?? entityDef?.labelOf ?? itemId,
+      search: collectionDef.search ?? true,
+      order: collectionDef.order ?? 'created',
+    };
+  };
+  const collections = new Map(model.collections.map(collectionDef => {
+    const resolved = resolveCollection(collectionDef);
+    return [resolved.id, resolved as unknown as ResolvedCollectionDef<unknown, unknown>];
+  }));
   // Disabled abilities disappear from the live model — render, palette, and DX all stop seeing them.
   const filterAbilities = <T,>(entityDef: EntityDef<T>): EntityDef<T> => {
     if (!flags) return entityDef;
@@ -167,7 +182,7 @@ export const createModelRegistry = <Ctx,>(model: ModelDef<Ctx>, flags?: FlagsApi
       const entityDef = entities.get(kind) as EntityDef<T, Patch> | undefined;
       return entityDef ? filterAbilities(entityDef) as EntityDef<T, Patch> : undefined;
     },
-    collection<T>(id: string) { return collections.get(id) as CollectionDef<T, unknown> | undefined; },
+    collection<T>(id: string) { return collections.get(id) as ResolvedCollectionDef<T, unknown> | undefined; },
     entities: () => [...entities.values()].map(e => filterAbilities(e)),
     collections: () => [...collections.values()],
     /** Raw, unfiltered access — DX validator uses this to compare declared vs live. */
@@ -345,7 +360,7 @@ export function registry(kind: FlagKind = 'system'): Registry {
 
 export function createAppContext(
   graphs: GraphStore,
-  model: ModelDef<ModelCtx, CollectionCommandsApi>,
+  model: ModelDef<ModelCtx>,
   flags: FlagsApi = createFlags(),
   io: IoApi = localStorageIo(),
 ): AppCtx {

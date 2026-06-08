@@ -1,4 +1,4 @@
-import type { AppCtx, Models, Registry } from '../core';
+import { collectionCreateCommand, collectionDeleteCommand, collectionKind, type AppCtx, type Models, type Registry } from '../core';
 import type { CommandSpec, DxIssue } from '../types';
 
 type TemplateDebug = { _cloned?: Set<string> };
@@ -63,8 +63,12 @@ export function runDx(ctx: AppCtx): DxIssue[] {
   }));
 
   ctx.model.collections().forEach(collectionDef => {
-    if (!commandIds.has(collectionDef.crud.create)) error('collection.no-create', `${collectionDef.id} missing create command ${collectionDef.crud.create}`);
-    if (!commandIds.has(collectionDef.crud.delete)) error('collection.no-delete', `${collectionDef.id} missing delete command ${collectionDef.crud.delete}`);
+    const create = collectionCreateCommand(collectionDef);
+    const del = collectionDeleteCommand(collectionDef);
+    const missingId = collectionDef.items(ctx).some(item => !collectionDef.itemId(item));
+    if (!commandIds.has(create)) error('collection.no-create', `${collectionDef.id} missing create command ${create}`);
+    if (!commandIds.has(del)) error('collection.no-delete', `${collectionDef.id} missing delete command ${del}`);
+    if (missingId) error('collection.item-id-missing', `${collectionDef.id} has an item without an id`);
     if (!collectionDef.search) error('collection.no-search', `${collectionDef.id} missing search`);
     if (!collectionDef.order) error('collection.no-order', `${collectionDef.id} missing order`);
   });
@@ -114,7 +118,7 @@ export function runDx(ctx: AppCtx): DxIssue[] {
 
   const bus = ctx.bus as unknown as BusDebug;
   const knownKinds = new Set(ctx.model.entities().map(e => e.kind));
-  const collectionKinds = new Set(ctx.model.collections().map(c => c.entity?.kind).filter(Boolean) as string[]);
+  const collectionKinds = new Set(ctx.model.collections().map(c => collectionKind(c)));
   const eventKinds = new Set<string>();
   ([...(bus._subscribed ?? []), ...(bus._emitted ?? [])] as string[]).forEach(name => {
     const m = name.match(/^graph\.([a-z]+)\.(?:create|created|update|updated|delete|deleted)$/);

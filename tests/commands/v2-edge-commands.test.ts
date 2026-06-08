@@ -20,7 +20,7 @@ describe('v2 edge commands (picker-driven)', () => {
     createNode(ctx, 'lonely');
     ctx.bus.emit('selection.item.clear');
     await settle();
-    expect(runCommand(ctx, 'graph.edge.create')).toBe(true);
+    expect(runCommand(ctx, 'editing.edge.create')).toBe(true);
     await settle();
     // The "To" step has zero candidates (only one node, From excludes it).
     // After picking From, the picker cancels with a notice.
@@ -37,7 +37,7 @@ describe('v2 edge commands (picker-driven)', () => {
     ctx.bus.emit('selection.node.select', { id: source.id });
     await settle();
 
-    runCommand(ctx, 'graph.edge.create');
+    runCommand(ctx, 'editing.edge.create');
     await settle();
     pressLetter('a');
     await settle();
@@ -55,7 +55,7 @@ describe('v2 edge commands (picker-driven)', () => {
     ctx.bus.emit('selection.item.clear');
     await settle();
 
-    runCommand(ctx, 'graph.edge.create');
+    runCommand(ctx, 'editing.edge.create');
     await settle();
     pressLetter('a');  // pick A as From
     await settle();
@@ -78,7 +78,7 @@ describe('v2 edge commands (picker-driven)', () => {
     ctx.bus.emit('selection.item.clear');
     await settle();
 
-    runCommand(ctx, 'graph.edge.create');
+    runCommand(ctx, 'editing.edge.create');
     await settle();
     pressLetter('a');  // From = first
     await settle();
@@ -91,7 +91,7 @@ describe('v2 edge commands (picker-driven)', () => {
     createNode(ctx, 'B');
     ctx.bus.emit('selection.item.clear');
     await settle();
-    runCommand(ctx, 'graph.edge.create');
+    runCommand(ctx, 'editing.edge.create');
     await settle();
     expect(captureInput()).not.toBeNull();
     captureInput()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));

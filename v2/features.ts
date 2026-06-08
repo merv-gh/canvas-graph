@@ -5,7 +5,39 @@ import type { Registry } from './core';
    that turns data mutations into coalesced redraws. If a feature is just "X happened → redraw",
    delete the listener; it's already handled. */
 export function registerFeatures(feature: Registry) {
-  feature('nodeLifecycle', ({ on, emit }) => {
+  feature('nodeLifecycle', ({ on, emit, contexts, graphs, selection }) => {
+    /** When a node is already selected, A creates a child of it and wires the
+     *  edge in one keystroke; the new node becomes the selection so further
+     *  A keystrokes build a chain. Shift+A does the same but keeps the
+     *  selection on the source so sequence builders can fan out siblings. */
+    const attachedDraft = (keepFocus: boolean) => {
+      const selected = selection.selectedNode();
+      const base = { Label: { text: `Node ${graphs.current.nodes().length + 1}` } };
+      if (!selected) return base;
+      return { ...base, relativeTo: selected.id, connectFrom: selected.id, ...(keepFocus ? { keepFocus: true } : {}) };
+    };
+    contexts.commands.register([
+      {
+        id: 'editing.node.create',
+        label: 'Create node',
+        event: 'editing.node.create',
+        group: 'editing',
+        shortcut: 'A',
+        input: { on: 'keydown', key: 'a', prevent: true },
+        payload: () => attachedDraft(false),
+      },
+      {
+        id: 'editing.node.create.keep',
+        label: 'Create attached node (keep selection)',
+        event: 'editing.node.create',
+        group: 'editing',
+        shortcut: 'Shift+A',
+        input: { on: 'keydown', key: 'A', shift: true, prevent: true },
+        available: () => !!selection.selectedNode(),
+        payload: () => attachedDraft(true),
+      },
+    ]);
+
     // editing.node.create is a user intent; graph.node.create is the storage command.
     on('editing.node.create', draft => emit('graph.node.create', draft));
     // After creation, select + focus the new node so the user can edit it immediately.
@@ -20,7 +52,44 @@ export function registerFeatures(feature: Registry) {
       if (hints?.connectFrom) emit('graph.edge.create', { From: hints.connectFrom, To: id });
     });
   });
-  feature('edgeLifecycle', ({ on, emit, graphs }) => {
+  feature('edgeLifecycle', ({ on, emit, contexts, graphs, selection }) => {
+    contexts.commands.register([{
+      id: 'editing.edge.create',
+      label: 'Create edge',
+      event: 'editing.edge.create',
+      group: 'edge',
+      shortcut: 'E',
+      input: { on: 'keydown', key: 'e', prevent: true },
+      // No `available` filter: the picker itself emits an app.notice when a step
+      // has no candidates. Keeps the command discoverable from palette and log.
+      picker: {
+        title: 'Create edge',
+        steps: [
+          {
+            id: 'From',
+            prompt: 'Pick source node',
+            filter: () => ref => ref.kind === 'node',
+            seed: () => {
+              const ref = selection.selected();
+              return ref?.kind === 'node' ? ref : null;
+            },
+          },
+          {
+            id: 'To',
+            prompt: 'Pick target node',
+            filter: values => ref => ref.kind === 'node' && ref.id !== values.From?.id,
+          },
+        ],
+        validate: values => {
+          if (graphs.current.nodes().length < 2) return 'Create at least two nodes before creating an edge.';
+          if (!values.From || !values.To) return 'Pick both source and target.';
+          if (values.From.id === values.To.id) return 'Source and target must be different nodes.';
+          return undefined;
+        },
+        payload: values => ({ From: values.From?.id ?? '', To: values.To?.id ?? '' }),
+      },
+    }]);
+
     on('editing.edge.create', draft => {
       const From = draft.From ?? '';
       const To = draft.To ?? '';

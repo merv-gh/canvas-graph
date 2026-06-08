@@ -100,7 +100,7 @@ describe('Principle 17 — canonical journey keystroke budgets', () => {
     // already 1 edge from the Shift+A chain; this test is about the second edge
     const baselineEdges = ctx.graphs.current.edges().length;
 
-    runCommand(ctx, 'graph.edge.create'); // keystroke 1: opens picker, From seeded
+    runCommand(ctx, 'editing.edge.create'); // keystroke 1: opens picker, From seeded
     await settle();
     pressLetter('a');                     // keystroke 2: picks 'To'
     await settle();
@@ -121,7 +121,7 @@ describe('Principle 17 — canonical journey keystroke budgets', () => {
     await settle();
     const baselineEdges = ctx.graphs.current.edges().length;
 
-    runCommand(ctx, 'graph.edge.create'); // keystroke 1
+    runCommand(ctx, 'editing.edge.create'); // keystroke 1
     await settle();
     pressLetter('a');                     // keystroke 2: From
     await settle();

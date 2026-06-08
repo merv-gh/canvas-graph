@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   commandShortcut,
+  collectionCreateCommand,
+  collectionDeleteCommand,
+  collectionKind,
+  collectionSelectCommand,
   edgeRef,
   grouped,
   itemRefFrom,
@@ -162,6 +166,23 @@ describe('v2 model and core helpers', () => {
     expect(graph.itemsOfKind('container')).toEqual([]);
   });
 
+  it('derives collection defaults and commands from collection kind', () => {
+    const ctx = bootV2();
+    const graphs = ctx.model.collection<Graph>('graphs')!;
+    const nodes = ctx.model.collection<{ id: string; Label: { text: string } }>('nodes')!;
+    const fake = { id: 'foos', label: 'Foos', items: () => [{ id: 'f1' }] };
+
+    expect(collectionKind(fake)).toBe('foo');
+    expect(graphs.itemLabel(ctx.graphs.current)).toBe(ctx.graphs.current.id);
+    expect(nodes.itemLabel({ id: 'n1', Label: { text: 'Named' } })).toBe('Named');
+    expect(collectionCreateCommand(graphs)).toBe('graph.create');
+    expect(collectionDeleteCommand(graphs)).toBe('graph.delete');
+    expect(collectionSelectCommand(graphs)).toBe('graph.switch');
+    expect(collectionCreateCommand(nodes)).toBe('editing.node.create');
+    expect(collectionDeleteCommand(nodes)).toBe('graph.node.delete');
+    expect(collectionSelectCommand(nodes)).toBe('selection.item.select');
+  });
+
   it('switches and deletes graphs while keeping a current graph', () => {
     const graphs = graphStore();
     const first = graphs.current;
@@ -199,7 +220,7 @@ describe('v2 model and core helpers', () => {
     const help = commands.get('help.open') as CommandSpec;
     expect(commandShortcut(commands, 'help.open')).toBe('?');
     expect(commandShortcut(commands, 'selection.item.delete')).toBe('X');
-    expect(commandShortcut(commands, 'graph.node.delete.selected')).toBe('');
+    expect(commandShortcut(commands, 'graph.node.delete')).toBe('');
     expect(commands.shortcutConflict('help.open', 'P')?.id).toBe('palette.open');
     expect(commands.setShortcut('help.open', 'P')).toBe(false);
     expect(commands.setShortcut('help.open', 'H')).toBe(true);

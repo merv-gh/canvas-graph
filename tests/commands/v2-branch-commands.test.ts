@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { localStorageIo } from '../../v2/core';
+import { createAppContext, createFlags, localStorageIo, memoryIo, registry } from '../../v2/core';
+import { graphStore } from '../../v2/model';
+import { registerCollections } from '../../v2/systems/collections';
+import { runDx } from '../../v2/systems/dx';
+import type { ModelDef } from '../../v2/types';
 import { bootV2, commandButton, runCommand, settle } from './v2-testkit';
 
 describe('v2 defensive command branches', () => {
@@ -94,5 +98,39 @@ describe('v2 defensive command branches', () => {
     await settle();
 
     expect(commandButton('editing.node.create')).not.toBeNull();
+  });
+
+  it('derives collection toolbar defaults and honors toolbar opt-out', () => {
+    const model: ModelDef<{ graphs: ReturnType<typeof graphStore> }> = {
+      entities: [],
+      collections: [
+        { id: 'foos', label: 'Foos', items: () => [{ id: 'f1' }] },
+        { id: 'bars', label: 'Bars', kind: 'bar', toolbar: false, items: () => [{ id: 'b1' }] },
+      ],
+    };
+    const ctx = createAppContext(graphStore(), model, createFlags({}, memoryIo()), memoryIo());
+    const systems = registry('system');
+
+    registerCollections(systems);
+    systems.start(ctx);
+
+    const top = ctx.contexts.affordances.system('top');
+    expect(top.some(aff => aff.command === 'editing.foo.create' && aff.text === '+ foo')).toBe(true);
+    expect(top.some(aff => aff.command === 'editing.bar.create')).toBe(false);
+  });
+
+  it('reports model coverage gaps for id-less collection items and unknown graph event kinds', () => {
+    const model: ModelDef<{ graphs: ReturnType<typeof graphStore> }> = {
+      entities: [],
+      collections: [{ id: 'things', label: 'Things', items: () => [{}] }],
+    };
+    const ctx = createAppContext(graphStore(), model, createFlags({}, memoryIo()), memoryIo());
+
+    ctx.bus.forward('graph.widget.create' as never, {});
+    const issues = runDx(ctx);
+
+    expect(issues.some(issue => issue.rule === 'collection.item-id-missing')).toBe(true);
+    expect(issues.some(issue => issue.rule === 'entity.kind-no-declaration' && issue.message.includes('widget'))).toBe(true);
+    expect(issues.some(issue => issue.rule === 'entity.kind-no-collection' && issue.message.includes('widget'))).toBe(true);
   });
 });

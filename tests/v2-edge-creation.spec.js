@@ -14,11 +14,11 @@ const createNodes = async (page, labels) => page.evaluate((labels) => {
 test('v2 boots current TypeScript entrypoint with edge creation UI enabled', async ({ page }) => {
   await boot(page);
 
-  await expect(page.locator('.toolbar [data-command="graph.edge.create"]')).toHaveText('+ Edge');
+  await expect(page.locator('.toolbar [data-command="editing.edge.create"]')).toHaveText('+ Edge');
   const state = await page.evaluate(() => ({
     commandFormOn: window.v2.flags.isOn('commandForm'),
     commandFormRegistered: !!window.v2.contexts.commands.get('commandForm.submit'),
-    edgeCommandEvent: window.v2.contexts.commands.get('graph.edge.create')?.event,
+    edgeCommandEvent: window.v2.contexts.commands.get('editing.edge.create')?.event,
   }));
 
   expect(state).toEqual({
@@ -31,12 +31,12 @@ test('v2 boots current TypeScript entrypoint with edge creation UI enabled', asy
 test('edge command explains why it cannot run before two nodes exist', async ({ page }) => {
   await boot(page);
 
-  await page.locator('.toolbar [data-command="graph.edge.create"]').click();
+  await page.locator('.toolbar [data-command="editing.edge.create"]').click();
   await expect(page.locator('.modal-layer')).toHaveCount(0);
   await expect(page.locator('.log-row').first()).toContainText('Nothing to pick for Pick source node');
 
   await createNodes(page, ['A']);
-  await page.locator('.toolbar [data-command="graph.edge.create"]').click();
+  await page.locator('.toolbar [data-command="editing.edge.create"]').click();
   await expect(page.locator('.log-row').first()).toContainText('Nothing to pick for Pick target node');
 });
 
@@ -49,7 +49,7 @@ test('edge command seeds source and picks target by letter when only two nodes e
     v.bus.emit('selection.node.select', { id: sourceId });
   }, nodes[0].id);
 
-  await page.locator('.toolbar [data-command="graph.edge.create"]').click();
+  await page.locator('.toolbar [data-command="editing.edge.create"]').click();
   await expect(page.locator('.picker-letter')).toHaveCount(1);
   await expect.poll(() => page.evaluate(() => window.v2.graphs.current.edges().length)).toBe(0);
 
@@ -76,7 +76,7 @@ test('edge command lets the user choose among several target letters', async ({ 
     v.bus.emit('selection.node.select', { id: sourceId });
   }, nodes[0].id);
 
-  await page.locator('.toolbar [data-command="graph.edge.create"]').click();
+  await page.locator('.toolbar [data-command="editing.edge.create"]').click();
   await expect(page.locator('.picker-letter')).toHaveCount(2);
 
   await page.keyboard.press('s');

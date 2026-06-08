@@ -146,5 +146,12 @@ describe('v2 principles (enforced)', () => {
     expect(ctx.flags.isOn('ability.collapsible')).toBe(true);
     expect(ctx.contexts.commands.get('node.collapse.toggle')).toBeTruthy();
     expect(ctx.model.entity('node')?.abilities.map(ability => ability.id)).toContain('collapsible');
+
+    ctx.bus.emit('flag.toggle', { name: 'experiment.missing', on: false });
+    expect(ctx.flags.isOn('experiment.missing')).toBe(false);
+
+    ctx.runtime!.refresh();
+    await settle();
+    expect(ctx.contexts.commands.get('node.collapse.toggle')).toBeTruthy();
   });
 });

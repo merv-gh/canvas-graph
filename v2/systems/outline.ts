@@ -1,4 +1,7 @@
 import {
+  collectionCreateCommand,
+  collectionDeleteCommand,
+  collectionSelectCommand,
   commandShortcut,
   emptyState,
   type AppCollectionDef,
@@ -21,12 +24,15 @@ export function registerOutline(system: Registry) {
       const head = el('div', 'outline-head');
       const query = searches.get(collectionDef.id) ?? '';
       const title = el('input', 'panel-title outline-title-search') as HTMLInputElement;
+      const createCommand = collectionCreateCommand(collectionDef);
+      const deleteCommand = collectionDeleteCommand(collectionDef);
+      const selectCommand = collectionSelectCommand(collectionDef);
       title.placeholder = collectionDef.label;
       title.value = query;
       title.dataset.collectionId = collectionDef.id;
       title.setAttribute('aria-label', `Search ${collectionDef.label.toLowerCase()}`);
       const createButton = el('button', 'icon-button', '+') as HTMLButtonElement;
-      createButton.dataset.command = collectionDef.crud.create;
+      createButton.dataset.command = createCommand;
       head.append(title, createButton);
       section.append(head);
 
@@ -37,25 +43,25 @@ export function registerOutline(system: Registry) {
         const id = collectionDef.itemId(item);
         const row = el('div', 'outline-row');
         row.dataset.itemId = id;
-        const kind = collectionDef.entity?.kind;
-        if (kind) row.dataset.itemKind = kind;
+        const kind = collectionDef.kind;
+        row.dataset.itemKind = kind;
         if (collectionDef.id === 'graphs') row.dataset.graphId = id;
         if (collectionDef.id === 'nodes') row.dataset.nodeId = id;
         if (kind === 'edge') row.dataset.edgeId = id;
         const main = el('button', 'outline-main', collectionDef.itemLabel(item)) as HTMLButtonElement;
-        if (collectionDef.selectCommand) main.dataset.command = collectionDef.selectCommand;
+        main.dataset.command = selectCommand;
         const properties = collectionDef.entity?.properties?.length
           ? el('button', 'icon-button', '⚙') as HTMLButtonElement
           : null;
         if (properties) properties.dataset.command = 'item.properties.open';
         const remove = el('button', 'icon-button', 'x') as HTMLButtonElement;
-        remove.dataset.command = collectionDef.crud.delete;
+        remove.dataset.command = deleteCommand;
         row.append(...[main, properties, remove].filter(Boolean) as HTMLElement[]);
         list.append(row);
       });
       section.append(list);
       if (!filtered.length) {
-        const shortcut = commandShortcut(contexts.commands, collectionDef.crud.create);
+        const shortcut = commandShortcut(contexts.commands, createCommand);
         const title = query ? `No matches for "${query}"` : `No ${collectionDef.label.toLowerCase()} yet`;
         const hint = !query && shortcut ? `Press <kbd>${shortcut}</kbd> or click +` : '';
         const empty = emptyState(contexts, title, hint);

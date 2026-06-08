@@ -136,7 +136,7 @@ describe('v2 node commands', () => {
     expect(ctx.graphs.current.id).toBe('g1');
 
     const first = ctx.graphs.current;
-    expect(runCommand(ctx, 'graph.delete.current')).toBe(true);
+    expect(runCommand(ctx, 'graph.delete')).toBe(true);
     expect(ctx.graphs.current).not.toBe(first);
 
     // Direct create — smart-A would auto-attach the second node and create an
@@ -148,7 +148,7 @@ describe('v2 node commands', () => {
     expect(ctx.graphs.current.edges()).toHaveLength(1);
 
     ctx.bus.emit('selection.node.select', { id: a.id });
-    expect(runCommand(ctx, 'graph.node.delete.selected')).toBe(true);
+    expect(runCommand(ctx, 'graph.node.delete')).toBe(true);
     expect(ctx.graphs.current.getNode(a.id)).toBeUndefined();
     expect(ctx.graphs.current.edges()).toHaveLength(0);
   });

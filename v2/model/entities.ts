@@ -9,7 +9,7 @@ import type {
   PropertyDef,
   Rect,
 } from '../types';
-import { GraphEdge, GraphNode } from './graph';
+import { Graph, GraphEdge, GraphNode } from './graph';
 
 const property = <T, Patch>(def: PropertyDef<T, Patch>) => def;
 const entity = <T, Patch = unknown>(kind: string, def: Omit<EntityDef<T, Patch>, 'kind'>): EntityDef<T, Patch> => ({ kind, ...def });
@@ -21,6 +21,12 @@ const svg = <K extends keyof SVGElementTagNameMap>(name: K, attrs: Record<string
   Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, String(v)));
   return el;
 };
+
+export const graphEntity = entity<Graph>('graph', {
+  label: 'Graph',
+  labelOf: graph => graph.id,
+  abilities: [],
+});
 
 const edgeRenderer: EntityRenderer<GraphEdge> = {
   layer: 'svg',

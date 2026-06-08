@@ -13,7 +13,7 @@ describe('v2 UI command surfaces', () => {
     await createNodes(ctx, 2);
 
     expect(commandButton('editing.node.create')?.textContent).toBe('+ Node');
-    expect(commandButton('graph.edge.create')?.textContent).toBe('+ Edge');
+    expect(commandButton('editing.edge.create')?.textContent).toBe('+ Edge');
     expect(document.querySelectorAll('.outline-search')).toHaveLength(0);
 
     const search = document.querySelector<HTMLInputElement>('.outline-title-search[placeholder="Nodes"]')!;
@@ -39,8 +39,8 @@ describe('v2 UI command surfaces', () => {
     expect([...document.querySelectorAll('.command-row b')].some(row => row.textContent?.includes('Create edge'))).toBe(true);
 
     const row = [...document.querySelectorAll<HTMLElement>('.command-row')]
-      .find(candidate => candidate.dataset.commandId === 'graph.edge.create')!;
-    expect(row.querySelector('kbd')?.textContent).toContain('1');
+      .find(candidate => candidate.dataset.commandId === 'editing.edge.create')!;
+    expect(row.querySelector('kbd')?.textContent).toContain('E');
     row.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     await settle();
     // Edge create is now picker-driven — the palette closes and a picker

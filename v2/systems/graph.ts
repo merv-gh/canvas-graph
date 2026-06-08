@@ -1,9 +1,69 @@
-import type { GraphNode } from '../model';
-import { edgeRef, nodeRef, type Registry } from '../core';
+import type { GraphNode, GraphStore } from '../model';
+import { edgeRef, itemIdFrom, nodeRef, type Registry } from '../core';
 import { Places } from '../types';
+
+const nextGraphId = (graphs: GraphStore) =>
+  graphs.all().find(g => g.id !== graphs.current.id)?.id ?? `g${graphs.all().length + 1}`;
 
 export function registerGraph(system: Registry) {
   system('graph', ({ on, emit, graphs, contexts, selection, origin }) => {
+    const selectedEdgeId = () => {
+      const ref = selection.selected();
+      return ref?.kind === 'edge' ? ref.id : '';
+    };
+
+    contexts.commands.register([
+      {
+        id: 'graph.create',
+        label: 'Create graph',
+        event: 'graph.create',
+        group: 'graph',
+        shortcut: 'N',
+        input: { on: 'keydown', key: 'n', prevent: true },
+      },
+      {
+        id: 'graph.switch.next',
+        label: 'Switch graph',
+        event: 'graph.switch',
+        group: 'graph',
+        shortcut: 'G',
+        input: { on: 'keydown', key: 'g', prevent: true },
+        payload: () => ({ id: nextGraphId(graphs) }),
+      },
+      {
+        id: 'graph.switch',
+        label: 'Switch graph',
+        event: 'graph.switch',
+        group: 'graph',
+        hidden: true,
+        payload: source => ({ id: itemIdFrom(source.target) || graphs.current.id }),
+      },
+      {
+        id: 'graph.delete',
+        label: 'Delete graph',
+        event: 'graph.delete',
+        group: 'graph',
+        available: source => graphs.all().length > 1 && (!!itemIdFrom(source?.target) || !!graphs.current.id),
+        payload: source => ({ id: itemIdFrom(source.target) || graphs.current.id }),
+      },
+      {
+        id: 'graph.node.delete',
+        label: 'Delete node',
+        event: 'graph.node.delete',
+        group: 'graph',
+        available: source => !!itemIdFrom(source?.target) || !!selection.selectedNode(),
+        payload: source => ({ id: itemIdFrom(source.target) || selection.selectedNode()?.id || '' }),
+      },
+      {
+        id: 'graph.edge.delete',
+        label: 'Delete edge',
+        event: 'graph.edge.delete',
+        group: 'edge',
+        available: source => !!itemIdFrom(source?.target) || !!selectedEdgeId(),
+        payload: source => ({ id: itemIdFrom(source.target) || selectedEdgeId() }),
+      },
+    ]);
+
     on('graph.create', () => {
       const graph = graphs.create();
       graphs.switch(graph.id);

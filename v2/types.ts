@@ -371,28 +371,29 @@ export type CollectionToolbar = {
   surface?: AffordanceSurface;
   order?: number;
 };
-/** A collection declares the IDs of its CRUD commands (DX checks they exist).
- *  The actual commands are produced by `commands(api)` below — simple collections
- *  can omit it and the `collections` system will synthesize defaults. The api type
- *  is supplied by core.ts (CollectionCommandsApi) to avoid a circular import. */
-export type CollectionDef<T, Ctx = unknown, Api = unknown> = {
+export type CollectionDef<T, Ctx = unknown> = {
   id: string;
   label: string;
+  /** Item kind for command/id derivation. Defaults to `entity.kind`, then singular collection id. */
+  kind?: string;
   entity?: EntityDef<T>;
   items: (ctx: Ctx) => T[];
+  /** Defaults to `item.id`; DX reports an error if an item cannot provide one. */
+  itemId?: (item: T) => Id;
+  /** Defaults to `entity.labelOf`, then item id. */
+  itemLabel?: (item: T) => string;
+  toolbar?: CollectionToolbar | false;
+  search?: true;
+  order?: 'created';
+};
+export type ResolvedCollectionDef<T, Ctx = unknown> = Omit<CollectionDef<T, Ctx>, 'kind' | 'itemId' | 'itemLabel' | 'search' | 'order'> & {
+  kind: string;
   itemId: (item: T) => Id;
   itemLabel: (item: T) => string;
-  selectCommand?: string;
-  crud: { create: string; delete: string };
-  /** Factory called once at boot with the live app api. Returns command specs the
-   *  collection owns (create, delete, navigation). Lets the collection close over
-   *  graphs/selection/view without leaking state. */
-  commands?: (api: Api) => CommandSpec[];
-  toolbar?: CollectionToolbar | false;
   search: true;
   order: 'created';
 };
-export type ModelDef<Ctx = unknown, Api = unknown> = {
+export type ModelDef<Ctx = unknown> = {
   entities: EntityDef<unknown, unknown>[];
-  collections: CollectionDef<unknown, Ctx, Api>[];
+  collections: CollectionDef<unknown, Ctx>[];
 };
