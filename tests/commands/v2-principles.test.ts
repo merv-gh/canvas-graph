@@ -127,4 +127,24 @@ describe('v2 principles (enforced)', () => {
     ctx.bus.emit('view.zoom.in');
     expect(ctx.contexts.view.get().scale).toBe(before);
   });
+
+  it('flag.toggle stops and restarts the owning registry entry at runtime', async () => {
+    const ctx = bootV2();
+    await settle();
+
+    expect(ctx.contexts.commands.get('node.collapse.toggle')).toBeTruthy();
+    ctx.bus.emit('flag.toggle', { name: 'ability.collapsible', on: false });
+    await settle();
+
+    expect(ctx.flags.isOn('ability.collapsible')).toBe(false);
+    expect(ctx.contexts.commands.get('node.collapse.toggle')).toBeUndefined();
+    expect(ctx.model.entity('node')?.abilities.map(ability => ability.id)).not.toContain('collapsible');
+
+    ctx.bus.emit('flag.toggle', { name: 'ability.collapsible', on: true });
+    await settle();
+
+    expect(ctx.flags.isOn('ability.collapsible')).toBe(true);
+    expect(ctx.contexts.commands.get('node.collapse.toggle')).toBeTruthy();
+    expect(ctx.model.entity('node')?.abilities.map(ability => ability.id)).toContain('collapsible');
+  });
 });

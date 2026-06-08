@@ -14,12 +14,14 @@ test('v2 routes DOM events through input adapter only', async () => {
   const listeners = files.flatMap(file => fs
     .readFileSync(file, 'utf8')
     .split('\n')
-    .filter(line => line.includes('addEventListener'))
+    .filter(line => line.includes('addEventListener') && !line.trim().startsWith('*'))
     .map(line => `${path.relative(v2Dir, file)}: ${line.trim()}`));
 
-  expect(listeners).toHaveLength(2);
+  expect(listeners).toHaveLength(4);
   expect(listeners).toContain("app.ts: window.addEventListener('DOMContentLoaded', () => {");
   expect(listeners.some(line => line.includes('core/commands.ts:') && line.includes('root.addEventListener(type, route'))).toBe(true);
+  expect(listeners.some(line => line.includes('core/keyboard.ts:') && line.includes("input.addEventListener('keydown'"))).toBe(true);
+  expect(listeners.some(line => line.includes('core/keyboard.ts:') && line.includes("input.addEventListener('input'"))).toBe(true);
 });
 
 test('v2 help rejects duplicate shortcuts without saving', async ({ page }) => {
@@ -54,9 +56,10 @@ test('v2 configurable ability opens node properties', async ({ page }) => {
   await page.getByRole('button', { name: '+ Node' }).click();
 
   const node = page.locator('.node').first();
+  const toolbar = page.locator('.node-toolbar');
   await expect(node).toBeVisible();
-  await expect(node.locator('[data-command="node.collapse.toggle"]')).toHaveText('-');
-  await node.locator('[data-command="item.properties.open"]').click();
+  await expect(toolbar.locator('[data-command="node.collapse.toggle"]')).toHaveText('-');
+  await toolbar.locator('[data-command="item.properties.open"]').click();
 
   await expect(page.locator('.modal-layer[data-visual="properties"]')).toBeVisible();
   await expect(page.locator('.modal-head')).toContainText('Node Properties');

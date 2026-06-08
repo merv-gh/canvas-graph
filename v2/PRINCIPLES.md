@@ -294,8 +294,11 @@ goal before building anything.
 ### Already covered
 
 - `ItemRef.parent: Id[]` exists and is honoured by `selection`, `focus`,
-  `itemTargets`, and `itemKey` deep-equality. Nested addressing works
-  end-to-end today.
+  `itemTargets`, `itemKey` deep-equality, and the DOM `data-item-parent`
+  roundtrip. Nested addressing works end-to-end today.
+- `Graph.registerItemStore(kind, () => Item[])` lets a system plug in a new
+  item kind without editing `Graph`. `Graph.itemsOfKind(kind)` and
+  `Graph.getItem(ref)` resolve those stores generically.
 - Render iterates `model.entities()` through `EntityDef.render`. A new entity
   kind (`'container'`) can declare its own renderer with zero render edits.
   Z-order falls out of declaration order — put `container` before `node` in
@@ -311,32 +314,25 @@ goal before building anything.
 
 ### Must land before containers ship (still single-file friendly)
 
-1. **`Graph.itemsOfKind(kind)` extension point.**
-   Today it switches on `'node' | 'edge'`. A container system needs to plug
-   its own item store in. Replace the switch with a registry on `Graph`:
-   `graph.registerItemStore(kind, () => Item[])`. Container system calls
-   `graph.registerItemStore('container', () => containers)` at boot. No core
-   commit needed for each new kind.
-
-2. **`graph.node.updated` cascade.**
+1. **`graph.node.updated` cascade.**
    Dragging a container has to move its children. The container system listens
    to `graph.node.updated`, computes the delta, and emits
    `graph.node.update` for each child. This already works today —
    `nodeLifecycle` is the proof. So: zero core change, just a feature-style
    listener in `container.ts`.
 
-3. **`itemTargets` from a side-source.**
+2. **`itemTargets` from a side-source.**
    Containers need to be jump targets and picker candidates. The targets API
    already accepts a `register(source, provider)` from any system —
    `container.ts` calls it the same way `graph.ts` does today.
 
-4. **Selection precedence.**
+3. **Selection precedence.**
    Clicking a child should not bubble to the container. Today
    `selection.item.select` matches `[data-item-kind][data-item-id]` via
    `closest()`, so the *innermost* tagged element wins — already correct.
    Containers just need to be rendered *behind* children (rule #1 above).
 
-5. **Layout-awareness (acceptable gap for v1).**
+4. **Layout-awareness (acceptable gap for v1).**
    `tidy` / `radial` / `grid` walk the flat node list and ignore parenting.
    We accept the v1 container does not participate in tidy; if a parent has
    children, layout runs on the parent only and the user lays out children
@@ -346,9 +342,8 @@ goal before building anything.
 
 ### Bottom line
 
-Containers are one file plus *one* core primitive: `graph.registerItemStore`.
-That core change is small (~10 lines) and pays for any future entity kind, not
-just containers. Once it lands, every new kind ships as a single file.
+Containers should now be one file plus a model declaration. The remaining gaps
+are behavior policy, not missing core machinery.
 
 If we end up needing more than that to ship containers, we got the abstraction
 wrong somewhere. Stop, fix the abstraction, then come back.

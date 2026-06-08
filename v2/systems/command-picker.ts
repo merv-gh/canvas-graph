@@ -122,15 +122,16 @@ export function registerCommandPicker(system: Registry) {
       });
     };
 
-    on('commandPicker.open', ({ commandId }) => {
+    on('commandPicker.open', ({ commandId, source }) => {
       const command = contexts.commands.get(commandId);
       if (!command?.picker) return;
+      const pickerSource: CommandSource = source ?? { origin: 'keyboard' };
       cancel();
       active = {
         commandId,
         command,
         picker: command.picker,
-        source: { origin: 'keyboard' },
+        source: pickerSource,
         values: {},
         stepIndex: 0,
       };

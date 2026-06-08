@@ -2,6 +2,7 @@ import { registerAbilitySystems } from './abilities';
 import { createAppContext, createFlags, localStorageIo, memoryIo, registry } from './core';
 import { registerFeatures } from './features';
 import { appModel, graphStore } from './model';
+import { installRuntimeFeatureManager } from './runtime';
 import { registerSystems } from './systems';
 
 const systems = registry('system');
@@ -22,6 +23,7 @@ window.addEventListener('DOMContentLoaded', () => {
   // win. To force a flag off at boot, pass it here or call window.v2.flags.set(...).
   const flags = createFlags({}, io);
   const ctx = createAppContext(graphStore(), appModel, flags, io);
+  installRuntimeFeatureManager(ctx, { systems, abilities, features });
   systems.start(ctx);
   abilities.start(ctx);
   features.start(ctx);

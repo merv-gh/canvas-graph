@@ -30,7 +30,9 @@ export type CreateHints = {
 };
 export type NonEmptyArray<T> = [T, ...T[]];
 export type ModalVisual = 'panel' | 'command' | 'properties';
-export type ItemKind = 'graph' | 'node' | 'edge';
+export interface CustomItemKinds {}
+export type BuiltinItemKind = 'graph' | 'node' | 'edge';
+export type ItemKind = BuiltinItemKind | Extract<keyof CustomItemKinds, string>;
 /** Addresses an item in the model. `parent` is the optional ancestor chain for
  *  nested-graph addressing — outermost graph first. A flat node lives at
  *  `{ kind: 'node', id: 'e1' }`; a node inside a container graph lives at
@@ -82,7 +84,7 @@ interface BuiltinEvents {
   'help.open': void;
   'commandForm.open': { commandId: string; seed?: Record<string, string> };
   'commandForm.submit': { commandId: string; values: Record<string, string> };
-  'commandPicker.open': { commandId: string };
+  'commandPicker.open': { commandId: string; source?: CommandSource };
   'commandPicker.step': { commandId: string; step: string; ref: ItemRef };
   'commandPicker.cancel': void;
   'commandPicker.submit': { commandId: string; values: Record<string, ItemRef> };
@@ -322,6 +324,8 @@ export type AbilityDef<T = unknown> = { id: string; actions: NonEmptyArray<Actio
 export type EntityRenderGraph = {
   getNode(id: Id): NodeEntity | undefined;
   getEdge(id: Id): EdgeEntity | undefined;
+  getItem(ref: ItemRef): unknown | undefined;
+  itemsOfKind<T = unknown>(kind: string): T[];
 };
 
 /** Per-item render scope. The render system constructs this once per item and

@@ -1,6 +1,6 @@
-import { commandShortcut, emptyState, type Registry } from '../core';
+import { commandShortcut, emptyState, tagItem, type Registry } from '../core';
 import { Places } from '../types';
-import type { ActionDef, AffordanceDef, EntityDef, EntityRenderCtx, ItemKind, ItemRef } from '../types';
+import type { ActionDef, AffordanceDef, EntityDef, EntityRenderCtx, ItemRef } from '../types';
 import { uiValue } from '../core';
 
 /** render.stage owns the stage paint: nodes, edges, overlays, empty state.
@@ -40,10 +40,6 @@ export function registerRenderStage(system: Registry) {
         });
       });
     };
-    const tagItem = (el: Element, ref: ItemRef) => {
-      el.setAttribute('data-item-kind', ref.kind);
-      el.setAttribute('data-item-id', ref.id);
-    };
     const applyItemModes = (el: Element, ref: ItemRef) => {
       const classes = [...new Set(contexts.itemModes.for(ref).map(mode => mode.className ?? mode.mode).filter(Boolean))];
       if (!classes.length) return;
@@ -81,7 +77,7 @@ export function registerRenderStage(system: Registry) {
           const renderer = entityDef.render;
           if (!renderer) return;
           const target = renderer.layer === 'svg' ? svgLayer : layer;
-          graphs.current.itemsOfKind(entityDef.kind as ItemKind).forEach(item => {
+          graphs.current.itemsOfKind(entityDef.kind).forEach(item => {
             const b = renderer.bounds?.(item);
             if (b && !contexts.view.isVisible(Places.Stage, b, 160)) return;
             const el = renderer.draw(item, renderCtxFor(entityDef, item));

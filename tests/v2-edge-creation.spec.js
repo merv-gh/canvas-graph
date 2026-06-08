@@ -32,17 +32,15 @@ test('edge command explains why it cannot run before two nodes exist', async ({ 
   await boot(page);
 
   await page.locator('.toolbar [data-command="graph.edge.create"]').click();
-  await expect(page.locator('.modal-head')).toContainText('Create edge');
-  await expect(page.locator('.form-error')).toHaveText('Create at least two nodes before creating an edge.');
-  await expect(page.locator('.log-row').first()).toContainText('Create at least two nodes before creating an edge.');
+  await expect(page.locator('.modal-layer')).toHaveCount(0);
+  await expect(page.locator('.log-row').first()).toContainText('Nothing to pick for Pick source node');
 
-  await page.getByRole('button', { name: 'Close' }).click();
   await createNodes(page, ['A']);
   await page.locator('.toolbar [data-command="graph.edge.create"]').click();
-  await expect(page.locator('.form-error')).toHaveText('Create at least two nodes before creating an edge.');
+  await expect(page.locator('.log-row').first()).toContainText('Nothing to pick for Pick target node');
 });
 
-test('edge command asks for source and target even when only two nodes exist', async ({ page }) => {
+test('edge command seeds source and picks target by letter when only two nodes exist', async ({ page }) => {
   await boot(page);
   const nodes = await createNodes(page, ['A', 'B']);
 
@@ -52,12 +50,10 @@ test('edge command asks for source and target even when only two nodes exist', a
   }, nodes[0].id);
 
   await page.locator('.toolbar [data-command="graph.edge.create"]').click();
-  await expect(page.locator('.modal-head')).toContainText('Create edge');
-  await expect(page.locator('[data-form-field="From"]')).toHaveValue(nodes[0].id);
-  await expect(page.locator('[data-form-field="To"]')).toHaveValue(nodes[1].id);
+  await expect(page.locator('.picker-letter')).toHaveCount(1);
   await expect.poll(() => page.evaluate(() => window.v2.graphs.current.edges().length)).toBe(0);
 
-  await page.getByRole('button', { name: 'Create edge' }).click();
+  await page.keyboard.press('a');
 
   await expect.poll(() => page.evaluate(() =>
     window.v2.graphs.current.edges().map(edge => ({ From: edge.From, To: edge.To })),
@@ -71,7 +67,7 @@ test('edge command asks for source and target even when only two nodes exist', a
   expect(box.stroke).not.toBe('none');
 });
 
-test('edge command prefills first valid target when selected source has several possible targets', async ({ page }) => {
+test('edge command lets the user choose among several target letters', async ({ page }) => {
   await boot(page);
   const nodes = await createNodes(page, ['A', 'B', 'C']);
 
@@ -81,13 +77,9 @@ test('edge command prefills first valid target when selected source has several 
   }, nodes[0].id);
 
   await page.locator('.toolbar [data-command="graph.edge.create"]').click();
-  await expect(page.locator('.modal-head')).toContainText('Create edge');
-  await expect(page.locator('[data-form-field="From"]')).toHaveValue(nodes[0].id);
-  await expect(page.locator('[data-form-field="To"]')).toHaveValue(nodes[1].id);
-  await expect(page.locator('datalist option')).toHaveCount(6);
+  await expect(page.locator('.picker-letter')).toHaveCount(2);
 
-  await page.locator('[data-form-field="To"]').fill(nodes[2].id);
-  await page.getByRole('button', { name: 'Create edge' }).click();
+  await page.keyboard.press('s');
 
   await expect(page.locator('.modal-layer')).toHaveCount(0);
   await expect.poll(() => page.evaluate(() =>

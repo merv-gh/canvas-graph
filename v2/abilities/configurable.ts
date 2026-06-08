@@ -1,4 +1,4 @@
-import { itemRefFrom, type Registry } from '../core';
+import { itemParentAttr, itemRefFrom, type Registry } from '../core';
 import type { GraphEdge, GraphNode } from '../model';
 import type {
   EdgePatch,
@@ -29,19 +29,16 @@ export function registerConfigurable(system: Registry) {
   system('ability.configurable', ({ on, emit, contexts, graphs, model, selection }) => {
     type ConfigItem = GraphNode | GraphEdge;
     type ConfigPatch = NodePatch | EdgePatch;
-    const formRef = (target?: Element | null): ItemRef => {
-      const form = target?.closest('.properties');
-      return {
-        kind: (form?.getAttribute('data-item-kind') as ItemRef['kind']) || 'node',
-        id: form?.getAttribute('data-item-id') ?? '',
-      };
-    };
+    const formRef = (target?: Element | null): ItemRef =>
+      itemRefFrom(target?.closest('.properties')) ?? { kind: 'node', id: '' };
     const item = (ref: ItemRef): ConfigItem | undefined => graphs.current.getItem(ref) as ConfigItem | undefined;
     const entityDef = (ref: ItemRef) => model.entity<ConfigItem, ConfigPatch>(ref.kind);
     const renderProperties = (ref: ItemRef, item: ConfigItem, properties: PropertyDef<ConfigItem, ConfigPatch>[]) => {
       const form = contexts.templates.clone('properties');
       form.dataset.itemKind = ref.kind;
       form.dataset.itemId = ref.id;
+      const parent = itemParentAttr(ref.parent);
+      if (parent) form.dataset.itemParent = parent;
       const fields = contexts.templates.slot(form, 'fields');
       const byGroup = new Map<string, PropertyDef<ConfigItem, ConfigPatch>[]>();
       properties.forEach(prop => {

@@ -8,10 +8,17 @@ import {
   nodeRect,
   parseShortcut,
   shortcutOf,
+  tagItem,
 } from '../../v2/core';
 import { Graph, graphStore } from '../../v2/model';
 import type { CommandSpec } from '../../v2/types';
 import { bootV2, runCommand, settle } from './v2-testkit';
+
+declare module '../../v2/types' {
+  interface CustomItemKinds {
+    container: unknown;
+  }
+}
 
 describe('v2 selection polymorphism', () => {
   it('holds an ItemRef of any kind, with typed node/edge projections', async () => {
@@ -137,6 +144,24 @@ describe('v2 model and core helpers', () => {
     expect(graph.updateEdge('missing', { Label: { text: 'x' } })).toBe(false);
   });
 
+  it('opens graph item stores and DOM refs for future container-like kinds', () => {
+    const graph = Graph.new('g-test');
+    const containers = [{ kind: 'container' as const, id: 'c1', parent: ['root'], title: 'Group' }];
+    const stop = graph.registerItemStore('container', () => containers);
+
+    expect(graph.itemsOfKind('container')).toEqual(containers);
+    expect(graph.getItem({ kind: 'container', id: 'c1', parent: ['root'] })).toBe(containers[0]);
+    expect(graph.getItem({ kind: 'container', id: 'c1' })).toBeUndefined();
+
+    const el = document.createElement('button');
+    tagItem(el, { kind: 'container', id: 'c1', parent: ['root'] });
+    expect(el.dataset.itemParent).toBe('["root"]');
+    expect(itemRefFrom(el)).toEqual({ kind: 'container', id: 'c1', parent: ['root'] });
+
+    stop();
+    expect(graph.itemsOfKind('container')).toEqual([]);
+  });
+
   it('switches and deletes graphs while keeping a current graph', () => {
     const graphs = graphStore();
     const first = graphs.current;
@@ -157,8 +182,7 @@ describe('v2 model and core helpers', () => {
     expect(grouped(['a', 'ab', 'b'], item => item[0])).toEqual([['a', ['a', 'ab']], ['b', ['b']]]);
 
     const el = document.createElement('div');
-    el.dataset.itemKind = 'edge';
-    el.dataset.itemId = 'r1';
+    tagItem(el, { kind: 'edge', id: 'r1' });
     expect(itemRefFrom(el)).toEqual({ kind: 'edge', id: 'r1' });
 
     const io = memoryIo();

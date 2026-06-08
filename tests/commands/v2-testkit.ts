@@ -10,6 +10,7 @@ import {
 } from '../../v2/core';
 import { registerFeatures } from '../../v2/features';
 import { appModel, graphStore } from '../../v2/model';
+import { installRuntimeFeatureManager } from '../../v2/runtime';
 import { registerSystems } from '../../v2/systems';
 import { Places, type CommandSource, type FeatureFlags } from '../../v2/types';
 
@@ -33,11 +34,12 @@ export function bootV2(flags: FeatureFlags = {}) {
   registerFeatures(features);
   const io = memoryIo();
   const ctx = createAppContext(graphStore(), appModel, createFlags(flags, io), io);
+  installRuntimeFeatureManager(ctx, { systems, abilities, features });
   systems.start(ctx);
   abilities.start(ctx);
   features.start(ctx);
   ctx.bus.emit('app.start');
-  const booted = Object.assign(ctx, { registries: { systems, abilities, features } });
+  const booted = ctx;
   window.v2 = booted;
   const stage = ctx.contexts.places.el(Places.Stage);
   if (stage) {

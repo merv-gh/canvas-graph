@@ -91,7 +91,7 @@ export function registerCommandModal(system: Registry) {
     };
     /** Flag toggle rows shown at the top of Help. Flags are grouped by kind
      *  (system / ability / feature); flipping a checkbox emits `flag.toggle`,
-     *  which calls flags.set and persists via the io adapter. The single Help
+     *  which the runtime feature manager applies to the owning registry. The single Help
      *  panel becomes the place a user goes to disable any non-core piece. */
     const renderFlagsSection = () => {
       const section = contexts.templates.clone('command-section');
@@ -233,6 +233,5 @@ export function registerCommandModal(system: Registry) {
       if (!(input instanceof HTMLInputElement) || !syncShortcutConflict(input)) return;
       contexts.commands.setShortcut(id, input.value);
     });
-    on('flag.toggle', ({ name, on: enabled }) => { if (name) flags.set(name, enabled); });
   });
 }

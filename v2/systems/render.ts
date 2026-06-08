@@ -1,4 +1,4 @@
-import { appendRenderable, factScope, type Registry } from '../core';
+import { appendRenderable, factScope, itemParentAttr, type Registry } from '../core';
 import { Places } from '../types';
 import type { ItemRef, Place, RedrawScope, Renderable } from '../types';
 
@@ -12,8 +12,11 @@ export function registerRender(system: Registry) {
     const root = document.getElementById('app')!;
     const views = new Map<Place, Map<string, Renderable>>();
 
-    const itemSelector = (ref: ItemRef) =>
-      `[data-item-kind="${ref.kind}"][data-item-id="${ref.id.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"]`;
+    const attr = (value: string) => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const itemSelector = (ref: ItemRef) => {
+      const parent = itemParentAttr(ref.parent);
+      return `[data-item-kind="${attr(ref.kind)}"][data-item-id="${attr(ref.id)}"]${parent ? `[data-item-parent="${attr(parent)}"]` : ':not([data-item-parent])'}`;
+    };
     const activeElement = () => document.activeElement as (Element & { blur?: () => void }) | null;
     const blurActiveItem = () => {
       const active = activeElement();

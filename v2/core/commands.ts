@@ -88,7 +88,7 @@ export function commandsContext(bus: Bus, isFlagOn: (origin?: string) => boolean
       const resolved: CommandSource = source.origin ? source : { ...source, origin: originFromEvent(source.event) };
       const payload = command.payload?.(resolved);
       if (command.picker) {
-        bus.emit('commandPicker.open', { commandId: id });
+        bus.emit('commandPicker.open', { commandId: id, source: resolved });
         return true;
       }
       if (command.form?.shouldOpen?.(payload, resolved)) {

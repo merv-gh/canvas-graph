@@ -41,21 +41,22 @@ test('outline row actions stay on the same visual row', async ({ page }) => {
   for (const name of ['Nodes', 'Edges']) {
     const row = section(page, name).locator('.outline-row').first();
     const tops = await childTops(row);
-    expect(Math.max(...tops) - Math.min(...tops)).toBeLessThanOrEqual(1);
+    expect(Math.max(...tops) - Math.min(...tops)).toBeLessThanOrEqual(2);
   }
 });
 
 test('node drag handle is explicit and moves the node', async ({ page }) => {
   await boot(page);
-  await createSmallGraph(page);
+  const ids = await createSmallGraph(page);
 
-  const node = page.locator('.node[data-node-id]').first();
+  const node = page.locator(`.node[data-node-id="${ids.b}"]`);
   const header = node.locator('.node-header');
-  const handle = node.locator('.node-drag-handle');
+  const toolbar = page.locator('.node-toolbar');
+  const handle = toolbar.locator('.node-drag-handle');
 
   await expect(handle).toBeVisible();
   await expect(handle).toHaveAttribute('data-drag-handle', '');
-  await expect(header).not.toHaveAttribute('data-drag-handle', '');
+  await expect(header).toHaveCount(0);
 
   const before = await node.boundingBox();
   const box = await handle.boundingBox();

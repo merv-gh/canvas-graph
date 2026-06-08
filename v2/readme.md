@@ -42,7 +42,7 @@ and full Vite serving.
 - `app.ts` is only the composition entrypoint.
 - `core.ts` owns the event bus, contexts, command registry, render helpers, view math, and registry helper.
 - `core/` owns small core-adjacent adapters such as IO and selection storage.
-- `model.ts` owns graph data structures plus entity/collection declarations.
+- `model.ts` is a compatibility barrel; `model/graph.ts` owns storage, `model/entities.ts` owns entity render/property declarations, and `model/collections.ts` owns collection CRUD metadata.
 - `abilities/` owns one file per ability; `abilities.ts` is only a compatibility barrel.
 - `systems/` owns one file per system; `systems.ts` is only a compatibility barrel.
 - `features.ts` owns cross-system workflows that intentionally coordinate several domains.
@@ -66,7 +66,7 @@ and full Vite serving.
 - `modal`: registers modal commands and renders modal contents.
 - `commandForm`: renders command-required input forms, then emits the command event after validation.
 - `commandModal`: renders Palette and Help from the same searchable grouped command modal definition.
-- `domain`: registers app/domain commands implied by collections.
+- `collections`: registers app/domain commands implied by collections.
 - `view.zoom`: owns zoom, fit-all, and fit-selected.
 - `view.pan`: owns background pan.
 - `graph`: adapts graph CRUD/switch events to the current `Graph`.
@@ -90,7 +90,7 @@ This keeps the add/remove test simple: if an entity no longer has an ability, it
 
 ## Architectural Decisions
 
-- Domain declarations live in `model.ts`; runtime contexts live in `core.ts`; app composition lives in `app.ts`.
+- Domain declarations live in `model/`; runtime contexts live in `core.ts`; app composition lives in `app.ts`.
 - Raw DOM events enter through the input adapter only; systems register commands and listen to bus events.
 - Systems register command arrays, even when they currently own one command.
 - Commands that need missing input declare a `form`; `commandForm` owns the modal, fields, validation, and submit flow.
@@ -150,9 +150,9 @@ const appModel = {
 
 Editable affordances use the same visual cue everywhere: dashed underline plus edit-in-place. Node titles and Help hotkeys already share that rule.
 
-Configurable affordances use the item properties command. Nodes expose it as a header gear button and as the `Open item properties` command when a node is selected. The properties modal is schema-driven: fields, labels, inputs, values, and patches come from `entity.properties`.
+Configurable affordances use the item properties command. Nodes expose it through the selected-node toolbar and as the `Open item properties` command when a node is selected. The properties modal is schema-driven: fields, labels, inputs, values, and patches come from `entity.properties`.
 
-Entity templates expose structural slots, not hardcoded abilities. The node template has `header:start`, `title`, and `header:end`; render fills those slots from ability affordance metadata.
+Entity templates expose structural slots, not hardcoded abilities. Node body rendering stays simple; selected-item chrome is filled from ability affordance metadata.
 
 ## Modal Model
 
@@ -189,7 +189,7 @@ Node creation flow:
 
 This is more verbose than a direct function call, but the debug story is much cleaner: the event log shows the lifecycle.
 
-`edgeLifecycle` mirrors that split. The visible `graph.edge.create` command always asks for source/target node refs with autocomplete, prefilled from the current selection when possible. If the graph has fewer than two nodes, the form and event log explain why the edge cannot be created. The feature validates real, distinct endpoints and only then emits the storage event `graph.edge.create`.
+`edgeLifecycle` mirrors that split. The visible `graph.edge.create` command asks for source/target node refs with a letter picker, prefilled from the current selection when possible. If a picker step has no candidates, the event log explains why the edge cannot be created. The feature validates real, distinct endpoints and only then emits the storage event `graph.edge.create`.
 
 ## Event Convention
 
@@ -254,14 +254,14 @@ There are no hidden archetype defaults or capability merges. If a future capabil
 
 The declaration/validation layer grew the total v2 code, but the entrypoint is now tiny and each concept has a narrower home:
 
-- `v2/app.ts`: `32` lines
-- `v2/core.ts`: `324` lines
-- `v2/core/`: `556` lines across focused adapters
-- `v2/systems.ts`: `1` line, plus `v2/systems/`: `1,159` lines
-- `v2/abilities.ts`: `1` line, plus `v2/abilities/`: `440` lines
-- `v2/features.ts`: `32` lines
-- `v2/model.ts`: `396` lines
-- `v2/types.ts`: `283` lines
+- `v2/app.ts`: `33` lines
+- `v2/core.ts`: `360` lines
+- `v2/core/`: focused adapters
+- `v2/systems.ts`: `1` line, plus `v2/systems/`
+- `v2/abilities.ts`: `1` line, plus `v2/abilities/`
+- `v2/features.ts`: `35` lines
+- `v2/model.ts`: `5` line compatibility barrel, plus `v2/model/`
+- `v2/types.ts`: `398` lines
 
 The current tradeoff is explicitness over smallest total line count. `core.ts` is below target; new foundation work should keep shrinking or move into focused adapters.
 
