@@ -46,6 +46,8 @@ export { emptyState, kbdHint } from './core/templates';
 export { grouped } from './core/util';
 export { factScope } from './core/redraw';
 export { createModelRegistry } from './core/model-registry';
+export { boundsOf, unionRect, expandRect, rectCenter } from './core/geometry';
+export { createNesting, type NestApi } from './core/nesting';
 
 export type Contexts = ReturnType<typeof createContexts>;
 export type Models = ReturnType<typeof createModelRegistry>;

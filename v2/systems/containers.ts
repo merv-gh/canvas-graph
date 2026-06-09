@@ -1,5 +1,5 @@
-import { collapsible, configurable, draggable, editable, nudgeable, selectable } from '../abilities';
-import { itemIdFrom, itemRefFrom, type Registry } from '../core';
+import { collapsible, configurable, draggable, editable, nudgeable, resizeable, selectable } from '../abilities';
+import { boundsOf, createNesting, expandRect, itemIdFrom, unionRect, type Registry } from '../core';
 import { Places } from '../types';
 import type {
   EntityDef,
@@ -13,30 +13,16 @@ import type {
 } from '../types';
 
 /**
- * Container system — the single-file mental test, v2.
+ * Container system — one file, one mental model.
  *
- * What this file owns:
- *   1. Container kind + events (declare module).
- *   2. Container data + a Map-backed store.
- *   3. Entity declaration with abilities (selectable, draggable, nudgeable,
- *      editable, collapsible, configurable) — works because all those
- *      abilities have *structural* generic constraints now.
- *   4. HTML renderer with [data-editable-title] for editable + wireAffordances
- *      for in-template chrome.
- *   5. Hierarchy provider — "this item lives in container X".
- *   6. itemTargets provider — containers appear in jump/picker.
- *   7. Collection registration + toolbar button.
- *   8. Commands: create, delete, move-into (picker), remove-from.
- *   9. item.update listener for kind:'container' (storage handler).
- *  10. Listeners for graph.node.deleted (cleanup) + selection.item.delete
- *      (delete via X when a container is selected).
- *  11. Drag cascade: when a container moves, its children move with it.
+ * Container is a *kind*. Its data, abilities, renderer, commands, and storage
+ * handler live here. Everything reusable (parent walking + cycle guard,
+ * geometry) lives behind `createNesting` / `boundsOf|unionRect|expandRect`
+ * in core, so this file stays focused on container-specific policy.
  */
 
 declare module '../types' {
-  interface CustomItemKinds {
-    container: unknown;
-  }
+  interface CustomItemKinds { container: unknown }
   interface CustomEvents {
     'editing.container.create': { Label?: { text: string }; at?: Position };
     'container.created': { id: Id };
@@ -56,136 +42,112 @@ type Container = {
   Position: Position;
   Size: Size;
   Collapsed?: boolean;
-  /** Refs of nested items (nodes or other containers). Storing refs (not just
-   *  ids) keeps the kind around so the resolver doesn't have to probe stores. */
+  /** Default true: visual rect is auto-fit from children. Manual resize flips this. */
+  AutoFit?: boolean;
   Children: ItemRef[];
 };
-
-type ContainerPatch = Partial<Pick<Container, 'Label' | 'Position' | 'Size' | 'Collapsed'>>;
+type ContainerPatch = Partial<Pick<Container, 'Label' | 'Position' | 'Size' | 'Collapsed' | 'AutoFit'>>;
 
 const DEFAULT_SIZE: Size = { w: 320, h: 200 };
-const PARENT_KEY = (ref: ItemRef) => `${ref.kind}:${ref.id}`;
+const PADDING = 24;
+const LABEL_BAND = 18;
+
+// ---------- The system ----------
 
 export function registerContainers(system: Registry) {
   system('containers', (ctx) => {
     const { on, emit, contexts, graphs, selection, contribute, origin } = ctx;
     let next = 1;
     const containers = new Map<Id, Container>();
-    /** Item → parent container. Keyed by `kind:id` so node "e1" and container
-     *  "e1" don't collide if both ever exist. Walked by hierarchy.parentRefOf. */
-    const parentOf = new Map<string, Id>();
 
-    // Register an item store on the current graph (and on every future graph) so
-    // graph.itemsOfKind('container') / graph.getItem({kind:'container', id}) work.
-    const storeProvider = () => [...containers.values()];
-    let storeOff = graphs.current.registerItemStore<Container>('container', storeProvider);
+    /** Parent / cycle / add / remove machinery — reusable across any nestable kind. */
+    const nest = createNesting<Container>({
+      parents: containers,
+      parentKind: 'container',
+      onChange: id => emit('container.children.changed', { id }),
+    });
+
+    // Item store registration on the current graph (and on every future graph).
+    const provider = () => [...containers.values()];
+    let storeOff = graphs.current.registerItemStore<Container>('container', provider);
     on('graph.switched', () => {
       storeOff();
-      storeOff = graphs.current.registerItemStore<Container>('container', storeProvider);
+      storeOff = graphs.current.registerItemStore<Container>('container', provider);
     });
 
-    // Hierarchy provider — the seam that makes layout/render/selection nested-aware.
-    contexts.hierarchy.register(origin, {
-      parentRefOf: (ref) => {
-        const cid = parentOf.get(PARENT_KEY(ref));
-        return cid && containers.has(cid) ? { kind: 'container' as const, id: cid } : undefined;
-      },
-    });
-
-    // Jump / picker targets.
+    contexts.hierarchy.register(origin, { parentRefOf: nest.parentRefOf });
     contexts.itemTargets.register(origin, () => [...containers.values()].map(c => ({
       ref: { kind: 'container', id: c.id } as ItemRef,
       label: c.Label.text || c.id,
       anchor: c.Position,
     })));
 
-    // ----- Entity declaration -----
-    const containerBounds = (c: Container): Rect => ({
-      x: c.Position.x - c.Size.w / 2,
-      y: c.Position.y - c.Size.h / 2,
-      w: c.Size.w,
-      h: c.Size.h,
-    });
-    const containerRenderer: EntityRenderer<Container> = {
+    // ---------- Auto-fit visual rect ----------
+    const childBounds = (ref: ItemRef): Rect | null => {
+      if (ref.kind === 'container') return visualRect(containers.get(ref.id) ?? null);
+      return boundsOf(graphs.current.getItem(ref) as { Position?: Position; Size?: Size } ?? {}, { w: 80, h: 40 });
+    };
+    const visualRect = (c: Container | null): Rect => {
+      if (!c) return boundsOf({ Position: { x: 0, y: 0 }, Size: DEFAULT_SIZE })!;
+      if (c.AutoFit === false) return boundsOf(c)!;
+      const kids = c.Children.map(childBounds).filter((r): r is Rect => !!r);
+      if (!kids.length) return boundsOf({ Position: c.Position, Size: DEFAULT_SIZE })!;
+      return expandRect(kids.reduce(unionRect), PADDING, LABEL_BAND);
+    };
+
+    // ---------- Entity declaration ----------
+    const render: EntityRenderer<Container> = {
       layer: 'html',
-      bounds: containerBounds,
-      draw(c, rctx) {
+      bounds: visualRect,
+      draw(c, r) {
+        const rect = visualRect(c);
         const el = document.createElement('div');
         el.className = 'container';
-        el.style.left = `${c.Position.x}px`;
-        el.style.top = `${c.Position.y}px`;
-        el.style.width = `${c.Size.w}px`;
-        el.style.height = `${c.Size.h}px`;
         if (c.Collapsed) el.classList.add('collapsed');
-        const ref = rctx.refOf(c.id);
-        rctx.tagItem(el, ref);
-        rctx.applyItemModes(el, ref);
-        // Editable label — [data-editable-title] is the generic selector
-        // editable's commands hook on. Single click selects (via global
-        // pointer handler); double-click enters edit mode.
+        if (c.AutoFit === false) el.classList.add('manual');
+        el.style.left = `${rect.x + rect.w / 2}px`;
+        el.style.top = `${rect.y + rect.h / 2}px`;
+        el.style.width = `${rect.w}px`;
+        el.style.height = `${rect.h}px`;
+        const ref = r.refOf(c.id);
+        r.tagItem(el, ref);
+        r.applyItemModes(el, ref);
+        // Editable label (data-editable-title triggers the generic edit flow).
         const label = document.createElement('div');
         label.className = 'container-label';
         label.dataset.editableTitle = '';
         label.textContent = c.Label.text;
-        el.append(label);
-        // Container's in-DOM affordance slots are empty in v1: chrome
-        // (drag, collapse, configure) lives in the floating item-toolbar.
-        // wireAffordances stays a no-op here — it's safe to call.
-        rctx.wireAffordances(el);
+        // Resize handle slot — wireAffordances injects data-resize-handle.
+        const handle = document.createElement('div');
+        handle.className = 'container-resize';
+        handle.dataset.slot = 'resize';
+        el.append(label, handle);
+        r.wireAffordances(el);
         return el;
       },
     };
 
-    const containerProperties: PropertyDef<Container, ContainerPatch>[] = [
-      {
-        id: 'title',
-        label: 'Title',
-        input: 'text',
+    const properties: PropertyDef<Container, ContainerPatch>[] = [
+      { id: 'title', label: 'Title', input: 'text',
         value: c => c.Label.text,
-        patch: (_c, value) => ({ Label: { text: String(value) } }),
-      },
-      {
-        id: 'width',
-        label: 'Width',
-        input: 'number',
-        min: 120,
-        step: 8,
+        patch: (_c, v) => ({ Label: { text: String(v) } }) },
+      { id: 'width', label: 'Width', input: 'number', min: 120, step: 8,
         value: c => c.Size.w,
-        patch: (c, value) => {
-          const w = Number(value);
-          return Number.isFinite(w) ? { Size: { ...c.Size, w: Math.max(120, w) } } : undefined;
-        },
-      },
-      {
-        id: 'height',
-        label: 'Height',
-        input: 'number',
-        min: 80,
-        step: 8,
+        patch: (c, v) => Number.isFinite(Number(v)) ? { Size: { ...c.Size, w: Math.max(120, Number(v)) } } : undefined },
+      { id: 'height', label: 'Height', input: 'number', min: 80, step: 8,
         value: c => c.Size.h,
-        patch: (c, value) => {
-          const h = Number(value);
-          return Number.isFinite(h) ? { Size: { ...c.Size, h: Math.max(80, h) } } : undefined;
-        },
-      },
-      {
-        id: 'collapsed',
-        label: 'Collapsed',
-        input: 'checkbox',
+        patch: (c, v) => Number.isFinite(Number(v)) ? { Size: { ...c.Size, h: Math.max(80, Number(v)) } } : undefined },
+      { id: 'collapsed', label: 'Collapsed', input: 'checkbox',
         value: c => !!c.Collapsed,
-        patch: (_c, value) => ({ Collapsed: !!value }),
-      },
+        patch: (_c, v) => ({ Collapsed: !!v }) },
     ];
 
-    const containerEntity: EntityDef<Container, ContainerPatch> = {
+    const entity: EntityDef<Container, ContainerPatch> = {
       kind: 'container',
       label: 'Container',
       labelOf: c => c.Label.text || c.id,
-      // Paint behind nodes/edges. Other kinds default to 0 — containers go first.
-      order: -10,
-      // Container has all the structural shapes these abilities need:
-      // Identified (selectable, configurable), Positioned (draggable,
-      // nudgeable), Labeled (editable), Collapsable (collapsible).
+      order: -10, // Paint behind nodes/edges.
+      // All 7 abilities — container satisfies every structural shape.
       abilities: [
         selectable<Container>(),
         draggable<Container>(),
@@ -193,11 +155,12 @@ export function registerContainers(system: Registry) {
         editable<Container>(),
         collapsible<Container>(),
         configurable<Container>(),
+        resizeable<Container>(),
       ],
-      properties: containerProperties,
-      render: containerRenderer,
+      properties,
+      render,
     };
-    const offEntity = ctx.model.registerEntity(containerEntity);
+    const offEntity = ctx.model.registerEntity(entity);
     const offCollection = ctx.model.registerCollection({
       id: 'containers',
       label: 'Containers',
@@ -206,7 +169,7 @@ export function registerContainers(system: Registry) {
       toolbar: false,
     });
 
-    // ----- Commands -----
+    // ---------- Commands ----------
     contexts.commands.register([
       {
         id: 'editing.container.create',
@@ -226,8 +189,7 @@ export function registerContainers(system: Registry) {
         event: 'graph.container.delete',
         group: 'container',
         available: source => {
-          const fromDom = source?.target?.closest('[data-item-kind="container"]') != null
-            && !!itemIdFrom(source?.target);
+          const fromDom = !!source?.target?.closest('[data-item-kind="container"]') && !!itemIdFrom(source?.target);
           const ref = selection.selected();
           return fromDom || ref?.kind === 'container';
         },
@@ -248,47 +210,18 @@ export function registerContainers(system: Registry) {
         picker: {
           title: 'Move into container',
           steps: [
-            {
-              id: 'child',
-              prompt: 'Pick a node or container to move',
-              // Anything but edges (which have no Position) and unnested
-              // collections can be a child.
+            { id: 'child', prompt: 'Pick a node or container to move',
               filter: () => ref => ref.kind === 'node' || ref.kind === 'container',
               seed: () => {
                 const r = selection.selected();
                 return r && (r.kind === 'node' || r.kind === 'container') ? r : null;
-              },
-            },
-            {
-              id: 'container',
-              prompt: 'Pick a container',
-              filter: values => ref => {
-                if (ref.kind !== 'container') return false;
-                // Cycle guard: can't move a container into itself or any descendant.
-                const child = values.child;
-                if (!child) return true;
-                if (child.kind === 'container' && child.id === ref.id) return false;
-                // Walk up the target's parent chain; refuse if the child appears.
-                let cur: ItemRef | undefined = ref;
-                const seen = new Set<string>();
-                while (cur) {
-                  const key = PARENT_KEY(cur);
-                  if (seen.has(key)) break;
-                  seen.add(key);
-                  if (child.kind === cur.kind && child.id === cur.id) return false;
-                  const parentId = parentOf.get(key);
-                  cur = parentId ? { kind: 'container', id: parentId } : undefined;
-                }
-                return true;
-              },
-            },
+              } },
+            { id: 'container', prompt: 'Pick a container',
+              filter: vs => ref => ref.kind === 'container' && !!vs.child && !nest.isAncestorOrSelf(vs.child, ref) },
           ],
-          validate: values => {
-            if (!containers.size) return 'Create a container first (Y).';
-            if (!values.child || !values.container) return 'Pick an item and a container.';
-            return undefined;
-          },
-          payload: values => ({ containerId: values.container.id, childRef: values.child }),
+          validate: vs => !containers.size ? 'Create a container first (Y).'
+            : (!vs.child || !vs.container) ? 'Pick an item and a container.' : undefined,
+          payload: vs => ({ containerId: vs.container.id, childRef: vs.child }),
         },
       },
       {
@@ -298,7 +231,7 @@ export function registerContainers(system: Registry) {
         group: 'container',
         available: () => {
           const r = selection.selected();
-          return !!r && parentOf.has(PARENT_KEY(r));
+          return !!r && !!nest.parentRefOf(r);
         },
         payload: () => {
           const r = selection.selected();
@@ -307,76 +240,43 @@ export function registerContainers(system: Registry) {
       },
     ]);
 
-    // ----- Handlers -----
-
-    const removeChildFromCurrentParent = (childRef: ItemRef) => {
-      const key = PARENT_KEY(childRef);
-      const prev = parentOf.get(key);
-      if (!prev) return;
-      const c = containers.get(prev);
-      if (c) c.Children = c.Children.filter(r => !(r.kind === childRef.kind && r.id === childRef.id));
-      parentOf.delete(key);
-      emit('container.children.changed', { id: prev });
-    };
-
+    // ---------- Handlers ----------
     on('editing.container.create', draft => {
       const id = `c${next++}`;
-      const container: Container = {
-        id,
-        kind: 'container',
+      containers.set(id, {
+        id, kind: 'container',
         Label: draft.Label ?? { text: id },
         Position: draft.at ?? { x: 0, y: 0 },
         Size: { ...DEFAULT_SIZE },
         Children: [],
-      };
-      containers.set(id, container);
+      });
       emit('container.created', { id });
       emit('selection.item.select', { kind: 'container', id });
     });
     on('graph.container.delete', ({ id }) => {
       const c = containers.get(id);
       if (!c) return;
-      // Release children — they keep their position but lose the parent link.
-      c.Children.forEach(childRef => parentOf.delete(PARENT_KEY(childRef)));
-      // If this container itself was nested, drop it from its parent's Children.
-      removeChildFromCurrentParent({ kind: 'container', id });
+      // Release children (they keep position; lose parent link).
+      [...c.Children].forEach(childRef => nest.remove(childRef));
+      // If this container was nested, detach from its own parent.
+      nest.remove({ kind: 'container', id });
       containers.delete(id);
       emit('container.deleted', { id });
     });
     on('container.add-child', ({ containerId, childRef }) => {
-      const c = containers.get(containerId);
-      if (!c) return;
-      // Verify the child exists in its claimed store.
-      const childItem = graphs.current.getItem(childRef);
-      if (!childItem) return;
-      // Detach from previous parent (if any, and not the same target).
-      const key = PARENT_KEY(childRef);
-      const prevId = parentOf.get(key);
-      if (prevId === containerId) return;
-      if (prevId) {
-        const prev = containers.get(prevId);
-        if (prev) prev.Children = prev.Children.filter(r => !(r.kind === childRef.kind && r.id === childRef.id));
-        emit('container.children.changed', { id: prevId });
-      }
-      if (!c.Children.some(r => r.kind === childRef.kind && r.id === childRef.id)) c.Children.push(childRef);
-      parentOf.set(key, containerId);
-      emit('container.children.changed', { id: containerId });
+      // Verify the child exists in some store before nesting it.
+      if (!graphs.current.getItem(childRef)) return;
+      const result = nest.add(containerId, childRef);
+      if (result === 'cycle') emit('app.notice', { message: 'Cannot nest a container into its own descendant.', level: 'warn' });
     });
-    on('container.remove-child', ({ childRef }) => {
-      removeChildFromCurrentParent(childRef);
-    });
-    // Cleanup: if a node is removed from the graph, drop it from any container.
-    on('graph.node.deleted', ({ id }) => {
-      removeChildFromCurrentParent({ kind: 'node', id });
-    });
-    // X deletes the selected item — selectable handles node/edge; we cover container.
+    on('container.remove-child', ({ childRef }) => { nest.remove(childRef); });
+    on('graph.node.deleted', ({ id }) => { nest.remove({ kind: 'node', id }); });
     on('selection.item.delete', () => {
       const ref = selection.selected();
       if (ref?.kind === 'container') emit('graph.container.delete', { id: ref.id });
     });
 
-    // ----- Storage handler: apply container patches from item.update -----
-
+    // ---------- Storage: apply container patches from item.update ----------
     on('item.update', ({ ref, patch }) => {
       if (ref.kind !== 'container') return;
       const c = containers.get(ref.id);
@@ -384,7 +284,7 @@ export function registerContainers(system: Registry) {
       const p = patch as ContainerPatch;
       const oldPos = { ...c.Position };
       Object.assign(c, p);
-      // Drag cascade: if the container moved, its children move with it.
+      // Drag cascade: when the container moves, children move with it.
       if (p.Position && (p.Position.x !== oldPos.x || p.Position.y !== oldPos.y)) {
         const dx = p.Position.x - oldPos.x;
         const dy = p.Position.y - oldPos.y;
@@ -397,13 +297,8 @@ export function registerContainers(system: Registry) {
       emit('container.updated', { id: c.id });
     });
 
-    // Toolbar button. We disabled the collection's auto-toolbar above so we own ordering.
     contribute({ surface: 'top', command: 'editing.container.create', kind: 'button', text: '+ Container', order: 17 });
 
-    return () => {
-      offEntity();
-      offCollection();
-      storeOff();
-    };
+    return () => { offEntity(); offCollection(); storeOff(); };
   });
 }

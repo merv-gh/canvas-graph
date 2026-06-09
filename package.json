@@ -10,7 +10,8 @@
     "test:browser": "playwright test",
     "test:commands": "vitest run",
     "test:commands:coverage": "vitest run --coverage",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "explore": "node scripts/explore.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.44.0",

@@ -1,0 +1,312 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`combinatorial action graph > enumerates the auto-runnable command set (for visibility) 1`] = `
+[
+  "app.cancel.escape",
+  "demo.render-self",
+  "editing.container.create",
+  "editing.node.create",
+  "graph.create",
+  "graph.switch.next",
+  "help.open",
+  "layout.apply.grid",
+  "layout.apply.radial",
+  "layout.apply.tidy",
+  "modal.close",
+  "modal.open",
+  "palette.open",
+  "view.fit.all",
+  "view.zoom.in",
+  "view.zoom.out",
+  "view.zoom.reset",
+]
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [app.cancel.escape] 1`] = `
+{
+  "sequence": [
+    "app.cancel.escape",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": null,
+    "nodes": 0,
+    "scale": 1,
+    "selected": null,
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [demo.render-self] 1`] = `
+{
+  "sequence": [
+    "demo.render-self",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 31,
+    "focused": "node:e1",
+    "nodes": 32,
+    "scale": 0.15,
+    "selected": "node:e1",
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [editing.container.create] 1`] = `
+{
+  "sequence": [
+    "editing.container.create",
+  ],
+  "snap": {
+    "containers": 1,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": "container:c1",
+    "nodes": 0,
+    "scale": 1,
+    "selected": "container:c1",
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [editing.node.create] 1`] = `
+{
+  "sequence": [
+    "editing.node.create",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": "node:e1",
+    "nodes": 1,
+    "scale": 1,
+    "selected": "node:e1",
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [graph.create] 1`] = `
+{
+  "sequence": [
+    "graph.create",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": null,
+    "nodes": 0,
+    "scale": 1,
+    "selected": null,
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [graph.switch.next] 1`] = `
+{
+  "sequence": [
+    "graph.switch.next",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": null,
+    "nodes": 0,
+    "scale": 1,
+    "selected": null,
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [help.open] 1`] = `
+{
+  "sequence": [
+    "help.open",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": null,
+    "nodes": 0,
+    "scale": 1,
+    "selected": null,
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [layout.apply.grid] 1`] = `
+{
+  "sequence": [
+    "layout.apply.grid",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": null,
+    "nodes": 0,
+    "scale": 1,
+    "selected": null,
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [layout.apply.radial] 1`] = `
+{
+  "sequence": [
+    "layout.apply.radial",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": null,
+    "nodes": 0,
+    "scale": 1,
+    "selected": null,
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [layout.apply.tidy] 1`] = `
+{
+  "sequence": [
+    "layout.apply.tidy",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": null,
+    "nodes": 0,
+    "scale": 1,
+    "selected": null,
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [modal.close] 1`] = `
+{
+  "sequence": [
+    "modal.close",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": null,
+    "nodes": 0,
+    "scale": 1,
+    "selected": null,
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [modal.open] 1`] = `
+{
+  "sequence": [
+    "modal.open",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": null,
+    "nodes": 0,
+    "scale": 1,
+    "selected": null,
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [palette.open] 1`] = `
+{
+  "sequence": [
+    "palette.open",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": null,
+    "nodes": 0,
+    "scale": 1,
+    "selected": null,
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [view.fit.all] 1`] = `
+{
+  "sequence": [
+    "view.fit.all",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": null,
+    "nodes": 0,
+    "scale": 1,
+    "selected": null,
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [view.zoom.in] 1`] = `
+{
+  "sequence": [
+    "view.zoom.in",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": null,
+    "nodes": 0,
+    "scale": 1.2,
+    "selected": null,
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [view.zoom.out] 1`] = `
+{
+  "sequence": [
+    "view.zoom.out",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": null,
+    "nodes": 0,
+    "scale": 0.83,
+    "selected": null,
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [view.zoom.reset] 1`] = `
+{
+  "sequence": [
+    "view.zoom.reset",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": null,
+    "nodes": 0,
+    "scale": 1,
+    "selected": null,
+  },
+}
+`;
