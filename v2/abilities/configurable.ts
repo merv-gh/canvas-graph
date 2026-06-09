@@ -1,11 +1,11 @@
 import { itemParentAttr, itemRefFrom, type Registry } from '../core';
-import type { EdgePatch, GraphEdge, GraphNode, NodeEntity, NodePatch } from '../model';
 import type {
   ItemRef,
   PropertyDef,
   PropertyValue,
 } from '../types';
 import { ability, action } from './shared';
+import type { Identified } from './shapes';
 
 declare module '../types' {
   interface CustomEvents {
@@ -15,9 +15,13 @@ declare module '../types' {
   }
 }
 
-export const configurable = <T extends NodeEntity>() => ability<T>('configurable', [action<T>({
-  id: 'node.configure',
-  label: 'Configure node',
+/** Configurable — any entity with declared `properties` can have this. The
+ *  properties modal is rendered from `EntityDef.properties` and dispatch
+ *  is generic: configurable emits `item.update` with the patch and the
+ *  storage system for the ref's kind applies it. */
+export const configurable = <T extends Identified>() => ability<T>('configurable', [action<T>({
+  id: 'item.configure',
+  label: 'Configure',
   paletteCommand: 'item.properties.open',
   ui: [{
     surface: 'entity',
@@ -26,26 +30,24 @@ export const configurable = <T extends NodeEntity>() => ability<T>('configurable
     slot: 'header:end',
     className: 'node-action node-config',
     text: '⚙',
-    label: 'Configure node',
+    label: 'Configure',
   }],
 })]);
 
 export function registerConfigurable(system: Registry) {
   system('ability.configurable', ({ on, emit, contexts, graphs, model, selection }) => {
-    type ConfigItem = GraphNode | GraphEdge;
-    type ConfigPatch = NodePatch | EdgePatch;
     const formRef = (target?: Element | null): ItemRef =>
       itemRefFrom(target?.closest('.properties')) ?? { kind: 'node', id: '' };
-    const item = (ref: ItemRef): ConfigItem | undefined => graphs.current.getItem(ref) as ConfigItem | undefined;
-    const entityDef = (ref: ItemRef) => model.entity<ConfigItem, ConfigPatch>(ref.kind);
-    const renderProperties = (ref: ItemRef, item: ConfigItem, properties: PropertyDef<ConfigItem, ConfigPatch>[]) => {
+    const item = (ref: ItemRef) => graphs.current.getItem(ref);
+    const entityDef = (ref: ItemRef) => model.entity<unknown, unknown>(ref.kind);
+    const renderProperties = (ref: ItemRef, current: unknown, properties: PropertyDef<unknown, unknown>[]) => {
       const form = contexts.templates.clone('properties');
       form.dataset.itemKind = ref.kind;
       form.dataset.itemId = ref.id;
       const parent = itemParentAttr(ref.parent);
       if (parent) form.dataset.itemParent = parent;
       const fields = contexts.templates.slot(form, 'fields');
-      const byGroup = new Map<string, PropertyDef<ConfigItem, ConfigPatch>[]>();
+      const byGroup = new Map<string, PropertyDef<unknown, unknown>[]>();
       properties.forEach(prop => {
         const group = prop.group ?? 'default';
         (byGroup.get(group) ?? byGroup.set(group, []).get(group)!).push(prop);
@@ -57,7 +59,7 @@ export function registerConfigurable(system: Registry) {
           heading.textContent = group;
           fields.append(heading);
         }
-        props.forEach(prop => fields.append(contexts.properties.render(prop, item)));
+        props.forEach(prop => fields.append(contexts.properties.render(prop, current)));
       });
       return form;
     };
@@ -69,7 +71,7 @@ export function registerConfigurable(system: Registry) {
       // Single generic dispatch. Storage systems decide how to apply for their kind.
       emit('item.update', { ref, patch });
     };
-    const selectedNode = () => selection.selectedNode();
+    const selected = () => selection.selected();
 
     contexts.commands.register([
       {
@@ -77,8 +79,8 @@ export function registerConfigurable(system: Registry) {
         label: 'Open item properties',
         event: 'item.properties.open',
         group: 'item',
-        available: source => !!itemRefFrom(source?.target) || !!selectedNode(),
-        payload: source => itemRefFrom(source.target) ?? { kind: 'node', id: selectedNode()?.id ?? '' },
+        available: source => !!itemRefFrom(source?.target) || !!selected(),
+        payload: source => itemRefFrom(source.target) ?? selected() ?? undefined,
       },
       {
         id: 'properties.item.input',

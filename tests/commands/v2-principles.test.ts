@@ -132,19 +132,19 @@ describe('v2 principles (enforced)', () => {
     const ctx = bootV2();
     await settle();
 
-    expect(ctx.contexts.commands.get('node.collapse.toggle')).toBeTruthy();
+    expect(ctx.contexts.commands.get('item.collapse.toggle')).toBeTruthy();
     ctx.bus.emit('flag.toggle', { name: 'ability.collapsible', on: false });
     await settle();
 
     expect(ctx.flags.isOn('ability.collapsible')).toBe(false);
-    expect(ctx.contexts.commands.get('node.collapse.toggle')).toBeUndefined();
+    expect(ctx.contexts.commands.get('item.collapse.toggle')).toBeUndefined();
     expect(ctx.model.entity('node')?.abilities.map(ability => ability.id)).not.toContain('collapsible');
 
     ctx.bus.emit('flag.toggle', { name: 'ability.collapsible', on: true });
     await settle();
 
     expect(ctx.flags.isOn('ability.collapsible')).toBe(true);
-    expect(ctx.contexts.commands.get('node.collapse.toggle')).toBeTruthy();
+    expect(ctx.contexts.commands.get('item.collapse.toggle')).toBeTruthy();
     expect(ctx.model.entity('node')?.abilities.map(ability => ability.id)).toContain('collapsible');
 
     ctx.bus.emit('flag.toggle', { name: 'experiment.missing', on: false });
@@ -152,6 +152,6 @@ describe('v2 principles (enforced)', () => {
 
     ctx.runtime!.refresh();
     await settle();
-    expect(ctx.contexts.commands.get('node.collapse.toggle')).toBeTruthy();
+    expect(ctx.contexts.commands.get('item.collapse.toggle')).toBeTruthy();
   });
 });

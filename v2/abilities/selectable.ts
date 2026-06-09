@@ -1,7 +1,7 @@
 import { isStageSurface, itemIdFrom, itemRefFrom, nodeRef, type Registry } from '../core';
-import type { NodeEntity } from '../model';
 import type { CommandSource, Id, ItemRef } from '../types';
 import { ability, action } from './shared';
+import type { Identified } from './shapes';
 
 declare module '../types' {
   interface CustomEvents {
@@ -15,11 +15,16 @@ declare module '../types' {
   }
 }
 
-export const selectable = <T extends NodeEntity>() => ability<T>('selectable', [action<T>({
-  id: 'node.select',
-  label: 'Select node',
-  paletteCommand: 'selection.node.next',
-  ui: [{ surface: 'entity', command: 'selection.node.select', kind: 'handler' }],
+/** Selectable — every entity that has an id can have this. The pointerdown
+ *  handler is registered globally (looks for [data-item-kind][data-item-id]) so
+ *  no template slot is required; declaring the ability is enough.
+ *  Keyboard reachability: the entity-surface UI handler is the affordance; no
+ *  paletteCommand because there's no concept of "select THIS item via keyboard"
+ *  outside of Tab cycling (which lives as its own standalone command). */
+export const selectable = <T extends Identified>() => ability<T>('selectable', [action<T>({
+  id: 'item.select',
+  label: 'Select item',
+  ui: [{ surface: 'entity', command: 'selection.item.select', kind: 'handler' }],
 })]);
 
 export function registerSelectable(system: Registry) {
@@ -47,7 +52,7 @@ export function registerSelectable(system: Registry) {
         input: {
           on: 'pointerdown',
           selector: '[data-item-kind][data-item-id]',
-          when: event => !(event.target as Element).closest('[data-command], [data-drag-handle]'),
+          when: event => !(event.target as Element).closest('[data-command], [data-drag-handle], [data-resize-handle]'),
           prevent: true,
           stop: true,
         },
@@ -82,9 +87,6 @@ export function registerSelectable(system: Registry) {
         payload: () => ({ id: previousNodeId() }),
       },
       {
-        // No own Escape / pointerdown binding — selection registers a
-        // Cancellable so the global cancellation system clears it on Esc or
-        // stage background click. Command stays callable from palette.
         id: 'selection.node.clear',
         label: 'Clear selection',
         event: 'selection.node.clear',
@@ -99,8 +101,8 @@ export function registerSelectable(system: Registry) {
         shortcut: 'X',
         input: { on: 'keydown', key: 'x', prevent: true },
         // Any selection is potentially deletable. Each kind's owner handles its
-        // own delete listener; the command stays open so e.g. containers can
-        // hook in without selectable knowing the kind exists.
+        // own delete listener; the command stays open so containers / future
+        // kinds can hook in without selectable knowing the kind exists.
         available: () => !!selection.selected(),
       },
     ]);
@@ -128,8 +130,6 @@ export function registerSelectable(system: Registry) {
     });
     contexts.cancellation.register({
       origin,
-      // Background mode — only fires when nothing more specific (modal,
-      // picker, edit, jump) is active for the same Escape / stage click.
       priority: -10,
       active: () => !!selection.selected(),
       cancel: () => emit('selection.item.clear'),

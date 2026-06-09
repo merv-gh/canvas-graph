@@ -119,7 +119,7 @@ describe('first-class cancellation', () => {
     ctx.bus.emit('selection.node.select', { id: node.id });
     await settle();
 
-    ctx.bus.emit('node.title.edit', { id: node.id });
+    ctx.bus.emit('item.title.edit', { ref: { kind: 'node', id: node.id } });
     await settle();
     const title = document.querySelector(`.node[data-item-kind="node"][data-item-id="${node.id}"] .node-title`) as HTMLElement;
     expect(title.classList.contains('editing')).toBe(true);

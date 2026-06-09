@@ -1,48 +1,55 @@
-import { itemIdFrom, nodeRef, type Registry } from '../core';
-import type { NodeEntity } from '../model';
+import { itemRefFrom, type Registry } from '../core';
 import { Places } from '../types';
-import type { CommandSource, Id } from '../types';
+import type { CommandSource, ItemRef } from '../types';
 import { ability, action } from './shared';
+import type { Labeled } from './shapes';
 
 declare module '../types' {
   interface CustomEvents {
-    'node.title.edit': { id: Id };
-    'node.title.commit': { id: Id; text: string; finish?: boolean };
+    'item.title.edit': { ref: ItemRef };
+    'item.title.commit': { ref: ItemRef; text: string; finish?: boolean };
   }
 }
 
-/** Editable title. The title slot stays plain by default — clicking it does
- *  NOT start an edit, so single-click selection works cleanly. Edit mode is
- *  entered explicitly:
- *    - `Enter` while the node is selected, OR
- *    - double-click on the title.
- *
- *  In edit mode the title becomes contentEditable; Escape goes through the
- *  global cancellation system (commits + blurs), Enter / focusout commit. */
-export const editable = <T extends NodeEntity>() => ability<T>('editable', [action<T>({
-  id: 'node.title.edit',
-  label: 'Edit node title',
-  paletteCommand: 'node.title.edit',
-  // No UI affordance: the title slot is plain text by default. The action is
-  // still reachable because paletteCommand `node.title.edit` carries the Enter
-  // shortcut (DX treats input-bound palette commands as the keyboard affordance).
+/** Editable title — any item with a `Label.text` can use this.
+ *  Convention: the entity's renderer must surface its title in an element
+ *  carrying `[data-editable-title]`. Single click is selection; double-click
+ *  (or Enter while selected) enters edit mode. */
+export const editable = <T extends Labeled>() => ability<T>('editable', [action<T>({
+  id: 'item.title.edit',
+  label: 'Edit title',
+  paletteCommand: 'item.title.edit',
+  // No per-entity UI — the title slot is plain text by default. The action is
+  // still reachable because paletteCommand `item.title.edit` carries Enter as
+  // its keyboard binding (DX treats input-bound palette commands as a valid
+  // keyboard affordance).
   ui: [],
 })]);
 
 export function registerEditable(system: Registry) {
   system('ability.editable', ({ on, emit, contexts, graphs, selection, origin }) => {
-    const titleEl = (id: Id) =>
-      contexts.places.el(Places.Stage)?.querySelector(`.node[data-item-kind="node"][data-item-id="${id}"] .node-title`) ?? null;
-    const nodeId = (source: CommandSource) => itemIdFrom(source.target) || selection.selectedNode()?.id || '';
-    const titleCommit = (target?: Element | null, finish = false) => ({
-      id: itemIdFrom(target),
-      text: target?.textContent?.trim() ?? '',
-      finish,
-    });
-    /** ID of the title currently in edit mode (or '' when nothing is being
-     *  edited). Powers the Cancellable + scopes the focusout/Enter commit
-     *  selector to only fire when we expect it. */
-    let editingId = '';
+    /** Find the title element belonging to a given ref. Generic over kind via the
+     *  data-item-* tagging — works for node, container, or any future kind that
+     *  marks its title with [data-editable-title]. */
+    const titleEl = (ref: ItemRef): HTMLElement | null => {
+      const stage = contexts.places.el(Places.Stage);
+      const item = stage?.querySelector(`[data-item-kind="${ref.kind}"][data-item-id="${ref.id}"]`);
+      const el = item?.querySelector('[data-editable-title]') ?? null;
+      return el instanceof HTMLElement ? el : null;
+    };
+    const refFromSource = (source: CommandSource): ItemRef | null =>
+      itemRefFrom(source.target) ?? selection.selected();
+    const titleCommit = (target?: Element | null, finish = false) => {
+      const ref = itemRefFrom(target);
+      return ref ? {
+        ref,
+        text: target?.textContent?.trim() ?? '',
+        finish,
+      } : undefined;
+    };
+    /** Ref currently being edited (or null when no edit in progress). Powers
+     *  the Cancellable + the focusout/Enter commit guard. */
+    let editingRef: ItemRef | null = null;
 
     const enterEditMode = (el: HTMLElement) => {
       el.contentEditable = 'plaintext-only';
@@ -61,87 +68,89 @@ export function registerEditable(system: Registry) {
 
     contexts.commands.register([
       {
-        id: 'node.title.edit',
-        label: 'Edit node title',
-        event: 'node.title.edit',
-        group: 'node',
+        id: 'item.title.edit',
+        label: 'Edit title',
+        event: 'item.title.edit',
+        group: 'item',
         shortcut: 'Enter',
-        // Plain Enter while the node is selected — but skip when typing inside
-        // any input/textarea/contenteditable (Enter inside the title-being-edited
-        // belongs to node.title.commit.enter below).
+        // Plain Enter while an item is selected. The selector-based commit
+        // commands below take precedence inside an active editing element so
+        // Enter-to-commit still works.
         input: { on: 'keydown', key: 'Enter', prevent: true },
-        available: source => !!nodeId(source ?? {}) || !!selection.selectedNode(),
-        payload: source => ({ id: nodeId(source) || selection.selectedNode()?.id || '' }),
+        available: source => !!refFromSource(source ?? {}),
+        payload: source => {
+          const ref = refFromSource(source);
+          return ref ? { ref } : undefined;
+        },
       },
       {
-        // Double-click the title to enter edit mode. Single click stays as a
-        // pure selection gesture so the user can pick a node without
-        // accidentally editing it.
-        id: 'node.title.edit.dblclick',
-        label: 'Edit node title on double-click',
-        event: 'node.title.edit',
-        group: 'node',
+        // Double-click to enter edit. Single click stays as a pure selection
+        // gesture so accidental edits don't happen.
+        id: 'item.title.edit.dblclick',
+        label: 'Edit title on double-click',
+        event: 'item.title.edit',
+        group: 'item',
         hidden: true,
-        input: { on: 'dblclick', selector: '.node-title', prevent: true },
-        payload: ({ target }) => ({ id: itemIdFrom(target) }),
+        input: { on: 'dblclick', selector: '[data-editable-title]', prevent: true },
+        payload: ({ target }) => {
+          const ref = itemRefFrom(target);
+          return ref ? { ref } : undefined;
+        },
       },
       {
-        id: 'node.title.commit.enter',
-        label: 'Commit node title',
-        event: 'node.title.commit',
-        group: 'node',
+        id: 'item.title.commit.enter',
+        label: 'Commit title (Enter)',
+        event: 'item.title.commit',
+        group: 'item',
         hidden: true,
-        input: { on: 'keydown', key: 'Enter', selector: '.node-title.editing', prevent: true, stop: true },
+        input: { on: 'keydown', key: 'Enter', selector: '[data-editable-title].editing', prevent: true, stop: true },
         payload: ({ target }) => titleCommit(target, true),
       },
       {
-        id: 'node.title.commit.focusout',
-        label: 'Commit node title focusout',
-        event: 'node.title.commit',
-        group: 'node',
+        id: 'item.title.commit.focusout',
+        label: 'Commit title on focusout',
+        event: 'item.title.commit',
+        group: 'item',
         hidden: true,
-        input: { on: 'focusout', selector: '.node-title.editing' },
+        input: { on: 'focusout', selector: '[data-editable-title].editing' },
         payload: ({ target }) => titleCommit(target),
       },
     ]);
 
-    on('node.title.edit', ({ id }) => queueMicrotask(() => {
-      const el = titleEl(id);
-      if (!(el instanceof HTMLElement)) return;
-      editingId = id;
+    on('item.title.edit', ({ ref }) => queueMicrotask(() => {
+      const el = titleEl(ref);
+      if (!el) return;
+      editingRef = ref;
       enterEditMode(el);
     }));
-    on('node.title.commit', ({ id, text, finish }) => {
-      const node = graphs.current.getNode(id);
-      if (!node) return;
-      if (text && text !== node.Label.text) emit('item.update', { ref: nodeRef(id), patch: { Label: { text } } });
+    on('item.title.commit', ({ ref, text, finish }) => {
+      const item = graphs.current.getItem(ref) as Labeled | undefined;
+      if (!item) return;
+      if (text && text !== item.Label.text) emit('item.update', { ref, patch: { Label: { text } } });
       if (!text) {
-        const el = titleEl(id);
-        if (el) el.textContent = node.Label.text;
+        const el = titleEl(ref);
+        if (el) el.textContent = item.Label.text;
       }
-      const el = titleEl(id);
-      if (el instanceof HTMLElement) exitEditMode(el);
+      const el = titleEl(ref);
+      if (el) exitEditMode(el);
       if (finish) queueMicrotask(() => {
-        const refocus = titleEl(id);
-        if (refocus instanceof HTMLElement) refocus.blur();
+        const refocus = titleEl(ref);
+        refocus?.blur();
       });
-      if (editingId === id) editingId = '';
+      if (editingRef && editingRef.kind === ref.kind && editingRef.id === ref.id) editingRef = null;
     });
 
     contexts.cancellation.register({
       origin,
-      active: () => !!editingId,
+      active: () => !!editingRef,
       // Cancel = synthesise a commit with finish:true so the same code path
-      // runs as Enter (persist + exit edit mode). Doesn't rely on blur firing
-      // focusout (jsdom is flaky on contenteditable blur events).
-      // V1 trade-off: no revert-to-original; add later by capturing original
-      // text on enterEditMode and a separate `cancelEdit` event.
+      // runs as Enter. No revert-to-original in v1.
       cancel: () => {
-        const id = editingId;
-        if (!id) return;
-        const el = titleEl(id);
-        if (!(el instanceof HTMLElement)) return;
-        emit('node.title.commit', { id, text: el.textContent?.trim() ?? '', finish: true });
+        const ref = editingRef;
+        if (!ref) return;
+        const el = titleEl(ref);
+        if (!el) return;
+        emit('item.title.commit', { ref, text: el.textContent?.trim() ?? '', finish: true });
       },
     });
   });

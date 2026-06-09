@@ -1,41 +1,42 @@
-import { itemIdFrom, nodeRef, type Registry } from '../core';
-import type { NodeEntity } from '../model';
+import { itemIdFrom, itemRefFrom, type Registry } from '../core';
 import type { CommandSource } from '../types';
 import { ability, action } from './shared';
+import type { Collapsable } from './shapes';
 // Uses the generic 'item.update' framework event — no CustomEvents add here.
 
-export const collapsible = <T extends NodeEntity>() => ability<T>('collapsible', [action<T>({
-  id: 'node.collapse',
-  label: 'Collapse node',
-  paletteCommand: 'node.collapse.toggle',
+export const collapsible = <T extends Collapsable>() => ability<T>('collapsible', [action<T>({
+  id: 'item.collapse',
+  label: 'Collapse',
+  paletteCommand: 'item.collapse.toggle',
   ui: [{
     surface: 'entity',
-    command: 'node.collapse.toggle',
+    command: 'item.collapse.toggle',
     kind: 'button',
     slot: 'header:start',
     className: 'node-action node-toggle',
-    text: node => node.Collapsed ? '+' : '-',
-    label: node => node.Collapsed ? 'Expand node' : 'Collapse node',
+    text: item => item.Collapsed ? '+' : '-',
+    label: item => item.Collapsed ? 'Expand' : 'Collapse',
   }],
 })]);
 
 export function registerCollapsible(system: Registry) {
   system('ability.collapsible', ({ contexts, graphs, selection }) => {
-    const selectedNode = () => selection.selectedNode();
-    const nodeId = (source: CommandSource) => itemIdFrom(source.target) || selectedNode()?.id || '';
+    const refFromSource = (source: CommandSource) => itemRefFrom(source.target) ?? selection.selected();
 
     contexts.commands.register([{
-      id: 'node.collapse.toggle',
-      label: 'Toggle node collapse',
+      id: 'item.collapse.toggle',
+      label: 'Toggle collapse',
       event: 'item.update',
-      group: 'node',
+      group: 'item',
       shortcut: 'C',
       input: { on: 'keydown', key: 'c', prevent: true },
-      available: source => !!nodeId(source ?? {}) || !!selectedNode(),
+      available: source => !!refFromSource(source ?? {}),
       payload: source => {
-        const id = nodeId(source) || selectedNode()?.id || graphs.current.nodes()[0]?.id || '';
-        const node = graphs.current.getNode(id)!;
-        return { ref: nodeRef(id), patch: { Collapsed: !node.Collapsed } };
+        const ref = refFromSource(source);
+        if (!ref) return undefined;
+        const item = graphs.current.getItem(ref) as Collapsable | undefined;
+        if (!item) return undefined;
+        return { ref, patch: { Collapsed: !item.Collapsed } };
       },
     }]);
   });

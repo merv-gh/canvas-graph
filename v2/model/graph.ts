@@ -3,8 +3,9 @@ import type { Id, ItemRef, Label, Position, Size } from '../types';
 // ----- Domain types -----
 // Live here, next to the classes implementing them. Anything kind-specific
 // (node, edge, future container) belongs in the model layer, not in types.ts.
+export type Entity = { id: Id; kind: string; Label: Label; Size: Size; Position?: Position; Collapsed?: boolean };
 
-export type NodeEntity = { id: Id; kind: 'node'; Label: Label; Size: Size; Position?: Position; Collapsed?: boolean };
+export type NodeEntity = Entity & { kind: 'node';  };
 export type NodeDraft = { Label?: Label; Position?: Position; Size?: Size; Collapsed?: boolean };
 export type NodePatch = Partial<Pick<NodeEntity, 'Label' | 'Size' | 'Position' | 'Collapsed'>>;
 export type NodeCreateOptions = { at?: Position; near?: Id | null };

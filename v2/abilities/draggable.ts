@@ -1,66 +1,72 @@
-import { itemIdFrom, nodeRef, type Registry } from '../core';
-import type { NodeEntity } from '../model';
+import { itemRefFrom, type Registry } from '../core';
 import { Places } from '../types';
-import type { Id, Position } from '../types';
+import type { ItemRef, Position } from '../types';
 import { ability, action } from './shared';
+import type { Positioned } from './shapes';
 
 declare module '../types' {
   interface CustomEvents {
-    'drag.node.start': { id: Id; x: number; y: number };
-    'drag.node.move': { x: number; y: number };
-    'drag.node.end': void;
-    'drag.node.moved': { id: Id };
+    'drag.item.start': { ref: ItemRef; x: number; y: number };
+    'drag.item.move': { x: number; y: number };
+    'drag.item.end': void;
+    'drag.item.moved': { ref: ItemRef };
   }
 }
 
-export const draggable = <T extends NodeEntity>() => ability<T>('draggable', [action<T>({
-  id: 'node.drag',
-  label: 'Drag node with pointer',
+/** Draggable — any item with a `Position` can be moved by pointer drag.
+ *  The ability declares the drag handle slot; the renderer places it. */
+export const draggable = <T extends Positioned>() => ability<T>('draggable', [action<T>({
+  id: 'item.drag',
+  label: 'Drag with pointer',
   ui: [{
     surface: 'entity',
-    command: 'drag.node.start',
+    command: 'drag.item.start',
     kind: 'handler',
     slot: 'drag',
-    attrs: { 'data-drag-handle': '', role: 'button', 'aria-label': 'Drag node', title: 'Drag node' },
+    attrs: { 'data-drag-handle': '', role: 'button', 'aria-label': 'Drag item', title: 'Drag item' },
   }],
 })]);
 
 export function registerDraggable(system: Registry) {
   system('ability.draggable', ({ on, emit, contexts, graphs }) => {
-    let drag: { id: Id; pointer: Position; start: Position } | null = null;
+    let drag: { ref: ItemRef; pointer: Position; start: Position } | null = null;
 
     contexts.commands.register([
       {
-        id: 'drag.node.start',
+        id: 'drag.item.start',
         label: 'Start drag',
-        event: 'drag.node.start',
+        event: 'drag.item.start',
         group: 'drag',
         hidden: true,
         input: { on: 'pointerdown', selector: '[data-drag-handle]', when: event => !(event.target as Element).closest('[data-command]'), prevent: true },
-        payload: ({ event, target }) => ({ id: itemIdFrom(target), x: (event as PointerEvent).clientX, y: (event as PointerEvent).clientY }),
+        payload: ({ event, target }) => {
+          const ref = itemRefFrom(target);
+          return ref ? { ref, x: (event as PointerEvent).clientX, y: (event as PointerEvent).clientY } : undefined;
+        },
       },
       {
-        id: 'drag.node.move',
-        label: 'Move dragged node',
-        event: 'drag.node.move',
+        id: 'drag.item.move',
+        label: 'Move dragged item',
+        event: 'drag.item.move',
         group: 'drag',
         hidden: true,
         input: { on: 'pointermove', when: () => !!drag, prevent: true },
         payload: ({ event }) => ({ x: (event as PointerEvent).clientX, y: (event as PointerEvent).clientY }),
       },
-      { id: 'drag.node.end', label: 'End drag', event: 'drag.node.end', group: 'drag', hidden: true, input: { on: 'pointerup', when: () => !!drag } },
+      { id: 'drag.item.end', label: 'End drag', event: 'drag.item.end', group: 'drag', hidden: true, input: { on: 'pointerup', when: () => !!drag } },
     ]);
 
-    on('drag.node.start', ({ id, x, y }) => {
-      const node = graphs.current.getNode(id);
-      if (node?.Position) drag = { id, pointer: contexts.view.clientToSpace(Places.Stage, { x, y }), start: { ...node.Position } };
+    on('drag.item.start', ({ ref, x, y }) => {
+      const item = graphs.current.getItem(ref) as Positioned | undefined;
+      if (item?.Position) drag = { ref, pointer: contexts.view.clientToSpace(Places.Stage, { x, y }), start: { ...item.Position } };
     });
-    on('drag.node.move', ({ x, y }) => {
+    on('drag.item.move', ({ x, y }) => {
       if (!drag) return;
       const pointer = contexts.view.clientToSpace(Places.Stage, { x, y });
-      emit('item.update', { ref: nodeRef(drag.id), patch: { Position: { x: drag.start.x + pointer.x - drag.pointer.x, y: drag.start.y + pointer.y - drag.pointer.y } } });
-      emit('drag.node.moved', { id: drag.id });
+      const Position = { x: drag.start.x + pointer.x - drag.pointer.x, y: drag.start.y + pointer.y - drag.pointer.y };
+      emit('item.update', { ref: drag.ref, patch: { Position } });
+      emit('drag.item.moved', { ref: drag.ref });
     });
-    on('drag.node.end', () => { drag = null; });
+    on('drag.item.end', () => { drag = null; });
   });
 }

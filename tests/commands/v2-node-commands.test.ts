@@ -29,11 +29,11 @@ describe('v2 node commands', () => {
 	    expect(document.querySelector('.node-title')?.textContent).toBe('Node 1');
 	    expect((document.activeElement as HTMLElement | null)?.dataset.itemId).toBe(node.id);
 
-    expect(runCommand(ctx, 'node.collapse.toggle')).toBe(true);
+    expect(runCommand(ctx, 'item.collapse.toggle')).toBe(true);
     expect(node.Collapsed).toBe(true);
 
     const before = { ...node.Position! };
-    expect(runCommand(ctx, 'graph.node.nudge.right')).toBe(true);
+    expect(runCommand(ctx, 'item.nudge.right')).toBe(true);
     expect(node.Position).toEqual({ x: before.x + 24, y: before.y });
 
     expect(runCommand(ctx, 'item.properties.open')).toBe(true);
@@ -123,11 +123,11 @@ describe('v2 node commands', () => {
     const title = document.querySelector<HTMLElement>('.node-title')!;
 
     title.textContent = 'Inline';
-    expect(runCommand(ctx, 'node.title.commit.enter', { target: title })).toBe(true);
+    expect(runCommand(ctx, 'item.title.commit.enter', { target: title })).toBe(true);
     expect(node.Label.text).toBe('Inline');
 
     title.textContent = '';
-    expect(runCommand(ctx, 'node.title.commit.focusout', { target: title })).toBe(true);
+    expect(runCommand(ctx, 'item.title.commit.focusout', { target: title })).toBe(true);
     expect(title.textContent).toBe('Inline');
   });
 
@@ -145,9 +145,9 @@ describe('v2 node commands', () => {
     expect(handle.hasAttribute('data-drag-handle')).toBe(true);
     expect(document.querySelector('.node .node-header')).toBeNull();
 
-    runCommand(ctx, 'drag.node.start', { event: new PointerEvent('pointerdown', { clientX: 10, clientY: 10 }), target: handle });
-    runCommand(ctx, 'drag.node.move', { event: new PointerEvent('pointermove', { clientX: 70, clientY: 30 }), target: document.body });
-    runCommand(ctx, 'drag.node.end');
+    runCommand(ctx, 'drag.item.start', { event: new PointerEvent('pointerdown', { clientX: 10, clientY: 10 }), target: handle });
+    runCommand(ctx, 'drag.item.move', { event: new PointerEvent('pointermove', { clientX: 70, clientY: 30 }), target: document.body });
+    runCommand(ctx, 'drag.item.end');
 
     expect(node.Position!.x).toBeGreaterThan(before.x);
     expect(node.Position!.y).toBeGreaterThan(before.y);
@@ -156,7 +156,7 @@ describe('v2 node commands', () => {
   it('can disable an ability and hide its commands from the model', () => {
     const ctx = bootV2({ 'ability.collapsible': false });
 
-    expect(ctx.contexts.commands.get('node.collapse.toggle')).toBeUndefined();
+    expect(ctx.contexts.commands.get('item.collapse.toggle')).toBeUndefined();
     expect(ctx.model.entity('node')?.abilities.map(ability => ability.id)).not.toContain('collapsible');
   });
 

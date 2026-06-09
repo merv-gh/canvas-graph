@@ -92,13 +92,18 @@ export function runDx(ctx: AppCtx): DxIssue[] {
     else seenBindings.set(key, c);
   });
 
+  // Each palette command should be canonical for exactly one ACTION identity
+  // (action.id). The same action appearing on multiple entities (because they
+  // share an ability — e.g. node + container are both `nudgeable`) is fine and
+  // expected; that's the whole point of structural abilities. The rule fires
+  // only when two DIFFERENT action ids point to the same paletteCommand.
   const paletteOwners = new Map<string, string>();
   ctx.model.entities().forEach(entityDef => entityDef.abilities.forEach(abilityDef => {
     abilityDef.actions.forEach(actionDef => {
       if (!actionDef.paletteCommand) return;
       const prev = paletteOwners.get(actionDef.paletteCommand);
-      if (prev) error('action.palette-shared', `paletteCommand "${actionDef.paletteCommand}" is the canonical for both "${prev}" and "${actionDef.id}"`);
-      else paletteOwners.set(actionDef.paletteCommand, actionDef.id);
+      if (prev && prev !== actionDef.id) error('action.palette-shared', `paletteCommand "${actionDef.paletteCommand}" is the canonical for both "${prev}" and "${actionDef.id}"`);
+      else if (!prev) paletteOwners.set(actionDef.paletteCommand, actionDef.id);
     });
   }));
 
