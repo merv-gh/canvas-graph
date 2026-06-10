@@ -72,6 +72,36 @@ export type NonEmptyArray<T> = [T, ...T[]];
 
 export const Places = { Top: 'top', Left: 'left', Stage: 'stage', Modal: 'modal' } as const;
 export type Place = typeof Places[keyof typeof Places];
+
+/** Named slots inside an entity's rendered card. Abilities point their
+ *  `AffordanceDef.slot` at one of these; the renderer (`render-stage`,
+ *  `item-toolbar`) reads the same names when wiring affordances to template
+ *  `[data-slot=...]` elements. Centralized so a typo at either end becomes a
+ *  TypeScript error AND a DX rule. */
+export const Slots = {
+  /** Drag handle (handler affordance, draggable). Entity surface. */
+  Drag: 'drag',
+  /** Resize handle (handler affordance, resizeable). Entity surface. */
+  Resize: 'resize',
+  /** Default catch-all slot for button affordances with no explicit slot. Entity surface. */
+  Header: 'header',
+  /** Left-of-title button row (collapsible). Entity surface. */
+  HeaderStart: 'header:start',
+  /** Right-of-title button row (configurable). Entity surface. */
+  HeaderEnd: 'header:end',
+  /** Editable title element (matches template `[data-editable-title]`). Entity surface. */
+  Title: 'title',
+  /** Leading toolbar group. Top surface (system affordance). */
+  Start: 'start',
+  /** Trailing toolbar group. Top surface (system affordance). */
+  End: 'end',
+} as const;
+export type SlotName = typeof Slots[keyof typeof Slots];
+/** Slots that live on the per-entity surface — DX checks `AffordanceDef.slot`
+ *  against this narrower set. Toolbar Start/End live on the top surface. */
+export const EntitySlots: ReadonlySet<SlotName> = new Set([
+  Slots.Drag, Slots.Resize, Slots.Header, Slots.HeaderStart, Slots.HeaderEnd, Slots.Title,
+]);
 export type RawInput = 'click' | 'dblclick' | 'keydown' | 'pointerdown' | 'pointermove' | 'pointerup' | 'wheel' | 'input' | 'change' | 'focusout';
 
 // ---------------------------------------------------------------------------
@@ -273,6 +303,12 @@ export type CommandSpec<K extends EventName = EventName> = {
   picker?: PickerSpec;
 };
 
+/** Authoring shape — `event` is optional. The command registry normalizes
+ *  `event ??= id` at registration, so most call sites can omit it when the
+ *  command id and event name match (the common case). After normalization the
+ *  registry stores `CommandSpec` with `event` guaranteed. */
+export type CommandSpecInput<K extends EventName = EventName> = Omit<CommandSpec<K>, 'event'> & { event?: K };
+
 // ---------------------------------------------------------------------------
 // Flags / UI value helper
 // ---------------------------------------------------------------------------
@@ -318,7 +354,7 @@ export type AffordanceDef<T = unknown> = {
   surface: AffordanceSurface;
   command: string;
   kind: AffordanceKind;
-  slot?: string;
+  slot?: SlotName;
   text?: UiValue<T>;
   label?: UiValue<T>;
   className?: string;

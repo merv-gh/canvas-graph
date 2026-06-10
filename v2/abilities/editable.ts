@@ -70,7 +70,6 @@ export function registerEditable(system: Registry) {
       {
         id: 'item.title.edit',
         label: 'Edit title',
-        event: 'item.title.edit',
         group: 'item',
         shortcut: 'Enter',
         // Plain Enter while an item is selected. The selector-based commit
@@ -153,5 +152,5 @@ export function registerEditable(system: Registry) {
         emit('item.title.commit', { ref, text: el.textContent?.trim() ?? '', finish: true });
       },
     });
-  });
+  }, { requires: ['ability.selectable'] });
 }

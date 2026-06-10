@@ -28,5 +28,5 @@ export function registerFocus(system: Registry) {
       emit('focus.item.focused', null);
       emit('focus.node.focused', { id: null });
     });
-  });
+  }, { requires: ['graph'] });
 }

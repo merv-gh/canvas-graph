@@ -1,5 +1,5 @@
 import { uiValue, type Registry } from '../core';
-import { Places } from '../types';
+import { Places, Slots } from '../types';
 import type { ActionDef, AffordanceDef, EntityDef } from '../types';
 
 /** Ephemeral toolbar pinned above the selected item — regardless of kind.
@@ -56,9 +56,9 @@ export function registerItemToolbar(system: Registry) {
           wrapper.append(el);
         });
       };
-      append('drag', 'handler', '⋮⋮', 'node-drag-handle');
-      append('header:start', 'button');
-      append('header:end', 'button');
+      append(Slots.Drag, 'handler', '⋮⋮', 'node-drag-handle');
+      append(Slots.HeaderStart, 'button');
+      append(Slots.HeaderEnd, 'button');
       return wrapper;
     };
 
@@ -80,5 +80,5 @@ export function registerItemToolbar(system: Registry) {
     };
 
     on('render.stage.draw', draw);
-  });
+  }, { requires: ['render.stage', 'graph'] });
 }

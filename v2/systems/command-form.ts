@@ -78,7 +78,6 @@ export function registerCommandForm(system: Registry) {
     contexts.commands.register([{
       id: 'commandForm.submit',
       label: 'Submit command form',
-      event: 'commandForm.submit',
       group: 'modal',
       hidden: true,
       input: { on: 'keydown', key: 'Enter', selector: '.command-form input', prevent: true, stop: true },
@@ -120,5 +119,5 @@ export function registerCommandForm(system: Registry) {
       forward(command.event, payload);
       emit('modal.close');
     });
-  });
+  }, { requires: ['modal'] });
 }

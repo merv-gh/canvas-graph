@@ -1,5 +1,5 @@
 import { commandShortcut, emptyState, kbdHint, tagItem, type Registry } from '../core';
-import { Places } from '../types';
+import { Places, Slots } from '../types';
 import type { ActionDef, AffordanceDef, EntityDef, EntityRenderCtx, ItemRef } from '../types';
 import { uiValue } from '../core';
 
@@ -28,7 +28,7 @@ export function registerRenderStage(system: Registry) {
     const wireItemAffordances = <T>(el: HTMLElement, entityDef: EntityDef<T>, item: T) => {
       const grouped = new Map<string, { action: ActionDef<T>; ui: AffordanceDef<T> }[]>();
       contexts.affordances.entity(entityDef).forEach(({ action, ui }) => {
-        const slotName = ui.slot ?? 'header';
+        const slotName = ui.slot ?? Slots.Header;
         (grouped.get(slotName) ?? grouped.set(slotName, []).get(slotName)!).push({ action: action as ActionDef<T>, ui: ui as AffordanceDef<T> });
       });
       grouped.forEach((entries, slotName) => {
@@ -134,5 +134,5 @@ export function registerRenderStage(system: Registry) {
     };
 
     on('render.stage.draw', () => { drawItems(); drawStageOverlays(); drawEmptyState(); });
-  });
+  }, { requires: ['render', 'graph'] });
 }

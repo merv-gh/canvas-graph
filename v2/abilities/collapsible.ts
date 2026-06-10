@@ -1,5 +1,5 @@
 import { itemIdFrom, itemRefFrom, type Registry } from '../core';
-import type { CommandSource } from '../types';
+import { Slots, type CommandSource } from '../types';
 import { ability, action } from './shared';
 import type { Collapsable } from './shapes';
 // Uses the generic 'item.update' framework event — no CustomEvents add here.
@@ -12,7 +12,7 @@ export const collapsible = <T extends Collapsable>() => ability<T>('collapsible'
     surface: 'entity',
     command: 'item.collapse.toggle',
     kind: 'button',
-    slot: 'header:start',
+    slot: Slots.HeaderStart,
     className: 'node-action node-toggle',
     text: item => item.Collapsed ? '+' : '-',
     label: item => item.Collapsed ? 'Expand' : 'Collapse',
@@ -39,5 +39,5 @@ export function registerCollapsible(system: Registry) {
         return { ref, patch: { Collapsed: !item.Collapsed } };
       },
     }]);
-  });
+  }, { requires: ['ability.selectable'] });
 }

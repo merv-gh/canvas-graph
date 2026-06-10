@@ -48,27 +48,4 @@ export function registerSystems(system: Registry) {
   registerContainers(system);
   registerDemo(system);
   registerDx(system);
-
-  const deps: Record<string, string[]> = {
-    render: ['input'],
-    'render.stage': ['render', 'graph'],
-    cancellation: ['input'],
-    jump: ['render.stage', 'graph', 'focus', 'view.zoom'],
-    main: ['render'],
-    log: ['render'],
-    outline: ['render', 'graph'],
-    modal: ['render'],
-    commandForm: ['modal'],
-    commandPicker: ['render.stage', 'graph'],
-    commandModal: ['modal'],
-    collections: ['graph'],
-    'view.zoom': ['render'],
-    'view.pan': ['render'],
-    focus: ['graph'],
-    layout: ['graph'],
-    'item.toolbar': ['render.stage', 'graph'],
-    containers: ['render.stage', 'graph'],
-    demo: ['graph', 'render'],
-  };
-  Object.entries(deps).forEach(([name, list]) => system.setRequires(name, list));
 }

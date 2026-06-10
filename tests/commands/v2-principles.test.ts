@@ -114,7 +114,7 @@ describe('v2 principles (enforced)', () => {
     ctx.contexts.itemTargets.register('view.zoom', () => [{ ref: { kind: 'node', id: 'e-test' }, label: 'Z', anchor: { x: 0, y: 0 } }]);
     ctx.contexts.keyboard.capture('view.zoom');
 
-    ctx.registries.systems.stop(ctx, 'view.zoom');
+    ctx.registry!.stop(ctx, 'view.zoom');
     await settle();
 
     expect(ctx.contexts.commands.get('view.zoom.in')).toBeUndefined();

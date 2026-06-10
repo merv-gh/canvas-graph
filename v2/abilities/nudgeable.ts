@@ -46,5 +46,5 @@ export function registerNudgeable(system: Registry) {
         },
       })),
     );
-  });
+  }, { requires: ['ability.selectable'] });
 }

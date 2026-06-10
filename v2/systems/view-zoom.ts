@@ -1,7 +1,7 @@
 import type { GraphEdge, GraphNode } from '../model';
 import type { Registry } from '../core';
 import { clamp, itemRefFrom } from '../core';
-import { Places, type ItemRef, type Position, type ViewState } from '../types';
+import { Places, Slots, type ItemRef, type Position, type ViewState } from '../types';
 
 declare module '../types' {
   interface CustomEvents {
@@ -20,10 +20,10 @@ type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
 
 export function registerViewZoom(system: Registry) {
   system('view.zoom', ({ on, emit, contexts, graphs, selection, contribute }) => {
-    contribute({ surface: 'top', command: 'view.zoom.out', kind: 'button', text: '−', slot: 'end', order: 10 });
-    contribute({ surface: 'top', command: 'view.zoom.reset', kind: 'button', text: '100%', slot: 'end', order: 20 });
-    contribute({ surface: 'top', command: 'view.zoom.in', kind: 'button', text: '+', slot: 'end', order: 30 });
-    contribute({ surface: 'top', command: 'view.fit.all', kind: 'button', text: 'Fit', slot: 'end', order: 5 });
+    contribute({ surface: 'top', command: 'view.zoom.out', kind: 'button', text: '−', slot: Slots.End, order: 10 });
+    contribute({ surface: 'top', command: 'view.zoom.reset', kind: 'button', text: '100%', slot: Slots.End, order: 20 });
+    contribute({ surface: 'top', command: 'view.zoom.in', kind: 'button', text: '+', slot: Slots.End, order: 30 });
+    contribute({ surface: 'top', command: 'view.fit.all', kind: 'button', text: 'Fit', slot: Slots.End, order: 5 });
     const stageSelector = `[data-place="${Places.Stage}"]`;
     const commit = () => emit('view.changed', contexts.view.get());
     const centerZoom = (factor: number) => {
@@ -70,15 +70,14 @@ export function registerViewZoom(system: Registry) {
           };
         },
       },
-      { id: 'view.zoom.in', label: 'Zoom in', event: 'view.zoom.in', group: 'view', shortcut: '+', input: { on: 'keydown', key: '+', prevent: true } },
-      { id: 'view.zoom.out', label: 'Zoom out', event: 'view.zoom.out', group: 'view', shortcut: '-', input: { on: 'keydown', key: '-', prevent: true } },
-      { id: 'view.zoom.reset', label: 'Reset view', event: 'view.zoom.reset', group: 'view', shortcut: '0', input: { on: 'keydown', key: '0', prevent: true } },
-      { id: 'view.fit.all', label: 'Fit all to view', event: 'view.fit.all', group: 'view', shortcut: 'Z', input: { on: 'keydown', key: 'z', prevent: true } },
-      { id: 'view.fit.selected', label: 'Fit selected to view', event: 'view.fit.selected', group: 'view', shortcut: 'Shift+Z', input: { on: 'keydown', key: 'Z', shift: true, prevent: true }, available: () => !!selection.selected() },
+      { id: 'view.zoom.in', label: 'Zoom in', group: 'view', shortcut: '+', input: { on: 'keydown', key: '+', prevent: true } },
+      { id: 'view.zoom.out', label: 'Zoom out', group: 'view', shortcut: '-', input: { on: 'keydown', key: '-', prevent: true } },
+      { id: 'view.zoom.reset', label: 'Reset view', group: 'view', shortcut: '0', input: { on: 'keydown', key: '0', prevent: true } },
+      { id: 'view.fit.all', label: 'Fit all to view', group: 'view', shortcut: 'Z', input: { on: 'keydown', key: 'z', prevent: true } },
+      { id: 'view.fit.selected', label: 'Fit selected to view', group: 'view', shortcut: 'Shift+Z', input: { on: 'keydown', key: 'Z', shift: true, prevent: true }, available: () => !!selection.selected() },
       {
         id: 'view.fit.item',
         label: 'Fit item to view',
-        event: 'view.fit.item',
         group: 'view',
         hidden: true,
         available: source => !!itemRefFrom(source?.target) || !!selection.selected(),
@@ -199,5 +198,5 @@ export function registerViewZoom(system: Registry) {
       if (b) gentlyFitToBounds(b);
     });
     return cancelCamera;
-  });
+  }, { requires: ['render'] });
 }

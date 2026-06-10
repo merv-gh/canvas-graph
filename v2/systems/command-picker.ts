@@ -154,5 +154,5 @@ export function registerCommandPicker(system: Registry) {
     });
 
     return cancel;
-  });
+  }, { requires: ['render.stage', 'graph'] });
 }

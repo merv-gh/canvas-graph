@@ -46,7 +46,6 @@ export function registerSelectable(system: Registry) {
       {
         id: 'selection.item.select',
         label: 'Select item',
-        event: 'selection.item.select',
         group: 'selection',
         hidden: true,
         input: {
@@ -61,7 +60,6 @@ export function registerSelectable(system: Registry) {
       {
         id: 'selection.node.select',
         label: 'Select node',
-        event: 'selection.node.select',
         group: 'selection',
         hidden: true,
         payload: source => ({ id: nodeId(source) }),
@@ -89,14 +87,12 @@ export function registerSelectable(system: Registry) {
       {
         id: 'selection.node.clear',
         label: 'Clear selection',
-        event: 'selection.node.clear',
         group: 'selection',
         available: () => !!selection.selected(),
       },
       {
         id: 'selection.item.delete',
         label: 'Delete selection',
-        event: 'selection.item.delete',
         group: 'selection',
         shortcut: 'X',
         input: { on: 'keydown', key: 'x', prevent: true },

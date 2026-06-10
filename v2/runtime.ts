@@ -1,48 +1,43 @@
 import type { AppCtx, Registry } from './core';
 
-export type RuntimeRegistries = {
-  systems: Registry;
-  abilities: Registry;
-  features: Registry;
-};
-
 export type RuntimeFeatureManager = {
-  registries: RuntimeRegistries;
+  registry: Registry;
   setFlag(name: string, on: boolean): void;
   refresh(): void;
 };
 
 declare module './types' {
   interface CustomExposable {
-    registries?: RuntimeRegistries;
+    registry?: Registry;
     runtime?: RuntimeFeatureManager;
   }
 }
 
-export function installRuntimeFeatureManager(ctx: AppCtx, registries: RuntimeRegistries) {
-  const registryList = [registries.systems, registries.abilities, registries.features];
-  const ownerOf = (name: string) => registryList.find(registry => registry.names().includes(name));
+/** Hot-toggle the flag-driven lifecycle of any registered entry. One flat
+ *  registry now holds system / ability / feature entries — distinguished by
+ *  `kind`, not by which list they live in — so flag toggles call
+ *  `registry.stop` / `registry.start` directly. */
+export function installRuntimeFeatureManager(ctx: AppCtx, registry: Registry) {
   const redraw = () => {
     ctx.bus.emit('render.stage.draw');
     ctx.bus.emit('outline.draw');
   };
   const manager: RuntimeFeatureManager = {
-    registries,
+    registry,
     setFlag(name, on) {
-      const owner = ownerOf(name);
       ctx.flags.set(name, on);
-      if (owner) {
-        if (on) owner.start(ctx);
-        else owner.stop(ctx, name);
+      if (registry.names().includes(name)) {
+        if (on) registry.start(ctx);
+        else registry.stop(ctx, name);
       }
       redraw();
     },
     refresh() {
-      registryList.forEach(registry => registry.start(ctx));
+      registry.start(ctx);
       redraw();
     },
   };
-  ctx.registries = registries;
+  ctx.registry = registry;
   ctx.runtime = manager;
   return ctx.bus.on('flag.toggle', ({ name, on }) => {
     if (name) manager.setFlag(name, on);

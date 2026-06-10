@@ -1,4 +1,5 @@
 import { collectionCreateCommand, collectionDeleteCommand, collectionKind, type AppCtx, type Models, type Registry } from '../core';
+import { EntitySlots } from '../types';
 import type { CommandSpec, DxIssue } from '../types';
 
 type TemplateDebug = { _cloned?: Set<string> };
@@ -7,6 +8,10 @@ type BusDebug = { _subscribed?: Set<string>; _emitted?: Set<string> };
 export function registerDx(system: Registry) {
   system('dx', (ctx) => {
     ctx.expose('dx', { run: () => runDx(ctx) });
+    // Same runner is reachable via `ctx.contexts.dx.run()` — survives the
+    // shallow-spread of AppCtx into SystemCtx that earlier-registered systems
+    // closed over.
+    ctx.contexts.dx._setRunner(() => runDx(ctx));
     ctx.on('app.start', () => {
       queueMicrotask(() => {
         const issues = runDx(ctx);
@@ -38,6 +43,7 @@ export function runDx(ctx: AppCtx): DxIssue[] {
   const commands = ctx.contexts.commands.all();
   const commandIds = new Set(commands.map(c => c.id));
   const visibleCommandIds = new Set(commands.filter(c => !c.hidden).map(c => c.id));
+  const knownSlots = EntitySlots;
 
   ctx.model.entities().forEach(entityDef => entityDef.abilities.forEach(abilityDef => {
     if (!abilityDef.actions.length) error('ability.no-actions', `${entityDef.kind}.${abilityDef.id} has no actions`);
@@ -58,9 +64,27 @@ export function runDx(ctx: AppCtx): DxIssue[] {
       }
       actionDef.ui.forEach(ui => {
         if (!commandIds.has(ui.command)) error('action.ui-command-missing', `${actionDef.id} UI missing command ${ui.command}`);
+        // Slot names are a contract between abilities and renderers. If an
+        // ability points at a slot the renderer doesn't know about, the
+        // affordance silently vanishes — catch the typo at boot.
+        if (ui.slot != null && !knownSlots.has(ui.slot)) {
+          error('slot.unknown', `${actionDef.id} uses unknown slot "${ui.slot}" — add it to Slots in types.ts`);
+        }
       });
     });
   }));
+
+  // Patchable entities must have a storage handler — otherwise item.update
+  // emits from drag/edit/configure/etc. fall on the floor. selectable on its
+  // own doesn't patch; the rule fires for entities with patchable abilities or
+  // declared properties.
+  const PATCHABLE_ABILITIES = new Set(['draggable', 'nudgeable', 'editable', 'collapsible', 'configurable', 'resizeable']);
+  ctx.model.entities().forEach(entityDef => {
+    const hasPatchable = entityDef.abilities.some(a => PATCHABLE_ABILITIES.has(a.id)) || (entityDef.properties?.length ?? 0) > 0;
+    if (hasPatchable && !ctx.contexts.storage.has(entityDef.kind)) {
+      error('storage.missing', `entity kind "${entityDef.kind}" has patchable abilities/properties but no storage handler`);
+    }
+  });
 
   ctx.model.collections().forEach(collectionDef => {
     const create = collectionCreateCommand(collectionDef);

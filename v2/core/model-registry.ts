@@ -19,17 +19,26 @@ export const createModelRegistry = <Ctx,>(model: ModelDef<Ctx>, flags?: FlagsApi
   };
   const resolveCollection = <T,>(collectionDef: CollectionDef<T, Ctx>): ResolvedCollectionDef<T, Ctx> => {
     const kind = collectionDef.kind ?? collectionDef.entity?.kind ?? singular(collectionDef.id);
-    const entityDef = collectionDef.entity ?? entities.get(kind) as EntityDef<T> | undefined;
+    const explicitEntity = collectionDef.entity;
     const itemId = collectionDef.itemId ?? defaultItemId;
-    return {
-      ...collectionDef,
+    /** Resolve the entity at use-time, not at boot — systems register their
+     *  entities (graph → node/edge, containers → container) during start(),
+     *  *after* the model's initial seed runs. A collection declared in the
+     *  static seed must still resolve its entity once that registration lands. */
+    const liveEntity = () => explicitEntity ?? entities.get(kind) as EntityDef<T> | undefined;
+    const labelOf = collectionDef.itemLabel ?? ((item: T) => liveEntity()?.labelOf(item) ?? itemId(item));
+    const { entity: _omitEntity, ...rest } = collectionDef;
+    void _omitEntity;
+    const resolved = {
+      ...rest,
       kind,
-      entity: entityDef,
       itemId,
-      itemLabel: collectionDef.itemLabel ?? entityDef?.labelOf ?? itemId,
+      itemLabel: labelOf as (item: T) => string,
       search: collectionDef.search ?? true,
       order: collectionDef.order ?? 'created',
-    };
+    } as ResolvedCollectionDef<T, Ctx>;
+    Object.defineProperty(resolved, 'entity', { get: () => liveEntity(), enumerable: true, configurable: true });
+    return resolved;
   };
   const registerEntity = <T, Patch = unknown>(entityDef: EntityDef<T, Patch>) => {
     entities.set(entityDef.kind, entityDef as EntityDef<unknown, unknown>);

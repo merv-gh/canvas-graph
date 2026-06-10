@@ -32,5 +32,5 @@ export function registerLog(system: Registry) {
       rows.length = Math.min(rows.length, 12);
       scheduleDraw();
     });
-  });
+  }, { requires: ['render'] });
 }

@@ -1,5 +1,5 @@
 import type { Registry } from '../core';
-import { Places } from '../types';
+import { Places, Slots } from '../types';
 
 export function registerMain(system: Registry) {
   system('main', ({ on, emit, contexts }) => {
@@ -17,12 +17,12 @@ export function registerMain(system: Registry) {
           button.textContent = aff.text ?? aff.command;
           if (aff.label) button.setAttribute('aria-label', aff.label);
           if (aff.className) button.classList.add(...aff.className.split(/\s+/).filter(Boolean));
-          (aff.slot === 'end' ? end : start).append(button);
+          (aff.slot === Slots.End ? end : start).append(button);
         });
         return root;
       },
     });
     on('app.start', () => { emit('render.shell'); drawToolbar(); });
     on('affordance.contributed', ({ surface }) => { if (surface === 'top') drawToolbar(); });
-  });
+  }, { requires: ['render'] });
 }

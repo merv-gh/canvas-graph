@@ -1,5 +1,5 @@
 import { itemRefFrom, type Registry } from '../core';
-import { Places } from '../types';
+import { Places, Slots } from '../types';
 import type { ItemRef, Position } from '../types';
 import { ability, action } from './shared';
 import type { Positioned } from './shapes';
@@ -22,7 +22,7 @@ export const draggable = <T extends Positioned>() => ability<T>('draggable', [ac
     surface: 'entity',
     command: 'drag.item.start',
     kind: 'handler',
-    slot: 'drag',
+    slot: Slots.Drag,
     attrs: { 'data-drag-handle': '', role: 'button', 'aria-label': 'Drag item', title: 'Drag item' },
   }],
 })]);
@@ -35,7 +35,6 @@ export function registerDraggable(system: Registry) {
       {
         id: 'drag.item.start',
         label: 'Start drag',
-        event: 'drag.item.start',
         group: 'drag',
         hidden: true,
         input: { on: 'pointerdown', selector: '[data-drag-handle]', when: event => !(event.target as Element).closest('[data-command]'), prevent: true },
@@ -47,13 +46,12 @@ export function registerDraggable(system: Registry) {
       {
         id: 'drag.item.move',
         label: 'Move dragged item',
-        event: 'drag.item.move',
         group: 'drag',
         hidden: true,
         input: { on: 'pointermove', when: () => !!drag, prevent: true },
         payload: ({ event }) => ({ x: (event as PointerEvent).clientX, y: (event as PointerEvent).clientY }),
       },
-      { id: 'drag.item.end', label: 'End drag', event: 'drag.item.end', group: 'drag', hidden: true, input: { on: 'pointerup', when: () => !!drag } },
+      { id: 'drag.item.end', label: 'End drag', group: 'drag', hidden: true, input: { on: 'pointerup', when: () => !!drag } },
     ]);
 
     on('drag.item.start', ({ ref, x, y }) => {

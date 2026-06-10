@@ -1,5 +1,5 @@
 import { grouped, shortcutOf, systemOf, type Registry } from '../core';
-import { Places, type CommandSpec } from '../types';
+import { Places, type CommandSpec, type CommandSpecInput } from '../types';
 
 declare module '../types' {
   interface CustomEvents {
@@ -32,7 +32,8 @@ const commandModals: Record<CommandModalDef['id'], CommandModalDef> = {
 const NUMBERED_ROWS = 5;
 
 export function registerCommandModal(system: Registry) {
-  system('commandModal', ({ on, emit, contexts, contribute, flags }) => {
+  system('commandModal', (ctx) => {
+    const { on, emit, contexts, contribute, flags } = ctx;
     contribute({ surface: 'top', command: 'palette.open', kind: 'button', text: 'Palette', order: 30 });
     contribute({ surface: 'top', command: 'help.open', kind: 'button', text: 'Help', order: 40 });
     const queries = new Map<CommandModalDef['id'], string>();
@@ -132,13 +133,49 @@ export function registerCommandModal(system: Registry) {
       }));
       return section;
     };
+    /** Doctor section: surfaces DX issues at the top of Help so contract drift
+     *  is visible to the user, not only to a developer tailing the console.
+     *  Re-reads `contexts.dx.issues()` every render (no caching) — the latest
+     *  flag toggle / runtime.refresh feeds straight in. */
+    const renderDoctorSection = () => {
+      // contexts.dx is created at boot (stable) and the dx system installs the
+      // live runner — works regardless of registration order.
+      const issues = contexts.dx.run();
+      const section = contexts.templates.clone('command-section');
+      const rows = contexts.templates.slot(section, 'rows');
+      const counts = { error: issues.filter(i => i.level === 'error').length, warn: issues.filter(i => i.level === 'warn').length };
+      contexts.templates.text(section, 'group', `Doctor — ${counts.error} error · ${counts.warn} warn`);
+      if (!issues.length) {
+        const ok = document.createElement('div');
+        ok.className = 'help-row';
+        ok.textContent = 'All checks passed.';
+        rows.append(ok);
+        return section;
+      }
+      issues.forEach(issue => {
+        const row = document.createElement('div');
+        row.className = `help-row dx-row dx-${issue.level}`;
+        const lead = document.createElement('b');
+        lead.textContent = `[${issue.level}] ${issue.rule}`;
+        const detail = document.createElement('small');
+        detail.textContent = issue.message;
+        const wrapper = document.createElement('span');
+        wrapper.append(lead, detail);
+        row.append(wrapper);
+        rows.append(row);
+      });
+      return section;
+    };
     const renderCommandModal = (modal: CommandModalDef) => {
       const palette = contexts.templates.clone('palette');
       palette.dataset.commandModal = modal.id;
       const input = palette.querySelector('.palette-search');
       if (input instanceof HTMLInputElement) input.placeholder = modal.placeholder;
       const slot = contexts.templates.slot(palette, 'commands');
-      if (modal.id === 'help') slot.append(renderFlagsSection());
+      if (modal.id === 'help') {
+        slot.append(renderDoctorSection());
+        slot.append(renderFlagsSection());
+      }
       slot.append(renderList(modal));
       return palette;
     };
@@ -146,15 +183,13 @@ export function registerCommandModal(system: Registry) {
       ...Object.values(commandModals).map(modal => ({
         id: modal.event,
         label: modal.label,
-        event: modal.event,
         group: 'modal',
         shortcut: modal.shortcut,
         input: { on: 'keydown', key: modal.key, prevent: true },
-      }) satisfies CommandSpec),
+      }) satisfies CommandSpecInput),
       {
         id: 'commandModal.run',
         label: 'Run command modal item',
-        event: 'commandModal.run',
         group: 'modal',
         hidden: true,
         payload: ({ target }) => ({ commandId: target?.closest('[data-command-id]')?.getAttribute('data-command-id') ?? '' }),
@@ -187,7 +222,6 @@ export function registerCommandModal(system: Registry) {
       {
         id: 'shortcut.edit.preview',
         label: 'Preview shortcut edit',
-        event: 'shortcut.edit.preview',
         group: 'modal',
         hidden: true,
         input: { on: 'input', selector: '.shortcut-edit' },
@@ -196,7 +230,6 @@ export function registerCommandModal(system: Registry) {
       {
         id: 'shortcut.edit.commit',
         label: 'Commit shortcut edit',
-        event: 'shortcut.edit.commit',
         group: 'modal',
         hidden: true,
         input: { on: 'change', selector: '.shortcut-edit' },
@@ -205,7 +238,6 @@ export function registerCommandModal(system: Registry) {
       {
         id: 'flag.toggle',
         label: 'Toggle feature flag',
-        event: 'flag.toggle',
         group: 'modal',
         hidden: true,
         input: { on: 'change', selector: '.flag-toggle' },
@@ -245,5 +277,5 @@ export function registerCommandModal(system: Registry) {
       if (!(input instanceof HTMLInputElement) || !syncShortcutConflict(input)) return;
       contexts.commands.setShortcut(id, input.value);
     });
-  });
+  }, { requires: ['modal'] });
 }

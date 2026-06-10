@@ -1,4 +1,5 @@
 import { itemParentAttr, itemRefFrom, type Registry } from '../core';
+import { Slots } from '../types';
 import type {
   ItemRef,
   PropertyDef,
@@ -27,7 +28,7 @@ export const configurable = <T extends Identified>() => ability<T>('configurable
     surface: 'entity',
     command: 'item.properties.open',
     kind: 'button',
-    slot: 'header:end',
+    slot: Slots.HeaderEnd,
     className: 'node-action node-config',
     text: '⚙',
     label: 'Configure',
@@ -77,7 +78,6 @@ export function registerConfigurable(system: Registry) {
       {
         id: 'item.properties.open',
         label: 'Open item properties',
-        event: 'item.properties.open',
         group: 'item',
         available: source => !!itemRefFrom(source?.target) || !!selected(),
         payload: source => itemRefFrom(source.target) ?? selected() ?? undefined,
@@ -85,7 +85,6 @@ export function registerConfigurable(system: Registry) {
       {
         id: 'properties.item.input',
         label: 'Edit item property',
-        event: 'properties.item.input',
         group: 'properties',
         hidden: true,
         input: { on: 'input', selector: '.properties input[data-field]:not([type="checkbox"])' },
@@ -98,7 +97,6 @@ export function registerConfigurable(system: Registry) {
       {
         id: 'properties.item.toggle',
         label: 'Toggle item property',
-        event: 'properties.item.toggle',
         group: 'properties',
         hidden: true,
         input: { on: 'change', selector: '.properties input[type="checkbox"][data-field]' },
@@ -123,5 +121,5 @@ export function registerConfigurable(system: Registry) {
     });
     on('properties.item.input', ({ ref, field, value }) => applyProperty(ref, field, value));
     on('properties.item.toggle', ({ ref, field, checked }) => applyProperty(ref, field, checked));
-  });
+  }, { requires: ['ability.selectable', 'modal'] });
 }

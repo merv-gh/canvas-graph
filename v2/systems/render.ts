@@ -83,5 +83,5 @@ export function registerRender(system: Registry) {
       const scope = factScope(name);
       if (scope) applyScope(scope);
     });
-  });
+  }, { requires: ['input'] });
 }

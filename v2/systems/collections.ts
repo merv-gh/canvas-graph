@@ -18,5 +18,5 @@ export function registerCollections(system: Registry) {
       };
       ctx.contribute(button);
     });
-  });
+  }, { requires: ['graph'] });
 }

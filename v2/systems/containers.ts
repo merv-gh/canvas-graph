@@ -1,6 +1,6 @@
 import { collapsible, configurable, draggable, editable, nudgeable, resizeable, selectable } from '../abilities';
 import { boundsOf, createNesting, expandRect, itemIdFrom, unionRect, type Registry } from '../core';
-import { Places } from '../types';
+import { Places, Slots } from '../types';
 import type {
   EntityDef,
   EntityRenderer,
@@ -120,7 +120,7 @@ export function registerContainers(system: Registry) {
         // Resize handle slot — wireAffordances injects data-resize-handle.
         const handle = document.createElement('div');
         handle.className = 'container-resize';
-        handle.dataset.slot = 'resize';
+        handle.dataset.slot = Slots.Resize;
         el.append(label, handle);
         r.wireAffordances(el);
         return el;
@@ -174,7 +174,6 @@ export function registerContainers(system: Registry) {
       {
         id: 'editing.container.create',
         label: 'Create container',
-        event: 'editing.container.create',
         group: 'container',
         shortcut: 'Y',
         input: { on: 'keydown', key: 'y', prevent: true },
@@ -186,7 +185,6 @@ export function registerContainers(system: Registry) {
       {
         id: 'graph.container.delete',
         label: 'Delete container',
-        event: 'graph.container.delete',
         group: 'container',
         available: source => {
           const fromDom = !!source?.target?.closest('[data-item-kind="container"]') && !!itemIdFrom(source?.target);
@@ -203,7 +201,6 @@ export function registerContainers(system: Registry) {
       {
         id: 'container.add-child',
         label: 'Move into container',
-        event: 'container.add-child',
         group: 'container',
         shortcut: 'M',
         input: { on: 'keydown', key: 'm', prevent: true },
@@ -227,7 +224,6 @@ export function registerContainers(system: Registry) {
       {
         id: 'container.remove-child',
         label: 'Remove from container',
-        event: 'container.remove-child',
         group: 'container',
         available: () => {
           const r = selection.selected();
@@ -277,8 +273,7 @@ export function registerContainers(system: Registry) {
     });
 
     // ---------- Storage: apply container patches from item.update ----------
-    on('item.update', ({ ref, patch }) => {
-      if (ref.kind !== 'container') return;
+    contexts.storage.register('container', origin, (ref, patch) => {
       const c = containers.get(ref.id);
       if (!c) return;
       const p = patch as ContainerPatch;
@@ -300,5 +295,5 @@ export function registerContainers(system: Registry) {
     contribute({ surface: 'top', command: 'editing.container.create', kind: 'button', text: '+ Container', order: 17 });
 
     return () => { offEntity(); offCollection(); storeOff(); };
-  });
+  }, { requires: ['render.stage', 'graph'] });
 }

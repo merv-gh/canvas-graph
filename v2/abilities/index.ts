@@ -24,13 +24,4 @@ export function registerAbilitySystems(system: Registry) {
   registerEditable(system);
   registerConfigurable(system);
   registerResizeable(system);
-
-  const deps: Record<string, string[]> = {
-    'ability.nudgeable': ['ability.selectable'],
-    'ability.collapsible': ['ability.selectable'],
-    'ability.editable': ['ability.selectable'],
-    'ability.configurable': ['ability.selectable', 'modal'],
-    'ability.resizeable': ['ability.selectable'],
-  };
-  Object.entries(deps).forEach(([name, list]) => system.setRequires(name, list));
 }

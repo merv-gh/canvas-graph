@@ -81,7 +81,6 @@ export function registerJump(system: Registry) {
       {
         id: 'jump.start',
         label: 'Jump to item',
-        event: 'jump.start',
         group: 'jump',
         shortcut: 'g',
         // `stop: true` so the same `g` keystroke doesn't also fall through to
@@ -93,7 +92,6 @@ export function registerJump(system: Registry) {
       {
         id: 'jump.cancel',
         label: 'Cancel jump',
-        event: 'jump.cancel',
         group: 'jump',
         hidden: true,
       },
@@ -108,5 +106,5 @@ export function registerJump(system: Registry) {
     });
 
     return cancel;
-  });
+  }, { requires: ['render.stage', 'graph', 'focus', 'view.zoom'] });
 }

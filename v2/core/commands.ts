@@ -1,4 +1,4 @@
-import type { Bus, CommandOrigin, CommandSource, CommandSpec, EventName } from '../types';
+import type { Bus, CommandOrigin, CommandSource, CommandSpec, CommandSpecInput, EventName } from '../types';
 import type { IoApi } from './io';
 import { STORAGE_KEYS } from './io';
 import { bindingParsed, keyMatchesEvent, parseShortcut, shortcutOf } from './shortcuts';
@@ -51,7 +51,13 @@ export function commandsContext(bus: Bus, isFlagOn: (origin?: string) => boolean
   };
 
   return {
-    register: (specs: CommandSpec[], origin?: string) => specs.forEach(command => {
+    register: (specs: CommandSpecInput[], origin?: string) => specs.forEach(input => {
+      const command = input as CommandSpec;
+      // `event` defaults to `id`. Most commands have id === event; the option to
+      // override exists for cases where many command ids fire the same event
+      // (e.g. four nudge directions → 'item.update', several pointer variants
+      // → 'drag.item.start').
+      if (!command.event) command.event = command.id as EventName;
       if (origin && !command.origin) command.origin = origin;
       applyOverrides(command);
       commandMap.set(command.id, command);

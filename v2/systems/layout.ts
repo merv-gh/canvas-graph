@@ -121,9 +121,9 @@ export function registerLayout(system: Registry) {
     contribute({ surface: 'top', command: 'layout.apply.tidy', kind: 'button', text: 'Tidy', order: 65 });
     contribute({ surface: 'top', command: 'layout.apply.radial', kind: 'button', text: 'Radial', order: 66 });
     contexts.commands.register([
-      { id: 'layout.apply.radial', label: 'Radial layout', event: 'layout.apply.radial', group: 'layout', input: { on: 'keydown', key: 'r', prevent: true } },
-      { id: 'layout.apply.grid',   label: 'Grid layout',   event: 'layout.apply.grid',   group: 'layout', input: { on: 'keydown', key: 'G', shift: true, prevent: true } },
-      { id: 'layout.apply.tidy',   label: 'Tidy tree layout', event: 'layout.apply.tidy', group: 'layout', input: { on: 'keydown', key: 't', prevent: true } },
+      { id: 'layout.apply.radial', label: 'Radial layout', group: 'layout', input: { on: 'keydown', key: 'r', prevent: true } },
+      { id: 'layout.apply.grid',   label: 'Grid layout',   group: 'layout', input: { on: 'keydown', key: 'G', shift: true, prevent: true } },
+      { id: 'layout.apply.tidy',   label: 'Tidy tree layout', group: 'layout', input: { on: 'keydown', key: 't', prevent: true } },
     ]);
 
     const set: PatchEmit = (id, Position) => emit('item.update', { ref: nodeRef(id), patch: { Position } });
@@ -134,5 +134,5 @@ export function registerLayout(system: Registry) {
       const focusedId = selection.focusedNode()?.id ?? selection.selectedNode()?.id;
       partitionByScope(ctx).forEach(scope => radialScope(scope, focusedId, set));
     });
-  });
+  }, { requires: ['graph'] });
 }

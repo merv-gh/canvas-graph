@@ -6,6 +6,7 @@ import {
   createFlags,
   memoryIo,
   registry,
+  withKind,
   type AppCtx,
 } from '../../v2/core';
 import { registerFeatures } from '../../v2/features';
@@ -26,18 +27,14 @@ export function bootV2(flags: FeatureFlags = {}) {
   }
   document.documentElement.innerHTML = html;
   localStorage.clear();
-  const systems = registry('system');
-  const abilities = registry('ability');
-  const features = registry('feature');
-  registerSystems(systems);
-  registerAbilitySystems(abilities);
-  registerFeatures(features);
+  const plugins = registry();
+  registerSystems(withKind(plugins, 'system'));
+  registerAbilitySystems(withKind(plugins, 'ability'));
+  registerFeatures(withKind(plugins, 'feature'));
   const io = memoryIo();
   const ctx = createAppContext(graphStore(), appModel, createFlags(flags, io), io);
-  installRuntimeFeatureManager(ctx, { systems, abilities, features });
-  systems.start(ctx);
-  abilities.start(ctx);
-  features.start(ctx);
+  installRuntimeFeatureManager(ctx, plugins);
+  plugins.start(ctx);
   ctx.bus.emit('app.start');
   const booted = ctx;
   window.v2 = booted;

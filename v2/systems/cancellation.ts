@@ -29,5 +29,5 @@ export function registerCancellation(system: Registry) {
         input: { on: 'pointerdown', selector: `[data-place="${Places.Stage}"]`, when: isStageSurface },
       },
     ]);
-  });
+  }, { requires: ['input'] });
 }

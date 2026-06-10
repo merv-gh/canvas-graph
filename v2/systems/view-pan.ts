@@ -54,5 +54,5 @@ export function registerViewPan(system: Registry) {
       pan = null;
       contexts.places.el(Places.Stage)?.classList.remove('panning');
     });
-  });
+  }, { requires: ['render'] });
 }

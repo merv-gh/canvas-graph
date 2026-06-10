@@ -103,5 +103,5 @@ export function registerOutline(system: Registry) {
         next?.setSelectionRange(next.value.length, next.value.length);
       });
     });
-  });
+  }, { requires: ['render', 'graph'] });
 }

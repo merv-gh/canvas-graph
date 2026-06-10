@@ -37,7 +37,6 @@ export function registerFeatures(feature: Registry) {
       {
         id: 'editing.node.create',
         label: 'Create node',
-        event: 'editing.node.create',
         group: 'editing',
         shortcut: 'A',
         input: { on: 'keydown', key: 'a', prevent: true },
@@ -69,12 +68,11 @@ export function registerFeatures(feature: Registry) {
       if (hints?.connectFrom) emit('graph.edge.create', { From: hints.connectFrom, To: id });
       if (createdNodeIsOffscreen(id)) emit('view.fit.item', { kind: 'node', id });
     });
-  });
+  }, { requires: ['graph', 'ability.selectable', 'focus'] });
   feature('edgeLifecycle', ({ on, emit, contexts, graphs, selection }) => {
     contexts.commands.register([{
       id: 'editing.edge.create',
       label: 'Create edge',
-      event: 'editing.edge.create',
       group: 'edge',
       shortcut: 'E',
       input: { on: 'keydown', key: 'e', prevent: true },
@@ -115,8 +113,5 @@ export function registerFeatures(feature: Registry) {
       if (!graphs.current.getNode(From) || !graphs.current.getNode(To)) return;
       emit('graph.edge.create', { From, To, Label: draft.Label });
     });
-  });
-
-  feature.setRequires('nodeLifecycle', ['graph', 'ability.selectable', 'focus']);
-  feature.setRequires('edgeLifecycle', ['graph']);
+  }, { requires: ['graph'] });
 }

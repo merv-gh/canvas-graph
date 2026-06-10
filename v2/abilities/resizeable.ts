@@ -1,5 +1,5 @@
 import { itemRefFrom, type Registry } from '../core';
-import { Places } from '../types';
+import { Places, Slots } from '../types';
 import type { ItemRef, Position, Size } from '../types';
 import { ability, action } from './shared';
 import type { Sized } from './shapes';
@@ -26,7 +26,7 @@ export const resizeable = <T extends Sized>() => ability<T>('resizeable', [actio
     surface: 'entity',
     command: 'resize.item.start',
     kind: 'handler',
-    slot: 'resize',
+    slot: Slots.Resize,
     attrs: { 'data-resize-handle': '', role: 'button', 'aria-label': 'Resize item', title: 'Resize item' },
   }],
 })]);
@@ -39,7 +39,6 @@ export function registerResizeable(system: Registry) {
       {
         id: 'resize.item.start',
         label: 'Start resize',
-        event: 'resize.item.start',
         group: 'resize',
         hidden: true,
         input: { on: 'pointerdown', selector: '[data-resize-handle]', prevent: true, stop: true },
@@ -51,7 +50,6 @@ export function registerResizeable(system: Registry) {
       {
         id: 'resize.item.move',
         label: 'Resize item',
-        event: 'resize.item.move',
         group: 'resize',
         hidden: true,
         input: { on: 'pointermove', when: () => !!resize, prevent: true },
@@ -60,7 +58,6 @@ export function registerResizeable(system: Registry) {
       {
         id: 'resize.item.end',
         label: 'End resize',
-        event: 'resize.item.end',
         group: 'resize',
         hidden: true,
         input: { on: 'pointerup', when: () => !!resize },
@@ -89,5 +86,5 @@ export function registerResizeable(system: Registry) {
       emit('resize.item.changed', { ref: resize.ref });
     });
     on('resize.item.end', () => { resize = null; });
-  });
+  }, { requires: ['ability.selectable'] });
 }

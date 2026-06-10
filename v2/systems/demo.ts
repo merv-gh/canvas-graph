@@ -1,4 +1,4 @@
-import type { Registry } from '../core';
+import { introspect, type IntrospectKind, type IntrospectRef, type Registry } from '../core';
 
 declare module '../types' {
   interface CustomEvents {
@@ -6,44 +6,56 @@ declare module '../types' {
   }
 }
 
-/** demo.run-self renders the live composition graph: every system, ability, and
- *  feature flagged ON appears as a node connected to a 'core' root. The list is
- *  derived from flags.declared() — adding a new system or ability shows up here
- *  automatically. Disabled flags are skipped. */
+/** Self-graph: the live composition of the app rendered as nodes + edges.
+ *  Sources its data exclusively from `introspect(ctx)`, so adding a new
+ *  system / ability / feature / entity / collection shows up here with zero
+ *  edits. The drawn slice is intentionally compact (no event nodes, only the
+ *  high-signal relations) so the picture stays legible. */
 export function registerDemo(system: Registry) {
-  system('demo', ({ on, emit, contexts, graphs, flags, selection, contribute }) => {
+  system('demo', (ctx) => {
+    const { on, emit, graphs, contribute } = ctx;
     contribute({ surface: 'top', command: 'demo.render-self', kind: 'button', text: '★ Self', order: 60 });
-    contexts.commands.register([{
+    ctx.contexts.commands.register([{
       id: 'demo.render-self',
       label: 'Render self-graph',
       event: 'demo.run-self',
       group: 'demo',
     }]);
 
+    const NODE_KINDS: IntrospectKind[] = ['system', 'ability', 'feature', 'entity', 'collection'];
+    const EDGE_RELATIONS = new Set(['requires', 'declares', 'lists']);
+    const refKey = (ref: IntrospectRef) => `${ref.kind}:${ref.id}`;
+
     on('demo.run-self', () => {
-      graphs.current.nodes().slice().forEach(node => emit('graph.node.delete', { id: node.id }));
-      emit('editing.node.create', { Label: { text: 'core' } });
-      const root = selection.selectedNode()?.id;
-      if (!root) return;
-      emit('focus.node.focus', { id: root });
+      const graph = graphs.current;
+      graph.nodes().slice().forEach(node => emit('graph.node.delete', { id: node.id }));
 
-      const buckets = (['system', 'ability', 'feature'] as const)
-        .flatMap(kind => flags.declared(kind).filter(name => flags.isOn(name)));
+      const snapshot = introspect(ctx);
+      const wantedNodes = snapshot.nodes.filter(n => NODE_KINDS.includes(n.kind));
+      const idOf = new Map<string, string>();
 
-      buckets.forEach(name => emit('editing.node.create', {
-        Label: { text: name },
-        connectFrom: root,
-        keepFocus: true,
-      }));
+      wantedNodes.forEach(n => {
+        const created = graph.createNode({ Label: { text: `${n.kind}:${n.id}` } });
+        idOf.set(refKey(n), created.id);
+        emit('graph.node.created', { graphId: graph.id, id: created.id });
+      });
+
+      snapshot.edges.forEach(e => {
+        if (!EDGE_RELATIONS.has(e.relation)) return;
+        const from = idOf.get(refKey(e.from));
+        const to = idOf.get(refKey(e.to));
+        if (!from || !to || from === to) return;
+        const created = graph.createEdge({ From: from, To: to, Label: { text: e.relation } });
+        emit('graph.edge.created', { graphId: graph.id, id: created.id, edge: created });
+      });
 
       emit('layout.apply.tidy');
       emit('view.fit.all');
 
-      console.info('[demo] self-graph rendered via bus', {
-        roots: 1,
-        nodes: buckets.length + 1,
-        kinds: { system: flags.declared('system').length, ability: flags.declared('ability').length, feature: flags.declared('feature').length },
+      console.info('[demo] self-graph rendered', {
+        nodes: wantedNodes.length,
+        edges: snapshot.edges.filter(e => EDGE_RELATIONS.has(e.relation)).length,
       });
     });
-  });
+  }, { requires: ['graph', 'render'] });
 }

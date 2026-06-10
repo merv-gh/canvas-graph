@@ -13,13 +13,17 @@ import { createModelRegistry } from './core/model-registry';
 import { propertiesContext } from './core/properties';
 import { createSelectionStore, type SelectionStore } from './core/selection';
 import { createSim, type SimApi } from './core/sim';
+import { storageContext, type StorageApi } from './core/storage';
 import { templateContext } from './core/templates';
 import { viewContext } from './core/view';
 import {
   type AnyEvent,
+  type AppEvents,
   type Bus,
   type CommandSpec,
+  type CommandSpecInput,
   type EventName,
+  type EventOf,
   type ModelDef,
   type Place,
   type ResolvedCollectionDef,
@@ -48,6 +52,8 @@ export { factScope } from './core/redraw';
 export { createModelRegistry } from './core/model-registry';
 export { boundsOf, unionRect, expandRect, rectCenter } from './core/geometry';
 export { createNesting, type NestApi } from './core/nesting';
+export { introspect, type IntrospectKind, type IntrospectNode, type IntrospectEdge, type IntrospectRelation, type IntrospectRef, type IntrospectSnapshot } from './core/introspect';
+export { storageContext, type StorageApi, type StorageApply } from './core/storage';
 
 export type Contexts = ReturnType<typeof createContexts>;
 export type Models = ReturnType<typeof createModelRegistry>;
@@ -81,6 +87,8 @@ export type RegistryEntryOptions = {
   /** Other system / ability / feature names that must be enabled for this entry to function well.
    *  DX will warn if this entry is enabled but a required dep is off. */
   requires?: string[];
+  /** Override the registry's default flag kind for this entry. Used by `withKind`. */
+  kind?: FlagKind;
 };
 export type Registry = ((name: string, setup: AppSystem, opts?: RegistryEntryOptions) => void) & {
   start(ctx: AppCtx): void;
@@ -90,6 +98,8 @@ export type Registry = ((name: string, setup: AppSystem, opts?: RegistryEntryOpt
   requires(name: string): string[];
   /** Post-register the requires list for an already-declared entry. */
   setRequires(name: string, requires: string[]): void;
+  /** Per-entry kind, set at registration via opts.kind or registry default. */
+  kindOf(name: string): FlagKind | undefined;
 };
 
 declare global { interface Window { v2?: AppCtx } }
@@ -99,13 +109,38 @@ export const systemOf = (id: string) => id.split('.')[0] || 'app';
 export const uiValue = <T,>(value: UiValue<T> | undefined, item: T, fallback = '') =>
   typeof value === 'function' ? value(item) : value ?? fallback;
 
-type InstrumentedBus = Bus & { _subscribed: Set<string>; _emitted: Set<string> };
+/** Bus instrumentation surface — separate so InstrumentedBus stays focused on
+ *  the inverse-index accessors callers actually use (introspect, DX, sim). */
+export type BusOriginIndex = {
+  /** Origins that subscribed to `name` at least once and haven't fully torn down. */
+  _subscribersOf(name: string): string[];
+  /** Origins that emitted `name` at least once this session. */
+  _emittersOf(name: string): string[];
+  /** Event names this origin still subscribes to. */
+  _subscriptionsOf(origin: string): string[];
+  /** Event names this origin has emitted at least once. */
+  _emissionsOf(origin: string): string[];
+  /** Record a subscribe / unsubscribe. Used by registry.start's scopedBus. */
+  _trackSubscribe(name: string, origin: string): void;
+  _untrackSubscribe(name: string, origin: string): void;
+  /** Record an emit. Used by registry.start's scopedBus and SystemCtx.emit/forward. */
+  _trackEmit(name: string, origin: string): void;
+};
+type InstrumentedBus = Bus & BusOriginIndex & { _subscribed: Set<string>; _emitted: Set<string> };
 function eventBus(): InstrumentedBus {
   const listeners = new Map<EventName, ((data: unknown, event: AnyEvent) => void)[]>();
   const any: ((event: AnyEvent) => void)[] = [];
   const listenerCounts = new Map<string, number>();
   const subscribed = new Set<string>();
   const emitted = new Set<string>();
+  /** Per-event subscriber counts keyed by origin. Counts (not booleans) because the
+   *  same origin can register multiple handlers on the same event; the origin only
+   *  drops off `_subscribersOf` when the last handler tears down. */
+  const subscribersOf = new Map<string, Map<string, number>>();
+  /** Inverse index: per-origin set of currently subscribed event names. */
+  const subscriptionsOf = new Map<string, Set<string>>();
+  const emittersOf = new Map<string, Set<string>>();
+  const emissionsOf = new Map<string, Set<string>>();
   const addSubscribed = (name: string) => {
     listenerCounts.set(name, (listenerCounts.get(name) ?? 0) + 1);
     subscribed.add(name);
@@ -151,6 +186,30 @@ function eventBus(): InstrumentedBus {
     forward(name, data) { dispatch(name, data); },
     _subscribed: subscribed,
     _emitted: emitted,
+    _subscribersOf: (name) => [...(subscribersOf.get(name)?.keys() ?? [])],
+    _emittersOf: (name) => [...(emittersOf.get(name) ?? [])],
+    _subscriptionsOf: (origin) => [...(subscriptionsOf.get(origin) ?? [])],
+    _emissionsOf: (origin) => [...(emissionsOf.get(origin) ?? [])],
+    _trackSubscribe(name, origin) {
+      const counts = subscribersOf.get(name) ?? subscribersOf.set(name, new Map()).get(name)!;
+      counts.set(origin, (counts.get(origin) ?? 0) + 1);
+      (subscriptionsOf.get(origin) ?? subscriptionsOf.set(origin, new Set()).get(origin)!).add(name);
+    },
+    _untrackSubscribe(name, origin) {
+      const counts = subscribersOf.get(name);
+      if (!counts) return;
+      const next = (counts.get(origin) ?? 0) - 1;
+      if (next > 0) { counts.set(origin, next); return; }
+      counts.delete(origin);
+      if (!counts.size) subscribersOf.delete(name);
+      const set = subscriptionsOf.get(origin);
+      set?.delete(name);
+      if (set && !set.size) subscriptionsOf.delete(origin);
+    },
+    _trackEmit(name, origin) {
+      (emittersOf.get(name) ?? emittersOf.set(name, new Set()).get(name)!).add(origin);
+      (emissionsOf.get(origin) ?? emissionsOf.set(origin, new Set()).get(origin)!).add(name);
+    },
   };
 }
 
@@ -172,17 +231,24 @@ function createContexts(bus: Bus, flags: FlagsApi, io: IoApi) {
   const keyboard = keyboardCaptureContext();
   const commands = commandsContext(bus, origin => !origin || flags.isOn(origin), io);
   const input = inputRouter(commands);
+  const storage = storageContext(bus);
   const placeContext = {
     set: (place: Place, el: HTMLElement | null) => { if (el) places.set(place, el); },
     el: (place: Place) => places.get(place) ?? null,
   };
   // DX inspection surface — `dx` system writes here at boot for tests/devtools to read.
+  // `run()` re-evaluates contracts on demand; the dx system installs the live
+  // runner at start so callers (Help modal, devtools) see current state, not a
+  // boot-time snapshot.
   let lastDxIssues: DxIssue[] = [];
+  let runner: () => DxIssue[] = () => lastDxIssues;
   const dx = {
     issues: () => lastDxIssues,
+    run: () => runner(),
     _set(issues: DxIssue[]) { lastDxIssues = issues; },
+    _setRunner(fn: () => DxIssue[]) { runner = fn; },
   };
-  const teardown: OriginScoped[] = [commands, affordances, cancellation, itemModes, itemOverlays, itemTargets, hierarchy, keyboard];
+  const teardown: OriginScoped[] = [commands, affordances, cancellation, itemModes, itemOverlays, itemTargets, hierarchy, keyboard, storage];
   return {
     commands,
     input,
@@ -198,19 +264,21 @@ function createContexts(bus: Bus, flags: FlagsApi, io: IoApi) {
     itemTargets,
     hierarchy,
     keyboard,
+    storage,
     teardown,
   };
 }
 
 /** Registry runs setup functions in insertion order, filtering by feature flag.
  *  Each setup gets `origin: <name>` injected so any commands it registers are tagged.
- *  The `kind` tags every flag the registry declares — lets demo/DX group entries
- *  without hardcoded name lists. */
-export function registry(kind: FlagKind = 'system'): Registry {
-  const entries: { name: string; setup: AppSystem; requires: string[] }[] = [];
+ *  The `defaultKind` tags every entry's flag unless `opts.kind` overrides it —
+ *  lets demo/DX group entries without hardcoded name lists, while still letting
+ *  a single registry hold system/ability/feature entries side by side. */
+export function registry(defaultKind: FlagKind = 'system'): Registry {
+  const entries: { name: string; setup: AppSystem; requires: string[]; kind: FlagKind }[] = [];
   const running = new Map<string, Disposer[]>();
   const register = ((name: string, setup: AppSystem, opts: RegistryEntryOptions = {}) => {
-    entries.push({ name, setup, requires: opts.requires ?? [] });
+    entries.push({ name, setup, requires: opts.requires ?? [], kind: opts.kind ?? defaultKind });
   }) as Registry;
   const stopEntry = (ctx: AppCtx, name: string) => {
     [...(running.get(name) ?? [])].reverse().forEach(dispose => dispose());
@@ -219,36 +287,55 @@ export function registry(kind: FlagKind = 'system'): Registry {
   };
   register.start = (ctx) => {
     entries.forEach(entry => {
-      ctx.flags.declare(entry.name, true, entry.requires, kind);
+      ctx.flags.declare(entry.name, true, entry.requires, entry.kind);
       if (!ctx.flags.isOn(entry.name) || running.has(entry.name)) return;
       const disposers: Disposer[] = [];
+      const index = ctx.bus as Partial<BusOriginIndex>;
+      const origin = entry.name;
+      const trackedOn = <K extends EventName>(name: K, fn: (data: AppEvents[K], event: EventOf<K>) => void) => {
+        const off = ctx.bus.on(name, fn);
+        index._trackSubscribe?.(name, origin);
+        let alive = true;
+        const wrappedOff = () => {
+          if (!alive) return;
+          alive = false;
+          off();
+          index._untrackSubscribe?.(name, origin);
+        };
+        disposers.push(wrappedOff);
+        return wrappedOff;
+      };
+      const trackedEmit = ((name: EventName, ...args: unknown[]) => {
+        index._trackEmit?.(name, origin);
+        return (ctx.bus.emit as (n: EventName, ...a: unknown[]) => void)(name, ...args);
+      }) as Bus['emit'];
+      const trackedForward: Bus['forward'] = (name, data) => {
+        index._trackEmit?.(name, origin);
+        return ctx.bus.forward(name, data);
+      };
       const scopedBus: Bus = {
-        on(name, fn) {
-          const off = ctx.bus.on(name, fn);
-          disposers.push(off);
-          return off;
-        },
+        on: trackedOn,
         onAny(fn) {
           const off = ctx.bus.onAny(fn);
           disposers.push(off);
           return off;
         },
-        emit: ctx.bus.emit,
-        forward: ctx.bus.forward,
+        emit: trackedEmit,
+        forward: trackedForward,
       };
       const api: SystemCtx = {
         ...ctx,
         bus: scopedBus,
-        on: scopedBus.on,
-        emit: ctx.bus.emit,
-        forward: ctx.bus.forward,
-        origin: entry.name,
-        contribute: (aff) => ctx.contexts.affordances.contribute({ ...aff, origin: aff.origin ?? entry.name }),
+        on: trackedOn,
+        emit: trackedEmit,
+        forward: trackedForward,
+        origin,
+        contribute: (aff) => ctx.contexts.affordances.contribute({ ...aff, origin: aff.origin ?? origin }),
         expose: <K extends keyof AppCtx>(key: K, value: AppCtx[K]) => { ctx[key] = value; },
       };
       // Adapt register so commands without `origin` get tagged with the current system name.
       const original = ctx.contexts.commands.register;
-      const taggedRegister = (specs: CommandSpec[]) => original(specs, entry.name);
+      const taggedRegister = (specs: CommandSpecInput[]) => original(specs, entry.name);
       const restore = ctx.contexts.commands.register;
       ctx.contexts.commands.register = taggedRegister as typeof original;
       try {
@@ -266,7 +353,25 @@ export function registry(kind: FlagKind = 'system'): Registry {
     const e = entries.find(e => e.name === name);
     if (e) e.requires = requires;
   };
+  register.kindOf = (name) => entries.find(e => e.name === name)?.kind;
   return register;
+}
+
+/** Wrap a Registry so every call() injects a fixed `kind`. The wrapped object
+ *  still delegates start/stop/names/etc. to the base, so multiple wrappers
+ *  share one underlying registry — one flat list of entries, three external
+ *  call surfaces tagged system / ability / feature. */
+export function withKind(base: Registry, kind: FlagKind): Registry {
+  const wrapped: Registry = ((name: string, setup: AppSystem, opts: RegistryEntryOptions = {}) =>
+    base(name, setup, { ...opts, kind })) as Registry;
+  wrapped.start = base.start;
+  wrapped.stop = base.stop;
+  wrapped.names = base.names;
+  wrapped.enabledNames = base.enabledNames;
+  wrapped.requires = base.requires;
+  wrapped.setRequires = base.setRequires;
+  wrapped.kindOf = base.kindOf;
+  return wrapped;
 }
 
 export function createAppContext(
