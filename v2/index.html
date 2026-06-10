@@ -41,7 +41,17 @@
 
   <template id="tpl-nodes">
     <div class="nodes">
-      <svg class="edges" data-slot="edges" overflow="visible" aria-hidden="true"></svg>
+      <svg class="edges" data-slot="edges" overflow="visible" aria-hidden="true">
+        <defs>
+          <!-- Directional arrowhead shared by every edge. `orient="auto"` aligns
+               with the line direction; `markerUnits="userSpaceOnUse"` keeps the
+               arrow size fixed in graph space, independent of stroke width. -->
+          <marker id="edge-arrow" viewBox="0 0 12 12" refX="11" refY="6"
+                  markerWidth="12" markerHeight="12" orient="auto" markerUnits="userSpaceOnUse">
+            <path d="M0,0 L12,6 L0,12 Z" />
+          </marker>
+        </defs>
+      </svg>
     </div>
   </template>
 

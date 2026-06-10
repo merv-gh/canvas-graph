@@ -83,7 +83,14 @@ export class Graph {
     return this.itemsOfKind<T & StoredItem>(ref.kind).find(item => {
       if (!item || typeof item !== 'object') return false;
       const candidate = item as StoredItem;
-      return candidate.id === ref.id && parentKey(candidate.parent) === parentKey(ref.parent);
+      if (candidate.id !== ref.id) return false;
+      // ItemRef.parent is hierarchy hint — useful when an item kind stores its
+      // own parent chain (e.g. ids could collide across scopes). When the item
+      // doesn't carry an embedded parent (containers track parenthood in the
+      // hierarchy provider, not on the data), the ref's parent is informational
+      // only and matching ignores it.
+      if (candidate.parent == null) return true;
+      return parentKey(candidate.parent) === parentKey(ref.parent);
     }) as T | undefined;
   }
 

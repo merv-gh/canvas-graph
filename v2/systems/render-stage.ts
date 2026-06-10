@@ -46,6 +46,16 @@ export function registerRenderStage(system: Registry) {
       el.classList.add(...classes);
       el.setAttribute('data-item-modes', classes.join(' '));
     };
+    /** Compute the bounds rect for any ref by looking up its entity's renderer
+     *  and calling its `bounds(item)` (the same hook used for culling). Returns
+     *  null when no entity/item/bounds is available — edge renderers fall back
+     *  to a small dot at the node's center. */
+    const boundsOfRef = (ref: ItemRef): import('../types').Rect | null => {
+      const entityDef = model.entity(ref.kind) as EntityDef<unknown> | undefined;
+      const item = graphs.current.getItem(ref);
+      if (!entityDef || !item) return null;
+      return entityDef.render?.bounds?.(item) ?? null;
+    };
     const renderCtxFor = <T>(entityDef: EntityDef<T>, item: T): EntityRenderCtx => ({
       graph: graphs.current,
       refOf: (id) => {
@@ -59,7 +69,17 @@ export function registerRenderStage(system: Registry) {
       cloneTemplate: <R extends Element = HTMLElement>(name: string) => contexts.templates.clone(name) as unknown as R,
       templateSlot: (templateRoot, name) => contexts.templates.slot(templateRoot, name),
       templateText: (templateRoot, name, value) => { contexts.templates.text(templateRoot, name, value); },
+      parentChain: ref => contexts.hierarchy.parentChain(ref),
+      boundsOf: boundsOfRef,
     });
+    /** True when any ancestor of `ref` is `Collapsed`. Collapsed containers
+     *  hide their entire subtree — the children stay in the data store (so
+     *  expand brings them back instantly), they're just skipped here. */
+    const hiddenByCollapsedAncestor = (ref: ItemRef): boolean =>
+      contexts.hierarchy.parentChain(ref).some(ancestor => {
+        const item = graphs.current.getItem(ancestor) as { Collapsed?: boolean } | undefined;
+        return !!item?.Collapsed;
+      });
     const syncStageView = () => {
       const stage = contexts.places.el(Places.Stage), view = contexts.view.get();
       if (!stage) return;
@@ -83,6 +103,16 @@ export function registerRenderStage(system: Registry) {
           if (!renderer) return;
           const target = renderer.layer === 'svg' ? svgLayer : layer;
           graphs.current.itemsOfKind(entityDef.kind).forEach(item => {
+            const id = (item as { id?: string }).id;
+            // Suppress descendants of collapsed ancestors. Edges decide their
+            // own visibility (one endpoint inside a collapsed subtree is fine —
+            // the renderer substitutes the collapsed ancestor as the endpoint).
+            if (id && entityDef.kind !== 'edge') {
+              const ref: ItemRef = { kind: entityDef.kind as ItemRef['kind'], id };
+              const parent = contexts.hierarchy.parentIds(ref);
+              if (parent) ref.parent = parent;
+              if (hiddenByCollapsedAncestor(ref)) return;
+            }
             const b = renderer.bounds?.(item);
             if (b && !contexts.view.isVisible(Places.Stage, b, 160)) return;
             const el = renderer.draw(item, renderCtxFor(entityDef, item));
@@ -118,7 +148,13 @@ export function registerRenderStage(system: Registry) {
     });
 
     const drawEmptyState = () => {
-      if (graphs.current.nodes().length) {
+      // "Empty" means *nothing renderable* on the stage — not just zero nodes.
+      // A graph with containers (even no nodes) shouldn't show "press A to add
+      // a node", so walk every rendered entity kind and count items.
+      const hasAnyItem = model.entities().some(entityDef =>
+        entityDef.render && graphs.current.itemsOfKind(entityDef.kind).length > 0,
+      );
+      if (hasAnyItem) {
         emit('render.view.clear', { place: Places.Stage, key: 'empty' });
         return;
       }

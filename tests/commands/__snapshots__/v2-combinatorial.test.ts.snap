@@ -45,13 +45,13 @@ exports[`combinatorial action graph > length-1: every auto-runnable command boot
     "demo.render-self",
   ],
   "snap": {
-    "containers": 0,
+    "containers": 5,
     "dxErrors": 0,
-    "edges": 55,
-    "focused": "node:e39",
-    "nodes": 39,
-    "scale": 0.22,
-    "selected": "node:e39",
+    "edges": 60,
+    "focused": "node:e41",
+    "nodes": 41,
+    "scale": 0.2,
+    "selected": "node:e41",
   },
 }
 `;

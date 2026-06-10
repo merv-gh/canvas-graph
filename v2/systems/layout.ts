@@ -29,13 +29,22 @@ export type LayoutScope = {
 /** Partition the current graph's nodes by hierarchy. Returns one scope per
  *  parent (plus one for the root scope). Edges are split so each scope only
  *  sees its own. With no hierarchy providers (the flat case), every node is
- *  in the root scope and behavior is identical to a flat graph. */
+ *  in the root scope and behavior is identical to a flat graph.
+ *
+ *  Nodes nested inside a `Collapsed` ancestor are excluded — moving hidden
+ *  nodes would scramble their positions for when the user expands again. */
 export function partitionByScope(ctx: AppCtx): LayoutScope[] {
   const graph = ctx.graphs.current;
   const hierarchy = ctx.contexts.hierarchy;
   const all = graph.nodes();
+  const hiddenByCollapse = (node: GraphNode): boolean =>
+    hierarchy.parentChain({ kind: 'node', id: node.id }).some(ancestor => {
+      const item = graph.getItem(ancestor) as { Collapsed?: boolean } | undefined;
+      return !!item?.Collapsed;
+    });
   const groups = new Map<string, { parent: ItemRef | null; nodes: GraphNode[] }>();
   for (const node of all) {
+    if (hiddenByCollapse(node)) continue;
     const chain = hierarchy.parentChain({ kind: 'node', id: node.id });
     const parent = chain.length ? chain[chain.length - 1] : null;
     const key = parent ? `${parent.kind}:${parent.id}` : '';

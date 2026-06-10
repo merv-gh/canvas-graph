@@ -28,9 +28,22 @@ export function registerOutline(system: Registry) {
       if (text != null) node.textContent = text;
       return node;
     };
+    const foldIdFor = (collectionId: string) => `outline.collection.${collectionId}`;
     const renderCollection = (collectionDef: AppCollectionDef<unknown>) => {
       const section = el('section', 'outline-section');
+      const foldId = foldIdFor(collectionDef.id);
+      const open = contexts.fold.isOpen(foldId, true);
+      section.classList.toggle('folded', !open);
+      section.dataset.collectionId = collectionDef.id;
       const head = el('div', 'outline-head');
+      // The fold trigger lives on a wrapper around the title — clicking the
+      // chevron OR the section name toggles. The search input itself stays
+      // independent (input listener stops propagation).
+      const foldTrigger = el('button', 'icon-button outline-fold', open ? '▾' : '▸') as HTMLButtonElement;
+      foldTrigger.dataset.foldId = foldId;
+      foldTrigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+      foldTrigger.setAttribute('aria-label', open ? `Collapse ${collectionDef.label}` : `Expand ${collectionDef.label}`);
+
       const query = searches.get(collectionDef.id) ?? '';
       const title = el('input', 'panel-title outline-title-search') as HTMLInputElement;
       const createCommand = collectionCreateCommand(collectionDef);
@@ -42,8 +55,12 @@ export function registerOutline(system: Registry) {
       title.setAttribute('aria-label', `Search ${collectionDef.label.toLowerCase()}`);
       const createButton = el('button', 'icon-button', '+') as HTMLButtonElement;
       createButton.dataset.command = createCommand;
-      head.append(title, createButton);
+      head.append(foldTrigger, title, createButton);
       section.append(head);
+
+      // Folded sections render only the header. The list + empty state are
+      // skipped entirely so a folded collection costs zero DOM per row.
+      if (!open) return section;
 
       const list = el('div', 'outline-list');
       const filtered = collectionDef.items(ctx)
@@ -94,6 +111,10 @@ export function registerOutline(system: Registry) {
     }]);
     on('app.start', draw);
     on('outline.draw', draw);
+    // Any fold of an outline section triggers a redraw — the section keeps its
+    // header but drops the list. Unrelated fold ids (e.g. left-panel collapse)
+    // are ignored so we don't repaint on every fold toggle in the app.
+    on('fold.changed', ({ id }) => { if (id.startsWith('outline.collection.')) draw(); });
     on('outline.search.changed', ({ collectionId, query }) => {
       searches.set(collectionId, query);
       draw();

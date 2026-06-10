@@ -1,5 +1,5 @@
 import { collapsible, configurable, draggable, editable, nudgeable, resizeable, selectable } from '../abilities';
-import { boundsOf, createNesting, expandRect, itemIdFrom, unionRect, type Registry } from '../core';
+import { boundsOf, createNesting, expandRect, itemIdFrom, unionRect, type NestApi, type Registry } from '../core';
 import { Places, Slots } from '../types';
 import type {
   EntityDef,
@@ -19,6 +19,10 @@ import type {
  * handler live here. Everything reusable (parent walking + cycle guard,
  * geometry) lives behind `createNesting` / `boundsOf|unionRect|expandRect`
  * in core, so this file stays focused on container-specific policy.
+ *
+ * State is per-graph: switching graphs hides containers that belong to other
+ * graphs (they live in their own state bucket keyed by graph id). Deleting a
+ * graph drops its bucket.
  */
 
 declare module '../types' {
@@ -32,6 +36,10 @@ declare module '../types' {
     'container.add-child': { containerId: Id; childRef: ItemRef };
     'container.remove-child': { childRef: ItemRef };
     'container.children.changed': { id: Id };
+    /** Fired only when `Collapsed` actually flipped. Cross-system listeners
+     *  (layout relayout, view fit) listen on this rather than container.updated
+     *  to avoid running on every drag tick. */
+    'container.collapsed.changed': { id: Id; collapsed: boolean };
   }
 }
 
@@ -49,6 +57,8 @@ type Container = {
 type ContainerPatch = Partial<Pick<Container, 'Label' | 'Position' | 'Size' | 'Collapsed' | 'AutoFit'>>;
 
 const DEFAULT_SIZE: Size = { w: 320, h: 200 };
+/** Compact size used when collapsed — just enough room for the label badge. */
+const COLLAPSED_SIZE: Size = { w: 140, h: 36 };
 const PADDING = 24;
 const LABEL_BAND = 18;
 
@@ -58,37 +68,67 @@ export function registerContainers(system: Registry) {
   system('containers', (ctx) => {
     const { on, emit, contexts, graphs, selection, contribute, origin } = ctx;
     let next = 1;
-    const containers = new Map<Id, Container>();
 
-    /** Parent / cycle / add / remove machinery — reusable across any nestable kind. */
-    const nest = createNesting<Container>({
-      parents: containers,
-      parentKind: 'container',
-      onChange: id => emit('container.children.changed', { id }),
+    /** Per-graph state bucket — containers, the nesting helper, and the live
+     *  item-store registration. Keyed by graph id so switching graphs hides
+     *  others; deleting a graph drops its bucket. */
+    type GraphState = {
+      containers: Map<Id, Container>;
+      nest: NestApi;
+      storeOff: () => void;
+    };
+    const states = new Map<Id, GraphState>();
+    const ensureState = (gid: Id): GraphState => {
+      const existing = states.get(gid);
+      if (existing) return existing;
+      const containers = new Map<Id, Container>();
+      const nest = createNesting<Container>({
+        parents: containers,
+        parentKind: 'container',
+        onChange: id => emit('container.children.changed', { id }),
+      });
+      const graph = graphs.get(gid) ?? graphs.current;
+      const storeOff = graph.registerItemStore<Container>('container', () => [...containers.values()]);
+      const state: GraphState = { containers, nest, storeOff };
+      states.set(gid, state);
+      return state;
+    };
+    const stateOf = () => ensureState(graphs.current.id);
+    const containersHere = () => stateOf().containers;
+    const nestHere = () => stateOf().nest;
+
+    on('graph.switched', () => { ensureState(graphs.current.id); });
+    on('graph.deleted', ({ id }) => {
+      const s = states.get(id);
+      if (!s) return;
+      s.storeOff();
+      states.delete(id);
     });
 
-    // Item store registration on the current graph (and on every future graph).
-    const provider = () => [...containers.values()];
-    let storeOff = graphs.current.registerItemStore<Container>('container', provider);
-    on('graph.switched', () => {
-      storeOff();
-      storeOff = graphs.current.registerItemStore<Container>('container', provider);
-    });
-
-    contexts.hierarchy.register(origin, { parentRefOf: nest.parentRefOf });
-    contexts.itemTargets.register(origin, () => [...containers.values()].map(c => ({
-      ref: { kind: 'container', id: c.id } as ItemRef,
-      label: c.Label.text || c.id,
-      anchor: c.Position,
-    })));
+    // Hierarchy + targets read live from the current graph's state — no
+    // re-registration needed on switch.
+    contexts.hierarchy.register(origin, { parentRefOf: ref => stateOf().nest.parentRefOf(ref) });
+    contexts.itemTargets.register(origin, () => [...containersHere().values()].map(c => {
+      const rect = visualRect(c);
+      return {
+        ref: { kind: 'container', id: c.id } as ItemRef,
+        label: c.Label.text || c.id,
+        // Anchor at the visual center so jump letters, picker, and view.fit.item
+        // address the rendered rect — not the original drop position.
+        anchor: { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 },
+      };
+    }));
 
     // ---------- Auto-fit visual rect ----------
     const childBounds = (ref: ItemRef): Rect | null => {
-      if (ref.kind === 'container') return visualRect(containers.get(ref.id) ?? null);
+      if (ref.kind === 'container') return visualRect(containersHere().get(ref.id) ?? null);
       return boundsOf(graphs.current.getItem(ref) as { Position?: Position; Size?: Size } ?? {}, { w: 80, h: 40 });
     };
     const visualRect = (c: Container | null): Rect => {
       if (!c) return boundsOf({ Position: { x: 0, y: 0 }, Size: DEFAULT_SIZE })!;
+      // Collapsed → compact badge anchored at the container's stored Position.
+      // The auto-fit rect (children) is irrelevant when collapsed.
+      if (c.Collapsed) return boundsOf({ Position: c.Position, Size: COLLAPSED_SIZE })!;
       if (c.AutoFit === false) return boundsOf(c)!;
       const kids = c.Children.map(childBounds).filter((r): r is Rect => !!r);
       if (!kids.length) return boundsOf({ Position: c.Position, Size: DEFAULT_SIZE })!;
@@ -165,7 +205,7 @@ export function registerContainers(system: Registry) {
       id: 'containers',
       label: 'Containers',
       kind: 'container',
-      items: () => [...containers.values()],
+      items: () => [...containersHere().values()],
       toolbar: false,
     });
 
@@ -178,7 +218,7 @@ export function registerContainers(system: Registry) {
         shortcut: 'Y',
         input: { on: 'keydown', key: 'y', prevent: true },
         payload: () => ({
-          Label: { text: `Container ${containers.size + 1}` },
+          Label: { text: `Container ${containersHere().size + 1}` },
           at: contexts.view.spaceCenter(Places.Stage),
         }),
       },
@@ -214,9 +254,9 @@ export function registerContainers(system: Registry) {
                 return r && (r.kind === 'node' || r.kind === 'container') ? r : null;
               } },
             { id: 'container', prompt: 'Pick a container',
-              filter: vs => ref => ref.kind === 'container' && !!vs.child && !nest.isAncestorOrSelf(vs.child, ref) },
+              filter: vs => ref => ref.kind === 'container' && !!vs.child && !nestHere().isAncestorOrSelf(vs.child, ref) },
           ],
-          validate: vs => !containers.size ? 'Create a container first (Y).'
+          validate: vs => !containersHere().size ? 'Create a container first (Y).'
             : (!vs.child || !vs.container) ? 'Pick an item and a container.' : undefined,
           payload: vs => ({ containerId: vs.container.id, childRef: vs.child }),
         },
@@ -227,7 +267,7 @@ export function registerContainers(system: Registry) {
         group: 'container',
         available: () => {
           const r = selection.selected();
-          return !!r && !!nest.parentRefOf(r);
+          return !!r && !!nestHere().parentRefOf(r);
         },
         payload: () => {
           const r = selection.selected();
@@ -239,7 +279,7 @@ export function registerContainers(system: Registry) {
     // ---------- Handlers ----------
     on('editing.container.create', draft => {
       const id = `c${next++}`;
-      containers.set(id, {
+      containersHere().set(id, {
         id, kind: 'container',
         Label: draft.Label ?? { text: id },
         Position: draft.at ?? { x: 0, y: 0 },
@@ -250,23 +290,25 @@ export function registerContainers(system: Registry) {
       emit('selection.item.select', { kind: 'container', id });
     });
     on('graph.container.delete', ({ id }) => {
-      const c = containers.get(id);
+      const here = containersHere();
+      const nest = nestHere();
+      const c = here.get(id);
       if (!c) return;
       // Release children (they keep position; lose parent link).
       [...c.Children].forEach(childRef => nest.remove(childRef));
       // If this container was nested, detach from its own parent.
       nest.remove({ kind: 'container', id });
-      containers.delete(id);
+      here.delete(id);
       emit('container.deleted', { id });
     });
     on('container.add-child', ({ containerId, childRef }) => {
       // Verify the child exists in some store before nesting it.
       if (!graphs.current.getItem(childRef)) return;
-      const result = nest.add(containerId, childRef);
+      const result = nestHere().add(containerId, childRef);
       if (result === 'cycle') emit('app.notice', { message: 'Cannot nest a container into its own descendant.', level: 'warn' });
     });
-    on('container.remove-child', ({ childRef }) => { nest.remove(childRef); });
-    on('graph.node.deleted', ({ id }) => { nest.remove({ kind: 'node', id }); });
+    on('container.remove-child', ({ childRef }) => { nestHere().remove(childRef); });
+    on('graph.node.deleted', ({ id }) => { nestHere().remove({ kind: 'node', id }); });
     on('selection.item.delete', () => {
       const ref = selection.selected();
       if (ref?.kind === 'container') emit('graph.container.delete', { id: ref.id });
@@ -274,10 +316,11 @@ export function registerContainers(system: Registry) {
 
     // ---------- Storage: apply container patches from item.update ----------
     contexts.storage.register('container', origin, (ref, patch) => {
-      const c = containers.get(ref.id);
+      const c = containersHere().get(ref.id);
       if (!c) return;
       const p = patch as ContainerPatch;
       const oldPos = { ...c.Position };
+      const wasCollapsed = !!c.Collapsed;
       Object.assign(c, p);
       // Drag cascade: when the container moves, children move with it.
       if (p.Position && (p.Position.x !== oldPos.x || p.Position.y !== oldPos.y)) {
@@ -289,11 +332,21 @@ export function registerContainers(system: Registry) {
           emit('item.update', { ref: childRef, patch: { Position: { x: child.Position.x + dx, y: child.Position.y + dy } } });
         });
       }
+      // Surface a dedicated fact when collapse flips, so cross-system flows
+      // (relayout, fit) don't have to diff state every tick.
+      if (Object.prototype.hasOwnProperty.call(p, 'Collapsed') && !!c.Collapsed !== wasCollapsed) {
+        emit('container.collapsed.changed', { id: c.id, collapsed: !!c.Collapsed });
+      }
       emit('container.updated', { id: c.id });
     });
 
     contribute({ surface: 'top', command: 'editing.container.create', kind: 'button', text: '+ Container', order: 17 });
 
-    return () => { offEntity(); offCollection(); storeOff(); };
+    return () => {
+      offEntity();
+      offCollection();
+      states.forEach(s => s.storeOff());
+      states.clear();
+    };
   }, { requires: ['render.stage', 'graph'] });
 }

@@ -44,7 +44,10 @@ button.danger:hover { background: var(--danger-soft); }
 button.icon { padding: 4px 7px; min-width: 26px; color: var(--text-muted); }
 button.icon:hover { color: var(--ink); }
 
-.shell { display: grid; grid-template: 44px 1fr / 260px 1fr; height: 100vh; }
+.shell { display: grid; grid-template: 44px 1fr / 260px 1fr; height: 100vh; transition: grid-template-columns .14s ease; }
+.shell[data-left-folded="true"] { grid-template-columns: 0 1fr; }
+.shell[data-left-folded="true"] .left { display: none; }
+.hamburger { font-size: 16px; line-height: 1; padding: 2px 8px; margin-right: 4px; }
 .top {
   grid-column: 1 / -1;
   display: flex; align-items: center; gap: 4px;
@@ -104,6 +107,7 @@ button.icon:hover { color: var(--ink); }
 .edges .edge-line { stroke: var(--edge); stroke-width: 2px; opacity: .9; pointer-events: none; }
 .edges .edge-line.selected { stroke: var(--accent); stroke-width: 2px; }
 .edges .edge-line.focused { stroke: var(--accent); stroke-dasharray: 4 3; }
+.edges #edge-arrow path { fill: var(--edge); }
 .edges .edge-label { fill: var(--text-muted); font: 11px ui-monospace, monospace; }
 .item-overlays { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
 .item-overlay {
@@ -173,6 +177,28 @@ button.icon:hover { color: var(--ink); }
 .container:hover { border-color: var(--accent); background: rgba(37, 99, 235, .03); }
 .container.selected { border-color: var(--accent); background: rgba(37, 99, 235, .05); }
 .container.focused { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Collapsed: a solid badge that sits ABOVE nodes/edges so it reads like a chip,
+   not a faint backdrop. Children are skipped by the renderer so the rect shrinks
+   to COLLAPSED_SIZE and the label centers inside. */
+.container.collapsed {
+  border-style: solid;
+  background: var(--panel);
+  box-shadow: var(--shadow-sm);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.container.collapsed .container-label {
+  position: static;
+  padding: 0 10px;
+  background: transparent;
+  color: var(--ink);
+  font: 600 12px/1 system-ui, sans-serif;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.container.collapsed .container-resize { display: none; }
 .container-label {
   position: absolute;
   top: -10px;
@@ -298,6 +324,15 @@ button.icon:hover { color: var(--ink); }
 /* Outline: each collection is a section. Rows are text; affordances appear on hover. */
 .outline { display: grid; gap: 16px; margin-bottom: 14px; }
 .outline-section { display: grid; gap: 6px; }
+.outline-section.folded { gap: 0; }
+.outline-fold {
+  min-width: 22px;
+  padding: 3px 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1;
+}
+.outline-fold:hover { color: var(--ink); }
 .outline-head {
   display: flex; align-items: center; justify-content: space-between;
   gap: 6px;

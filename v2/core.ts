@@ -14,6 +14,7 @@ import { propertiesContext } from './core/properties';
 import { createSelectionStore, type SelectionStore } from './core/selection';
 import { createSim, type SimApi } from './core/sim';
 import { storageContext, type StorageApi } from './core/storage';
+import { foldContext, type FoldStore } from './core/fold';
 import { templateContext } from './core/templates';
 import { viewContext } from './core/view';
 import {
@@ -54,6 +55,7 @@ export { boundsOf, unionRect, expandRect, rectCenter } from './core/geometry';
 export { createNesting, type NestApi } from './core/nesting';
 export { introspect, type IntrospectKind, type IntrospectNode, type IntrospectEdge, type IntrospectRelation, type IntrospectRef, type IntrospectSnapshot } from './core/introspect';
 export { storageContext, type StorageApi, type StorageApply } from './core/storage';
+export { foldContext, type FoldStore } from './core/fold';
 
 export type Contexts = ReturnType<typeof createContexts>;
 export type Models = ReturnType<typeof createModelRegistry>;
@@ -232,6 +234,7 @@ function createContexts(bus: Bus, flags: FlagsApi, io: IoApi) {
   const commands = commandsContext(bus, origin => !origin || flags.isOn(origin), io);
   const input = inputRouter(commands);
   const storage = storageContext(bus);
+  const fold = foldContext(bus, io);
   const placeContext = {
     set: (place: Place, el: HTMLElement | null) => { if (el) places.set(place, el); },
     el: (place: Place) => places.get(place) ?? null,
@@ -265,6 +268,7 @@ function createContexts(bus: Bus, flags: FlagsApi, io: IoApi) {
     hierarchy,
     keyboard,
     storage,
+    fold,
     teardown,
   };
 }

@@ -7,6 +7,7 @@ import { registerCommandPicker } from './command-picker';
 import { registerContainers } from './containers';
 import { registerDemo } from './demo';
 import { registerDx } from './dx';
+import { registerFoldable } from './foldable';
 import { registerFocus } from './focus';
 import { registerGraph } from './graph';
 import { registerInput } from './input';
@@ -26,6 +27,7 @@ export function registerSystems(system: Registry) {
   registerRender(system);
   registerRenderStage(system);
   registerInput(system);
+  registerFoldable(system);
   registerCancellation(system);
   registerMain(system);
   registerLog(system);

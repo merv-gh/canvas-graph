@@ -177,6 +177,11 @@ interface BuiltinEvents {
    *  redraw stage chrome (selection rings, jump letters, etc.). */
   'itemMode.changed': { source?: string };
   'itemOverlay.changed': { source?: string };
+  /** Fold (collapse/expand) request + fact for any panel/section. Owned by the
+   *  foldable system; consumers (outline, main, …) listen on `.changed` and
+   *  re-render. */
+  'fold.toggle': { id: string };
+  'fold.changed': { id: string; open: boolean };
   /** Generic patch request. The single seam every storage system dispatches on:
    *  graph.ts handles `kind === 'node' | 'edge'`, the containers system handles
    *  `kind === 'container'`, and so on. Abilities (draggable, editable,
@@ -412,6 +417,14 @@ export type EntityRenderCtx = {
   cloneTemplate<T extends Element = HTMLElement>(name: string): T;
   templateSlot(root: Element, name: string): Element;
   templateText(root: Element, name: string, value: unknown): void;
+  /** Outermost-first chain of ancestors registered with the hierarchy context.
+   *  Empty when the ref is a root item. */
+  parentChain(ref: ItemRef): ItemRef[];
+  /** Resolve any ref's renderer bounds (its on-stage rect). Used by edge
+   *  renderers to substitute a hidden node's collapsed ancestor as the
+   *  visible endpoint. Returns null when the ref has no entity, no item, or
+   *  the entity renderer doesn't declare bounds. */
+  boundsOf(ref: ItemRef): Rect | null;
 };
 
 export type EntityRenderer<T = unknown> = {

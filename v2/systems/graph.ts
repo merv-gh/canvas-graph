@@ -25,6 +25,7 @@ import type {
   EntityDef,
   EntityRenderer,
   Id,
+  ItemRef,
   PropertyDef,
   Rect,
 } from '../types';
@@ -45,31 +46,75 @@ const graphEntity: EntityDef<Graph> = entityDef<Graph>('graph', {
   abilities: [],
 });
 
+/** Shrink the line endpoint to the target rect's border so the arrowhead lands
+ *  outside the card, not inside it. Treats the target as an axis-aligned
+ *  rectangle centered on `(cx, cy)` with half-dims `(hw, hh)`. */
+const intersectRectBoundary = (outside: { x: number; y: number }, rectCenter: { x: number; y: number }, half: { w: number; h: number }) => {
+  const { x: cx, y: cy } = rectCenter;
+  const dx = outside.x - cx, dy = outside.y - cy;
+  if (dx === 0 && dy === 0) return { x: cx, y: cy };
+  const tx = dx === 0 ? Infinity : Math.abs(half.w / dx);
+  const ty = dy === 0 ? Infinity : Math.abs(half.h / dy);
+  const t = Math.min(tx, ty);
+  return { x: cx + dx * t, y: cy + dy * t };
+};
+
+/** Compute the visible endpoint for an edge anchor: if the node is inside a
+ *  Collapsed container, the endpoint snaps to the outermost collapsed
+ *  ancestor's visual rect. Otherwise it's the node itself. Returns null when
+ *  neither resolves (orphaned edge — render skips it). */
+const resolveEndpoint = (nodeRef: { kind: 'node'; id: string }, ctx: { graph: { getItem(ref: ItemRef): unknown }; parentChain(ref: ItemRef): ItemRef[]; boundsOf(ref: ItemRef): Rect | null }):
+  | { ref: ItemRef; center: { x: number; y: number }; half: { w: number; h: number } }
+  | null => {
+  const chain = ctx.parentChain(nodeRef);
+  // Outermost collapsed ancestor wins — pick the highest-level visible boundary.
+  const collapsed = chain.find(a => {
+    const item = ctx.graph.getItem(a) as { Collapsed?: boolean } | undefined;
+    return !!item?.Collapsed;
+  });
+  if (collapsed) {
+    const rect = ctx.boundsOf(collapsed);
+    if (!rect) return null;
+    return {
+      ref: collapsed,
+      center: { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 },
+      half: { w: rect.w / 2, h: rect.h / 2 },
+    };
+  }
+  const node = ctx.graph.getItem(nodeRef) as NodeEntity | undefined;
+  if (!node?.Position) return null;
+  return { ref: nodeRef, center: node.Position, half: { w: node.Size.w / 2, h: node.Size.h / 2 } };
+};
+
 const edgeRenderer: EntityRenderer<GraphEdge> = {
   layer: 'svg',
   draw(edge, ctx) {
-    const from = ctx.graph.getItem({ kind: 'node', id: edge.From }) as NodeEntity | undefined;
-    const to = ctx.graph.getItem({ kind: 'node', id: edge.To }) as NodeEntity | undefined;
-    if (!from?.Position || !to?.Position) return null;
+    const from = resolveEndpoint({ kind: 'node', id: edge.From }, ctx);
+    const to = resolveEndpoint({ kind: 'node', id: edge.To }, ctx);
+    if (!from || !to) return null;
+    // Self-loop after collapse (both endpoints inside the same collapsed
+    // container) — hide the edge to avoid the degenerate visual.
+    if (from.ref.kind === to.ref.kind && from.ref.id === to.ref.id) return null;
     const ref = ctx.refOf(edge.id);
+    // Clip both visible endpoints to the rect borders so the arrowhead lands
+    // outside; the hit-box stays centered-to-centered for click forgiveness.
+    const tipAtTarget = intersectRectBoundary(from.center, to.center, to.half);
+    const tipAtSource = intersectRectBoundary(to.center, from.center, from.half);
     const g = svg('g', {});
     g.setAttribute('class', 'edge');
-    const line = (className: string, extra: Record<string, string | number> = {}) => {
-      const el = svg('line', {
-        x1: from.Position!.x, y1: from.Position!.y, x2: to.Position!.x, y2: to.Position!.y,
-        class: className, ...extra,
-      });
+    const line = (className: string, x1: number, y1: number, x2: number, y2: number, extra: Record<string, string | number> = {}) => {
+      const el = svg('line', { x1, y1, x2, y2, class: className, ...extra });
       ctx.tagItem(el, ref);
       ctx.applyItemModes(el, ref);
       return el;
     };
-    g.append(line('edge-hit', { tabindex: -1 }));
-    g.append(line('edge-line'));
+    g.append(line('edge-hit', from.center.x, from.center.y, to.center.x, to.center.y, { tabindex: -1 }));
+    g.append(line('edge-line', tipAtSource.x, tipAtSource.y, tipAtTarget.x, tipAtTarget.y, { 'marker-end': 'url(#edge-arrow)' }));
     if (edge.Label?.text) {
       const text = svg('text', {
         class: 'edge-label',
-        x: (from.Position.x + to.Position.x) / 2,
-        y: (from.Position.y + to.Position.y) / 2 - 4,
+        x: (from.center.x + to.center.x) / 2,
+        y: (from.center.y + to.center.y) / 2 - 4,
         'text-anchor': 'middle',
       });
       text.textContent = edge.Label.text;

@@ -114,4 +114,14 @@ export function registerFeatures(feature: Registry) {
       emit('graph.edge.create', { From, To, Label: draft.Label });
     });
   }, { requires: ['graph'] });
+  /** Cross-system reaction: when a container's `Collapsed` flips, sibling
+     items want to relayout so the freed/used space is reclaimed. Lives here
+     rather than inside containers.ts because the policy ("re-tidy and re-fit
+     the view") spans layout + view systems. */
+  feature('containerCollapseLayout', ({ on, emit }) => {
+    on('container.collapsed.changed', () => {
+      emit('layout.apply.tidy');
+      emit('view.fit.all');
+    });
+  }, { requires: ['containers', 'layout', 'view.zoom'] });
 }

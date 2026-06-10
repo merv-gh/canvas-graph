@@ -40,9 +40,22 @@ export function registerItemToolbar(system: Registry) {
       // toolbar without us threading the id manually.
       wrapper.dataset.itemKind = ref.kind;
       wrapper.dataset.itemId = ref.id;
-      const pos = (item as { Position?: { x: number; y: number } }).Position ?? { x: 0, y: 0 };
-      const size = (item as { Size?: { w: number; h: number } }).Size ?? { w: 0, h: 0 };
-      const screen = contexts.view.spaceToScreen({ x: pos.x, y: pos.y - size.h / 2 });
+      // Anchor the toolbar at the top-center of the entity's *visual* rect.
+      // For nodes that's Position±Size/2; for containers it's the auto-fit
+      // bounds (which differs from Position when children fill the rect).
+      // EntityRenderer.bounds is the source of truth — falls back to Position
+      // + Size for entities whose renderer doesn't declare bounds.
+      const renderer = entityDef.render;
+      const fallbackPos = (item as { Position?: { x: number; y: number } }).Position ?? { x: 0, y: 0 };
+      const fallbackSize = (item as { Size?: { w: number; h: number } }).Size ?? { w: 0, h: 0 };
+      const rect = renderer?.bounds?.(item) ?? {
+        x: fallbackPos.x - fallbackSize.w / 2,
+        y: fallbackPos.y - fallbackSize.h / 2,
+        w: fallbackSize.w,
+        h: fallbackSize.h,
+      };
+      const topCenter = { x: rect.x + rect.w / 2, y: rect.y };
+      const screen = contexts.view.spaceToScreen(topCenter);
       wrapper.style.left = `${screen.x}px`;
       wrapper.style.top = `${screen.y}px`;
 
