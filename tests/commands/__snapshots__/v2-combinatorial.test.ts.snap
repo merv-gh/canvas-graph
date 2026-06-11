@@ -3,6 +3,7 @@
 exports[`combinatorial action graph > enumerates the auto-runnable command set (for visibility) 1`] = `
 [
   "app.cancel.escape",
+  "debug.enable",
   "demo.render-self",
   "editing.container.create",
   "editing.node.create",
@@ -39,6 +40,23 @@ exports[`combinatorial action graph > length-1: every auto-runnable command boot
 }
 `;
 
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [debug.enable] 1`] = `
+{
+  "sequence": [
+    "debug.enable",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": null,
+    "nodes": 0,
+    "scale": 1,
+    "selected": null,
+  },
+}
+`;
+
 exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [demo.render-self] 1`] = `
 {
   "sequence": [
@@ -47,11 +65,11 @@ exports[`combinatorial action graph > length-1: every auto-runnable command boot
   "snap": {
     "containers": 5,
     "dxErrors": 0,
-    "edges": 60,
-    "focused": "node:e41",
-    "nodes": 41,
+    "edges": 62,
+    "focused": "node:e42",
+    "nodes": 42,
     "scale": 0.2,
-    "selected": "node:e41",
+    "selected": "node:e42",
   },
 }
 `;

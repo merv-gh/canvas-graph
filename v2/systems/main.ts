@@ -38,6 +38,11 @@ export function registerMain(system: Registry) {
         // fires fold.toggle for the left panel via [data-fold-id] selector.
         start.append(hamburger());
         contexts.affordances.system('top').forEach(aff => {
+          // Skip buttons whose command says it's unavailable. The same predicate
+          // already blocks `commands.run`; checking here keeps the toolbar from
+          // showing clickable buttons that do nothing.
+          const cmd = contexts.commands.get(aff.command);
+          if (cmd?.available && !cmd.available()) return;
           const button = document.createElement('button');
           button.type = 'button';
           button.dataset.command = aff.command;
@@ -58,5 +63,12 @@ export function registerMain(system: Registry) {
       syncShellFold();
       drawToolbar();
     });
+    // Debug toolbar toggles + record state changes flip the availability of
+    // many command.available predicates — those are sparse events so we redraw
+    // safely. Selection changes are NOT here: principle 8 budgets the toolbar
+    // to ≤2 redraws under bursty mutation, and selection-dependent buttons
+    // (`view.fit.selected`) accept always being rendered + a no-op click.
+    on('debug.enabled.changed', drawToolbar);
+    on('debug.recording.changed', drawToolbar);
   }, { requires: ['render'] });
 }

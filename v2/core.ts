@@ -56,6 +56,8 @@ export { createNesting, type NestApi } from './core/nesting';
 export { introspect, type IntrospectKind, type IntrospectNode, type IntrospectEdge, type IntrospectRelation, type IntrospectRef, type IntrospectSnapshot } from './core/introspect';
 export { storageContext, type StorageApi, type StorageApply } from './core/storage';
 export { foldContext, type FoldStore } from './core/fold';
+export { snapshot, snapshotTree, flattenSnapshotTree, type Snapshot, type SnapshotNode } from './core/snapshot';
+export { traceToTest, defaultEventFilter, type Assertion, type TestGenOptions } from './core/test-gen';
 
 export type Contexts = ReturnType<typeof createContexts>;
 export type Models = ReturnType<typeof createModelRegistry>;
