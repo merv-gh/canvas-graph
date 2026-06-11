@@ -130,7 +130,9 @@ button.icon:hover { color: var(--ink); }
   resize: none;
   white-space: pre;
   overflow: auto;
+  color: var(--ink);
 }
+.debug-code:focus { border-color: var(--accent); }
 .debug-code:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .debug-actions { display: flex; gap: 6px; }
 .debug-actions button { border: 1px solid var(--line); padding: 5px 12px; }
@@ -162,6 +164,7 @@ button.icon:hover { color: var(--ink); }
 .brand { font-weight: 600; color: var(--ink); padding-right: 8px; margin-right: 4px; border-right: 1px solid var(--line); font-size: 13px; }
 
 .left {
+  grid-column: 1;
   border-right: 1px solid var(--line);
   background: var(--panel-2);
   overflow: auto;
@@ -169,6 +172,10 @@ button.icon:hover { color: var(--ink); }
 }
 
 .stage {
+  /* Pin the stage to column 2 explicitly. Without this, hiding `.left` via
+     `display: none` removes it from grid auto-flow and the stage drops into
+     column 1 (which collapses to 0px when the panel folds). */
+  grid-column: 2;
   --grid-size: 32px;
   --grid-x: 0px;
   --grid-y: 0px;

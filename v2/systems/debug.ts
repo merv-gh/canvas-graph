@@ -71,6 +71,12 @@ export function registerDebug(system: Registry) {
     let assertSearch = '';
     let lastSnapshot: Snapshot | null = null;
     let replayDraft = '';
+    /** Manual edits to the generated test. When non-null, takes over the
+     *  textarea instead of the auto-generated string — lets the user flip
+     *  captured-actual into desired-actual (e.g. `toBe(false)` → `toBe(true)`)
+     *  to encode a regression. New picks re-generate from scratch (clearing
+     *  the override), so the convention is "pick, then edit". */
+    let manualOverride: string | null = null;
 
     const writeEnabled = (on: boolean) => {
       enabled = on;
@@ -263,12 +269,15 @@ export function registerDebug(system: Registry) {
       const q = query.trim().toLowerCase();
       const flat = flattenSnapshotTree(root);
       const visible = q
-        ? flat.filter(n => n.code.toLowerCase().includes(q) || n.label.toLowerCase().includes(q))
+        ? flat.filter(n =>
+            n.path.toLowerCase().includes(q) ||
+            n.code.toLowerCase().includes(q) ||
+            n.label.toLowerCase().includes(q))
         : flat;
       visible.forEach(n => {
-        // Depth derived from how many separators are in the code path — keeps
-        // indentation roughly aligned with nesting.
-        const depth = (n.code.match(/[.[]/g) || []).length;
+        // Depth derived from the snapshot-path separators — matches the
+        // visual nesting in the tree.
+        const depth = (n.path.match(/[.[]/g) || []).length;
         list.append(renderTreeNode(n, depth));
       });
       if (!visible.length) {
@@ -316,8 +325,10 @@ export function registerDebug(system: Registry) {
       const code = document.createElement('textarea');
       code.className = 'debug-code';
       code.spellcheck = false;
-      code.readOnly = true;
-      code.value = traceToTest({ trace, assertions });
+      code.value = manualOverride ?? traceToTest({ trace, assertions });
+      // Listen for edits → store the override so Copy/Download write the
+      // user's version, not the auto-regenerated one.
+      code.addEventListener('input', () => { manualOverride = code.value; });
       right.append(code);
 
       const actions = document.createElement('div');
@@ -350,12 +361,16 @@ export function registerDebug(system: Registry) {
     on('debug.assert.open', () => {
       assertions = [];
       assertSearch = '';
+      manualOverride = null;
       lastSnapshot = snapshot(ctx);
       reopenAssertModal();
     });
 
     on('debug.assert.pick', ({ code, matcher, expected }) => {
       assertions.push({ code, matcher, expected });
+      // A new pick invalidates the manual override — auto-regenerate so the
+      // user sees the new assertion appended. They can edit again afterward.
+      manualOverride = null;
       reopenAssertModal();
     });
 
@@ -374,11 +389,22 @@ export function registerDebug(system: Registry) {
 
     on('debug.assert.clear-asserts', () => {
       assertions = [];
+      manualOverride = null;
       reopenAssertModal();
     });
 
+    /** Pull the text currently in the textarea — that's the user's
+     *  authoritative version (auto-generated or hand-edited). Falls back to a
+     *  fresh generation when the modal isn't mounted. */
+    const currentTestText = (): string => {
+      const modalEl = contexts.places.el(Places.Modal);
+      const textarea = modalEl?.querySelector('.debug-code') as HTMLTextAreaElement | null;
+      if (textarea) return textarea.value;
+      return manualOverride ?? traceToTest({ trace, assertions });
+    };
+
     on('debug.assert.copy', () => {
-      const text = traceToTest({ trace, assertions });
+      const text = currentTestText();
       navigator.clipboard?.writeText(text).then(
         () => emit('app.notice', { message: 'Test copied to clipboard.', level: 'info' }),
         () => emit('app.notice', { message: 'Copy failed — see textarea.', level: 'warn' }),
@@ -386,7 +412,7 @@ export function registerDebug(system: Registry) {
     });
 
     on('debug.assert.download', () => {
-      const text = traceToTest({ trace, assertions });
+      const text = currentTestText();
       const blob = new Blob([text], { type: 'text/typescript' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');

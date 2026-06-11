@@ -2,10 +2,14 @@ import type { AppCtx } from '../core';
 
 /** One node in the inspectable state tree. `code` is the TypeScript expression
  *  a test would use to read this value from a booted `ctx` — clicking a leaf
- *  in the assert modal generates an assertion against this expression. */
+ *  in the assert modal generates an assertion against this expression. `path`
+ *  is the natural snapshot-shaped key chain ("ui.places.stage.width") — what
+ *  a user types when filtering the tree. */
 export type SnapshotNode = {
   /** Human label for the tree row (object key, array index, etc.). */
   label: string;
+  /** Dot-path through the snapshot POJO — used for filtering. */
+  path: string;
   /** TS expression that returns this value from a `ctx: AppCtx`. */
   code: string;
   value: unknown;
@@ -21,6 +25,7 @@ export type SnapshotNode = {
  *  on a leaf generates a readable assertion — `ctx.graphs.current.nodes()`,
  *  not `ctx.snapshot().graph.nodes`. */
 export function snapshot(ctx: AppCtx) {
+  const ui = captureUi(ctx);
   const graph = ctx.graphs.current;
   const containers = graph.itemsOfKind('container') as Array<{
     id: string; Label?: { text: string }; Collapsed?: boolean; Position?: unknown; Size?: unknown; Children?: unknown;
@@ -66,6 +71,52 @@ export function snapshot(ctx: AppCtx) {
       errors: dxIssues.filter(i => i.level === 'error').length,
       warnings: dxIssues.filter(i => i.level === 'warn').length,
     },
+    ui,
+  };
+}
+
+/** UI/DOM-side snapshot — what the user actually sees. Counts what's rendered
+ *  per kind, whether each place is mounted with non-zero size, and whether key
+ *  surfaces (stage empty-state, item-toolbar, modal) are visible.
+ *
+ *  Code paths point at `ctx.contexts.places.el(...)` and `querySelectorAll`,
+ *  which work identically in jsdom (tests) and the browser (recording). */
+function captureUi(ctx: AppCtx) {
+  const placeEl = (place: 'top' | 'left' | 'stage' | 'modal') => ctx.contexts.places.el(place);
+  const stageEl = placeEl('stage');
+  const modalEl = placeEl('modal');
+  const topEl = placeEl('top');
+  const leftEl = placeEl('left');
+  const shellEl = topEl?.parentElement ?? null;
+  const sizeOf = (el: HTMLElement | null) => {
+    if (!el) return { mounted: false, width: 0, height: 0 };
+    const rect = el.getBoundingClientRect();
+    return { mounted: true, width: Math.round(rect.width), height: Math.round(rect.height) };
+  };
+  const count = (selector: string) => stageEl?.querySelectorAll(selector).length ?? 0;
+  return {
+    places: {
+      top: sizeOf(topEl),
+      left: sizeOf(leftEl),
+      stage: sizeOf(stageEl),
+      modal: sizeOf(modalEl),
+    },
+    shell: {
+      leftFolded: shellEl?.dataset.leftFolded === 'true',
+    },
+    rendered: {
+      nodes: count('.node[data-item-kind="node"]'),
+      edges: count('[data-item-kind="edge"]'),
+      containers: count('.container[data-item-kind="container"]'),
+      overlays: count('.item-overlay'),
+    },
+    stage: {
+      emptyStateVisible: !!stageEl?.querySelector('.empty'),
+      itemToolbarVisible: !!stageEl?.querySelector('.item-toolbar'),
+    },
+    modal: {
+      open: (modalEl?.children.length ?? 0) > 0,
+    },
   };
 }
 
@@ -81,6 +132,33 @@ const ROOT_CODE: Record<string, string> = {
   flags: 'ctx.flags',
   fold: 'ctx.contexts.fold.all()',
   dx: 'ctx.contexts.dx.run()',
+  ui: '/* see UI sub-paths */',
+};
+
+/** DOM-side helpers — each picked assertion under `ui.*` resolves to a query
+ *  on the live element tree, so a regression test catches both "data is right"
+ *  AND "the user actually sees it". */
+const PLACES_CODE: Record<string, string> = {
+  top: "ctx.contexts.places.el('top')?.getBoundingClientRect()",
+  left: "ctx.contexts.places.el('left')?.getBoundingClientRect()",
+  stage: "ctx.contexts.places.el('stage')?.getBoundingClientRect()",
+  modal: "ctx.contexts.places.el('modal')?.getBoundingClientRect()",
+};
+const SHELL_CODE: Record<string, string> = {
+  leftFolded: "ctx.contexts.places.el('top')?.parentElement?.dataset.leftFolded === 'true'",
+};
+const RENDERED_CODE: Record<string, string> = {
+  nodes: "ctx.contexts.places.el('stage')?.querySelectorAll('.node[data-item-kind=\"node\"]').length",
+  edges: "ctx.contexts.places.el('stage')?.querySelectorAll('[data-item-kind=\"edge\"]').length",
+  containers: "ctx.contexts.places.el('stage')?.querySelectorAll('.container[data-item-kind=\"container\"]').length",
+  overlays: "ctx.contexts.places.el('stage')?.querySelectorAll('.item-overlay').length",
+};
+const STAGE_CODE: Record<string, string> = {
+  emptyStateVisible: "!!ctx.contexts.places.el('stage')?.querySelector('.empty')",
+  itemToolbarVisible: "!!ctx.contexts.places.el('stage')?.querySelector('.item-toolbar')",
+};
+const MODAL_CODE: Record<string, string> = {
+  open: "(ctx.contexts.places.el('modal')?.children.length ?? 0) > 0",
 };
 
 /** Selection has method-shaped readers (`selected()`, `focused()`) instead of
@@ -114,43 +192,64 @@ const DX_CODE: Record<string, string> = {
  *  children. Optional chaining (`?.`) is inserted after any indexed access so
  *  generated assertions stay safe when the array is empty. */
 export function snapshotTree(snap: Snapshot): SnapshotNode {
-  return makeNode('snapshot', snap, 'ctx');
+  return makeNode('snapshot', snap, 'ctx', 'root', '');
 }
 
-function pickCode(parentCode: string, key: string, segment: 'root' | 'graph' | 'selection' | 'flags' | 'dx' | 'plain', optional: boolean): string {
+type Segment =
+  | 'root'
+  | 'graph' | 'selection' | 'flags' | 'dx'
+  | 'ui' | 'ui.places' | 'ui.shell' | 'ui.rendered' | 'ui.stage' | 'ui.modal'
+  | 'plain';
+
+function pickCode(parentCode: string, key: string, segment: Segment, optional: boolean): string {
   if (segment === 'root' && ROOT_CODE[key]) return ROOT_CODE[key];
   if (segment === 'graph' && GRAPH_CODE[key]) return GRAPH_CODE[key];
   if (segment === 'selection' && SELECTION_CODE[key]) return SELECTION_CODE[key];
   if (segment === 'flags' && FLAGS_CODE[key]) return FLAGS_CODE[key];
   if (segment === 'dx' && DX_CODE[key]) return DX_CODE[key];
+  if (segment === 'ui.places' && PLACES_CODE[key]) return PLACES_CODE[key];
+  if (segment === 'ui.shell' && SHELL_CODE[key]) return SHELL_CODE[key];
+  if (segment === 'ui.rendered' && RENDERED_CODE[key]) return RENDERED_CODE[key];
+  if (segment === 'ui.stage' && STAGE_CODE[key]) return STAGE_CODE[key];
+  if (segment === 'ui.modal' && MODAL_CODE[key]) return MODAL_CODE[key];
   return `${parentCode}${optional ? '?.' : '.'}${key}`;
 }
 
-function nextSegment(parent: 'root' | 'graph' | 'selection' | 'flags' | 'dx' | 'plain', key: string): typeof parent {
+function nextSegment(parent: Segment, key: string): Segment {
   if (parent === 'root') {
     if (key === 'graph') return 'graph';
     if (key === 'selection') return 'selection';
     if (key === 'flags') return 'flags';
     if (key === 'dx') return 'dx';
+    if (key === 'ui') return 'ui';
     return 'plain';
+  }
+  if (parent === 'ui') {
+    if (key === 'places') return 'ui.places';
+    if (key === 'shell') return 'ui.shell';
+    if (key === 'rendered') return 'ui.rendered';
+    if (key === 'stage') return 'ui.stage';
+    if (key === 'modal') return 'ui.modal';
   }
   return 'plain';
 }
 
-function makeNode(label: string, value: unknown, code: string, segment: 'root' | 'graph' | 'selection' | 'flags' | 'dx' | 'plain' = 'root'): SnapshotNode {
+function makeNode(label: string, value: unknown, code: string, segment: Segment = 'root', path = ''): SnapshotNode {
   if (Array.isArray(value)) {
     return {
       label,
+      path,
       code,
       value,
       kind: 'array',
-      children: value.map((v, i) => makeNode(`[${i}]`, v, `${code}[${i}]`, 'plain')),
+      children: value.map((v, i) => makeNode(`[${i}]`, v, `${code}[${i}]`, 'plain', `${path}[${i}]`)),
     };
   }
   if (value && typeof value === 'object') {
     const entries = Object.entries(value as Record<string, unknown>);
     return {
       label,
+      path,
       code,
       value,
       kind: 'object',
@@ -160,11 +259,12 @@ function makeNode(label: string, value: unknown, code: string, segment: 'root' |
         // an empty list at replay time.
         const optional = /\]$/.test(code) || /\)$/.test(code);
         const childCode = pickCode(code, k, segment, optional);
-        return makeNode(k, v, childCode, nextSegment(segment, k));
+        const childPath = path ? `${path}.${k}` : k;
+        return makeNode(k, v, childCode, nextSegment(segment, k), childPath);
       }),
     };
   }
-  return { label, code, value, kind: 'literal' };
+  return { label, path, code, value, kind: 'literal' };
 }
 
 /** Flatten the tree for searching. Each entry's path is its `code` so filters
