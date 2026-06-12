@@ -500,6 +500,10 @@ export type CollectionDef<T, Ctx = unknown> = {
   toolbar?: CollectionToolbar | false;
   search?: true;
   order?: 'created';
+  /** Render a standalone outline section for this collection. Default true. Set
+   *  false for kinds that only appear nested inside another (e.g. containers,
+   *  which live in the unified Outline tree, not their own list). */
+  section?: boolean;
 };
 
 export type ResolvedCollectionDef<T, Ctx = unknown> = Omit<CollectionDef<T, Ctx>, 'kind' | 'itemId' | 'itemLabel' | 'search' | 'order'> & {

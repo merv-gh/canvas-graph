@@ -282,8 +282,14 @@ Both come from the single `hierarchy` context (`tree`, `roots`, `childrenOf`,
 `parentChain`, `targets`). Storage (the `nesting` engine) is the same concept's
 mutable side.
 
+**Fold is the one less-detail ⟷ more-detail operation** over that hierarchy.
+Panel fold (outline sections, via the `fold` store) and item collapse (containers
+/ nodes, via `Collapsed`) are two facets of it and share one chevron (`▾`/`▸`) —
+don't invent a second collapse idiom. (Collapse is presentation state; migrating
+it from entity data into the `fold` store is the open follow-up, per Principle 10.)
+
 > **Test:** Move a node into a container → it renders inside that container's
-> `.outline-children` and disappears from the flat Nodes section
+> `.outline-children` and is not a loose top-level row
 > (`v2-outline-tree.test.ts`, `v2-principles.test.ts`).
 
 ## 19. Concepts merge and split safely

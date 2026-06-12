@@ -64,9 +64,12 @@ and full Vite serving.
 - `input`: starts the command-backed input router.
 - `main`: emits base shell and toolbar.
 - `log`: observes events and renders the event log.
-- `outline`: renders each collection as a section, laid out by `ctx.contexts.hierarchy`
-  — contained items nest + fold under their parent, loose items stay flat — with
-  per-section search/create/delete. Nesting is visible in navigation (Principle 18).
+- `outline`: graphs (documents) and edges (relationships) render as flat sections;
+  every other kind is one unified containment tree laid out by `ctx.contexts.hierarchy`
+  — contained items nest + fold under their parent, loose items stay flat. Containers
+  have no standalone section (`section: false`); they appear nested in the tree.
+  Folding uses the same `▾`/`▸` chevron as item collapse — one "fold" concept.
+  Nesting is visible in navigation (Principle 18).
 - `modal`: registers modal commands and renders modal contents.
 - `commandForm`: renders command-required input forms, then emits the command event after validation.
 - `commandModal`: renders Palette and Help from the same searchable grouped command modal definition.

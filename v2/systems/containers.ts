@@ -1,5 +1,5 @@
 import { collapsible, configurable, draggable, editable, nudgeable, resizeable, selectable } from '../abilities';
-import { boundsOf, createNesting, expandRect, itemIdFrom, unionRect, type NestApi, type Registry } from '../core';
+import { boundsOf, createNesting, expandRect, itemIdFrom, rectCenter, unionRect, type NestApi, type Registry } from '../core';
 import { Places, Slots } from '../types';
 import type {
   EntityDef,
@@ -124,15 +124,21 @@ export function registerContainers(system: Registry) {
       if (ref.kind === 'container') return visualRect(containersHere().get(ref.id) ?? null);
       return boundsOf(graphs.current.getItem(ref) as { Position?: Position; Size?: Size } ?? {}, { w: 80, h: 40 });
     };
-    const visualRect = (c: Container | null): Rect => {
-      if (!c) return boundsOf({ Position: { x: 0, y: 0 }, Size: DEFAULT_SIZE })!;
-      // Collapsed → compact badge anchored at the container's stored Position.
-      // The auto-fit rect (children) is irrelevant when collapsed.
-      if (c.Collapsed) return boundsOf({ Position: c.Position, Size: COLLAPSED_SIZE })!;
+    /** The expanded rect (children union + padding, or a default/manual box).
+     *  Independent of Collapsed, so collapse can pin its badge to the same
+     *  center the expanded container occupied. */
+    const expandedRect = (c: Container): Rect => {
       if (c.AutoFit === false) return boundsOf(c)!;
       const kids = c.Children.map(childBounds).filter((r): r is Rect => !!r);
       if (!kids.length) return boundsOf({ Position: c.Position, Size: DEFAULT_SIZE })!;
       return expandRect(kids.reduce(unionRect), PADDING, LABEL_BAND);
+    };
+    const visualRect = (c: Container | null): Rect => {
+      if (!c) return boundsOf({ Position: { x: 0, y: 0 }, Size: DEFAULT_SIZE })!;
+      // Collapsed → compact badge centered at the stored Position, which collapse
+      // pins to the expanded center (below), so the badge stays put.
+      if (c.Collapsed) return boundsOf({ Position: c.Position, Size: COLLAPSED_SIZE })!;
+      return expandedRect(c);
     };
 
     // ---------- Entity declaration ----------
@@ -207,6 +213,9 @@ export function registerContainers(system: Registry) {
       kind: 'container',
       items: () => [...containersHere().values()],
       toolbar: false,
+      // No standalone outline section — containers appear nested in the unified
+      // Outline tree alongside the nodes they group.
+      section: false,
     });
 
     // ---------- Commands ----------
@@ -338,6 +347,9 @@ export function registerContainers(system: Registry) {
       // Surface a dedicated fact when collapse flips, so cross-system flows
       // (relayout, fit) don't have to diff state every tick.
       if (Object.prototype.hasOwnProperty.call(p, 'Collapsed') && !!c.Collapsed !== wasCollapsed) {
+        // Pin the collapsed badge to the expanded center so it doesn't jump to a
+        // stale Position (children keep their positions, so uncollapse restores).
+        if (c.Collapsed) c.Position = rectCenter(expandedRect(c));
         emit('container.collapsed.changed', { id: c.id, collapsed: !!c.Collapsed });
       }
       emit('container.updated', { id: c.id });

@@ -116,11 +116,10 @@ export function registerOutline(system: Registry) {
 
     const renderSection = (
       collectionDef: AppCollectionDef<unknown>,
-      forest: HierarchyNode[],
-      hierarchical: Set<string>,
+      roots: HierarchyNode[],
+      total: number,
       byKind: Map<string, AppCollectionDef<unknown>>,
     ) => {
-      const kind = collectionKind(collectionDef);
       const section = el('section', 'outline-section');
       section.dataset.collectionId = collectionDef.id;
       const foldId = `outline.collection.${collectionDef.id}`;
@@ -144,10 +143,6 @@ export function registerOutline(system: Registry) {
       section.append(head);
       if (!open) return section;
 
-      // Hierarchical kinds render their roots (nested); others render flat leaves.
-      const roots = hierarchical.has(kind)
-        ? forest.filter(node => node.ref.kind === kind)
-        : collectionDef.items(ctx).map(item => leafNode(collectionDef, item));
       const q = query.trim().toLowerCase();
       const list = el('div', 'outline-list');
       const rows = roots.map(root => renderRow(root, [], byKind, 0, q)).filter((row): row is HTMLElement => !!row);
@@ -155,27 +150,48 @@ export function registerOutline(system: Registry) {
       section.append(list);
 
       if (!rows.length) {
-        const totalItems = collectionDef.items(ctx).length;
         const shortcut = commandShortcut(contexts.commands, collectionCreateCommand(collectionDef));
         const label = collectionDef.label.toLowerCase();
-        const title = q ? `No matches for "${query}"`
-          : roots.length === 0 && totalItems > 0 ? `All ${label} are nested`
+        const emptyTitle = q ? `No matches for "${query}"`
+          : total > 0 ? `All ${label} are nested`
           : `No ${label} yet`;
-        const hint = !q && !totalItems && shortcut ? kbdHint('Press ', shortcut, ' or click +') : undefined;
-        const empty = emptyState(contexts.templates, title, hint);
+        const hint = !q && !total && shortcut ? kbdHint('Press ', shortcut, ' or click +') : undefined;
+        const empty = emptyState(contexts.templates, emptyTitle, hint);
         if (empty) section.append(empty);
       }
       return section;
     };
 
+    // Outline policy: graphs (documents) and edges (relationships) are flat
+    // lists; every other kind is the unified containment tree. Containers opt
+    // out of a standalone section (section:false) and appear nested in that tree.
+    const FLAT_KINDS = new Set(['graph', 'edge']);
+
     const renderOutline = () => {
       const panel = el('section', 'outline');
       const forest = hierarchy.tree();
-      const hierarchical = new Set(hierarchy.items().map(item => item.ref.kind));
+      const itemKinds = new Set<string>(hierarchy.items().map(item => item.ref.kind));
       const byKind = collectionsByKind();
-      model.collections().forEach(collectionDef =>
-        panel.append(renderSection(collectionDef as AppCollectionDef<unknown>, forest, hierarchical, byKind)),
-      );
+      const contentTotal = hierarchy.items().filter(item => !FLAT_KINDS.has(item.ref.kind)).length;
+      let treeRendered = false;
+      model.collections().forEach(def => {
+        const collectionDef = def as AppCollectionDef<unknown>;
+        if (collectionDef.section === false) return; // e.g. containers — nested in the tree
+        const kind = collectionKind(collectionDef);
+        if (FLAT_KINDS.has(kind)) {
+          const roots = itemKinds.has(kind)
+            ? forest.filter(node => node.ref.kind === kind)
+            : collectionDef.items(ctx).map(item => leafNode(collectionDef, item));
+          panel.append(renderSection(collectionDef, roots, collectionDef.items(ctx).length, byKind));
+        } else {
+          // The unified containment tree — rendered once, on the first content
+          // collection (nodes), with every non-flat kind's roots nested.
+          if (treeRendered) return;
+          treeRendered = true;
+          const roots = forest.filter(node => !FLAT_KINDS.has(node.ref.kind));
+          panel.append(renderSection(collectionDef, roots, contentTotal, byKind));
+        }
+      });
       return panel;
     };
 

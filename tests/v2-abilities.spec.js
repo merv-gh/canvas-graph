@@ -58,7 +58,7 @@ test('v2 configurable ability opens node properties', async ({ page }) => {
   const node = page.locator('.node').first();
   const toolbar = page.locator('.node-toolbar');
   await expect(node).toBeVisible();
-  await expect(toolbar.locator('[data-command="item.collapse.toggle"]')).toHaveText('-');
+  await expect(toolbar.locator('[data-command="item.collapse.toggle"]')).toHaveText('▾');
   await toolbar.locator('[data-command="item.properties.open"]').click();
 
   await expect(page.locator('.modal-layer[data-visual="properties"]')).toBeVisible();

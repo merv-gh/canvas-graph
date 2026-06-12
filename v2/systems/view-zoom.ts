@@ -1,7 +1,7 @@
 import type { GraphEdge, GraphNode } from '../model';
 import type { Registry } from '../core';
 import { clamp, itemRefFrom } from '../core';
-import { Places, Slots, type ItemRef, type Position, type ViewState } from '../types';
+import { Places, Slots, type ItemRef, type Position, type Rect, type ViewState } from '../types';
 
 declare module '../types' {
   interface CustomEvents {
@@ -19,7 +19,7 @@ declare module '../types' {
 type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
 
 export function registerViewZoom(system: Registry) {
-  system('view.zoom', ({ on, emit, contexts, graphs, selection, contribute }) => {
+  system('view.zoom', ({ on, emit, contexts, graphs, selection, contribute, model }) => {
     contribute({ surface: 'top', command: 'view.zoom.out', kind: 'button', text: '−', slot: Slots.End, order: 10 });
     contribute({ surface: 'top', command: 'view.zoom.reset', kind: 'button', text: '100%', slot: Slots.End, order: 20 });
     contribute({ surface: 'top', command: 'view.zoom.in', kind: 'button', text: '+', slot: Slots.End, order: 30 });
@@ -163,13 +163,16 @@ export function registerViewZoom(system: Registry) {
         scale,
       });
     };
-    /** Resolve any ItemRef to a graph-space bounds. Falls back to the hierarchy
-     *  anchor for items whose canonical entity lookup fails (overlays, ghosts). */
-    const itemBounds = (ref: ItemRef) => {
-      if (ref.kind === 'node') {
-        const node = graphs.current.getNode(ref.id) as GraphNode | undefined;
-        if (node) return nodesBounds([node]);
-      }
+    const rectToBounds = (r: Rect): Bounds => ({ minX: r.x, minY: r.y, maxX: r.x + r.w, maxY: r.y + r.h });
+    /** Resolve any ItemRef to graph-space bounds. Prefers the entity renderer's
+     *  own `bounds()` — so it frames nodes AND containers (whose bounds are their
+     *  visual rect, collapsed or expanded). Edges fit both endpoints; anything
+     *  else falls back to its hierarchy anchor. */
+    const itemBounds = (ref: ItemRef): Bounds | null => {
+      const item = graphs.current.getItem(ref);
+      const renderer = model.entity(ref.kind)?.render;
+      const rect = item && renderer?.bounds ? renderer.bounds(item as never) : null;
+      if (rect) return rectToBounds(rect);
       if (ref.kind === 'edge') {
         const edge = graphs.current.getEdge(ref.id) as GraphEdge | undefined;
         const from = edge && graphs.current.getNode(edge.From);

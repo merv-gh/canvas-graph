@@ -4,8 +4,9 @@ import { snapshot } from '../../v2/core';
 
 /** The outline is the mission-critical "nested navigation" surface. These tests
  *  assert that containment is *visible in the left pane*, not just stored —
- *  loose items stay flat in their kind's section, contained items nest under
- *  their parent, and the record/snapshot harness can see the nesting. */
+ *  loose items stay flat, contained items nest under their parent in the unified
+ *  Outline tree (containers have no standalone section), and the record/snapshot
+ *  harness can see the nesting. */
 
 const section = (id: string) => document.querySelector(`.outline-section[data-collection-id="${id}"]`);
 const containerId = (ctx: ReturnType<typeof bootV2>) =>
@@ -24,7 +25,7 @@ describe('v2 outline — nested navigation', () => {
     expect(row?.closest('.outline-children')).toBeNull();
   });
 
-  it('nests a node under its container in the Containers section', async () => {
+  it('nests a node under its container in the unified Outline tree', async () => {
     const ctx = bootV2();
     await settle();
     runCommand(ctx, 'editing.container.create');
@@ -38,8 +39,9 @@ describe('v2 outline — nested navigation', () => {
     await settle();
 
     // The container row owns an outline-item; the node row lives in its children.
-    const containers = section('containers')!;
-    const containerRow = containers.querySelector(`.outline-row[data-item-kind="container"][data-item-id="${cid}"]`);
+    // Containers render inside the unified content section (data-collection-id="nodes").
+    const content = section('nodes')!;
+    const containerRow = content.querySelector(`.outline-row[data-item-kind="container"][data-item-id="${cid}"]`);
     expect(containerRow).not.toBeNull();
     const containerItem = containerRow!.closest('.outline-item')!;
     const childRow = containerItem.querySelector(`.outline-children .outline-row[data-item-kind="node"][data-item-id="${nid}"]`);
@@ -48,8 +50,11 @@ describe('v2 outline — nested navigation', () => {
     // canvas element (which is tagged with data-item-parent).
     expect(childRow!.getAttribute('data-item-parent')).toContain(cid);
 
-    // It left the flat Nodes section (it's nested, not loose).
-    expect(section('nodes')?.querySelector(`.outline-row[data-item-kind="node"][data-item-id="${nid}"]`)).toBeNull();
+    // It is nested (inside a children block) and appears exactly once — not also
+    // as a loose top-level row.
+    const nidRows = [...document.querySelectorAll(`.outline-row[data-item-kind="node"][data-item-id="${nid}"]`)];
+    expect(nidRows).toHaveLength(1);
+    expect(nidRows[0].closest('.outline-children')).not.toBeNull();
 
     // The harness sees the deepened tree.
     expect(snapshot(ctx).ui.outline.nested).toBeGreaterThanOrEqual(1);
@@ -71,7 +76,7 @@ describe('v2 outline — nested navigation', () => {
     ctx.bus.emit('fold.toggle', { id: `outline.item.container:${cid}` });
     await settle();
 
-    expect(section('containers')?.querySelector(`.outline-children .outline-row[data-item-kind="node"][data-item-id="${nid}"]`)).toBeNull();
+    expect(section('nodes')?.querySelector(`.outline-children .outline-row[data-item-kind="node"][data-item-id="${nid}"]`)).toBeNull();
     expect(snapshot(ctx).ui.outline.nested).toBe(0);
   });
 
@@ -87,7 +92,7 @@ describe('v2 outline — nested navigation', () => {
     ctx.bus.emit('container.add-child', { containerId: cid, childRef: { kind: 'node', id: nid } });
     await settle();
 
-    const childMain = section('containers')!
+    const childMain = section('nodes')!
       .querySelector(`.outline-children .outline-row[data-item-kind="node"][data-item-id="${nid}"] .outline-main`) as HTMLElement;
     childMain.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     await settle();

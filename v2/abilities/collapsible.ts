@@ -14,7 +14,9 @@ export const collapsible = <T extends Collapsable>() => ability<T>('collapsible'
     kind: 'button',
     slot: Slots.HeaderStart,
     className: 'node-action node-toggle',
-    text: item => item.Collapsed ? '+' : '-',
+    // Same fold chevron as outline sections — one visual language for "fold"
+    // (less detail ⟷ more detail). ▾ = expanded (click to fold), ▸ = folded.
+    text: item => item.Collapsed ? '▸' : '▾',
     label: item => item.Collapsed ? 'Expand' : 'Collapse',
   }],
 })]);
