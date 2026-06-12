@@ -2,16 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "graph",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8765"],
-      "port": 8765
-    },
-    {
-      "name": "v2",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev:v2"],
-      "port": 5175
+      "name": "v2-preview",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "v2", "--host", "127.0.0.1", "--port", "5199"],
+      "port": 5199
     }
   ]
 }

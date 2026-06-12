@@ -157,6 +157,7 @@ button.icon:hover { color: var(--ink); }
 }
 .top {
   grid-column: 1 / -1;
+  grid-row: 1;
   display: flex; align-items: center; gap: 4px;
   padding: 6px 10px;
   border-bottom: 1px solid var(--line);
@@ -170,6 +171,7 @@ button.icon:hover { color: var(--ink); }
 
 .left {
   grid-column: 1;
+  grid-row: 2;
   border-right: 1px solid var(--line);
   background: var(--panel-2);
   overflow: auto;
@@ -177,10 +179,13 @@ button.icon:hover { color: var(--ink); }
 }
 
 .stage {
-  /* Pin the stage to column 2 explicitly. Without this, hiding `.left` via
-     `display: none` removes it from grid auto-flow and the stage drops into
-     column 1 (which collapses to 0px when the panel folds). */
+  /* Pin the stage to column 2 AND row 2 explicitly. Without the column pin,
+     hiding `.left` via `display: none` removes it from grid auto-flow and the
+     stage drops into column 1 (which collapses to 0px when the panel folds).
+     Without the row pin, zen mode (`display: none` on .top + .left) auto-flows
+     the stage into row 1 — which zen collapses to 0px height. */
   grid-column: 2;
+  grid-row: 2;
   --grid-size: 32px;
   --grid-x: 0px;
   --grid-y: 0px;
