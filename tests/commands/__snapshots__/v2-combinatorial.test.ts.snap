@@ -5,6 +5,8 @@ exports[`combinatorial action graph > enumerates the auto-runnable command set (
   "app.cancel.escape",
   "debug.enable",
   "demo.render-self",
+  "detail.less",
+  "detail.more",
   "editing.container.create",
   "editing.node.create",
   "graph.create",
@@ -14,9 +16,9 @@ exports[`combinatorial action graph > enumerates the auto-runnable command set (
   "layout.apply.radial",
   "layout.apply.tidy",
   "modal.close",
-  "modal.open",
   "palette.open",
   "view.fit.all",
+  "view.zen",
   "view.zoom.in",
   "view.zoom.out",
   "view.zoom.reset",
@@ -65,11 +67,45 @@ exports[`combinatorial action graph > length-1: every auto-runnable command boot
   "snap": {
     "containers": 5,
     "dxErrors": 0,
-    "edges": 61,
-    "focused": "node:e42",
-    "nodes": 42,
+    "edges": 62,
+    "focused": "node:e43",
+    "nodes": 43,
     "scale": 0.19,
-    "selected": "node:e42",
+    "selected": "node:e43",
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [detail.less] 1`] = `
+{
+  "sequence": [
+    "detail.less",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": null,
+    "nodes": 0,
+    "scale": 0.83,
+    "selected": null,
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [detail.more] 1`] = `
+{
+  "sequence": [
+    "detail.more",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": null,
+    "nodes": 0,
+    "scale": 1.2,
+    "selected": null,
   },
 }
 `;
@@ -227,23 +263,6 @@ exports[`combinatorial action graph > length-1: every auto-runnable command boot
 }
 `;
 
-exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [modal.open] 1`] = `
-{
-  "sequence": [
-    "modal.open",
-  ],
-  "snap": {
-    "containers": 0,
-    "dxErrors": 0,
-    "edges": 0,
-    "focused": null,
-    "nodes": 0,
-    "scale": 1,
-    "selected": null,
-  },
-}
-`;
-
 exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [palette.open] 1`] = `
 {
   "sequence": [
@@ -265,6 +284,23 @@ exports[`combinatorial action graph > length-1: every auto-runnable command boot
 {
   "sequence": [
     "view.fit.all",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": null,
+    "nodes": 0,
+    "scale": 1,
+    "selected": null,
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [view.zen] 1`] = `
+{
+  "sequence": [
+    "view.zen",
   ],
   "snap": {
     "containers": 0,

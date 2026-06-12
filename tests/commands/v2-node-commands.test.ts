@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nodeRect } from '../../v2/core';
+import { itemFoldId, nodeRect } from '../../v2/core';
 import { Places } from '../../v2/types';
 import { bootV2, commandButton, field, runCommand, settle } from './v2-testkit';
 
@@ -29,8 +29,10 @@ describe('v2 node commands', () => {
 	    expect(document.querySelector('.node-title')?.textContent).toBe('Node 1');
 	    expect((document.activeElement as HTMLElement | null)?.dataset.itemId).toBe(node.id);
 
+    // Collapse is fold state now (presentation), not node data.
+    const nodeFold = () => ctx.contexts.fold.folded(itemFoldId({ kind: 'node', id: node.id }, ctx.graphs.current.id));
     expect(runCommand(ctx, 'item.collapse.toggle')).toBe(true);
-    expect(node.Collapsed).toBe(true);
+    expect(nodeFold()).toBe(true);
 
     const before = { ...node.Position! };
     expect(runCommand(ctx, 'item.nudge.right')).toBe(true);
@@ -48,10 +50,9 @@ describe('v2 node commands', () => {
     expect(runCommand(ctx, 'properties.item.input', { target: width })).toBe(true);
     expect(node.Size.w).toBe(222);
 
-    const collapsed = document.querySelector<HTMLInputElement>('.properties [data-field="collapsed"]')!;
-    collapsed.checked = false;
-    expect(runCommand(ctx, 'properties.item.toggle', { target: collapsed })).toBe(true);
-    expect(node.Collapsed).toBe(false);
+    // No 'collapsed' property anymore — toggling the fold again expands it.
+    expect(runCommand(ctx, 'item.collapse.toggle')).toBe(true);
+    expect(nodeFold()).toBe(false);
   });
 
   it('routes keyboard and click input through the command registry', async () => {

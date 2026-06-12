@@ -1,20 +1,14 @@
 import { appendRenderable, type Registry } from '../core';
 import { Places } from '../types';
-import type { AppEvents, Renderable } from '../types';
+import type { Renderable } from '../types';
 
 export function registerModal(system: Registry) {
-  system('modal', ({ on, emit, contexts, contribute, origin }) => {
+  system('modal', ({ on, emit, contexts, origin }) => {
     let open = false;
-    contribute({ surface: 'top', command: 'modal.open', kind: 'button', text: 'Modal', order: 50 });
+    // `modal.open` is an event other systems emit (commandForm, configurable,
+    // debug) — not a user command, so it has no toolbar button. Only `modal.close`
+    // is a real command (backdrop / Close button / Escape via the Cancellable).
     contexts.commands.register([
-      {
-        id: 'modal.open',
-        label: 'Open modal',
-        group: 'modal',
-        payload: ({ target }) => ({ title: (target as HTMLElement)?.dataset.title, visual: (target as HTMLElement)?.dataset.visual as AppEvents['modal.open']['visual'] }),
-      },
-      // No own Escape binding — modal registers a Cancellable below. The
-      // command stays callable from backdrop click and the Close button.
       { id: 'modal.close', label: 'Close modal', group: 'modal' },
     ]);
     contexts.cancellation.register({

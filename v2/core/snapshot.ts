@@ -1,4 +1,4 @@
-import type { AppCtx } from '../core';
+import { itemFoldId, type AppCtx } from '../core';
 
 /** One node in the inspectable state tree. `code` is the TypeScript expression
  *  a test would use to read this value from a booted `ctx` — clicking a leaf
@@ -39,7 +39,7 @@ export function snapshot(ctx: AppCtx) {
         Label: n.Label,
         Position: n.Position,
         Size: n.Size,
-        Collapsed: !!n.Collapsed,
+        Collapsed: ctx.contexts.fold.folded(itemFoldId({ kind: 'node', id: n.id }, graph.id)),
       })),
       edges: graph.edges().map(e => ({
         id: e.id,
@@ -50,7 +50,7 @@ export function snapshot(ctx: AppCtx) {
       containers: containers.map(c => ({
         id: c.id,
         Label: c.Label,
-        Collapsed: !!c.Collapsed,
+        Collapsed: ctx.contexts.fold.folded(itemFoldId({ kind: 'container', id: c.id }, graph.id)),
         Position: c.Position,
         Size: c.Size,
         Children: c.Children,

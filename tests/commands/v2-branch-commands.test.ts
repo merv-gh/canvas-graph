@@ -21,7 +21,8 @@ describe('v2 defensive command branches', () => {
   it('runs modal default, close, and malformed command form paths', () => {
     const ctx = bootV2();
 
-    expect(runCommand(ctx, 'modal.open', { target: document.createElement('button') })).toBe(true);
+    // modal.open is an event other systems emit (no user command/button now).
+    ctx.bus.emit('modal.open', {});
     expect(document.querySelector('.modal-head')?.textContent).toContain('Modal');
     expect(runCommand(ctx, 'modal.close')).toBe(true);
     expect(document.querySelector('.modal-layer')).toBeNull();

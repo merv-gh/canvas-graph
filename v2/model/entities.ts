@@ -43,15 +43,12 @@ const intersectRectBoundary = (outside: { x: number; y: number }, rectCenter: { 
  *  Collapsed container, the endpoint snaps to the outermost collapsed
  *  ancestor's visual rect. Otherwise it's the node itself. Returns null when
  *  neither resolves (orphaned edge — render skips it). */
-const resolveEndpoint = (nodeRef: { kind: 'node'; id: string }, ctx: { graph: { getItem(ref: ItemRef): unknown }; parentChain(ref: ItemRef): ItemRef[]; boundsOf(ref: ItemRef): Rect | null }):
+const resolveEndpoint = (nodeRef: { kind: 'node'; id: string }, ctx: { graph: { getItem(ref: ItemRef): unknown }; parentChain(ref: ItemRef): ItemRef[]; isFolded(ref: ItemRef): boolean; boundsOf(ref: ItemRef): Rect | null }):
   | { ref: ItemRef; center: { x: number; y: number }; half: { w: number; h: number } }
   | null => {
   const chain = ctx.parentChain(nodeRef);
-  // Outermost collapsed ancestor wins — pick the highest-level visible boundary.
-  const collapsed = chain.find(a => {
-    const item = ctx.graph.getItem(a) as { Collapsed?: boolean } | undefined;
-    return !!item?.Collapsed;
-  });
+  // Outermost folded ancestor wins — pick the highest-level visible boundary.
+  const collapsed = chain.find(a => ctx.isFolded(a));
   if (collapsed) {
     const rect = ctx.boundsOf(collapsed);
     if (!rect) return null;
@@ -133,7 +130,7 @@ const nodeRenderer: EntityRenderer<GraphNode> = {
     ctx.tagItem(el, ref);
     el.tabIndex = -1;
     ctx.applyItemModes(el, ref);
-    el.classList.toggle('collapsed', !!node.Collapsed);
+    el.classList.toggle('collapsed', ctx.isFolded(ref));
     el.style.left = `${pos.x}px`;
     el.style.top = `${pos.y}px`;
     el.style.width = `${node.Size.w}px`;
@@ -179,11 +176,8 @@ export const nodeEntity: EntityDef<GraphNode, NodePatch> = entityDef<GraphNode, 
         return Number.isFinite(height) ? { Size: { ...node.Size, h: clamp(height, 40, 900) } } : undefined;
       },
     }),
-    property<GraphNode, NodePatch>({
-      id: 'collapsed', label: 'Collapsed', input: 'checkbox',
-      value: node => !!node.Collapsed,
-      patch: (_node, value) => ({ Collapsed: !!value }),
-    }),
+    // Collapse is fold state (presentation), not a node property — toggle it with
+    // the fold chevron / item.collapse.toggle, not the properties modal.
   ],
 });
 

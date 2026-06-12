@@ -3,11 +3,11 @@ import type { Id, ItemRef, Label, Position, Size } from '../types';
 // ----- Domain types -----
 // Live here, next to the classes implementing them. Anything kind-specific
 // (node, edge, future container) belongs in the model layer, not in types.ts.
-export type Entity = { id: Id; kind: string; Label: Label; Size: Size; Position?: Position; Collapsed?: boolean };
+export type Entity = { id: Id; kind: string; Label: Label; Size: Size; Position?: Position };
 
 export type NodeEntity = Entity & { kind: 'node';  };
-export type NodeDraft = { Label?: Label; Position?: Position; Size?: Size; Collapsed?: boolean };
-export type NodePatch = Partial<Pick<NodeEntity, 'Label' | 'Size' | 'Position' | 'Collapsed'>>;
+export type NodeDraft = { Label?: Label; Position?: Position; Size?: Size };
+export type NodePatch = Partial<Pick<NodeEntity, 'Label' | 'Size' | 'Position'>>;
 export type NodeCreateOptions = { at?: Position; near?: Id | null };
 
 /** Operation-time hints attached to create events. They control the lifecycle around the
@@ -36,13 +36,11 @@ export class GraphNode implements NodeEntity {
   Label: Label;
   Size: Size;
   Position?: Position;
-  Collapsed?: boolean;
 
   constructor(readonly graph: Graph, readonly id: Id, draft: NodeDraft = {}) {
     this.Label = draft.Label ?? { text: id };
     this.Size = draft.Size ?? { w: 150, h: 64 };
     this.Position = draft.Position;
-    this.Collapsed = draft.Collapsed;
   }
 }
 

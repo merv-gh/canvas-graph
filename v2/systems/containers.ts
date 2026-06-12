@@ -1,5 +1,5 @@
 import { collapsible, configurable, draggable, editable, nudgeable, resizeable, selectable } from '../abilities';
-import { boundsOf, createNesting, expandRect, itemIdFrom, rectCenter, unionRect, type NestApi, type Registry } from '../core';
+import { boundsOf, createNesting, expandRect, itemFoldId, itemIdFrom, rectCenter, unionRect, type NestApi, type Registry } from '../core';
 import { Places, Slots } from '../types';
 import type {
   EntityDef,
@@ -36,10 +36,6 @@ declare module '../types' {
     'container.add-child': { containerId: Id; childRef: ItemRef };
     'container.remove-child': { childRef: ItemRef };
     'container.children.changed': { id: Id };
-    /** Fired only when `Collapsed` actually flipped. Cross-system listeners
-     *  (layout relayout, view fit) listen on this rather than container.updated
-     *  to avoid running on every drag tick. */
-    'container.collapsed.changed': { id: Id; collapsed: boolean };
   }
 }
 
@@ -49,12 +45,11 @@ type Container = {
   Label: { text: string };
   Position: Position;
   Size: Size;
-  Collapsed?: boolean;
   /** Default true: visual rect is auto-fit from children. Manual resize flips this. */
   AutoFit?: boolean;
   Children: ItemRef[];
 };
-type ContainerPatch = Partial<Pick<Container, 'Label' | 'Position' | 'Size' | 'Collapsed' | 'AutoFit'>>;
+type ContainerPatch = Partial<Pick<Container, 'Label' | 'Position' | 'Size' | 'AutoFit'>>;
 
 const DEFAULT_SIZE: Size = { w: 320, h: 200 };
 /** Compact size used when collapsed — just enough room for the label badge. */
@@ -124,9 +119,11 @@ export function registerContainers(system: Registry) {
       if (ref.kind === 'container') return visualRect(containersHere().get(ref.id) ?? null);
       return boundsOf(graphs.current.getItem(ref) as { Position?: Position; Size?: Size } ?? {}, { w: 80, h: 40 });
     };
+    /** Is this container folded? Collapse is fold state (the `fold` store),
+     *  not container data — same concept as outline/panel/zen folding. */
+    const folded = (c: Container) => contexts.fold.folded(itemFoldId({ kind: 'container', id: c.id }, graphs.current.id));
     /** The expanded rect (children union + padding, or a default/manual box).
-     *  Independent of Collapsed, so collapse can pin its badge to the same
-     *  center the expanded container occupied. */
+     *  Independent of fold state, so the folded badge can center on it. */
     const expandedRect = (c: Container): Rect => {
       if (c.AutoFit === false) return boundsOf(c)!;
       const kids = c.Children.map(childBounds).filter((r): r is Rect => !!r);
@@ -135,9 +132,9 @@ export function registerContainers(system: Registry) {
     };
     const visualRect = (c: Container | null): Rect => {
       if (!c) return boundsOf({ Position: { x: 0, y: 0 }, Size: DEFAULT_SIZE })!;
-      // Collapsed → compact badge centered at the stored Position, which collapse
-      // pins to the expanded center (below), so the badge stays put.
-      if (c.Collapsed) return boundsOf({ Position: c.Position, Size: COLLAPSED_SIZE })!;
+      // Folded → compact badge centered *live* on where the children are, so it
+      // never jumps and uncollapse restores exactly (no stored position).
+      if (folded(c)) return boundsOf({ Position: rectCenter(expandedRect(c)), Size: COLLAPSED_SIZE })!;
       return expandedRect(c);
     };
 
@@ -149,7 +146,7 @@ export function registerContainers(system: Registry) {
         const rect = visualRect(c);
         const el = document.createElement('div');
         el.className = 'container';
-        if (c.Collapsed) el.classList.add('collapsed');
+        if (folded(c)) el.classList.add('collapsed');
         if (c.AutoFit === false) el.classList.add('manual');
         el.style.left = `${rect.x + rect.w / 2}px`;
         el.style.top = `${rect.y + rect.h / 2}px`;
@@ -183,9 +180,6 @@ export function registerContainers(system: Registry) {
       { id: 'height', label: 'Height', input: 'number', min: 80, step: 8,
         value: c => c.Size.h,
         patch: (c, v) => Number.isFinite(Number(v)) ? { Size: { ...c.Size, h: Math.max(80, Number(v)) } } : undefined },
-      { id: 'collapsed', label: 'Collapsed', input: 'checkbox',
-        value: c => !!c.Collapsed,
-        patch: (_c, v) => ({ Collapsed: !!v }) },
     ];
 
     const entity: EntityDef<Container, ContainerPatch> = {
@@ -332,7 +326,6 @@ export function registerContainers(system: Registry) {
       if (!c) return;
       const p = patch as ContainerPatch;
       const oldPos = { ...c.Position };
-      const wasCollapsed = !!c.Collapsed;
       Object.assign(c, p);
       // Drag cascade: when the container moves, children move with it.
       if (p.Position && (p.Position.x !== oldPos.x || p.Position.y !== oldPos.y)) {
@@ -343,14 +336,6 @@ export function registerContainers(system: Registry) {
           if (!child?.Position) return;
           emit('item.update', { ref: childRef, patch: { Position: { x: child.Position.x + dx, y: child.Position.y + dy } } });
         });
-      }
-      // Surface a dedicated fact when collapse flips, so cross-system flows
-      // (relayout, fit) don't have to diff state every tick.
-      if (Object.prototype.hasOwnProperty.call(p, 'Collapsed') && !!c.Collapsed !== wasCollapsed) {
-        // Pin the collapsed badge to the expanded center so it doesn't jump to a
-        // stale Position (children keep their positions, so uncollapse restores).
-        if (c.Collapsed) c.Position = rectCenter(expandedRect(c));
-        emit('container.collapsed.changed', { id: c.id, collapsed: !!c.Collapsed });
       }
       emit('container.updated', { id: c.id });
     });

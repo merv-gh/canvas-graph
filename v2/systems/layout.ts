@@ -1,4 +1,4 @@
-import { nodeRef, type Registry } from '../core';
+import { itemFoldId, nodeRef, type Registry } from '../core';
 import type { GraphEdge, GraphNode } from '../model';
 import type { AppCtx } from '../core';
 import type { ItemRef, Position } from '../types';
@@ -36,12 +36,10 @@ export type LayoutScope = {
 export function partitionByScope(ctx: AppCtx): LayoutScope[] {
   const graph = ctx.graphs.current;
   const hierarchy = ctx.contexts.hierarchy;
+  const fold = ctx.contexts.fold;
   const all = graph.nodes();
   const hiddenByCollapse = (node: GraphNode): boolean =>
-    hierarchy.parentChain({ kind: 'node', id: node.id }).some(ancestor => {
-      const item = graph.getItem(ancestor) as { Collapsed?: boolean } | undefined;
-      return !!item?.Collapsed;
-    });
+    hierarchy.parentChain({ kind: 'node', id: node.id }).some(ancestor => fold.folded(itemFoldId(ancestor, graph.id)));
   const groups = new Map<string, { parent: ItemRef | null; nodes: GraphNode[] }>();
   for (const node of all) {
     if (hiddenByCollapse(node)) continue;

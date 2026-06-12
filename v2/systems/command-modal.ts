@@ -58,9 +58,17 @@ export function registerCommandModal(system: Registry) {
         .filter(command => !modal.availableOnly || !!q || command.available?.() !== false)
         .filter(command => !q || `${command.id} ${command.label} ${command.group ?? ''} ${shortcutOf(command)}`.toLowerCase().includes(q));
     };
+    // Context-ranked palette: when something is chosen, groups that act on the
+    // current target (item / selection / choose / editing / edge / container)
+    // sort first — so the numbered hot-rows and top sections are what's relevant
+    // to "this". With nothing chosen, create/navigate groups lead instead.
+    const TARGET_GROUPS = new Set(['item', 'selection', 'choose', 'editing', 'edge', 'container']);
+    const groupRank = (group: string) =>
+      (TARGET_GROUPS.has(group) === (ctx.selection.selectedAll().length > 0)) ? 0 : 1;
     const orderedCommands = (modal: CommandModalDef, query = '') => {
       const ordered: CommandSpec[] = [];
-      grouped(visibleCommands(modal, query), command => command.group ?? systemOf(command.id))
+      [...grouped(visibleCommands(modal, query), command => command.group ?? systemOf(command.id))]
+        .sort((a, b) => groupRank(a[0]) - groupRank(b[0]))
         .forEach(([, commands]) => ordered.push(...commands));
       return ordered;
     };

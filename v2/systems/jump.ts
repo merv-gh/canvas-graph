@@ -1,4 +1,4 @@
-import type { Registry } from '../core';
+import { foldHidden, type Registry } from '../core';
 import type { ItemRef } from '../types';
 
 /** A single-file vimium-style jump mode.
@@ -27,7 +27,7 @@ declare module '../types' {
 const LETTERS = 'asdfghjklqwertyuiopzxcvbnm';
 
 export function registerJump(system: Registry) {
-  system('jump', ({ on, emit, contexts, origin }) => {
+  system('jump', ({ on, emit, contexts, graphs, origin }) => {
     let letterToRef: Map<string, ItemRef> | null = null;
 
     const cancel = () => {
@@ -38,7 +38,11 @@ export function registerJump(system: Registry) {
     };
 
     const start = () => {
-      const targets = contexts.hierarchy.targets().slice(0, LETTERS.length);
+      // Only jump to items the user can actually see — skip anything hidden
+      // inside a collapsed/folded container.
+      const targets = contexts.hierarchy.targets()
+        .filter(target => !foldHidden(target.ref, contexts.hierarchy.parentChain, contexts.fold, graphs.current.id))
+        .slice(0, LETTERS.length);
       if (!targets.length) return;
       const next = new Map<string, ItemRef>();
       const overlays = targets.map((target, i) => {

@@ -1,4 +1,4 @@
-import { isStageSurface, itemIdFrom, itemRefFrom, nodeRef, type Registry } from '../core';
+import { foldHidden, isStageSurface, itemIdFrom, itemRefFrom, nodeRef, type Registry } from '../core';
 import type { CommandSource, Id, ItemRef } from '../types';
 import { ability, action } from './shared';
 import type { Identified } from './shapes';
@@ -37,13 +37,17 @@ export function registerSelectable(system: Registry) {
   system('ability.selectable', ({ on, emit, contexts, graphs, selection, origin }) => {
     const selectedNodeId = () => selection.selectedNode()?.id ?? null;
     const nodeId = (source: CommandSource) => itemIdFrom(source.target) || selectedNodeId() || '';
+    // Tab cycles only *visible* nodes — never a node hidden inside a collapsed
+    // container (which would leave a floating toolbar over nothing).
+    const visibleNodes = () => graphs.current.nodes()
+      .filter(node => !foldHidden(nodeRef(node.id), contexts.hierarchy.parentChain, contexts.fold, graphs.current.id));
     const nextNodeId = () => {
-      const nodes = graphs.current.nodes();
+      const nodes = visibleNodes();
       const index = Math.max(0, nodes.findIndex(node => node.id === selectedNodeId()));
       return nodes[(index + 1) % nodes.length]?.id ?? nodes[0]?.id ?? '';
     };
     const previousNodeId = () => {
-      const nodes = graphs.current.nodes();
+      const nodes = visibleNodes();
       const index = nodes.findIndex(node => node.id === selectedNodeId());
       return nodes[(index <= 0 ? nodes.length : index) - 1]?.id ?? nodes[0]?.id ?? '';
     };

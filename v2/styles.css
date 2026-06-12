@@ -47,6 +47,11 @@ button.icon:hover { color: var(--ink); }
 .shell { display: grid; grid-template: 44px 1fr / 260px 1fr; height: 100vh; transition: grid-template-columns .14s ease; }
 .shell[data-left-folded="true"] { grid-template-columns: 0 1fr; }
 .shell[data-left-folded="true"] .left { display: none; }
+/* Zen mode — fold the whole shell to canvas only (distraction-free, clean
+ * screenshots). Exit with the same `\` toggle. */
+.shell[data-zen="true"] { grid-template: 0 1fr / 0 1fr; }
+.shell[data-zen="true"] .top,
+.shell[data-zen="true"] .left { display: none; }
 .hamburger { font-size: 16px; line-height: 1; padding: 2px 8px; margin-right: 4px; }
 
 /* --- Debug toolbar group --- */

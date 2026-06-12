@@ -14,7 +14,7 @@ export { editable } from './editable';
 export { nudgeable } from './nudgeable';
 export { resizeable } from './resizeable';
 export { selectable } from './selectable';
-export type { Collapsable, Identified, Labeled, Positioned, Sized } from './shapes';
+export type { Identified, Labeled, Positioned, Sized } from './shapes';
 
 export function registerAbilitySystems(system: Registry) {
   registerSelectable(system);

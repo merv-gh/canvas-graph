@@ -1,6 +1,6 @@
 import type { GraphEdge, GraphNode } from '../model';
 import type { Registry } from '../core';
-import { clamp, itemRefFrom } from '../core';
+import { clamp, foldHidden, itemRefFrom } from '../core';
 import { Places, Slots, type ItemRef, type Position, type Rect, type ViewState } from '../types';
 
 declare module '../types' {
@@ -187,8 +187,35 @@ export function registerViewZoom(system: Registry) {
       return { minX: anchor.x - 80, minY: anchor.y - 32, maxX: anchor.x + 80, maxY: anchor.y + 32 };
     };
 
+    const unionBounds = (a: Bounds, b: Bounds): Bounds => ({
+      minX: Math.min(a.minX, b.minX), minY: Math.min(a.minY, b.minY),
+      maxX: Math.max(a.maxX, b.maxX), maxY: Math.max(a.maxY, b.maxY),
+    });
+    /** Bounds of everything currently *visible* — each entity's renderer bounds
+     *  (so a collapsed container counts as its small badge, not its expanded
+     *  rect), skipping items hidden inside a folded ancestor. Fit frames what the
+     *  user sees, not stale expanded extents. */
+    const visibleBounds = (): Bounds | null => {
+      let acc: Bounds | null = null;
+      model.entities().forEach(entityDef => {
+        const bounds = entityDef.render?.bounds;
+        if (!bounds) return;
+        graphs.current.itemsOfKind(entityDef.kind).forEach(item => {
+          const id = (item as { id?: string }).id;
+          if (!id) return;
+          const ref = { kind: entityDef.kind as ItemRef['kind'], id };
+          if (foldHidden(ref, contexts.hierarchy.parentChain, contexts.fold, graphs.current.id)) return;
+          const r = bounds(item);
+          if (!r) return;
+          const bb = { minX: r.x, minY: r.y, maxX: r.x + r.w, maxY: r.y + r.h };
+          acc = acc ? unionBounds(acc, bb) : bb;
+        });
+      });
+      return acc;
+    };
+
     on('view.fit.all', () => {
-      const b = nodesBounds(graphs.current.nodes() as GraphNode[]);
+      const b = visibleBounds();
       if (b) fitToBounds(b);
     });
     on('view.fit.selected', () => {

@@ -7,6 +7,7 @@ import { registerCommandForm } from './command-form';
 import { registerCommandPicker } from './command-picker';
 import { registerContainers } from './containers';
 import { registerDebug } from './debug';
+import { registerDetail } from './detail';
 import { registerDemo } from './demo';
 import { registerDx } from './dx';
 import { registerFoldable } from './foldable';
@@ -51,6 +52,7 @@ export function registerSystems(system: Registry) {
   registerItemToolbar(system);
   registerContainers(system);
   registerChoose(system);
+  registerDetail(system);
   registerDemo(system);
   registerDebug(system);
   registerDx(system);

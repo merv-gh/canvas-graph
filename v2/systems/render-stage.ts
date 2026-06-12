@@ -1,4 +1,4 @@
-import { commandShortcut, emptyState, kbdHint, tagItem, type Registry } from '../core';
+import { commandShortcut, emptyState, foldHidden, itemFoldId, kbdHint, tagItem, type Registry } from '../core';
 import { Places, Slots } from '../types';
 import type { ActionDef, AffordanceDef, EntityDef, EntityRenderCtx, ItemRef } from '../types';
 import { uiValue } from '../core';
@@ -70,16 +70,14 @@ export function registerRenderStage(system: Registry) {
       templateSlot: (templateRoot, name) => contexts.templates.slot(templateRoot, name),
       templateText: (templateRoot, name, value) => { contexts.templates.text(templateRoot, name, value); },
       parentChain: ref => contexts.hierarchy.parentChain(ref),
+      isFolded: ref => contexts.fold.folded(itemFoldId(ref, graphs.current.id)),
       boundsOf: boundsOfRef,
     });
     /** True when any ancestor of `ref` is `Collapsed`. Collapsed containers
      *  hide their entire subtree — the children stay in the data store (so
      *  expand brings them back instantly), they're just skipped here. */
     const hiddenByCollapsedAncestor = (ref: ItemRef): boolean =>
-      contexts.hierarchy.parentChain(ref).some(ancestor => {
-        const item = graphs.current.getItem(ancestor) as { Collapsed?: boolean } | undefined;
-        return !!item?.Collapsed;
-      });
+      foldHidden(ref, contexts.hierarchy.parentChain, contexts.fold, graphs.current.id);
     const syncStageView = () => {
       const stage = contexts.places.el(Places.Stage), view = contexts.view.get();
       if (!stage) return;

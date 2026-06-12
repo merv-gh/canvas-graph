@@ -14,7 +14,7 @@ import type { Id, Position, Size } from '../types';
  *   editable     → Labeled     (has a writable text label)
  *   draggable    → Positioned  (can be moved with pointer)
  *   nudgeable    → Positioned  (can be moved by arrow keys)
- *   collapsible  → Collapsable (has a toggle field)
+ *   collapsible  → Identified  (fold is presentation state, not item data)
  *   resizeable   → Sized       (has Size)
  */
 
@@ -22,4 +22,3 @@ export type Identified = { id: Id; kind: string };
 export type Positioned = Identified & { Position?: Position };
 export type Sized = Identified & { Size: Size };
 export type Labeled = Identified & { Label: { text: string } };
-export type Collapsable = Identified & { Collapsed?: boolean };

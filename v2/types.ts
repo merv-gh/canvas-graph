@@ -442,6 +442,9 @@ export type EntityRenderCtx = {
   /** Outermost-first chain of ancestors registered with the hierarchy context.
    *  Empty when the ref is a root item. */
   parentChain(ref: ItemRef): ItemRef[];
+  /** Whether a ref is folded (collapsed) — reads the fold store, not item data.
+   *  Renderers use it for the 'collapsed' class and collapsed-ancestor hiding. */
+  isFolded(ref: ItemRef): boolean;
   /** Resolve any ref's renderer bounds (its on-stage rect). Used by edge
    *  renderers to substitute a hidden node's collapsed ancestor as the
    *  visible endpoint. Returns null when the ref has no entity, no item, or

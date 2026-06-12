@@ -78,7 +78,7 @@ export function runDx(ctx: AppCtx): DxIssue[] {
   // emits from drag/edit/configure/etc. fall on the floor. selectable on its
   // own doesn't patch; the rule fires for entities with patchable abilities or
   // declared properties.
-  const PATCHABLE_ABILITIES = new Set(['draggable', 'nudgeable', 'editable', 'collapsible', 'configurable', 'resizeable']);
+  const PATCHABLE_ABILITIES = new Set(['draggable', 'nudgeable', 'editable', 'configurable', 'resizeable']);
   ctx.model.entities().forEach(entityDef => {
     const hasPatchable = entityDef.abilities.some(a => PATCHABLE_ABILITIES.has(a.id)) || (entityDef.properties?.length ?? 0) > 0;
     if (hasPatchable && !ctx.contexts.storage.has(entityDef.kind)) {
