@@ -59,6 +59,7 @@ export function snapshot(ctx: AppCtx) {
     selection: {
       selected: ctx.selection.selected(),
       focused: ctx.selection.focused(),
+      count: ctx.selection.selectedAll().length,
     },
     view: ctx.contexts.view.get(),
     flags: {
@@ -180,6 +181,7 @@ const OUTLINE_CODE: Record<string, string> = {
 const SELECTION_CODE: Record<string, string> = {
   selected: 'ctx.selection.selected()',
   focused: 'ctx.selection.focused()',
+  count: 'ctx.selection.selectedAll().length',
 };
 
 /** Graph readers — same treatment. nodes/edges are methods; container kind

@@ -323,6 +323,27 @@ pipeline. Never mutate domain state outside an event handler.
 > state (`v2-debug.test.ts`). Undo, when it lands, is the inverse-patch listener
 > on these same facts.
 
+## 22. Actions operate on the chosen set — choosing is higher than selecting
+
+A bulk action is "do X over *these items*." Selection is a **set**; a single
+selection is a set of one. Two roles, cleanly split:
+
+- **Choosers** build the set (`all`, `none`, `toggle`, `invert`, `follow`-edges,
+  `radius`, `search`) — each a `Set → Set` command emitting `selection.choose`.
+- **Actions** consume it (`delete`, `move`, `group`) — each fans out over the set
+  into the SAME per-item events single-select already uses (`graph.*.delete`,
+  `item.update`, `container.add-child`).
+
+That fan-out is the point: decorations, redraw, deletion-cleanup, and (next)
+undo reuse one set of seams, so `X` deletes 1 or N and arrows move 1 or N with
+no special-casing. "Choosing mode" needs no new state — it *is* the decorated
+set. Multi that works by fanning out to single-item events is also the cheapest
+proof the rest of the stack is robust.
+
+> **Test:** `choose.all` then delete empties the graph; `group` folds the set
+> into a container that nests them; nudging {container + child} moves the child
+> once, not twice (`v2-choose.test.ts`).
+
 ---
 
 ## Anti-principles (things we explicitly do NOT believe)

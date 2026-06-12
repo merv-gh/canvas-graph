@@ -1,5 +1,6 @@
 import type { Registry } from '../core';
 import { registerCancellation } from './cancellation';
+import { registerChoose } from './choose';
 import { registerCollections } from './collections';
 import { registerCommandModal } from './command-modal';
 import { registerCommandForm } from './command-form';
@@ -49,6 +50,7 @@ export function registerSystems(system: Registry) {
   registerLayout(system);
   registerItemToolbar(system);
   registerContainers(system);
+  registerChoose(system);
   registerDemo(system);
   registerDebug(system);
   registerDx(system);

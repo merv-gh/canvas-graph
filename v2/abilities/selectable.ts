@@ -6,9 +6,15 @@ import type { Identified } from './shapes';
 declare module '../types' {
   interface CustomEvents {
     'selection.item.select': ItemRef;
+    'selection.item.toggle': ItemRef;
+    /** The choosing seam: build the set by replacing / adding / removing /
+     *  toggling. Single-select is `{ refs: [ref], mode: 'replace' }`. */
+    'selection.choose': { refs: ItemRef[]; mode: 'replace' | 'add' | 'remove' | 'toggle' };
     'selection.item.clear': void;
     'selection.item.delete': void;
     'selection.item.selected': ItemRef | null;
+    /** Fact carrying the whole chosen set after any change (the store emits it). */
+    'selection.changed': { refs: ItemRef[] };
     'selection.node.select': { id: Id };
     'selection.node.clear': void;
     'selection.node.selected': { id: Id | null };
@@ -51,6 +57,24 @@ export function registerSelectable(system: Registry) {
         input: {
           on: 'pointerdown',
           selector: '[data-item-kind][data-item-id]',
+          when: event => !(event.target as Element).closest('[data-command], [data-drag-handle], [data-resize-handle]'),
+          prevent: true,
+          stop: true,
+        },
+        payload: source => itemRefFrom(source.target) ?? nodeRef(nodeId(source)),
+      },
+      {
+        // Shift+pointer toggles an item in/out of the set — random-access
+        // include/exclude. Plain pointerdown (no shift) hits the command above;
+        // this one requires shift, so they never collide.
+        id: 'selection.item.toggle',
+        label: 'Toggle item in selection',
+        group: 'selection',
+        hidden: true,
+        input: {
+          on: 'pointerdown',
+          selector: '[data-item-kind][data-item-id]',
+          shift: true,
           when: event => !(event.target as Element).closest('[data-command], [data-drag-handle], [data-resize-handle]'),
           prevent: true,
           stop: true,
@@ -105,29 +129,38 @@ export function registerSelectable(system: Registry) {
 
     on('selection.node.select', ({ id }) => emit('selection.item.select', nodeRef(id)));
     on('selection.node.clear', () => emit('selection.item.clear'));
-    on('selection.item.select', ref => {
-      selection.select(ref);
-      contexts.decorations.modes.set(origin, 'selected', [ref]);
-      emit('selection.item.selected', ref);
-      emit('selection.node.selected', { id: ref.kind === 'node' ? ref.id : null });
-      emit('focus.item.focus', ref);
+    // Entry points just drive the store; the store commits `selection.changed`,
+    // and the single handler below turns that one fact into decorations + focus.
+    on('selection.item.select', ref => selection.select(ref));
+    on('selection.item.toggle', ref => selection.toggle(ref));
+    on('selection.item.clear', () => selection.select(null));
+    on('selection.choose', ({ refs, mode }) => {
+      if (mode === 'add') refs.forEach(ref => selection.add(ref));
+      else if (mode === 'remove') refs.forEach(ref => selection.remove(ref));
+      else if (mode === 'toggle') refs.forEach(ref => selection.toggle(ref));
+      else selection.choose(refs);
     });
-    on('selection.item.clear', () => {
-      selection.select(null);
-      contexts.decorations.unregisterOrigin(origin);
-      emit('selection.item.selected', null);
-      emit('selection.node.selected', { id: null });
-      emit('focus.item.clear');
+    // One reaction to any set change: paint the WHOLE set 'selected', move focus
+    // to the primary. Deletion cleanup flows through here too (store re-commits).
+    on('selection.changed', ({ refs }) => {
+      if (refs.length) contexts.decorations.modes.set(origin, 'selected', refs);
+      else contexts.decorations.unregisterOrigin(origin);
+      const primary = refs[refs.length - 1] ?? null;
+      if (primary) emit('focus.item.focus', primary);
+      else emit('focus.item.clear');
     });
     on('selection.item.delete', () => {
-      const ref = selection.selected();
-      if (ref?.kind === 'node') emit('graph.node.delete', { id: ref.id });
-      if (ref?.kind === 'edge') emit('graph.edge.delete', { id: ref.id });
+      // Fan out over the chosen set — each kind owner deletes its own items
+      // (containers handles 'container'). Same command for 1 or N.
+      selection.selectedAll().forEach(ref => {
+        if (ref.kind === 'node') emit('graph.node.delete', { id: ref.id });
+        if (ref.kind === 'edge') emit('graph.edge.delete', { id: ref.id });
+      });
     });
     contexts.cancellation.register({
       origin,
       priority: -10,
-      active: () => !!selection.selected(),
+      active: () => selection.selectedAll().length > 0,
       cancel: () => emit('selection.item.clear'),
     });
   });

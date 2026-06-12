@@ -310,8 +310,11 @@ export function registerContainers(system: Registry) {
     on('container.remove-child', ({ childRef }) => { nestHere().remove(childRef); });
     on('graph.node.deleted', ({ id }) => { nestHere().remove({ kind: 'node', id }); });
     on('selection.item.delete', () => {
-      const ref = selection.selected();
-      if (ref?.kind === 'container') emit('graph.container.delete', { id: ref.id });
+      // Delete every chosen container (containers owns its kind; selectable owns
+      // node/edge). Fan-out over the set — same command for 1 or N.
+      selection.selectedAll().forEach(ref => {
+        if (ref.kind === 'container') emit('graph.container.delete', { id: ref.id });
+      });
     });
 
     // ---------- Storage: apply container patches from item.update ----------

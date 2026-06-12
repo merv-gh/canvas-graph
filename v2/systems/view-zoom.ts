@@ -189,9 +189,14 @@ export function registerViewZoom(system: Registry) {
       if (b) fitToBounds(b);
     });
     on('view.fit.selected', () => {
-      const ref = selection.selected();
-      const b = ref ? itemBounds(ref) : null;
-      if (b) fitToBounds(b, 180);
+      // Fit the whole chosen set (union of bounds), not just the primary.
+      const boxes = selection.selectedAll().map(itemBounds).filter((b): b is Bounds => !!b);
+      if (!boxes.length) return;
+      const b = boxes.reduce((acc, box) => ({
+        minX: Math.min(acc.minX, box.minX), minY: Math.min(acc.minY, box.minY),
+        maxX: Math.max(acc.maxX, box.maxX), maxY: Math.max(acc.maxY, box.maxY),
+      }));
+      fitToBounds(b, 180);
     });
     on('view.fit.item', ref => {
       const b = itemBounds(ref);

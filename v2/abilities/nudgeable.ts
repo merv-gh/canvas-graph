@@ -1,7 +1,14 @@
-import type { Registry } from '../core';
-import type { ActionDef, NonEmptyArray, Position } from '../types';
+import { sameItemRef, type Registry } from '../core';
+import type { ActionDef, ItemRef, NonEmptyArray } from '../types';
 import { ability, action } from './shared';
 import type { Positioned } from './shapes';
+
+declare module '../types' {
+  interface CustomEvents {
+    /** Move the whole chosen set by a delta. Fanned out to per-item item.update. */
+    'item.nudge': { dx: number; dy: number };
+  }
+}
 
 const NUDGE_DIRECTIONS = [
   { dir: 'right', key: 'ArrowRight', dx: 24, dy: 0 },
@@ -10,8 +17,9 @@ const NUDGE_DIRECTIONS = [
   { dir: 'down',  key: 'ArrowDown',  dx: 0, dy: 24 },
 ] as const;
 
-/** Nudgeable — any positioned item can be moved by arrow keys when selected.
- *  Keyboard-only: the affordance is the shortcut on the paletteCommand. */
+/** Nudgeable — any positioned item can be moved by arrow keys when chosen.
+ *  Keyboard-only: the affordance is the shortcut on the paletteCommand. Moves
+ *  the entire chosen set, so arrows move 1 or N items with the same keystroke. */
 export const nudgeable = <T extends Positioned>() => ability<T>('nudgeable',
   NUDGE_DIRECTIONS.map(({ dir }) => action<T>({
     id: `item.nudge.${dir}`,
@@ -21,30 +29,37 @@ export const nudgeable = <T extends Positioned>() => ability<T>('nudgeable',
 );
 
 export function registerNudgeable(system: Registry) {
-  system('ability.nudgeable', ({ contexts, graphs, selection }) => {
-    /** A positioned selected item, or null. Works for any kind. */
-    const positioned = (): { ref: import('../types').ItemRef; Position: Position } | null => {
-      const ref = selection.selected();
-      if (!ref) return null;
+  system('ability.nudgeable', ({ on, emit, contexts, graphs, selection }) => {
+    const hasPositioned = () => selection.selectedAll().some(ref => {
       const item = graphs.current.getItem(ref) as Positioned | undefined;
-      if (!item?.Position) return null;
-      return { ref, Position: item.Position };
-    };
+      return !!item?.Position;
+    });
 
     contexts.commands.register(
       NUDGE_DIRECTIONS.map(({ dir, key, dx, dy }) => ({
         id: `item.nudge.${dir}`,
         label: `Nudge ${dir}`,
-        event: 'item.update' as const,
+        event: 'item.nudge' as const,
         group: 'item',
         shortcut: key,
         input: { on: 'keydown' as const, key, prevent: true },
-        available: () => !!positioned(),
-        payload: () => {
-          const p = positioned()!;
-          return { ref: p.ref, patch: { Position: { x: p.Position.x + dx, y: p.Position.y + dy } } };
-        },
+        available: () => hasPositioned(),
+        payload: () => ({ dx, dy }),
       })),
     );
+
+    // Move the whole chosen set. Skip members whose ancestor is also chosen —
+    // the ancestor's drag-cascade (containers) already shifts them, so applying
+    // the delta again would double-move. One keystroke moves the set coherently.
+    on('item.nudge', ({ dx, dy }) => {
+      const all = selection.selectedAll();
+      const inSet = (ref: ItemRef) => all.some(r => sameItemRef(r, ref));
+      all.forEach(ref => {
+        if (contexts.hierarchy.parentChain(ref).some(inSet)) return;
+        const item = graphs.current.getItem(ref) as Positioned | undefined;
+        if (!item?.Position) return;
+        emit('item.update', { ref, patch: { Position: { x: item.Position.x + dx, y: item.Position.y + dy } } });
+      });
+    });
   }, { requires: ['ability.selectable'] });
 }
