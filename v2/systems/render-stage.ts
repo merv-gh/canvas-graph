@@ -41,7 +41,7 @@ export function registerRenderStage(system: Registry) {
       });
     };
     const applyItemModes = (el: Element, ref: ItemRef) => {
-      const classes = [...new Set(contexts.itemModes.for(ref).map(mode => mode.className ?? mode.mode).filter(Boolean))];
+      const classes = [...new Set(contexts.decorations.modes.for(ref).map(mode => mode.className ?? mode.mode).filter(Boolean))];
       if (!classes.length) return;
       el.classList.add(...classes);
       el.setAttribute('data-item-modes', classes.join(' '));
@@ -129,8 +129,8 @@ export function registerRenderStage(system: Registry) {
       view: () => {
         const layer = document.createElement('div');
         layer.className = 'item-overlays';
-        contexts.itemOverlays.all().forEach(overlay => {
-          const anchor = contexts.itemTargets.anchor(overlay.ref);
+        contexts.decorations.overlays.all().forEach(overlay => {
+          const anchor = contexts.hierarchy.anchor(overlay.ref);
           if (!anchor) return;
           const screen = contexts.view.spaceToScreen(anchor);
           const el = document.createElement('div');

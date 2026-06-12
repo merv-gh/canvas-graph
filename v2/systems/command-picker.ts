@@ -36,7 +36,7 @@ export function registerCommandPicker(system: Registry) {
     let active: Active | null = null;
 
     const clearStageOverlay = () => {
-      contexts.itemOverlays.unregisterOrigin('commandPicker');
+      contexts.decorations.unregisterOrigin('commandPicker');
       contexts.keyboard.unregisterOrigin('commandPicker');
       emit('render.view.clear', { place: Places.Stage, key: 'picker-prompt' });
     };
@@ -88,7 +88,7 @@ export function registerCommandPicker(system: Registry) {
         return;
       }
       const filterFn = step.filter?.(active.values, active.source) ?? (() => true);
-      const targets = contexts.itemTargets.all().filter(target => filterFn(target.ref)).slice(0, LETTERS.length);
+      const targets = contexts.hierarchy.items().filter(target => filterFn(target.ref)).slice(0, LETTERS.length);
       if (!targets.length) {
         emit('app.notice', { message: `Nothing to pick for ${step.prompt ?? step.id}`, level: 'warn' });
         cancel();
@@ -105,7 +105,7 @@ export function registerCommandPicker(system: Registry) {
           id: `picker-${letter}`,
         };
       });
-      contexts.itemOverlays.set('commandPicker', overlays);
+      contexts.decorations.overlays.set('commandPicker', overlays);
       emit('render.view.set', {
         place: Places.Stage,
         key: 'picker-prompt',
@@ -125,7 +125,7 @@ export function registerCommandPicker(system: Registry) {
           active.stepIndex++;
           emit('commandPicker.step', { commandId: active.commandId, step: step.id, ref });
           contexts.keyboard.unregisterOrigin('commandPicker');
-          contexts.itemOverlays.unregisterOrigin('commandPicker');
+          contexts.decorations.unregisterOrigin('commandPicker');
           runStep();
         },
       });

@@ -139,6 +139,15 @@ export function runDx(ctx: AppCtx): DxIssue[] {
     if (!c.origin) error('command.no-origin', `command "${c.id}" has no origin — won't unregister when its system flag flips`);
   });
 
+  // Contexts budget — ctx.contexts is the shared mental-model surface, so it
+  // RATCHETS: adding a context means merging two others first (Principle:
+  // concepts merge and split safely). 'teardown' is bookkeeping, not a concept.
+  const CONTEXT_BUDGET = 14;
+  const contextNames = Object.keys(ctx.contexts).filter(name => name !== 'teardown');
+  if (contextNames.length > CONTEXT_BUDGET) {
+    error('contexts.budget', `ctx.contexts has ${contextNames.length} contexts (budget ${CONTEXT_BUDGET}); merge two before adding one — ${contextNames.join(', ')}`);
+  }
+
   ctx.flags.declared().forEach(name => {
     if (!ctx.flags.isOn(name)) return;
     const missing = ctx.flags.requires(name).filter(dep => !ctx.flags.isOn(dep));

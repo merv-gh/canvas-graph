@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { bootV2, commandButton, settle } from './v2-testkit';
+import { bootV2, commandButton, runCommand, settle } from './v2-testkit';
 
 const V2 = resolve(process.cwd(), 'v2');
 
@@ -109,9 +109,9 @@ describe('v2 principles (enforced)', () => {
 
     expect(ctx.contexts.commands.get('view.zoom.in')).toBeTruthy();
     expect(commandButton('view.zoom.in')).not.toBeNull();
-    ctx.contexts.itemModes.set('view.zoom', 'focused', [{ kind: 'node', id: 'e-test' }]);
-    ctx.contexts.itemOverlays.set('view.zoom', [{ ref: { kind: 'node', id: 'e-test' }, text: 'Z' }]);
-    ctx.contexts.itemTargets.register('view.zoom', () => [{ ref: { kind: 'node', id: 'e-test' }, label: 'Z', anchor: { x: 0, y: 0 } }]);
+    ctx.contexts.decorations.modes.set('view.zoom', 'focused', [{ kind: 'node', id: 'e-test' }]);
+    ctx.contexts.decorations.overlays.set('view.zoom', [{ ref: { kind: 'node', id: 'e-test' }, text: 'Z' }]);
+    ctx.contexts.hierarchy.sources.register('view.zoom', () => [{ ref: { kind: 'node', id: 'e-test' }, label: 'Z', anchor: { x: 0, y: 0 } }]);
     ctx.contexts.keyboard.capture('view.zoom');
 
     ctx.registry!.stop(ctx, 'view.zoom');
@@ -119,9 +119,9 @@ describe('v2 principles (enforced)', () => {
 
     expect(ctx.contexts.commands.get('view.zoom.in')).toBeUndefined();
     expect(ctx.contexts.affordances.system('top').some(aff => aff.command === 'view.zoom.in')).toBe(false);
-    expect(ctx.contexts.itemModes.all().some(mode => mode.source === 'view.zoom')).toBe(false);
-    expect(ctx.contexts.itemOverlays.all()).toEqual([]);
-    expect(ctx.contexts.itemTargets.all().some(target => target.label === 'Z')).toBe(false);
+    expect(ctx.contexts.decorations.modes.all().some(mode => mode.source === 'view.zoom')).toBe(false);
+    expect(ctx.contexts.decorations.overlays.all()).toEqual([]);
+    expect(ctx.contexts.hierarchy.targets().some(target => target.label === 'Z')).toBe(false);
     expect(ctx.contexts.keyboard.active()).toBeNull();
     expect(commandButton('view.zoom.in')).toBeNull();
     ctx.bus.emit('view.zoom.in');
@@ -153,5 +153,47 @@ describe('v2 principles (enforced)', () => {
     ctx.runtime!.refresh();
     await settle();
     expect(ctx.contexts.commands.get('item.collapse.toggle')).toBeTruthy();
+  });
+
+  // PRINCIPLE — concepts merge & split safely; ctx.contexts is a ratchet. Adding
+  // a context requires merging two others first, so the shared surface a
+  // contributor must hold never quietly creeps upward. (Also a runtime DX rule.)
+  it('ctx.contexts stays within the merge budget', () => {
+    const ctx = bootV2();
+    const names = Object.keys(ctx.contexts).filter(name => name !== 'teardown');
+    expect(names.length).toBeLessThanOrEqual(14);
+  });
+
+  // PRINCIPLE — types read high → low. types.ts opens with a MODEL MAP, and the
+  // nouns it names are defined further down, in that same order, so a reader
+  // grasps the overview first and descends only into the detail they need.
+  it('types.ts opens with a MODEL MAP whose nouns are defined below in order', () => {
+    const src = readFileSync(join(V2, 'types.ts'), 'utf8');
+    const mapAt = src.indexOf('MODEL MAP');
+    const firstDef = src.search(/\nexport (type|interface) /);
+    expect(mapAt).toBeGreaterThanOrEqual(0);
+    expect(mapAt).toBeLessThan(firstDef); // overview precedes detail
+    const nouns = ['Renderable', 'ItemRef', 'AppEvents', 'CommandSpec', 'AbilityDef', 'EntityDef', 'CollectionDef'];
+    const positions = nouns.map(noun => src.indexOf(`export type ${noun}`));
+    positions.forEach((pos, i) => expect(pos, nouns[i]).toBeGreaterThan(0));
+    expect(positions).toEqual([...positions].sort((a, b) => a - b)); // high→low order
+  });
+
+  // PRINCIPLE — hierarchy is visible in navigation, not just storage. A node
+  // moved into a container renders nested under it in the outline (full tree
+  // assertions live in v2-outline-tree.test.ts; this is the principle's anchor).
+  it('nesting is visible in the outline, not only in the store', async () => {
+    const ctx = bootV2();
+    await settle();
+    runCommand(ctx, 'editing.container.create');
+    await settle();
+    const cid = (ctx.graphs.current.itemsOfKind('container')[0] as { id: string }).id;
+    runCommand(ctx, 'editing.node.create');
+    await settle();
+    const nid = ctx.graphs.current.nodes()[0].id;
+    ctx.bus.emit('container.add-child', { containerId: cid, childRef: { kind: 'node', id: nid } });
+    await settle();
+    const nested = document.querySelector(`.outline-children .outline-row[data-item-kind="node"][data-item-id="${nid}"]`);
+    expect(nested).not.toBeNull();
   });
 });

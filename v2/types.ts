@@ -1,4 +1,27 @@
 /**
+ * ============================================================================
+ *  MODEL MAP — read top-down; stop when you have enough.
+ * ============================================================================
+ *  v2 is a handful of nouns. Grasp these and you have the whole model; the full
+ *  type for each is defined further down, in this same order (high → low), so
+ *  you can skim the ladder and only descend into the detail you need.
+ *
+ *    L1 · Renderable    — anything the UI can show: `Node | () => Node`.
+ *    L2 · ItemRef       — addresses one thing in the model (kind + id + parent).
+ *    L3 · AppEvents     — the typed bus: imperative requests + past-tense facts.
+ *    L4 · CommandSpec   — a reachable intent (key / form / picker → event).
+ *    L5 · AbilityDef    — a capability an entity opts into (actions + affordances).
+ *    L6 · EntityDef     — what a *kind* is (label, abilities, properties, render).
+ *    L7 · CollectionDef / ModelDef — the lists, then the assembled model.
+ *
+ *  Everything else (Places, Slots, AffordanceDef, PropertyDef, geometry…) is a
+ *  detail of one of those layers. The section banners below follow the ladder.
+ *  Rule (Principle "types read high → low"): this map stays in sync with the
+ *  real definitions, and they appear in this order — both are tested.
+ * ============================================================================
+ */
+
+/**
  * Core types. Framework contracts only — domain types and events live with
  * their owning module.
  *
@@ -173,10 +196,9 @@ interface BuiltinEvents {
    *  commandModal, configurable); they all go through these two events. */
   'modal.open': { title?: string; body?: Renderable; visual?: ModalVisual };
   'modal.close': void;
-  /** Item-mode / item-overlay context change notification. Render listens to
-   *  redraw stage chrome (selection rings, jump letters, etc.). */
-  'itemMode.changed': { source?: string };
-  'itemOverlay.changed': { source?: string };
+  /** decorations facet-change notification (item modes / overlays). Render
+   *  listens to redraw stage chrome (selection rings, jump letters, etc.). */
+  'decoration.changed': { facet?: 'modes' | 'overlays'; source?: string };
   /** Fold (collapse/expand) request + fact for any panel/section. Owned by the
    *  foldable system; consumers (outline, main, …) listen on `.changed` and
    *  re-render. */

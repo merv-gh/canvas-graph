@@ -471,9 +471,21 @@ button.icon:hover { color: var(--ink); }
 }
 .outline-title-search::placeholder { color: var(--text-muted); opacity: 1; }
 .outline-list { display: grid; gap: 1px; }
+.outline-item { display: grid; gap: 1px; }
+/* Nested children indent under their parent with a guide rail. */
+.outline-children {
+  display: grid;
+  gap: 1px;
+  margin-left: 11px;
+  padding-left: 6px;
+  border-left: 1px solid var(--border);
+}
+/* Keep leaf rows (no fold toggle) aligned with foldable rows. Stretch so the
+ * empty cell's box spans the row height — its top matches sibling controls. */
+.outline-fold-spacer { align-self: stretch; min-width: 22px; }
 .outline-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 4px;
   border-radius: var(--radius);

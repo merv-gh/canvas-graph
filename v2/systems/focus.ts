@@ -18,13 +18,13 @@ export function registerFocus(system: Registry) {
     on('focus.node.clear', () => emit('focus.item.clear'));
     on('focus.item.focus', ref => {
       selection.focus(ref);
-      contexts.itemModes.set(origin, 'focused', [ref]);
+      contexts.decorations.modes.set(origin, 'focused', [ref]);
       emit('focus.item.focused', ref);
       emit('focus.node.focused', { id: ref.kind === 'node' ? ref.id : null });
     });
     on('focus.item.clear', () => {
       selection.focus(null);
-      contexts.itemModes.unregisterOrigin(origin);
+      contexts.decorations.unregisterOrigin(origin);
       emit('focus.item.focused', null);
       emit('focus.node.focused', { id: null });
     });

@@ -15,11 +15,15 @@ concept needs more text to explain than to implement, it belongs in a system, no
 the core.
 
 > **Test:** `core.ts` size ≤ 400 lines. New core APIs require deleting at least
-> as many lines elsewhere.
+> as many lines elsewhere. **And** `ctx.contexts` ≤ 14 entries — the shared
+> mental-model surface ratchets: adding a context means merging two first
+> (`contexts.budget` DX rule + `v2-principles.test.ts`).
 
 Current status: `core.ts` is below this target after extracting IO, flags, DX,
-selection, and other small adapters. New core APIs should keep paying their way
-with equal or greater deletions.
+selection, and other small adapters. The context surface shrank by merging
+itemModes + itemOverlays → `decorations` and hierarchy + itemTargets + nesting →
+`hierarchy`. New foundation work keeps paying its way with equal or greater
+deletions / merges.
 
 ## 2. Systems are self-sufficient and independent
 
@@ -63,19 +67,22 @@ view is paid by every future contributor reading the code.
 > **Test:** Adding a new entity kind requires no new render code — just the
 > entity declaration.
 
-## 5. Render is a swappable adapter
+## 5. Render *placement* is a swappable adapter (renderers are DOM today)
 
-The render boundary takes a `Renderable` (`string | Node | () => string | Node`).
-Systems emit renderables; they never reach for `document.querySelector` *outside*
-the slot they own.
+The render boundary takes a `Renderable` — currently `Node | () => Node`. Systems
+emit renderables into named places/slots and never reach for
+`document.querySelector` *outside* the slot they own. So the *placement* layer —
+where things mount, plus the command/affordance/toolbar wiring — is swappable.
 
-This is what lets us swap to React, Radix, JSX, canvas, or anything else later
-*without* rewriting systems. If a system pokes the DOM globally, the swap costs
-everything.
+Be honest about the limit: today every renderer hand-builds DOM nodes, so a
+React/JSX swap still rewrites the leaf renderers. What stays free is placement,
+commands, and affordances. To make renderers themselves swappable, widen
+`Renderable` to accept a framework node and add an adapter — until then, do not
+claim "swap to React for free."
 
-> **Test:** A grep for `document.querySelector` outside `render` / `templates` /
-> `commands` should return zero results in `systems.ts` and `abilities.ts`.
-> (We have known violations today; track them as debt.)
+> **Test:** A grep for `document.querySelector` outside render-adjacent files
+> returns zero in `systems/` and `abilities/` (enforced in
+> `v2-principles.test.ts`). New renderers return `Renderable`.
 
 ## 6. DX validator is progressively aggressive
 
@@ -257,6 +264,64 @@ Three rules guarantee the budget holds:
 > **Test:** `tests/commands/v2-journey-budget.test.ts` enforces each row.
 > When you add a new entity ability, add the corresponding journey row before
 > shipping.
+
+## 18. Hierarchy is visible in navigation, not just storage
+
+Containment is a *navigation* truth, not only a data field. The left pane (and,
+next, the palette) render the tree: a contained item nests under its parent;
+loose items stay flat in their kind's section. A flat list that hides real
+nesting is Principle 12's blank-screen bug, one level up.
+
+Hierarchy is two questions over one structure:
+- **ordered importance** — what nests under what, sibling order → *what to show
+  when, what matters less right now*.
+- **shortest paths** — parent chain up, children down → *log-N* jump, search,
+  and contextual commands.
+
+Both come from the single `hierarchy` context (`tree`, `roots`, `childrenOf`,
+`parentChain`, `targets`). Storage (the `nesting` engine) is the same concept's
+mutable side.
+
+> **Test:** Move a node into a container → it renders inside that container's
+> `.outline-children` and disappears from the flat Nodes section
+> (`v2-outline-tree.test.ts`, `v2-principles.test.ts`).
+
+## 19. Concepts merge and split safely
+
+The architecture is judged by how cheaply you can *regroup* it. Each context is
+assembled from small, separately-typed **facets** (`decorations.modes` /
+`.overlays`; `hierarchy.sources` / `.parents`). Merging two concepts = put two
+facets behind one object; splitting one back = lift a facet into its own context.
+Origin-scoped teardown is uniform, so a regroup never changes runtime behavior.
+The pressure to merge is the contexts budget (Principle 1); the freedom to split
+is that facets are independently typed.
+
+> **Test:** `ctx.contexts` ≤ 14 (`contexts.budget`). Disabling any system tears
+> down cleanly regardless of how its contexts are grouped (Principle 2 tests).
+
+## 20. Types read high → low
+
+`types.ts` opens with a **MODEL MAP** naming the nouns (Renderable → ItemRef →
+AppEvents → CommandSpec → AbilityDef → EntityDef → CollectionDef/ModelDef). The
+full definitions appear below in that same order. A reader grasps the model from
+the map and descends only into the layer they need. The map can't rot because
+it's checked against the real definitions and their order.
+
+> **Test:** the MAP precedes the first definition AND its nouns are defined in
+> the documented order (`v2-principles.test.ts`).
+
+## 21. Every domain mutation is reversible and replayable
+
+The bus is the system of record. Every mutation is an imperative event that
+carries enough to redo it (`item.update {ref, patch}`, `graph.*`, `container.*`);
+every fact is emitted after the change lands; `sim.record` / `replay` round-trips
+a whole session. That single discipline is what makes undo/redo a small
+inverse-patch consumer *and* what powers the record → assert → generate test
+pipeline. Never mutate domain state outside an event handler.
+
+> **Test:** replaying a recorded trace into a fresh boot reconstructs the same
+> state (`v2-debug.test.ts`). Undo, when it lands, is the inverse-patch listener
+> on these same facts.
 
 ---
 

@@ -107,8 +107,8 @@ export function registerContainers(system: Registry) {
 
     // Hierarchy + targets read live from the current graph's state — no
     // re-registration needed on switch.
-    contexts.hierarchy.register(origin, { parentRefOf: ref => stateOf().nest.parentRefOf(ref) });
-    contexts.itemTargets.register(origin, () => [...containersHere().values()].map(c => {
+    contexts.hierarchy.parents.register(origin, { parentRefOf: ref => stateOf().nest.parentRefOf(ref) });
+    contexts.hierarchy.sources.register(origin, () => [...containersHere().values()].map(c => {
       const rect = visualRect(c);
       return {
         ref: { kind: 'container', id: c.id } as ItemRef,

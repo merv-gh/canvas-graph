@@ -141,7 +141,7 @@ describe('v2 debug system', () => {
 
   it('default filter keeps user-intent events and drops facts', () => {
     const keep = ['editing.node.create', 'editing.edge.create', 'commandForm.submit', 'modal.open', 'graph.create', 'view.fit.all', 'layout.apply.tidy', 'selection.item.select'];
-    const drop = ['render.stage.draw', 'render.view.set', 'graph.node.create', 'graph.node.created', 'affordance.contributed', 'fold.changed', 'outline.draw', 'commandModal.search.changed', 'app.start', 'itemMode.changed', 'item.update', 'selection.node.select', 'focus.item.focus'];
+    const drop = ['render.stage.draw', 'render.view.set', 'graph.node.create', 'graph.node.created', 'affordance.contributed', 'fold.changed', 'outline.draw', 'commandModal.search.changed', 'app.start', 'decoration.changed', 'item.update', 'selection.node.select', 'focus.item.focus'];
     keep.forEach(name => {
       expect(defaultEventFilter({ name: name as never, data: undefined, at: 0 }), name).toBe(true);
     });

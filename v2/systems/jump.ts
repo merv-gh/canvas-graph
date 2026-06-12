@@ -8,8 +8,8 @@ import type { ItemRef } from '../types';
  *  the item → Enter or Escape cancels. Lives entirely in one file by leaning
  *  on:
  *
- *    - `contexts.itemTargets.all()`   → the canonical "what can I jump to" list
- *    - `contexts.itemOverlays.set()`  → renders the letter chips in screen-space
+ *    - `contexts.hierarchy.targets()`       → the canonical "what can I jump to" list
+ *    - `contexts.decorations.overlays.set()` → renders the letter chips in screen-space
  *    - `contexts.keyboard.capture(id, {onKey})` → consumes keys without
  *      synthesising a DOM listener outside the input router
  *    - `view.fit.item: ItemRef`       → gently reveals the chosen item (any kind)
@@ -33,12 +33,12 @@ export function registerJump(system: Registry) {
     const cancel = () => {
       if (!letterToRef) return;
       letterToRef = null;
-      contexts.itemOverlays.unregisterOrigin('jump');
+      contexts.decorations.unregisterOrigin('jump');
       contexts.keyboard.unregisterOrigin('jump');
     };
 
     const start = () => {
-      const targets = contexts.itemTargets.all().slice(0, LETTERS.length);
+      const targets = contexts.hierarchy.targets().slice(0, LETTERS.length);
       if (!targets.length) return;
       const next = new Map<string, ItemRef>();
       const overlays = targets.map((target, i) => {
@@ -52,7 +52,7 @@ export function registerJump(system: Registry) {
         };
       });
       letterToRef = next;
-      contexts.itemOverlays.set('jump', overlays);
+      contexts.decorations.overlays.set('jump', overlays);
       // Escape is handled by the global cancellation system; the Cancellable
       // registered below fires jump.cancel for us. Enter still cancels here
       // because we treat it as "I'm done, don't pick" — it's a positive intent
@@ -87,7 +87,7 @@ export function registerJump(system: Registry) {
         // `graph.switch.next`. DX will still emit `binding.duplicate` so the
         // conflict is visible — rebind either side from Help to silence it.
         input: { on: 'keydown', key: 'g', prevent: true, stop: true },
-        available: () => contexts.itemTargets.all().length > 0,
+        available: () => contexts.hierarchy.targets().length > 0,
       },
       {
         id: 'jump.cancel',

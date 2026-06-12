@@ -8,7 +8,7 @@ const containers = (ctx: ReturnType<typeof bootV2>) =>
   ctx.graphs.current.itemsOfKind<ContainerLite>('container');
 
 describe('v2 containers', () => {
-  it('creates a container, focuses it, and lists it in itemTargets', async () => {
+  it('creates a container, focuses it, and lists it in hierarchy targets', async () => {
     const ctx = bootV2();
     await settle();
     runCommand(ctx, 'editing.container.create');
@@ -16,7 +16,7 @@ describe('v2 containers', () => {
     const list = containers(ctx);
     expect(list).toHaveLength(1);
     expect(ctx.selection.selected()).toEqual({ kind: 'container', id: list[0].id });
-    expect(ctx.contexts.itemTargets.all().some(t => t.ref.kind === 'container' && t.ref.id === list[0].id)).toBe(true);
+    expect(ctx.contexts.hierarchy.targets().some(t => t.ref.kind === 'container' && t.ref.id === list[0].id)).toBe(true);
   });
 
   it('drag-cascades children: moving a container moves nested nodes by the same delta', async () => {

@@ -29,7 +29,7 @@ export type TestGenOptions = {
  *  keep, or that are pure UI/paint coordination:
  *
  *   - `render.*`, `affordance.*`, `fold.*`, `commandModal.*`, `outline.*` — UI
- *   - `app.start`, `app.notice`, `itemMode.changed`, `itemOverlay.changed` — boot/notices
+ *   - `app.start`, `app.notice`, `decoration.changed` — boot/notices
  *   - `view.changed` — fact emitted after every view set
  *   - `*.created` / `.updated` / `.deleted` / `.switched` / `.selected` /
  *     `.focused` / `.changed` — facts (storage emits them in response to
@@ -57,8 +57,7 @@ export function defaultEventFilter(event: TraceEvent): boolean {
   if (name === 'view.changed') return false;
   if (name === 'app.notice') return false;
   if (name === 'app.start') return false;
-  if (name === 'itemMode.changed') return false;
-  if (name === 'itemOverlay.changed') return false;
+  if (name === 'decoration.changed') return false;
   if (name === 'item.update') return false;
   // Downstream storage CRUD — re-fired by the editing.* feature flow.
   if (/^graph\.(node|edge|container)\.(create|update|delete)$/.test(name)) return false;

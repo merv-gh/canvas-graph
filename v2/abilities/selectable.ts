@@ -107,14 +107,14 @@ export function registerSelectable(system: Registry) {
     on('selection.node.clear', () => emit('selection.item.clear'));
     on('selection.item.select', ref => {
       selection.select(ref);
-      contexts.itemModes.set(origin, 'selected', [ref]);
+      contexts.decorations.modes.set(origin, 'selected', [ref]);
       emit('selection.item.selected', ref);
       emit('selection.node.selected', { id: ref.kind === 'node' ? ref.id : null });
       emit('focus.item.focus', ref);
     });
     on('selection.item.clear', () => {
       selection.select(null);
-      contexts.itemModes.unregisterOrigin(origin);
+      contexts.decorations.unregisterOrigin(origin);
       emit('selection.item.selected', null);
       emit('selection.node.selected', { id: null });
       emit('focus.item.clear');

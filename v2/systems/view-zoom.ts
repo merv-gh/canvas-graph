@@ -163,7 +163,7 @@ export function registerViewZoom(system: Registry) {
         scale,
       });
     };
-    /** Resolve any ItemRef to a graph-space bounds. Falls back to itemTargets
+    /** Resolve any ItemRef to a graph-space bounds. Falls back to the hierarchy
      *  anchor for items whose canonical entity lookup fails (overlays, ghosts). */
     const itemBounds = (ref: ItemRef) => {
       if (ref.kind === 'node') {
@@ -179,7 +179,7 @@ export function registerViewZoom(system: Registry) {
           if (nodes.length) return nodesBounds(nodes);
         }
       }
-      const anchor = contexts.itemTargets.anchor(ref);
+      const anchor = contexts.hierarchy.anchor(ref);
       if (!anchor) return null;
       return { minX: anchor.x - 80, minY: anchor.y - 32, maxX: anchor.x + 80, maxY: anchor.y + 32 };
     };

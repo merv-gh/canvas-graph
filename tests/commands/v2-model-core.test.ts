@@ -62,7 +62,7 @@ describe('v2 selection polymorphism', () => {
     await settle();
 
     expect(ctx.selection.focused()).toEqual(ref);
-    expect(ctx.contexts.itemModes.has(ref, 'focused')).toBe(true);
+    expect(ctx.contexts.decorations.modes.has(ref, 'focused')).toBe(true);
     expect(document.querySelector(`.edge-line[data-item-kind="edge"][data-item-id="${ref.id}"]`)?.classList.contains('focused')).toBe(true);
     expect(document.activeElement?.getAttribute('data-item-kind')).toBe('edge');
     expect(document.activeElement?.getAttribute('data-item-id')).toBe(ref.id);
@@ -101,13 +101,13 @@ describe('v2 selection polymorphism', () => {
     await settle();
     const edge = ctx.graphs.current.edges()[0];
 
-    expect(ctx.contexts.itemTargets.all().map(target => target.ref)).toEqual([
+    expect(ctx.contexts.hierarchy.targets().map(target => target.ref)).toEqual([
       { kind: 'node', id: a.id },
       { kind: 'node', id: b.id },
       { kind: 'edge', id: edge.id },
     ]);
 
-    ctx.contexts.itemOverlays.set('test', [{ ref: edgeRef(edge.id), text: 'AA' }]);
+    ctx.contexts.decorations.overlays.set('test', [{ ref: edgeRef(edge.id), text: 'AA' }]);
     await settle();
     const overlay = document.querySelector<HTMLElement>('.item-overlay')!;
     expect(overlay.textContent).toBe('AA');

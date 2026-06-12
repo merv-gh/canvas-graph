@@ -94,6 +94,7 @@ function captureUi(ctx: AppCtx) {
     return { mounted: true, width: Math.round(rect.width), height: Math.round(rect.height) };
   };
   const count = (selector: string) => stageEl?.querySelectorAll(selector).length ?? 0;
+  const leftCount = (selector: string) => leftEl?.querySelectorAll(selector).length ?? 0;
   return {
     places: {
       top: sizeOf(topEl),
@@ -113,6 +114,14 @@ function captureUi(ctx: AppCtx) {
     stage: {
       emptyStateVisible: !!stageEl?.querySelector('.empty'),
       itemToolbarVisible: !!stageEl?.querySelector('.item-toolbar'),
+    },
+    // Outline shape — how nesting actually renders in the left pane. `nested`
+    // counts rows that live inside a parent's children block, so a recorded
+    // "move into container" session can assert that the tree deepened.
+    outline: {
+      sections: leftCount('.outline-section'),
+      rows: leftCount('.outline-row'),
+      nested: leftCount('.outline-children .outline-row'),
     },
     modal: {
       open: (modalEl?.children.length ?? 0) > 0,
@@ -160,6 +169,11 @@ const STAGE_CODE: Record<string, string> = {
 const MODAL_CODE: Record<string, string> = {
   open: "(ctx.contexts.places.el('modal')?.children.length ?? 0) > 0",
 };
+const OUTLINE_CODE: Record<string, string> = {
+  sections: "ctx.contexts.places.el('left')?.querySelectorAll('.outline-section').length",
+  rows: "ctx.contexts.places.el('left')?.querySelectorAll('.outline-row').length",
+  nested: "ctx.contexts.places.el('left')?.querySelectorAll('.outline-children .outline-row').length",
+};
 
 /** Selection has method-shaped readers (`selected()`, `focused()`) instead of
  *  plain properties. Map those too so generated tests look idiomatic. */
@@ -198,7 +212,7 @@ export function snapshotTree(snap: Snapshot): SnapshotNode {
 type Segment =
   | 'root'
   | 'graph' | 'selection' | 'flags' | 'dx'
-  | 'ui' | 'ui.places' | 'ui.shell' | 'ui.rendered' | 'ui.stage' | 'ui.modal'
+  | 'ui' | 'ui.places' | 'ui.shell' | 'ui.rendered' | 'ui.stage' | 'ui.modal' | 'ui.outline'
   | 'plain';
 
 function pickCode(parentCode: string, key: string, segment: Segment, optional: boolean): string {
@@ -212,6 +226,7 @@ function pickCode(parentCode: string, key: string, segment: Segment, optional: b
   if (segment === 'ui.rendered' && RENDERED_CODE[key]) return RENDERED_CODE[key];
   if (segment === 'ui.stage' && STAGE_CODE[key]) return STAGE_CODE[key];
   if (segment === 'ui.modal' && MODAL_CODE[key]) return MODAL_CODE[key];
+  if (segment === 'ui.outline' && OUTLINE_CODE[key]) return OUTLINE_CODE[key];
   return `${parentCode}${optional ? '?.' : '.'}${key}`;
 }
 
@@ -230,6 +245,7 @@ function nextSegment(parent: Segment, key: string): Segment {
     if (key === 'rendered') return 'ui.rendered';
     if (key === 'stage') return 'ui.stage';
     if (key === 'modal') return 'ui.modal';
+    if (key === 'outline') return 'ui.outline';
   }
   return 'plain';
 }

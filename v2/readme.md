@@ -41,7 +41,9 @@ and full Vite serving.
 
 - `app.ts` is only the composition entrypoint.
 - `core.ts` owns the event bus, contexts, command registry, render helpers, view math, and registry helper.
-- `core/` owns small core-adjacent adapters such as IO and selection storage.
+- `core/` owns small core-adjacent adapters such as IO, selection storage,
+  `decorations` (transient per-item visual state: modes + overlays), and
+  `hierarchy` (nesting engine + navigable targets + the assembled tree).
 - `model.ts` is a compatibility barrel; `model/graph.ts` owns storage, `model/entities.ts` owns entity render/property declarations, `model/collections.ts` owns collection declarations, and `model/app.ts` assembles the app model.
 - `abilities/` owns one file per ability; `abilities.ts` is only a compatibility barrel.
 - `systems/` owns one file per system; `systems.ts` is only a compatibility barrel.
@@ -62,7 +64,9 @@ and full Vite serving.
 - `input`: starts the command-backed input router.
 - `main`: emits base shell and toolbar.
 - `log`: observes events and renders the event log.
-- `outline`: renders collection lists/search/create/delete from `ctx.model.collections()`.
+- `outline`: renders each collection as a section, laid out by `ctx.contexts.hierarchy`
+  — contained items nest + fold under their parent, loose items stay flat — with
+  per-section search/create/delete. Nesting is visible in navigation (Principle 18).
 - `modal`: registers modal commands and renders modal contents.
 - `commandForm`: renders command-required input forms, then emits the command event after validation.
 - `commandModal`: renders Palette and Help from the same searchable grouped command modal definition.

@@ -2,12 +2,10 @@ import type { GraphStore } from './model';
 import { affordancesContext } from './core/affordances';
 import { cancellationContext } from './core/cancellation';
 import { commandsContext, inputRouter } from './core/commands';
+import { decorationsContext } from './core/decorations';
 import { createFlags, type FlagKind, type FlagsApi } from './core/flags';
 import { hierarchyContext } from './core/hierarchy';
 import { localStorageIo, type IoApi } from './core/io';
-import { itemModesContext } from './core/item-modes';
-import { itemOverlaysContext } from './core/item-overlays';
-import { itemTargetsContext } from './core/item-targets';
 import { keyboardCaptureContext } from './core/keyboard';
 import { createModelRegistry } from './core/model-registry';
 import { propertiesContext } from './core/properties';
@@ -41,10 +39,8 @@ export { createSim, type SimApi, type Trace, type TraceEvent } from './core/sim'
 export { parseShortcut, shortcutOf, commandShortcut } from './core/shortcuts';
 export { itemIdFrom, itemRefFrom, appendRenderable, itemParentAttr, itemParentFromAttr, tagItem } from './core/dom';
 export { edgeRef, itemKey, nodeRef, sameItemRef } from './core/item-ref';
-export { itemModesContext, type ItemMode } from './core/item-modes';
-export { itemOverlaysContext, type ItemOverlay } from './core/item-overlays';
-export { itemTargetsContext, type ItemTarget, type ItemTargetProvider } from './core/item-targets';
-export { hierarchyContext, type HierarchyProvider } from './core/hierarchy';
+export { decorationsContext, type DecorationsApi, type ItemMode, type Overlay } from './core/decorations';
+export { hierarchyContext, createNesting, type HierarchyApi, type HierarchyItem, type HierarchySource, type HierarchyParent, type HierarchyNode, type NestApi } from './core/hierarchy';
 export { keyboardCaptureContext, type KeyboardCapture } from './core/keyboard';
 export { clamp, nodeRect, clientPoint, isStageSurface } from './core/view';
 export { emptyState, kbdHint } from './core/templates';
@@ -52,7 +48,6 @@ export { grouped } from './core/util';
 export { factScope } from './core/redraw';
 export { createModelRegistry } from './core/model-registry';
 export { boundsOf, unionRect, expandRect, rectCenter } from './core/geometry';
-export { createNesting, type NestApi } from './core/nesting';
 export { introspect, type IntrospectKind, type IntrospectNode, type IntrospectEdge, type IntrospectRelation, type IntrospectRef, type IntrospectSnapshot } from './core/introspect';
 export { storageContext, type StorageApi, type StorageApply } from './core/storage';
 export { foldContext, type FoldStore } from './core/fold';
@@ -228,9 +223,7 @@ function createContexts(bus: Bus, flags: FlagsApi, io: IoApi) {
   const properties = propertiesContext();
   const affordances = affordancesContext(bus);
   const cancellation = cancellationContext(bus);
-  const itemModes = itemModesContext(bus);
-  const itemOverlays = itemOverlaysContext(bus);
-  const itemTargets = itemTargetsContext();
+  const decorations = decorationsContext(bus);
   const hierarchy = hierarchyContext();
   const keyboard = keyboardCaptureContext();
   const commands = commandsContext(bus, origin => !origin || flags.isOn(origin), io);
@@ -253,7 +246,7 @@ function createContexts(bus: Bus, flags: FlagsApi, io: IoApi) {
     _set(issues: DxIssue[]) { lastDxIssues = issues; },
     _setRunner(fn: () => DxIssue[]) { runner = fn; },
   };
-  const teardown: OriginScoped[] = [commands, affordances, cancellation, itemModes, itemOverlays, itemTargets, hierarchy, keyboard, storage];
+  const teardown: OriginScoped[] = [commands, affordances, cancellation, decorations, hierarchy, keyboard, storage];
   return {
     commands,
     input,
@@ -264,9 +257,7 @@ function createContexts(bus: Bus, flags: FlagsApi, io: IoApi) {
     dx,
     affordances,
     cancellation,
-    itemModes,
-    itemOverlays,
-    itemTargets,
+    decorations,
     hierarchy,
     keyboard,
     storage,
