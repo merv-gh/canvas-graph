@@ -1,0 +1,28 @@
+{
+  "ollama": {
+    "url": "http://192.168.1.148:11434",
+    "model": "qwen2.5-coder:7b",
+    "escalateModel": "qwen3.5:35b",
+    "temperature": 0.2,
+    "escalateTemperature": 0.4,
+    "numCtx": 8192,
+    "timeoutMs": 360000,
+    "seedBase": 7
+  },
+  "budgets": {
+    "staticContextTokens": 1000,
+    "toolResultChars": 1200,
+    "readResultChars": 2600,
+    "historyMessages": 8,
+    "redTurns": 20,
+    "greenTurns": 24,
+    "walkTurns": 16,
+    "verifyRounds": 2,
+    "attemptMinutes": 30,
+    "parseMisses": 3
+  },
+  "ports": { "vite": 5180 },
+  "attemptsPerTaskPerCycle": 1,
+  "escalateAfterFails": 2,
+  "walkEveryNCycles": 1
+}
