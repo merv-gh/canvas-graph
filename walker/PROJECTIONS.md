@@ -4,16 +4,29 @@ Feature projections are editable local views over source-owned slices. They are
 for context compression, not new ownership: the source files keep the structure,
 while the projection gives a smaller model or human one focused surface.
 
-## Commands projection
+## Built-in projections
 
 ```bash
 npm run dx -- project generate commands
+npm run dx -- project show commands detail.less
+npm run dx -- project show flows graph.edge.create
 npm run dx -- project sync commands
 npm run dx -- project watch commands
+npm run dx -- project generate events
+npm run dx -- project generate flows
+npm run dx -- project generate command-ui
 ```
 
-The generated file is `walker/views/commands.proj.ts`. Each slice is wrapped in
-stable markers:
+- `commands` -> `walker/views/commands.proj.ts`: editable command specs from
+  `contexts.commands.register(...)`.
+- `events` -> `walker/views/events.proj.ts`: editable event declaration lines
+  from `CustomEvents` / `BuiltinEvents`.
+- `flows` -> `walker/views/flows.proj.md`: read-only map of commands, emitters,
+  and handlers per event.
+- `command-ui` -> `walker/views/command-ui.proj.ts`: editable
+  `contribute({ surface, command, ... })` affordance calls.
+
+Each editable slice is wrapped in stable markers:
 
 ```ts
 // BEGIN command graph.node.create v2/systems/graph.ts:63
@@ -21,19 +34,21 @@ stable markers:
 // END command graph.node.create
 ```
 
-Edit the command literal between the markers, then run `sync`. The sync step
-finds the current source literal by command id and replaces only that object.
-When `watch` is running, edits to the projection sync back automatically; edits
-to source files regenerate the projection.
+Edit the slice between the markers, then run `sync`. The sync step rescans the
+current source and replaces only the matching source slice. When `watch` is
+running, edits to editable projections sync back automatically; edits to source
+files regenerate the projection.
 
 ## Contract
 
 - A projection file is disposable and ignored by git.
 - Marker lines are the routing table. Do not edit them unless you mean to move a
   slice to another source file.
-- The source slice must still contain the same top-level id as the marker.
+- Command slices must still contain the same top-level id as the marker.
 - Projection sync is intentionally narrow: it replaces known slices, not whole
   files.
+- `flows` is read-only because it is derived from commands, declarations,
+  `emit(...)`, and `on(...)`.
 
 ## Adding another projection
 

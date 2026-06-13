@@ -16,7 +16,7 @@
 //   node walker/dx.mjs archive <task>
 //   node walker/dx.mjs add
 //   node walker/dx.mjs clean [--keep 3] [--yes]
-//   node walker/dx.mjs project <list|status|generate|sync|watch> [commands]
+//   node walker/dx.mjs project <list|status|show|generate|sync|watch> [projection] [filter]
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import {
@@ -610,7 +610,7 @@ async function menu() {
         const keepRaw = await rl.question('Keep latest N runs [3]: ');
         await cleanJournal({ keep: keepRaw.trim() || 3, rl });
       } else if (choice === 'v') {
-        console.log('\nProjection actions: list, status, generate, sync, watch');
+        console.log('\nProjection actions: list, status, show, generate, sync, watch');
         const action = (await rl.question('Action [status]: ')).trim() || 'status';
         const name = (await rl.question('Projection [commands]: ')).trim() || 'commands';
         runNode('walker/projections.mjs', [action, name]);
@@ -638,7 +638,7 @@ usage:
   node walker/dx.mjs archive <task>
   node walker/dx.mjs add
   node walker/dx.mjs clean [--keep 3] [--yes]
-  node walker/dx.mjs project <list|status|generate|sync|watch> [commands]
+  node walker/dx.mjs project <list|status|show|generate|sync|watch> [projection] [filter]
 `);
 }
 

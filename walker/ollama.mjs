@@ -21,6 +21,7 @@ export const TOOL_SCHEMAS = [
   { name: 'scenario', description: 'Boot app, run steps, check asserts — instant verification. spec={steps:[{command:"id"}|{event:"name",data:{}}],asserts:[{path:"ui.shell.zen",op:"eq",value:true}|{css:".node",op:"count",value:2}|{file:"v2/styles.css",matches:"regex"}|{command:"id",has:"input.key",value:"i"}]}. ops: eq gt contains truthy falsy count. command-asserts check the command SPEC (shortcuts!).', parameters: { type: 'object', properties: { spec: { type: 'object' } }, required: ['spec'] } },
   { name: 'gen_test', description: 'RED only: a scenario spec whose asserts state DESIRED behavior → writes the red test file for you.', parameters: { type: 'object', properties: { title: { type: 'string' }, spec: { type: 'object' } }, required: ['title', 'spec'] } },
   { name: 'graph', description: 'Code index → file:line. mode=find (keyword) | callers | callees | file (symbols in file) | tests (coverage of symbol).', parameters: { type: 'object', properties: { mode: { type: 'string', enum: ['find', 'callers', 'callees', 'file', 'tests'] }, query: { type: 'string' } }, required: ['mode', 'query'] } },
+  { name: 'projection', description: 'Compressed architecture view generated from the current workspace. name=commands|events|flows|command-ui; filter narrows to an id/file/topic. Use before reading whole systems.', parameters: { type: 'object', properties: { name: { type: 'string', enum: ['commands', 'events', 'flows', 'command-ui'] }, filter: { type: 'string' } }, required: ['name'] } },
   { name: 'note', description: 'Save a short note to your persistent scratchpad (survives history trimming).', parameters: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] } },
   { name: 'done', description: 'Declare the current phase goal achieved.', parameters: { type: 'object', properties: { summary: { type: 'string' } }, required: ['summary'] } },
   { name: 'give_up', description: 'Abandon the task with a reason.', parameters: { type: 'object', properties: { reason: { type: 'string' } }, required: ['reason'] } },
@@ -32,8 +33,8 @@ const toOllamaTools = () => TOOL_SCHEMAS.map(t => ({ type: 'function', function:
  *  re-injects full protocol detail on the specific failure, so the standing
  *  reminder stays cheap. Native-tool models still get the full schema. */
 export const toolDocsText = () => TOOL_SCHEMAS
-  .map(t => `${t.name}(${Object.keys(t.parameters.properties ?? {}).join(',')}) — ${t.description.split(/(?<=\.)\s|\. /)[0]}`)
-  .join('\n');
+  .map(t => `${t.name}(${Object.keys(t.parameters.properties ?? {}).join(',')})`)
+  .join(' ');
 
 /** Single-string-arg tools that small models like to write as calls:
  *  give_up("reason") / done('summary') / note(text). */

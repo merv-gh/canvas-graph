@@ -34,10 +34,23 @@ export function runProbe(cwd, request, timeoutMs = 120000) {
   }
 }
 
+export function normalizeScenarioSpec(spec = {}) {
+  spec = spec ?? {};
+  const asserts = (spec.asserts ?? []).map(assertion => {
+    if (assertion.command || !assertion.path || !assertion.has) return assertion;
+    const m = String(assertion.path).match(/^commands\.(.+)$/);
+    if (!m) return assertion;
+    const { path, ...rest } = assertion;
+    return { ...rest, command: m[1] };
+  });
+  return { ...spec, steps: spec.steps ?? [], asserts };
+}
+
 /** Render a runnable vitest file from a validated scenario. Steps/asserts use
  *  the same shapes the probe's `scenario` mode takes, so the workflow is:
  *  scenario (observe actuals) → adjust expected values → genTest (red test). */
-export function genTest({ title, steps = [], asserts = [] }) {
+export function genTest(input) {
+  const { title, steps = [], asserts = [] } = normalizeScenarioSpec(input);
   const needsFs = asserts.some(a => a.file);
   const needsTrace = asserts.some(a => a.event);
   // Command steps self-assert: a missing/unavailable command is itself red.

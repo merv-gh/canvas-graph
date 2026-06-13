@@ -2,9 +2,10 @@
 // (pre-trimmed by the loop). Guards are mechanical: RED writes only under
 // tests/commands/walker/, GREEN writes only under v2/. No shell tool exists.
 
+import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, resolve, relative, dirname } from 'node:path';
-import { genTest, runProbe } from './probe-client.mjs';
+import { genTest, normalizeScenarioSpec, runProbe } from './probe-client.mjs';
 import { graphQuery } from './graphdb.mjs';
 import { repairJson } from './ollama.mjs';
 
@@ -89,6 +90,24 @@ export class Tools {
     return blocks.join('\n---\n') + '\n(use these LINE NUMBERS with patch, or copy text EXACTLY for edit)';
   }
 
+  tool_projection({ name = 'commands', filter = '' }) {
+    const script = join(this.ws.repoRoot, 'walker/projections.mjs');
+    try {
+      const output = execFileSync(process.execPath, [script, 'show', name, filter].filter(Boolean), {
+        cwd: this.ws.dir,
+        encoding: 'utf8',
+        timeout: 20000,
+        env: { ...process.env, WALKER_PROJECTION_ROOT: this.ws.dir },
+        maxBuffer: 1024 * 1024,
+      });
+      const lines = output.trimEnd().split('\n');
+      const capped = lines.slice(0, 120).join('\n');
+      return `${name} projection${filter ? ` filtered by '${filter}'` : ''}:\n${capped}${lines.length > 120 ? `\n…${lines.length - 120} more lines; call projection with a narrower filter` : ''}`;
+    } catch (err) {
+      return `projection failed: ${err.stderr || err.message}`;
+    }
+  }
+
   /** Domain constructor: inject plain-data props (shortcut, input, group, hidden,
    *  event) into an existing command spec, located by id. Commands are data in
    *  this codebase, so the literal is greppable and the injection is mechanical —
@@ -109,13 +128,19 @@ export class Tools {
     const all = readFileSync(abs, 'utf8').split('\n');
     const line = all[lineNo - 1];
     const already = Object.keys(parsed).filter(k => new RegExp(`\\b${k}\\s*:`).test(line));
-    if (already.length) return `set_command: '${id}' already sets ${already.join(', ')} on line ${lineNo}: ${line.trim()}`;
+    const missingEntries = Object.entries(parsed).filter(([k]) => !already.includes(k));
+    if (!missingEntries.length) {
+      const taskText = `${this.task?.title ?? ''}\n${this.task?.prompt ?? ''}`;
+      const siblingIds = [...new Set([...taskText.matchAll(/['"`]([a-z][\w-]*(?:\.[\w-]+)+)['"`]/g)].map(m => m[1]).filter(other => other !== id))];
+      const siblingHint = siblingIds.length ? `\nOther command ids in this task: ${siblingIds.slice(0, 6).join(', ')}. If the test still fails, update the remaining id.` : '';
+      return `set_command: '${id}' already sets ${already.join(', ')} on line ${lineNo}: ${line.trim()}${siblingHint}`;
+    }
     const js = (v) => {
       if (typeof v === 'string') return `'${v.replace(/'/g, "\\'")}'`;
       if (v && typeof v === 'object' && !Array.isArray(v)) return `{ ${Object.entries(v).map(([k, val]) => `${k}: ${js(val)}`).join(', ')} }`;
       return JSON.stringify(v);
     };
-    const propsCode = Object.entries(parsed).map(([k, v]) => `${k}: ${js(v)}`).join(', ');
+    const propsCode = missingEntries.map(([k, v]) => `${k}: ${js(v)}`).join(', ');
     const closing = line.match(/^(.*?)(\s*\}\s*,?\s*\)?;?\s*)$/);
     if (closing && line.includes('{')) {
       // Single-line spec: …, <props> }
@@ -127,9 +152,10 @@ export class Tools {
       all.splice(lineNo, 0, `${indent}${propsCode},`);
     }
     writeFileSync(abs, all.join('\n'));
-    this.log(`[tool] set_command ${id} += ${Object.keys(parsed).join(',')}`);
+    const skipped = already.length ? ` (already had ${already.join(',')})` : '';
+    this.log(`[tool] set_command ${id} += ${missingEntries.map(([k]) => k).join(',')}${skipped}`);
     const from = Math.max(0, lineNo - 2);
-    return `updated ${file}:\n${all.slice(from, lineNo + 1).map((l, i) => `${from + 1 + i}|${l}`).join('\n')}\nNow run_test to confirm.`;
+    return `updated ${file}: added ${missingEntries.map(([k]) => k).join(', ')}${skipped}.\n${all.slice(from, lineNo + 1).map((l, i) => `${from + 1 + i}|${l}`).join('\n')}\nNow run_test to confirm.`;
   }
 
   /** Serialize a JSON object to a TS object literal. String values that look
@@ -482,6 +508,17 @@ export class Tools {
         return `line ${line} is inside an open CSS block. Inserting a selector there creates nested/invalid CSS. For styling tasks use add_css_rule {"selector":"...","declarations":{...},"after":"..."} or locate an existing selector and patch outside the block.`;
       }
     }
+    if (this.phase === 'green' && /\bid\s*:\s*['"][\w.]+['"]/.test(String(text)) && /\b(shortcut|input|group|hidden|event|label)\b/.test(String(text))) {
+      const ids = [...String(text).matchAll(/\bid\s*:\s*['"]([\w.]+)['"]/g)].map(m => m[1]);
+      const unique = [...new Set(ids)];
+      return [
+        `This patch payload looks like command specs (${unique.join(', ') || 'unknown id'}).`,
+        'Do not patch command register arrays by hand; it often breaks the wrapper syntax.',
+        unique.length === 1
+          ? `Existing command props: use set_command {"id":"${unique[0]}","props":{...}}. New command: use add_command.`
+          : `For existing command props, call set_command once per id. New command: use add_command.`,
+      ].join('\n');
+    }
     // Teach tool-selection at the point of the mistake: patching command props
     // into a command-spec line is the wrong move — set_command does it cleanly
     // and keeps the array valid. (Observed: weak models reach for insert_after here.)
@@ -567,7 +604,7 @@ export class Tools {
   }
 
   tool_scenario({ spec }) {
-    const parsed = this.parseSpec(spec);
+    const parsed = normalizeScenarioSpec(this.parseSpec(spec));
     if (!parsed) return 'scenario: spec is not valid JSON — send {steps:[…],asserts:[…]}';
     const answer = runProbe(this.ws.dir, { mode: 'scenario', steps: parsed.steps ?? [], asserts: parsed.asserts ?? [] });
     if (answer.error) return `scenario failed: ${answer.error}`;
@@ -583,8 +620,14 @@ export class Tools {
   }
 
   tool_gen_test({ title, spec }) {
-    if (this.phase !== 'red') return 'gen_test is RED-phase only (it writes a test file)';
-    const parsed = this.parseSpec(spec);
+    if (this.phase !== 'red') {
+      return [
+        'gen_test is RED-phase only. GREEN keeps the existing failing test; do not rewrite it.',
+        `Current test: ${this.taskTestPath ?? this.defaultTestPath ?? 'tests/commands/walker/<task>.test.ts'}.`,
+        'Use projection/inspect/scenario to identify the remaining failed assertion, then edit v2/ with the constructor tool (set_command/add_command/etc.) and run_test again.',
+      ].join('\n');
+    }
+    const parsed = normalizeScenarioSpec(this.parseSpec(spec));
     if (!parsed) return 'gen_test: spec is not valid JSON';
     const badCss = (parsed.asserts ?? []).find(a => a.css && a.op && !['count', 'exists', 'textContains'].includes(a.op));
     if (badCss) return `gen_test: css asserts support op=count|exists|textContains only. To assert CSS source text (rules like dashed border), use {"file":"v2/styles.css","matches":"..."} with no steps.`;

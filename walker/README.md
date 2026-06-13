@@ -48,6 +48,7 @@ node walker/dx.mjs land detail-shortcuts
 node walker/dx.mjs archive detail-shortcuts
 node walker/dx.mjs clean --keep 3
 node walker/dx.mjs project generate commands
+node walker/dx.mjs project show flows graph.edge.create
 node walker/dx.mjs project sync commands
 node walker/dx.mjs project watch commands
 ```
@@ -62,12 +63,16 @@ without moving ownership: source systems still own their commands/events/etc.,
 while a focused generated file gives humans and small models the relevant
 surface in one place.
 
-The first projection is commands:
+Available projections:
 
 ```bash
 npm run dx -- project generate commands   # writes walker/views/commands.proj.ts
+npm run dx -- project show flows graph.edge.create
 npm run dx -- project sync commands       # pushes edited command slices to v2/
 npm run dx -- project watch commands      # two-way watch: projection <-> source
+npm run dx -- project generate events     # editable event declaration lines
+npm run dx -- project generate flows      # read-only command/event flow map
+npm run dx -- project generate command-ui # editable contribute(...) calls
 ```
 
 See `PROJECTIONS.md` for the marker format and the extension contract.
@@ -128,6 +133,7 @@ Every capability is dual-exposed: a walker tool for the model and
 | `gen_test` / `gen-test '<json>' [out]` | validated scenario → runnable vitest file (the RED-phase shortcut) |
 | `graph <find\|callers\|callees\|file\|tests> <q>` | code-review-graph index → `file:line` without grep |
 | `locate <anchor> [dir]` | grep + verbatim numbered context, ready for patch/edit |
+| `projection <commands\|events\|flows\|command-ui> [filter]` | generated architecture view from the current workspace — less reading, tighter context |
 | `gen <system\|feature\|ability> <name>` (CLI) | scaffold a new plugin — template file + `index.ts`/CLAUDE.md wiring + a flag off→on smoke test. A human/Claude pre-step (writes a test + multiple files, so it's not a RED/GREEN model loop tool); the model then fills the TODOs. |
 
 ### GREEN-phase editing (model tools; intent over text surgery)

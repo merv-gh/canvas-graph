@@ -9,7 +9,6 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
-  statSync,
   watch,
   writeFileSync,
 } from 'node:fs';
@@ -17,20 +16,54 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO = resolve(HERE, '..');
+const REPO = resolve(process.env.WALKER_PROJECTION_ROOT ?? resolve(HERE, '..'));
 const SOURCE_ROOT = join(REPO, 'v2');
-const VIEWS_DIR = join(HERE, 'views');
+const VIEWS_DIR = join(REPO, 'walker', 'views');
 const COMMANDS_VIEW = join(VIEWS_DIR, 'commands.proj.ts');
+const EVENTS_VIEW = join(VIEWS_DIR, 'events.proj.ts');
+const FLOWS_VIEW = join(VIEWS_DIR, 'flows.proj.md');
+const COMMAND_UI_VIEW = join(VIEWS_DIR, 'command-ui.proj.ts');
 
 const projections = new Map([
   ['commands', {
     name: 'commands',
     outFile: COMMANDS_VIEW,
     description: 'all contexts.commands.register(...) command literals from v2/',
+    render: () => renderCommands(collectCommands()),
     generate: generateCommands,
     sync: syncCommands,
     watchFiles: commandSourceFiles,
     count: () => collectCommands().length,
+  }],
+  ['events', {
+    name: 'events',
+    outFile: EVENTS_VIEW,
+    description: 'typed CustomEvents/BuiltinEvents declaration lines from v2/',
+    render: () => renderEvents(collectEventDecls()),
+    generate: generateEvents,
+    sync: syncEvents,
+    watchFiles: eventSourceFiles,
+    count: () => collectEventDecls().length,
+  }],
+  ['flows', {
+    name: 'flows',
+    outFile: FLOWS_VIEW,
+    description: 'generated command/event/on/emit flow map from v2/',
+    render: renderFlows,
+    generate: generateFlows,
+    sync: () => console.log('flows is read-only; edit event declarations or source handlers instead'),
+    watchFiles: () => listSourceFiles(),
+    count: () => collectEventUsages().length,
+  }],
+  ['command-ui', {
+    name: 'command-ui',
+    outFile: COMMAND_UI_VIEW,
+    description: 'all contribute({ surface, command, ... }) command UI affordances from v2/',
+    render: () => renderCommandUi(collectCommandUi()),
+    generate: generateCommandUi,
+    sync: syncCommandUi,
+    watchFiles: commandUiSourceFiles,
+    count: () => collectCommandUi().length,
   }],
 ]);
 
@@ -216,6 +249,14 @@ function generateCommands({ quiet = false } = {}) {
   return commands.length;
 }
 
+function writeProjection(def, text, quiet) {
+  ensureViewDir();
+  if (!existsSync(def.outFile) || readFileSync(def.outFile, 'utf8') !== text) {
+    writeFileSync(def.outFile, text);
+  }
+  if (!quiet) console.log(`generated ${rel(def.outFile)} (${def.count()} slice(s))`);
+}
+
 function parseCommandBlocks(text) {
   const blocks = [];
   const beginRe = /^\/\/ BEGIN command ([^\s]+) (.+):(\d+)$/gm;
@@ -291,11 +332,291 @@ function syncCommands({ quiet = false } = {}) {
   return changedBlocks;
 }
 
+function interfaceBodies(source, names = ['CustomEvents', 'BuiltinEvents']) {
+  const bodies = [];
+  for (const name of names) {
+    const re = new RegExp(`\\binterface\\s+${name}\\s*\\{`, 'g');
+    for (let m; (m = re.exec(source));) {
+      const open = source.indexOf('{', m.index);
+      const close = findMatching(source, open, '{', '}');
+      if (close < 0) continue;
+      bodies.push({ name, start: open + 1, end: close });
+      re.lastIndex = close + 1;
+    }
+  }
+  return bodies;
+}
+
+function lineBounds(source, index) {
+  const start = source.lastIndexOf('\n', index) + 1;
+  const endRaw = source.indexOf('\n', index);
+  const end = endRaw < 0 ? source.length : endRaw;
+  return { start, end };
+}
+
+function collectEventDecls() {
+  const decls = [];
+  for (const file of listSourceFiles()) {
+    const source = readFileSync(file, 'utf8');
+    for (const body of interfaceBodies(source)) {
+      const text = source.slice(body.start, body.end);
+      const re = /^\s*['"]([^'"]+)['"]\s*:\s*[^;]+;/gm;
+      for (let m; (m = re.exec(text));) {
+        const quoteAt = m[0].search(/['"]/);
+        const absIndex = body.start + m.index + Math.max(0, quoteAt);
+        const bounds = lineBounds(source, absIndex);
+        decls.push({
+          id: m[1],
+          iface: body.name,
+          file,
+          rel: rel(file),
+          start: bounds.start,
+          end: bounds.end,
+          line: lineNumber(source, bounds.start),
+          text: source.slice(bounds.start, bounds.end),
+        });
+      }
+    }
+  }
+  decls.sort((a, b) => a.rel.localeCompare(b.rel) || a.line - b.line || a.id.localeCompare(b.id));
+  return decls;
+}
+
+function eventSourceFiles() {
+  return [...new Set(collectEventDecls().map(decl => decl.file))];
+}
+
+function renderEvents(decls) {
+  const blocks = decls.map(decl => [
+    `// BEGIN event ${encodeURIComponent(decl.id)} ${decl.rel}:${decl.line} ${decl.iface}`,
+    decl.text.trimEnd(),
+    `// END event ${encodeURIComponent(decl.id)}`,
+    '',
+  ].join('\n'));
+  return [
+    '// @walker-projection events v1',
+    '// Editable view over event declaration lines. Handlers and emitters stay in source.',
+    '// Sync edits back: node walker/projections.mjs sync events',
+    '',
+    ...blocks,
+  ].join('\n');
+}
+
+function generateEvents({ quiet = false } = {}) {
+  const def = selectProjection('events');
+  writeProjection(def, def.render(), quiet);
+}
+
+function parseMarkedBlocks(text, kind) {
+  const blocks = [];
+  const beginRe = new RegExp(`^// BEGIN ${kind} ([^\\s]+) (.+?):(\\d+)(?: .*)?$`, 'gm');
+  for (let begin; (begin = beginRe.exec(text));) {
+    const key = begin[1];
+    const id = decodeURIComponent(key);
+    const file = begin[2];
+    const contentStart = beginRe.lastIndex;
+    const endRe = new RegExp(`^// END ${kind} ${escapeRe(key)}\\s*$`, 'gm');
+    endRe.lastIndex = contentStart;
+    const end = endRe.exec(text);
+    if (!end) throw new Error(`projection block for ${kind} ${id} has no END marker`);
+    let body = text.slice(contentStart, end.index);
+    if (body.startsWith('\n')) body = body.slice(1);
+    if (body.endsWith('\n')) body = body.slice(0, -1);
+    blocks.push({ id, file: sourcePathFromMarker(file), body });
+    beginRe.lastIndex = end.index + end[0].length;
+  }
+  return blocks;
+}
+
+function syncEvents({ quiet = false } = {}) {
+  if (!existsSync(EVENTS_VIEW)) throw new Error(`${rel(EVENTS_VIEW)} does not exist; run generate first`);
+  const blocks = parseMarkedBlocks(readFileSync(EVENTS_VIEW, 'utf8'), 'event');
+  const byFile = new Map();
+  for (const block of blocks) {
+    if (!byFile.has(block.file)) byFile.set(block.file, []);
+    byFile.get(block.file).push(block);
+  }
+  let changedFiles = 0;
+  let changedBlocks = 0;
+  for (const [file, fileBlocks] of byFile) {
+    let source = readFileSync(file, 'utf8');
+    const decls = collectEventDecls().filter(decl => decl.file === file);
+    const replacements = fileBlocks.map(block => {
+      const found = decls.find(decl => decl.id === block.id);
+      if (!found) throw new Error(`could not find source event ${block.id} in ${rel(file)}`);
+      return { ...found, next: block.body.trimEnd() };
+    }).sort((a, b) => b.start - a.start);
+    let nextSource = source;
+    for (const replacement of replacements) {
+      if (nextSource.slice(replacement.start, replacement.end) !== replacement.next) changedBlocks++;
+      nextSource = `${nextSource.slice(0, replacement.start)}${replacement.next}${nextSource.slice(replacement.end)}`;
+    }
+    if (nextSource !== source) {
+      writeFileSync(file, nextSource);
+      changedFiles++;
+    }
+  }
+  if (!quiet) console.log(`synced ${changedBlocks} event declaration(s) into ${changedFiles} source file(s)`);
+}
+
+function collectEventUsages() {
+  const usages = [];
+  const callRe = /\b(on|emit)\s*\(\s*(['"`])([^'"`]+)\2/g;
+  for (const file of listSourceFiles()) {
+    const source = readFileSync(file, 'utf8');
+    for (let m; (m = callRe.exec(source));) {
+      usages.push({ kind: m[1], event: m[3], file, rel: rel(file), line: lineNumber(source, m.index) });
+    }
+  }
+  for (const command of collectCommands()) {
+    const eventMatch = command.text.match(/\bevent\s*:\s*(['"`])([^'"`]+)\1/);
+    usages.push({
+      kind: 'command',
+      event: eventMatch?.[2] ?? command.id,
+      command: command.id,
+      file: command.file,
+      rel: command.rel,
+      line: command.line,
+    });
+  }
+  usages.sort((a, b) => a.event.localeCompare(b.event) || a.kind.localeCompare(b.kind) || a.rel.localeCompare(b.rel) || a.line - b.line);
+  return usages;
+}
+
+function renderFlows() {
+  const declsByEvent = new Map();
+  for (const decl of collectEventDecls()) {
+    if (!declsByEvent.has(decl.id)) declsByEvent.set(decl.id, []);
+    declsByEvent.get(decl.id).push(decl);
+  }
+  const usagesByEvent = new Map();
+  for (const usage of collectEventUsages()) {
+    if (!usagesByEvent.has(usage.event)) usagesByEvent.set(usage.event, []);
+    usagesByEvent.get(usage.event).push(usage);
+  }
+  const events = [...new Set([...declsByEvent.keys(), ...usagesByEvent.keys()])].sort();
+  const lines = [
+    '# @walker-projection flows v1',
+    '',
+    'Generated map of command-triggered events, emitters, and handlers. Read-only.',
+    '',
+  ];
+  for (const event of events) {
+    const decls = declsByEvent.get(event) ?? [];
+    const usages = usagesByEvent.get(event) ?? [];
+    const commands = usages.filter(u => u.kind === 'command');
+    const emitters = usages.filter(u => u.kind === 'emit');
+    const handlers = usages.filter(u => u.kind === 'on');
+    lines.push(`## ${event}`);
+    if (decls.length) lines.push(`declared: ${decls.map(d => `${d.rel}:${d.line}`).join(', ')}`);
+    if (commands.length) lines.push(`commands: ${commands.map(u => `${u.command} (${u.rel}:${u.line})`).join(', ')}`);
+    if (emitters.length) lines.push(`emitters: ${emitters.map(u => `${u.rel}:${u.line}`).join(', ')}`);
+    if (handlers.length) lines.push(`handlers: ${handlers.map(u => `${u.rel}:${u.line}`).join(', ')}`);
+    if (!decls.length) lines.push('declared: -');
+    if (!commands.length && !emitters.length && !handlers.length) lines.push('usage: -');
+    lines.push('');
+  }
+  return `${lines.join('\n')}`;
+}
+
+function generateFlows({ quiet = false } = {}) {
+  const def = selectProjection('flows');
+  writeProjection(def, def.render(), quiet);
+}
+
+function collectCommandUi() {
+  const items = [];
+  const re = /\bcontribute\s*\(/g;
+  for (const file of listSourceFiles()) {
+    const source = readFileSync(file, 'utf8');
+    for (let m; (m = re.exec(source));) {
+      const open = source.indexOf('(', m.index);
+      const close = findMatching(source, open, '(', ')');
+      if (close < 0) continue;
+      let firstArg = open + 1;
+      while (/\s/.test(source[firstArg] ?? '')) firstArg++;
+      if (source[firstArg] !== '{') continue;
+      let end = close + 1;
+      while (/\s/.test(source[end] ?? '')) end++;
+      if (source[end] === ';') end++;
+      const text = source.slice(m.index, end);
+      const command = text.match(/\bcommand\s*:\s*(['"`])([^'"`]+)\1/)?.[2];
+      if (!command) continue;
+      items.push({
+        id: command,
+        file,
+        rel: rel(file),
+        start: m.index,
+        end,
+        line: lineNumber(source, m.index),
+        text,
+      });
+      re.lastIndex = end;
+    }
+  }
+  items.sort((a, b) => a.rel.localeCompare(b.rel) || a.line - b.line || a.id.localeCompare(b.id));
+  return items;
+}
+
+function commandUiSourceFiles() {
+  return [...new Set(collectCommandUi().map(item => item.file))];
+}
+
+function renderCommandUi(items) {
+  const blocks = items.map(item => [
+    `// BEGIN command-ui ${encodeURIComponent(item.id)} ${item.rel}:${item.line}`,
+    item.text.trimEnd(),
+    `// END command-ui ${encodeURIComponent(item.id)}`,
+    '',
+  ].join('\n'));
+  return [
+    '// @walker-projection command-ui v1',
+    '// Editable view over contribute({ surface, command, ... }) affordance calls.',
+    '// Sync edits back: node walker/projections.mjs sync command-ui',
+    '',
+    ...blocks,
+  ].join('\n');
+}
+
+function generateCommandUi({ quiet = false } = {}) {
+  const def = selectProjection('command-ui');
+  writeProjection(def, def.render(), quiet);
+}
+
+function syncCommandUi({ quiet = false } = {}) {
+  if (!existsSync(COMMAND_UI_VIEW)) throw new Error(`${rel(COMMAND_UI_VIEW)} does not exist; run generate first`);
+  const blocks = parseMarkedBlocks(readFileSync(COMMAND_UI_VIEW, 'utf8'), 'command-ui');
+  const byFile = new Map();
+  for (const block of blocks) {
+    if (!byFile.has(block.file)) byFile.set(block.file, []);
+    byFile.get(block.file).push(block);
+  }
+  let changedFiles = 0;
+  let changedBlocks = 0;
+  for (const [file, fileBlocks] of byFile) {
+    let source = readFileSync(file, 'utf8');
+    const items = collectCommandUi().filter(item => item.file === file);
+    const replacements = fileBlocks.map(block => {
+      const found = items.find(item => item.id === block.id);
+      if (!found) throw new Error(`could not find command UI contribution ${block.id} in ${rel(file)}`);
+      return { ...found, next: block.body.trimEnd() };
+    }).sort((a, b) => b.start - a.start);
+    let nextSource = source;
+    for (const replacement of replacements) {
+      if (nextSource.slice(replacement.start, replacement.end) !== replacement.next) changedBlocks++;
+      nextSource = `${nextSource.slice(0, replacement.start)}${replacement.next}${nextSource.slice(replacement.end)}`;
+    }
+    if (nextSource !== source) {
+      writeFileSync(file, nextSource);
+      changedFiles++;
+    }
+  }
+  if (!quiet) console.log(`synced ${changedBlocks} command UI contribution(s) into ${changedFiles} source file(s)`);
+}
+
 function projectionStatus(def) {
-  const sourceFiles = def.watchFiles();
-  const maxSourceMtime = sourceFiles.reduce((max, file) => Math.max(max, statSync(file).mtimeMs), 0);
   const outExists = existsSync(def.outFile);
-  const stale = !outExists || statSync(def.outFile).mtimeMs < maxSourceMtime;
+  const stale = !outExists || readFileSync(def.outFile, 'utf8') !== def.render();
   const out = outExists ? rel(def.outFile) : `${rel(def.outFile)} (missing)`;
   console.log(`${def.name}: ${out}; ${def.count()} slices; ${stale ? 'stale' : 'fresh'}`);
 }
@@ -310,6 +631,23 @@ function printList() {
   for (const def of projections.values()) {
     console.log(`${def.name.padEnd(10)} ${rel(def.outFile)}  ${def.description}`);
   }
+}
+
+function filterProjectionText(text, filter) {
+  const needle = String(filter ?? '').trim().toLowerCase();
+  if (!needle) return text;
+  const chunks = text.includes('\n// BEGIN ')
+    ? text.split(/\n(?=\/\/ BEGIN )/)
+    : text.split(/\n(?=## )/);
+  const header = chunks.shift() ?? '';
+  const hits = chunks.filter(chunk => chunk.toLowerCase().includes(needle));
+  if (hits.length) return [header.trimEnd(), ...hits.map(hit => hit.trimEnd())].join('\n\n') + '\n';
+  const lines = text.split('\n').filter(line => line.toLowerCase().includes(needle));
+  return lines.length ? lines.join('\n') + '\n' : `no projection matches for: ${filter}\n`;
+}
+
+function showProjection(def, filter) {
+  console.log(filterProjectionText(def.render(), filter).trimEnd());
 }
 
 function watchProjection(def) {
@@ -364,9 +702,10 @@ function printHelp() {
 usage:
   node walker/projections.mjs list
   node walker/projections.mjs status
-  node walker/projections.mjs generate [commands]
-  node walker/projections.mjs sync [commands]
-  node walker/projections.mjs watch [commands]
+  node walker/projections.mjs show [commands|events|flows|command-ui] [filter]
+  node walker/projections.mjs generate [commands|events|flows|command-ui]
+  node walker/projections.mjs sync [commands|events|command-ui]
+  node walker/projections.mjs watch [commands|events|flows|command-ui]
 
 Generated views live in walker/views/. Source files remain the owners.
 `);
@@ -387,6 +726,7 @@ function main() {
     for (const def of defs) projectionStatus(def);
     return;
   }
+  if (cmd === 'show') return showProjection(selectProjection(name ?? 'commands'), argv.slice(2).join(' '));
   if (cmd === 'generate') return runForSelected(name, 'generate');
   if (cmd === 'sync') return runForSelected(name, 'sync');
   if (cmd === 'watch' || cmd === 'serve') return watchProjection(selectProjection(name ?? 'commands'));

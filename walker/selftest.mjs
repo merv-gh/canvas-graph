@@ -121,6 +121,15 @@ ok('gen_test: source runs green when asserting current behavior', () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+ok('gen_test: normalizes command-spec path shorthand', () => {
+  const source = genTest({
+    title: 'command shorthand',
+    steps: [],
+    asserts: [{ path: 'commands.detail.less', has: 'input.key', value: '[' }],
+  });
+  assert(source.includes('ctx.contexts.commands.get("detail.less")?.input?.key'), source);
+  assert(!source.includes('snapshot().commands.detail.less'), source);
+});
 
 // --- graph queries ---
 ok('graph find: locates the editable ability source', () => {
@@ -145,6 +154,13 @@ ok('scenario: event-trace assert sees a fired fact', () => {
   assert.equal(answer.asserts[0].pass, true, JSON.stringify(answer.asserts[0]));
   assert.equal(answer.asserts[1].pass, false);
   assert(answer.eventsFired.includes('editing.node.create'), JSON.stringify(answer.eventsFired));
+});
+
+ok('projection: commands and flows expose focused architecture views', () => {
+  const commandsView = execFileSync(process.execPath, ['walker/projections.mjs', 'show', 'commands', 'detail.less'], { cwd: REPO, encoding: 'utf8' });
+  assert(commandsView.includes("id: 'detail.less'"), commandsView);
+  const flowsView = execFileSync(process.execPath, ['walker/projections.mjs', 'show', 'flows', 'graph.edge.create'], { cwd: REPO, encoding: 'utf8' });
+  assert(flowsView.includes('handlers: v2/systems/graph.ts'), flowsView);
 });
 
 // --- parser shapes (regression for the live failures we saw) ---
@@ -195,6 +211,22 @@ ok('patch: redirects command-prop edits to set_command', () => {
   tools.phase = 'green';
   const out = tools.tool_patch({ path: 'v2/s.ts', op: 'insert_after', line: 2, text: "shortcut: 'I', input: { key: 'i' }" });
   assert(/use set_command/.test(out) && /choose\.invert/.test(out), out);
+  rmSync(dir, { recursive: true, force: true });
+});
+ok('patch: blocks command-register rewrites from payload shape', () => {
+  const dir = join(REPO, 'walker/.selftest-tmp4');
+  mkdirSync(join(dir, 'v2'), { recursive: true });
+  writeFileSync(join(dir, 'v2/s.ts'), "system('x', ({ contexts }) => {\n  contexts.commands.register([\n    { id: 'detail.less', label: 'Less', group: 'view' },\n  ]);\n});\n");
+  const tools = new Tools({ ws: stubWs(dir), browser: null, log: () => {} });
+  tools.phase = 'green';
+  const out = tools.tool_patch({
+    path: 'v2/s.ts',
+    op: 'replace',
+    line: 2,
+    text: "    { id: 'detail.less', label: 'Less', group: 'view', shortcut: '[', input: { on: 'keydown', key: '[', prevent: true } },",
+  });
+  assert(/looks like command specs/.test(out) && /set_command/.test(out), out);
+  assert(readFileSync(join(dir, 'v2/s.ts'), 'utf8').includes('contexts.commands.register(['), 'file must be untouched');
   rmSync(dir, { recursive: true, force: true });
 });
 ok('patch: refuses a non-v2 path during GREEN', () => {
@@ -377,8 +409,9 @@ await okAsync('set_command + add_command take effect in a booted copy', async ()
     tools.phase = 'green';
 
     // set_command: bind a currently-unbound detail command.
-    const sc = tools.tool_set_command({ id: 'detail.less', props: { shortcut: '[', input: { on: 'keydown', key: '[', prevent: true } } });
+    const sc = tools.tool_set_command({ id: 'detail.less', props: { group: 'view', shortcut: '[', input: { on: 'keydown', key: '[', prevent: true } } });
     assert(/updated/.test(sc), `set_command: ${sc}`);
+    assert(/already had group/.test(sc), `set_command should ignore redundant existing props: ${sc}`);
 
     // add_command: register a brand-new verb in graph.ts WITH a handler — and
     // no manual declare first, so this also exercises add_command's auto-declare
