@@ -26,26 +26,29 @@ the stage survives zen and the toggle round-trips.
 - files: v2/systems/detail.ts
 - title: detail.less / detail.more have no keyboard shortcuts
 
-Commands `detail.less` (fold selection / zoom out) and `detail.more` exist but are
-palette-only — no keyboard binding, which breaks the keyboard-first rule. Add
-shortcuts: `[` for detail.less, `]` for detail.more (both unbound today; check
-with search for `key: '['`). Follow the pattern of other commands: set
-`shortcut` label AND `input: { on: 'keydown', key: '[', prevent: true }`. Red
-test: assert `ctx.contexts.commands.get('detail.less').input?.key` is `'['`
-and that dispatching the keydown emits the event (see how existing tests drive
-keyboard via document.dispatchEvent(new KeyboardEvent('keydown', ...))).
+Commands `detail.less` (fold selection / zoom out) and `detail.more` exist but
+are palette-only — no keyboard binding, breaking the keyboard-first rule. Add
+shortcuts in v2/systems/detail.ts: `[` for detail.less, `]` for detail.more —
+set both `shortcut` label AND `input: { on: 'keydown', key: '[', prevent: true }`
+(read the file; copy the input shape from any bound command via
+inspect commands). Red scenario asserts:
+{"command":"detail.less","has":"input.key","value":"["} and
+{"command":"detail.more","has":"input.key","value":"]"} — both fail today;
+gen_test renders them. GREEN: edit v2/systems/detail.ts only.
 
 ## choose-invert-shortcut
 - kind: feature
 - files: v2/systems/choose.ts
 - title: choose.invert has no keyboard shortcut
 
-`choose.invert` (invert the chosen set) is palette-only. Add the unbound key `i`:
-`shortcut: 'I'`, `input: { on: 'keydown', key: 'i', prevent: true }` on the
-choose.invert command in v2/systems/choose.ts, following choose.all right above
-it. Red test: with two nodes where one is selected, running `choose.invert`
-via the `i` keydown selects the complement (assert via
-ctx.selection.selectedAll() / ctx.debug.snapshot().selection.count).
+`choose.invert` (invert the chosen set) is palette-only — no keyboard binding.
+Fix: in v2/systems/choose.ts add to the choose.invert command spec:
+`shortcut: 'I', input: { on: 'keydown', key: 'i', prevent: true }` (copy the
+shape from choose.all directly above it; read the file first). Red scenario:
+steps = `editing.node.create` twice, then command `choose.invert`; asserts =
+{"command":"choose.invert","has":"input.key","value":"i"} (RED: fails until you
+bind it) plus {"path":"selection.count","op":"eq","value":1}. gen_test renders
+both. GREEN: one edit in v2/systems/choose.ts.
 
 ## edge-inline-edit
 - kind: feature
@@ -89,3 +92,58 @@ palette.open …), `app snapshot ui` / `app snapshot graph` to observe state,
 selection, or places sizes change the way the command promises? Save every
 suspected bug with `note` (symptom + the exact commands to reproduce). Call
 `done` with a summary when you have walked at least 10 distinct commands.
+
+## reverse-edge
+- kind: feature
+- files: v2/systems/graph.ts
+- title: Reverse the selected edge
+
+There is no way to flip an edge's direction. Add command `graph.edge.reverse`
+(group `edge`, shortcut `Shift+E`, available only when an edge is selected) that
+swaps the selected edge's `From` and `To`, then emits the `graph.edge.updated`
+fact. Use `inspect commands edge` and `graph file v2/systems/graph.ts` to see
+the pattern (graph.edge.delete is the closest sibling — selection-aware
+`available` + `payload`). Red test: create two nodes and an edge via scenario
+steps (`graph.edge.create` event with `{From:'e1',To:'e2'}`), select the edge,
+run the new command, assert `graph.edges[0].From` is `e2`.
+
+## duplicate-node
+- kind: feature
+- files: v2/features.ts, v2/systems/graph.ts
+- title: Duplicate the selected node
+
+Add command `editing.node.duplicate` (group `editing`, shortcut `D`, available
+when a node is selected): creates a new node copying the selected node's Label
+text and Size, positioned slightly offset (e.g. +24,+24), and the new node
+becomes the selection. Reuse the existing `editing.node.create` →
+`graph.node.create` flow (see nodeLifecycle in v2/features.ts) — a duplicate is
+a create with a prefilled draft. Red test: create a node, rename intent not
+needed — duplicate it, assert `graph.nodes` length 2 and both share the same
+`Label.text`, and `selection.count` is 1.
+
+## export-json
+- kind: feature
+- files: v2/core/io.ts, v2/systems/graph.ts
+- title: Export the current graph as JSON
+
+Sharing is impossible: no export at all. Add command `graph.export.json`
+(group `graph`, palette-visible) that serializes the current graph —
+`{ nodes: [{id, Label, Position, Size}], edges: [{id, From, To, Label}] }` —
+and emits a new fact `graph.exported { json }` (declare it via CustomEvents next
+to the handler), plus writes it to `navigator.clipboard` when available (guard
+it — jsdom has no clipboard). Red test: create two nodes via scenario, run the
+command through a test that subscribes to `graph.exported`, parse the payload,
+assert it contains both node ids. Keep it one system: storage stays untouched.
+
+## insert-node-on-edge
+- kind: feature
+- files: v2/systems/graph.ts, v2/features.ts
+- title: Insert a node in the middle of the selected edge
+
+Sequence editing lacks the "split this arrow" verb. Add command
+`editing.edge.split` (group `edge`, available when an edge is selected): given
+selected edge A→B, create a new node N at the midpoint of A and B, delete the
+original edge, create edges A→N and N→B, select N. Fan out through EXISTING
+events (`graph.node.create` / `graph.edge.create` / `graph.edge.delete`) from a
+feature-style listener — no storage changes. Red test: scenario builds A→B,
+run the command, assert `graph.nodes` length 3 and `graph.edges` length 2.

@@ -61,6 +61,50 @@ tool, exact-match `edit` (unique old-text required), everything else read-only.
   `escalateModel` (default qwen3.5:35b) at higher temperature; seeds rotate per
   cycle so overnight runs explore.
 
+## App toolbox (model tools ⇄ human CLI)
+
+Every capability is dual-exposed: a walker tool for the model and
+`node walker/apptool.mjs <cmd>` for humans/Claude. Self-test: `node walker/selftest.mjs`.
+
+| Tool / CLI | What it answers |
+|---|---|
+| `inspect commands [filter]` | every command + shortcut/binding/origin — *where shortcuts are missing* |
+| `inspect events [filter]` | every bus event + which commands fire it, who emits/subscribes |
+| `inspect flows <event>` / `flows` | one event's path: fired-by → handled-by → what handlers emit next |
+| `scenario '<json>'` | boot the real app, run `{steps,asserts}`, get pass/fail + actuals + state — the verification micro-loop |
+| `gen_test` / `gen-test '<json>' [out]` | validated scenario → runnable vitest file (the RED-phase shortcut) |
+| `graph <find\|callers\|callees\|file\|tests> <q>` | code-review-graph index → `file:line` without grep |
+| `locate <anchor> [dir]` | grep + verbatim numbered context, ready for patch/edit |
+
+### GREEN-phase editing (model tools; intent over text surgery)
+
+Exact-text `edit` was the #1 time sink for weak models (read→edit→read loops when
+they couldn't reproduce source verbatim). The constructor tools express intent as
+data and do the placement mechanically — all GREEN-phase, all proven in `selftest`
+to produce code that boots *and* typechecks:
+
+| Tool | What it does |
+|---|---|
+| `set_command {id, props}` | inject plain props (`shortcut`, `input`, `group`, `hidden`, `event`) into an existing command literal — the shortcut/binding tasks |
+| `add_command {system, spec, handler?}` | splice a new command into a system's `register([…])`; auto-declares the command's request event and places `on(event, handler)` — new-verb tasks |
+| `declare_event {system, event, type?}` | add a typed event to a system's `CustomEvents` (creating the `declare module` block if absent) |
+| `patch {path, op, line, count, text}` | line-addressed replace/insert using read's numbers — no old-text matching (CSS and everything else) |
+
+Decision tree the model is given: existing-command prop → `set_command`; new verb →
+`add_command`; new fact → `declare_event`; anything else → `patch` (line numbers
+from `read`/`locate`). `edit`/`write` remain as fallbacks.
+
+scenario/gen-test JSON: `{"steps":[{"command":"editing.node.create"},{"event":"fold.toggle","data":{"id":"shell.zen"}}],`
+`"asserts":[{"path":"ui.shell.zen","op":"eq","value":true},{"css":".node","op":"count","value":2},{"file":"v2/styles.css","matches":"grid-row"}]}`.
+Implementation: `tests/commands/probes/walker-probe.test.ts` (skipped without `PROBE_REQUEST`;
+boots the CURRENT tree — in walker runs that's the model's edited workspace).
+Graph queries hit the repo's `.code-review-graph/graph.db` (may lag edits by a build).
+
+The intended RED loop for the model: `inspect`/`graph` to discover → `scenario`
+with desired-behavior asserts (failing now) → `gen_test` writes the file →
+`run_test` confirms red → `done`. GREEN: edit v2/, `scenario` to iterate cheaply,
+`run_test` to confirm.
+
 ## Eyes: app tools + screenshots + logs
 
 The `app` tool drives the live workspace app through Playwright:

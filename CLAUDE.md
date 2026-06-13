@@ -4,6 +4,8 @@ Two apps live here. **All active development is `v2/`** — read `v2/CLAUDE.md` 
 
 - `v2/` — TypeScript event-driven graph editor (systems/abilities/features plugins). Active.
 - `app.js` + `index.html` + `styles.css` (root) — v1, a single-file prototype. Frozen; don't refactor unless explicitly asked.
+- `walker/` — local-model TDD loop + app-aware tooling (`node walker/apptool.mjs` for
+  commands/events/flows/scenario/graph queries — see `walker/README.md`).
 
 ## Commands
 

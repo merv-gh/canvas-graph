@@ -65,3 +65,11 @@ Debug surfaces (browser console or tests): `window.v2` = AppCtx; `v2.debug.snaps
 (structured user-visible state, each leaf maps to a TS assertion); `v2.dx.run()`
 (contract issues); `v2.sim.record()/replay()`; `v2.flags` + Help modal toggles any
 system/ability/feature live. Local-model / agent harness plan: `HARNESS.md`.
+
+App-aware queries — prefer these over grep for discovery (each boots the real app):
+`node walker/apptool.mjs commands [filter]` (all commands + shortcuts/origins),
+`… events [filter]` / `… flows <event>` (who fires/handles, downstream chain),
+`… scenario '<json>'` ({steps,asserts} against a fresh boot — instant behavior check),
+`… gen-test '<json>' [out]` (scenario → vitest file), `… graph find|callers|file <q>`
+(code index → file:line), `… locate <anchor>` (grep + verbatim numbered context).
+Shapes in `walker/README.md`; `walker/ANALYSIS.md` has the local-model coverage matrix.

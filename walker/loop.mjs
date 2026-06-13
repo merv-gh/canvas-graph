@@ -111,16 +111,21 @@ async function attempt(task, { cycle, n, model, temperature, seed }) {
     // Doom-loop breaker: small models repeat an identical failing action forever.
     const callCounts = new Map();
     let repeatStrikes = 0;
+    let giveUpBounced = false;
     // Two-step payload protocol: small models reliably emit a bare tool head
     // ({"name":"write","arguments":{"path":...}}) and reliably emit pure fenced
     // code — but not both in one reply. When a write/edit arrives without its
     // payload, park it and ask for ONLY the missing piece as fenced block(s).
     let pending = null; // { name, args, asked }
     const missingPayload = (name, args) =>
-      (name === 'write' && args.content == null) || (name === 'edit' && (args.old == null || args.new == null));
+      (name === 'write' && args.content == null)
+      || (name === 'edit' && (args.old == null || args.new == null))
+      || (name === 'patch' && args.text == null);
     const askForPayload = (p) => p.name === 'write'
       ? `Now send ONLY the entire file content for ${p.args.path} as ONE fenced code block (\`\`\` … \`\`\`). No JSON, no prose.`
-      : `Now send TWO fenced code blocks for ${p.args.path}: first the EXACT existing text to replace, second the new text. No JSON, no prose.`;
+      : p.name === 'patch'
+        ? `Now send ONLY the new line(s) for ${p.args.path} as ONE fenced code block. No JSON, no prose.`
+        : `Now send TWO fenced code blocks for ${p.args.path}: first the EXACT existing text to replace, second the new text. No JSON, no prose.`;
 
     const phaseTurnCap = () => MAX_TURNS
       || (isWalk ? CONFIG.budgets.walkTurns : tools.phase === 'red' ? CONFIG.budgets.redTurns : CONFIG.budgets.greenTurns);
@@ -152,6 +157,10 @@ async function attempt(task, { cycle, n, model, temperature, seed }) {
         const p = pending;
         if (p.name === 'write' && (blocks[0] != null || /^\s*import /.test(reply.rawText ?? ''))) {
           p.args.content = blocks[0] ?? reply.rawText;
+          pending = null;
+          reply = { kind: 'tool', name: p.name, args: p.args, rawText: reply.rawText };
+        } else if (p.name === 'patch' && blocks[0] != null) {
+          p.args.text = blocks[0];
           pending = null;
           reply = { kind: 'tool', name: p.name, args: p.args, rawText: reply.rawText };
         } else if (p.name === 'edit' && blocks.length >= 1) {
@@ -210,7 +219,16 @@ async function attempt(task, { cycle, n, model, temperature, seed }) {
       }
 
       if (name === 'note' && args.text) notes.push(String(args.text).slice(0, 400));
-      if (name === 'give_up') { outcome = `gave-up: ${args.reason ?? ''}`.slice(0, 120); break; }
+      if (name === 'give_up') {
+        if (!isWalk && !giveUpBounced && phaseTurns < phaseTurnCap() - 2) {
+          giveUpBounced = true;
+          history.push({ role: 'assistant', content: `give_up: ${args.reason ?? ''}` });
+          history.push({ role: 'user', content: `Rejected — the task is real and you have ${phaseTurnCap() - phaseTurns} turns left. If a command id was "not found", use inspect {"what":"commands","filter":"<keyword>"} to get the REAL ids, then retry. Continue.` });
+          continue;
+        }
+        outcome = `gave-up: ${args.reason ?? ''}`.slice(0, 120);
+        break;
+      }
 
       if (name === 'done') {
         if (isWalk) { outcome = 'walked'; writeFileSync(join(attemptDir, 'observations.md'), [...notes, args.summary ?? ''].join('\n')); break; }
@@ -241,7 +259,31 @@ async function attempt(task, { cycle, n, model, temperature, seed }) {
 
       const result = await tools.dispatch(name, args);
       const cap = name === 'read' ? (CONFIG.budgets.readResultChars ?? 2600) : CONFIG.budgets.toolResultChars;
-      const trimmed = trimResult(result, cap);
+      let trimmed = trimResult(result, cap);
+
+      // Auto-advance on evidence: models reliably run their test but forget
+      // done(). A failing task-test in RED *is* the red gate; a passing one in
+      // GREEN *is* the green gate.
+      const lastRun = name === 'run_test' ? tools.lastRun : null;
+      if (lastRun?.rel === tools.defaultTestPath && lastRun.ran && lastRun.testsRan) {
+        if (tools.phase === 'red' && !lastRun.ok) {
+          tools.phase = 'green'; phaseTurns = 0; extra = '';
+          tools.taskTestPath = lastRun.rel;
+          jlog('RED accepted (auto-advance)');
+          if (browser) await browser.screenshot('red-accepted').catch(() => {});
+          trimmed += `\n\n✅ RED ACCEPTED — your test fails as required. You are now in PHASE GREEN: edit code under v2/ until this test passes (scenario to iterate, run_test to confirm).`;
+        } else if (tools.phase === 'green' && lastRun.ok) {
+          jlog('GREEN accepted (auto-advance), verifying');
+          const verdict = verify(ws, jlog);
+          if (verdict.ok) {
+            outcome = 'fixed';
+            if (browser) await browser.screenshot('fixed').catch(() => {});
+            journal({ at: Date.now(), dir: 'auto', note: 'green verified, fixed' });
+            break;
+          }
+          trimmed += `\n\nYour test passes BUT full verification failed:\n${trimResult(verdict.detail, CONFIG.budgets.toolResultChars)}\nFix without breaking your test.`;
+        }
+      }
       journal({ at: Date.now(), dir: 'tool-result', name, result: trimmed.slice(0, 800) });
       const turnsLeft = phaseTurnCap() - phaseTurns;
       const pressure = turnsLeft === 4 && !isWalk

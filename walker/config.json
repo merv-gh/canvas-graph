@@ -1,7 +1,7 @@
 {
   "ollama": {
     "url": "http://192.168.1.148:11434",
-    "model": "qwen2.5-coder:7b",
+    "model": "qwen2.5-coder:14b",
     "escalateModel": "qwen3.5:35b",
     "temperature": 0.2,
     "escalateTemperature": 0.4,
@@ -18,7 +18,7 @@
     "greenTurns": 24,
     "walkTurns": 16,
     "verifyRounds": 2,
-    "attemptMinutes": 30,
+    "attemptMinutes": 10,
     "parseMisses": 3
   },
   "ports": { "vite": 5180 },
