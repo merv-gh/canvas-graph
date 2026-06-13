@@ -41,3 +41,16 @@ inspect commands). Red scenario asserts:
 {"command":"detail.less","has":"input.key","value":"["} and
 {"command":"detail.more","has":"input.key","value":"]"} — both fail today;
 gen_test renders them. GREEN: edit v2/systems/detail.ts only.
+
+## properties-title
+- kind: bug
+- files: v2/styles.css
+- title: Properties modal title field looks uneditable (invisible input)
+
+Properties Title uses `input.editable-inline`, whose global border is transparent
+at rest; users cannot tell it is editable. This is a CSS affordance bug only.
+Do NOT create/select/open modal commands. RED: no steps; use `gen_test` with a
+file assert on `v2/styles.css` requiring a `.properties input.editable-inline`
+rule with visible dashed `border-bottom`. GREEN: use `add_css_rule` after
+`.properties input`, selector `.properties input.editable-inline`, declaration
+`border-bottom: 1px dashed var(--line-strong)`; then `run_test`.

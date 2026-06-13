@@ -39,19 +39,6 @@ mark the label `<text>` element editable. Red test: select an edge, emit
 'item.title.commit' with the edge ref and new text, assert the edge label
 changed AND the rendered edge exposes a `[data-editable-title]` element.
 
-## properties-title
-- kind: bug
-- files: v2/styles.css
-- title: Properties modal title field looks uneditable (invisible input)
-
-Properties Title uses `input.editable-inline`, whose global border is transparent
-at rest; users cannot tell it is editable. This is a CSS affordance bug only.
-Do NOT create/select/open modal commands. RED: no steps; use `gen_test` with a
-file assert on `v2/styles.css` requiring a `.properties input.editable-inline`
-rule with visible dashed `border-bottom`. GREEN: use `add_css_rule` after
-`.properties input`, selector `.properties input.editable-inline`, declaration
-`border-bottom: 1px dashed var(--line-strong)`; then `run_test`.
-
 ## walk
 - kind: walk
 - title: Explore the app via commands, report anything broken
