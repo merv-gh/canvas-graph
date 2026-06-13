@@ -178,6 +178,44 @@ see pixels). Browser console is captured per attempt. The `walk` task kind uses
 the same tools for open-ended exploration; its `note`s land in
 `journal/run-*/walk-*/observations.md` — feed good ones back into TASKS.md.
 
+### Layout oracle (`app-probe`)
+
+jsdom can't measure real geometry, focus, or computed style — so layout/focus
+bugs (modal focus loss, a glyph that won't flip, a panel that overlaps the stage)
+can't be expressed as a jsdom `scenario` assert. `app-probe` is a Playwright-backed
+oracle that mirrors the `scenario` `{steps, asserts}` shape but adds the kinds jsdom
+can't observe, returning a structured pass/fail + actuals:
+
+```bash
+npm run dev   # serve the app first (or pass --port for another server)
+node walker/apptool.mjs app-probe '{
+  "steps":[{"command":"editing.node.create"},{"command":"item.properties.open"}],
+  "asserts":[
+    {"focus":".modal input"},                                  # real document.activeElement
+    {"rect":".modal","op":"visible"},                          # getBoundingClientRect + display
+    {"rect":".node","op":"count","value":1},
+    {"style":".node-toggle","pseudo":"::before","prop":"content","op":"eq","value":"\"▾\""},
+    {"path":"ui.modal.focusedField","op":"eq","value":"title"} # snapshot, in a real browser
+  ]
+}'
+```
+
+Assert kinds: `focus` (selector the active element must match/`closest`), `rect`
+(`visible`/`hidden`/`count`/`in-viewport`/`width>`/`height>`), `style` (computed
+property, with optional `pseudo` for `::before`/`::after`), and `path` (any
+`debug.snapshot()` dot-path, evaluated in the real browser).
+
+In the loop, a `kind: layout` task is judged by the oracle instead of jsdom. The
+model gets two tools: `app_probe {spec}` (observe the failing focus/layout fact,
+any phase) and `gen_layout_test {title, spec}` (RED-only — writes
+`tests/commands/walker/<id>.layout.json` once the oracle confirms the asserts fail
+now). `run_test` routes that `.layout.json` through the live `Browser` session, so
+RED→GREEN→VERIFY auto-advance exactly as for vitest tasks. When such a task lands,
+`tests/walker-layout.spec.ts` runs every committed `.layout.json` through the same
+`walker/layout-probe.mjs` oracle under `npm run test:browser`, so the fix stays
+guarded in CI. (Proven: a 7B reached RED autonomously — `app_probe` →
+`gen_layout_test` → `run_test` FAIL → RED accepted — on the `modal-focus` task.)
+
 ## Reading the live stream
 
 stdout is a compact per-turn trace you can watch in real time (also in

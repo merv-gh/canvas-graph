@@ -1,11 +1,28 @@
 # walker tasks
 
 Format: `## <id>` then `- key: value` bullets, then free-text prompt (this is what
-the model sees — keep it under ~120 words). Keys: `kind` (bug | feature | walk),
-`files` (≤3 hints), `title`, `command` (new feature command id), `disabled` (skip).
+the model sees — keep it under ~120 words). Keys: `kind` (bug | feature | walk |
+layout), `files` (≤3 hints), `title`, `command` (new feature command id),
+`disabled` (skip). `layout` tasks are judged in a REAL browser by the oracle:
+RED writes a `.layout.json` via gen_layout_test (focus/rect/style/path asserts),
+not a vitest file.
 
 Suggested next local-model queue: `detail-shortcuts`, `properties-title`,
 `reverse-edge`, then `duplicate-node`.
+
+## modal-focus
+- kind: layout
+- files: v2/systems/command-modal.ts, v2/abilities/configurable.ts
+- title: Properties modal opens but keyboard focus stays on the node
+
+Opening item properties leaves focus on the node article instead of the modal's
+first field, so you must click before typing the name. Reproduce with
+{"command":"editing.node.create"} then {"command":"item.properties.open"}: the
+modal is open and visible, but document.activeElement is still the node and
+ui.modal.focusedField is null. Use app_probe to see it, then gen_layout_test with
+desired (red) asserts {"focus":".modal input"} and
+{"path":"ui.modal.focusedField","op":"truthy"} — both fail today. GREEN: when the
+properties modal opens, move focus to its first field (edit v2/ only).
 
 ## detail-shortcuts
 - kind: feature

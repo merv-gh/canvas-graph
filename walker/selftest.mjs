@@ -6,7 +6,8 @@
 
 import assert from 'node:assert';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { genTest, runProbe } from './probe-client.mjs';
@@ -161,6 +162,71 @@ ok('projection: commands and flows expose focused architecture views', () => {
   assert(commandsView.includes("id: 'detail.less'"), commandsView);
   const flowsView = execFileSync(process.execPath, ['walker/projections.mjs', 'show', 'flows', 'graph.edge.create'], { cwd: REPO, encoding: 'utf8' });
   assert(flowsView.includes('handlers: v2/systems/graph.ts'), flowsView);
+});
+
+ok('projection: commands view is a compilable array and round-trips clean', () => {
+  execFileSync(process.execPath, ['walker/projections.mjs', 'generate', 'commands'], { cwd: REPO, encoding: 'utf8' });
+  const view = readFileSync(join(REPO, 'walker/views/commands.proj.ts'), 'utf8');
+  assert(view.includes('export const commands: CommandSpec[] = ['), 'view is not a typed array');
+  assert(view.includes('@ts-nocheck'), 'view should be @ts-nocheck (valid TS, no sea of red)');
+  assert(!view.includes('// BEGIN command'), 'v2 view should carry no per-slice markers');
+  // a no-op sync MUST NOT rewrite source — the watcher saves on every edit.
+  const noop = execFileSync(process.execPath, ['walker/projections.mjs', 'sync', 'commands'], { cwd: REPO, encoding: 'utf8' });
+  assert(/synced 0 command slice/.test(noop), `no-op sync mutated source: ${noop}`);
+});
+
+ok('projection: editing a field syncs back to the owning source file by id', () => {
+  // isolated scratch repo so we never touch the real v2/ tree.
+  const scratch = mkdtempSync(join(tmpdir(), 'walker-proj-'));
+  const env = { ...process.env, WALKER_PROJECTION_ROOT: scratch };
+  const proj = join(REPO, 'walker/projections.mjs');
+  try {
+    mkdirSync(join(scratch, 'v2/systems'), { recursive: true });
+    writeFileSync(join(scratch, 'v2/systems/x.ts'),
+      'export function r(s) {\n  s.commands.register([\n    { id: \'x.go\', label: \'Go\', group: \'x\' },\n  ]);\n}\n');
+    execFileSync(process.execPath, [proj, 'generate', 'commands'], { cwd: scratch, env, encoding: 'utf8' });
+    const viewFile = join(scratch, 'walker/views/commands.proj.ts');
+    const view = readFileSync(viewFile, 'utf8');
+    assert(view.includes("id: 'x.go'"), 'scratch view missing x.go');
+    writeFileSync(viewFile, view.replace("group: 'x' }", "group: 'x', shortcut: 'G' }"));
+    const out = execFileSync(process.execPath, [proj, 'sync', 'commands'], { cwd: scratch, env, encoding: 'utf8' });
+    assert(/synced 1 command slice/.test(out), `expected 1 synced slice: ${out}`);
+    const src = readFileSync(join(scratch, 'v2/systems/x.ts'), 'utf8');
+    assert(src.includes("shortcut: 'G'"), `edit did not reach source:\n${src}`);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+ok('projection: events view is a compilable interface and round-trips clean', () => {
+  execFileSync(process.execPath, ['walker/projections.mjs', 'generate', 'events'], { cwd: REPO, encoding: 'utf8' });
+  const view = readFileSync(join(REPO, 'walker/views/events.proj.ts'), 'utf8');
+  assert(view.includes('interface CustomEvents {'), 'events view should be an interface block');
+  assert(!view.includes('// BEGIN event'), 'events v2 view should carry no markers');
+  const noop = execFileSync(process.execPath, ['walker/projections.mjs', 'sync', 'events'], { cwd: REPO, encoding: 'utf8' });
+  assert(/synced 0 event declaration/.test(noop), `no-op events sync mutated source: ${noop}`);
+});
+
+ok('projection: editing an event type syncs back to source by name', () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'walker-proj-ev-'));
+  const env = { ...process.env, WALKER_PROJECTION_ROOT: scratch };
+  const proj = join(REPO, 'walker/projections.mjs');
+  try {
+    mkdirSync(join(scratch, 'v2'), { recursive: true });
+    writeFileSync(join(scratch, 'v2/types.ts'),
+      "declare module './x' {\n  interface CustomEvents {\n    'demo.ping': { n: number };\n  }\n}\n");
+    execFileSync(process.execPath, [proj, 'generate', 'events'], { cwd: scratch, env, encoding: 'utf8' });
+    const viewFile = join(scratch, 'walker/views/events.proj.ts');
+    const view = readFileSync(viewFile, 'utf8');
+    assert(view.includes("'demo.ping'"), 'scratch events view missing demo.ping');
+    writeFileSync(viewFile, view.replace("'demo.ping': { n: number };", "'demo.ping': { n: number; tag: string };"));
+    const out = execFileSync(process.execPath, [proj, 'sync', 'events'], { cwd: scratch, env, encoding: 'utf8' });
+    assert(/synced 1 event declaration/.test(out), `expected 1 synced decl: ${out}`);
+    const src = readFileSync(join(scratch, 'v2/types.ts'), 'utf8');
+    assert(src.includes('tag: string'), `edit did not reach source:\n${src}`);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
 });
 
 // --- parser shapes (regression for the live failures we saw) ---

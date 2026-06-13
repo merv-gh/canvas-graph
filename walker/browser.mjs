@@ -5,6 +5,7 @@
 import { chromium } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { runLayoutProbe } from './layout-probe.mjs';
 
 export class Browser {
   constructor(port, shotDir, log = () => {}) {
@@ -84,6 +85,23 @@ export class Browser {
     });
     this.log(`[browser] screenshot ${file}`);
     return { file, summary };
+  }
+
+  /**
+   * Layout oracle: run {steps, asserts} against the REAL browser and return a
+   * structured verdict. Mirrors the jsdom `scenario` shape so the model uses one
+   * mental model, but adds the assert kinds jsdom can't observe — real focus,
+   * geometry/visibility, and computed style (incl. ::before, how glyph icons render).
+   *
+   *   steps:   [{command:'item.properties.open'}, {event:'fold.toggle', data:{id:'shell.zen'}}]
+   *   asserts: [{focus:'.properties input'},                       // document.activeElement
+   *             {rect:'.modal', op:'visible'},                     // getBoundingClientRect + display
+   *             {rect:'.node', op:'count', value:2},
+   *             {style:'.collapse-toggle', pseudo:'::before', prop:'content', op:'eq', value:'"▾"'},
+   *             {path:'ui.modal.focusedField', op:'eq', value:'title'}]  // real-browser snapshot
+   */
+  async probe(spec = {}) {
+    return runLayoutProbe(this.page, spec);
   }
 
   consoleLogs() { return this.consoleTail.join('\n'); }

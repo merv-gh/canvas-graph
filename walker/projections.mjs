@@ -216,21 +216,34 @@ function commandSourceFiles() {
   return [...new Set(collectCommands().map(command => command.file))];
 }
 
+// Render the command slices as one valid `CommandSpec[]` literal. The bodies close
+// over system-local helpers (refFromSource, graphs, selected, …) that don't resolve
+// in isolation, so the view is @ts-nocheck: valid, readable TS (no sea of red that
+// makes weak models flail) rather than a sequence of bare object literals. The real
+// type/behaviour oracle is the loop's VERIFY step (vitest + tsc on actual source).
 function renderCommands(commands) {
-  const blocks = commands.map(command => [
-    `// BEGIN command ${encodeURIComponent(command.id)} ${command.rel}:${command.line}`,
-    command.text.trimEnd(),
-    `// END command ${encodeURIComponent(command.id)}`,
-    '',
-  ].join('\n'));
+  // Bodies are emitted verbatim (source indentation preserved) so a no-op sync is a
+  // true no-op — the watcher must not rewrite source on every save. Only the trailing
+  // comma is normalized; the `// ── file ──` headers are skipped by the parser.
+  // Two spaces prefix the opening brace only; inner lines keep their source
+  // indentation untouched. The parser slices from `{`, so the prefix sits outside
+  // the captured body and a no-op sync stays a true no-op.
+  let lastRel = null;
+  const elements = commands.map(command => {
+    const body = `${command.text.trimEnd().replace(/,\s*$/, '')},`;
+    const header = command.rel !== lastRel ? `  // ── ${command.rel} ──\n` : '';
+    lastRel = command.rel;
+    return `${header}  ${body}`;
+  });
   return [
-    '// @walker-projection commands v1',
-    '// Editable view over command specs. Source files still own these slices.',
-    '// Generate: node walker/projections.mjs generate commands',
-    '// Sync edits back: node walker/projections.mjs sync commands',
-    '// Watch both ways: node walker/projections.mjs watch commands',
+    '// @ts-nocheck — @walker-projection commands v2. Source files still own these slices.',
+    '// Edit a field below, then: node walker/projections.mjs sync commands  (routes by id).',
+    "import type { CommandSpec } from '../../v2/types';",
     '',
-    ...blocks,
+    'export const commands: CommandSpec[] = [',
+    ...elements,
+    '];',
+    '',
   ].join('\n');
 }
 
@@ -257,29 +270,30 @@ function writeProjection(def, text, quiet) {
   if (!quiet) console.log(`generated ${rel(def.outFile)} (${def.count()} slice(s))`);
 }
 
-function parseCommandBlocks(text) {
+// Walk `export const commands … = [ … ]` and brace-match each top-level { … }
+// element. Comments and the `// ── file ──` headers between elements are skipped
+// (we only scan for object braces). Routing is by the body's own `id:` field.
+function parseCommandArray(text) {
+  const decl = text.search(/export\s+const\s+commands\b/);
+  if (decl < 0) throw new Error('commands projection: no `export const commands` declaration found');
+  const eq = text.indexOf('=', decl); // skip the CommandSpec[] type annotation's brackets
+  const open = eq < 0 ? -1 : text.indexOf('[', eq);
+  if (open < 0) throw new Error('commands projection: no `= [` array literal found');
+  const close = findMatching(text, open, '[', ']');
+  if (close < 0) throw new Error('commands projection: unterminated commands array');
   const blocks = [];
-  const beginRe = /^\/\/ BEGIN command ([^\s]+) (.+):(\d+)$/gm;
-  for (let begin; (begin = beginRe.exec(text));) {
-    const key = begin[1];
-    const id = decodeURIComponent(key);
-    const file = begin[2];
-    const contentStart = beginRe.lastIndex;
-    const endRe = new RegExp(`^// END command ${escapeRe(key)}\\s*$`, 'gm');
-    endRe.lastIndex = contentStart;
-    const end = endRe.exec(text);
-    if (!end) throw new Error(`projection block for ${id} has no END marker`);
-    let body = text.slice(contentStart, end.index);
-    if (body.startsWith('\n')) body = body.slice(1);
-    if (body.endsWith('\n')) body = body.slice(0, -1);
-    blocks.push({ id, file: sourcePathFromMarker(file), body });
-    beginRe.lastIndex = end.index + end[0].length;
+  let i = open + 1;
+  while (i < close) {
+    if (text[i] !== '{') { i++; continue; }
+    const endBrace = findMatching(text, i, '{', '}');
+    if (endBrace < 0 || endBrace > close) throw new Error('commands projection: unterminated object literal');
+    const body = text.slice(i, endBrace + 1);
+    const id = body.match(/\bid\s*:\s*(['"`])([^'"`]+)\1/)?.[2];
+    if (!id) throw new Error(`commands projection: array element has no id:\n${body.slice(0, 80)}`);
+    blocks.push({ id, body });
+    i = endBrace + 1;
   }
   return blocks;
-}
-
-function findCommand(source, id) {
-  return extractCommandsFromSource(source, join(REPO, '<memory>')).find(command => command.id === id) ?? null;
 }
 
 function assertBlockStillTargetsId(block) {
@@ -291,34 +305,42 @@ function assertBlockStillTargetsId(block) {
 
 function syncCommands({ quiet = false } = {}) {
   if (!existsSync(COMMANDS_VIEW)) throw new Error(`${rel(COMMANDS_VIEW)} does not exist; run generate first`);
-  const blocks = parseCommandBlocks(readFileSync(COMMANDS_VIEW, 'utf8'));
+  const blocks = parseCommandArray(readFileSync(COMMANDS_VIEW, 'utf8'));
   const seen = new Set();
   for (const block of blocks) {
-    if (seen.has(block.id)) throw new Error(`duplicate projection block for ${block.id}`);
+    if (seen.has(block.id)) throw new Error(`duplicate projection element for ${block.id}`);
     seen.add(block.id);
     assertBlockStillTargetsId(block);
   }
 
+  // ids are globally unique, so route each element to its owning source file by id.
+  const index = new Map();
+  for (const command of collectCommands()) index.set(command.id, command);
+  const projectionIds = new Set(blocks.map(block => block.id));
+
   const byFile = new Map();
   for (const block of blocks) {
-    if (!byFile.has(block.file)) byFile.set(block.file, []);
-    byFile.get(block.file).push(block);
+    const found = index.get(block.id);
+    if (!found) {
+      // Likely a rename: the id was edited, so its old slice is now un-projected.
+      const orphans = [...index.keys()].filter(id => !projectionIds.has(id));
+      const hint = orphans.length
+        ? ` Source still has un-projected command(s): ${orphans.slice(0, 5).join(', ')}${orphans.length > 5 ? ', …' : ''}. If you renamed an id, sync won't auto-rename (other references — events, tests, paletteCommand — would dangle); do renames with refactor_tool, then regenerate.`
+        : '';
+      throw new Error(`command '${block.id}' is not in any source file. Add new commands with the add_command tool (it splices into the right register([…]) and declares the event); the projection only edits existing slices.${hint}`);
+    }
+    let next = block.body.trimEnd();
+    if (found.text.trimEnd().endsWith(',') && !next.endsWith(',')) next += ',';
+    if (!byFile.has(found.file)) byFile.set(found.file, []);
+    byFile.get(found.file).push({ ...found, next });
   }
 
   let changedFiles = 0;
   let changedBlocks = 0;
-  for (const [file, fileBlocks] of byFile) {
-    let source = readFileSync(file, 'utf8');
-    const replacements = fileBlocks.map(block => {
-      const found = findCommand(source, block.id);
-      if (!found) throw new Error(`could not find source command ${block.id} in ${rel(file)}`);
-      let next = block.body.trimEnd();
-      if (found.text.trimEnd().endsWith(',') && !next.endsWith(',')) next += ',';
-      return { ...found, next };
-    }).sort((a, b) => b.start - a.start);
-
+  for (const [file, replacements] of byFile) {
+    const source = readFileSync(file, 'utf8');
     let nextSource = source;
-    for (const replacement of replacements) {
+    for (const replacement of [...replacements].sort((a, b) => b.start - a.start)) {
       if (nextSource.slice(replacement.start, replacement.end) !== replacement.next) changedBlocks++;
       nextSource = `${nextSource.slice(0, replacement.start)}${replacement.next}${nextSource.slice(replacement.end)}`;
     }
@@ -386,17 +408,31 @@ function eventSourceFiles() {
   return [...new Set(collectEventDecls().map(decl => decl.file))];
 }
 
+// Render the event declarations as compilable `interface` blocks (one per
+// CustomEvents/BuiltinEvents), grouped by source file. Decl lines are emitted
+// verbatim (source indentation preserved) so a no-op sync stays a true no-op;
+// routing is by event name (globally unique), so no markers are needed.
+// @ts-nocheck because the type bodies reference app types (ItemRef, …) that don't
+// resolve in isolation.
 function renderEvents(decls) {
-  const blocks = decls.map(decl => [
-    `// BEGIN event ${encodeURIComponent(decl.id)} ${decl.rel}:${decl.line} ${decl.iface}`,
-    decl.text.trimEnd(),
-    `// END event ${encodeURIComponent(decl.id)}`,
-    '',
-  ].join('\n'));
+  const byIface = new Map();
+  for (const decl of decls) {
+    if (!byIface.has(decl.iface)) byIface.set(decl.iface, []);
+    byIface.get(decl.iface).push(decl);
+  }
+  const blocks = [];
+  for (const [iface, ifaceDecls] of byIface) {
+    blocks.push(`interface ${iface} {`);
+    let lastRel = null;
+    for (const decl of ifaceDecls) {
+      if (decl.rel !== lastRel) { blocks.push(`  // ── ${decl.rel} ──`); lastRel = decl.rel; }
+      blocks.push(decl.text.trimEnd());
+    }
+    blocks.push('}', '');
+  }
   return [
-    '// @walker-projection events v1',
-    '// Editable view over event declaration lines. Handlers and emitters stay in source.',
-    '// Sync edits back: node walker/projections.mjs sync events',
+    "// @ts-nocheck — @walker-projection events v2. Source declares these in `declare module '../types'`.",
+    '// Edit a type below, then: node walker/projections.mjs sync events  (routes by event name).',
     '',
     ...blocks,
   ].join('\n');
@@ -428,26 +464,54 @@ function parseMarkedBlocks(text, kind) {
   return blocks;
 }
 
+// Walk each `interface X { … }` block and pull out `'name': type;` decl lines.
+// Routing is by event name; the decl line text is captured verbatim.
+function parseEventInterfaces(text) {
+  const decls = [];
+  const ifaceRe = /\binterface\s+\w+\s*\{/g;
+  for (let m; (m = ifaceRe.exec(text));) {
+    const open = text.indexOf('{', m.index);
+    const close = findMatching(text, open, '{', '}');
+    if (close < 0) continue;
+    const body = text.slice(open + 1, close);
+    const lineRe = /^[^\S\n]*(['"])([^'"]+)\1\s*:\s*[^;]+;[^\n]*$/gm;
+    for (let d; (d = lineRe.exec(body));) decls.push({ id: d[2], body: d[0] });
+    ifaceRe.lastIndex = close + 1;
+  }
+  return decls;
+}
+
 function syncEvents({ quiet = false } = {}) {
   if (!existsSync(EVENTS_VIEW)) throw new Error(`${rel(EVENTS_VIEW)} does not exist; run generate first`);
-  const blocks = parseMarkedBlocks(readFileSync(EVENTS_VIEW, 'utf8'), 'event');
+  const blocks = parseEventInterfaces(readFileSync(EVENTS_VIEW, 'utf8'));
+  const seen = new Set();
+  for (const block of blocks) {
+    if (seen.has(block.id)) throw new Error(`duplicate event declaration for ${block.id}`);
+    seen.add(block.id);
+  }
+  // event names are globally unique, so route each decl to its source by name.
+  const index = new Map();
+  for (const decl of collectEventDecls()) index.set(decl.id, decl);
+  const projectionIds = new Set(blocks.map(block => block.id));
+
   const byFile = new Map();
   for (const block of blocks) {
-    if (!byFile.has(block.file)) byFile.set(block.file, []);
-    byFile.get(block.file).push(block);
+    const found = index.get(block.id);
+    if (!found) {
+      const orphans = [...index.keys()].filter(id => !projectionIds.has(id));
+      const hint = orphans.length ? ` Un-projected source event(s): ${orphans.slice(0, 5).join(', ')}${orphans.length > 5 ? ', …' : ''}. Renaming an event isn't auto-synced (handlers/emitters would dangle) — use refactor_tool, then regenerate.` : '';
+      throw new Error(`event '${block.id}' is not declared in any source file. Declare new events where the owning system augments CustomEvents, not in the projection.${hint}`);
+    }
+    if (!byFile.has(found.file)) byFile.set(found.file, []);
+    byFile.get(found.file).push({ ...found, next: block.body.trimEnd() });
   }
+
   let changedFiles = 0;
   let changedBlocks = 0;
-  for (const [file, fileBlocks] of byFile) {
-    let source = readFileSync(file, 'utf8');
-    const decls = collectEventDecls().filter(decl => decl.file === file);
-    const replacements = fileBlocks.map(block => {
-      const found = decls.find(decl => decl.id === block.id);
-      if (!found) throw new Error(`could not find source event ${block.id} in ${rel(file)}`);
-      return { ...found, next: block.body.trimEnd() };
-    }).sort((a, b) => b.start - a.start);
+  for (const [file, replacements] of byFile) {
+    const source = readFileSync(file, 'utf8');
     let nextSource = source;
-    for (const replacement of replacements) {
+    for (const replacement of [...replacements].sort((a, b) => b.start - a.start)) {
       if (nextSource.slice(replacement.start, replacement.end) !== replacement.next) changedBlocks++;
       nextSource = `${nextSource.slice(0, replacement.start)}${replacement.next}${nextSource.slice(replacement.end)}`;
     }
@@ -637,8 +701,12 @@ function filterProjectionText(text, filter) {
   const needle = String(filter ?? '').trim().toLowerCase();
   if (!needle) return text;
   const chunks = text.includes('\n// BEGIN ')
-    ? text.split(/\n(?=\/\/ BEGIN )/)
-    : text.split(/\n(?=## )/);
+    ? text.split(/\n(?=\/\/ BEGIN )/)              // marker view (command-ui)
+    : /\nexport const \w+/.test(text)
+      ? text.split(/\n(?=  (?:\/\/|\{))/)          // compilable array view (commands): chunk per element / file header
+      : /\ninterface \w+\s*\{/.test(text)
+        ? text.split(/\n(?=\s*(?:\/\/ ──|['"]))/)  // compilable interface view (events): chunk per decl / file header
+        : text.split(/\n(?=## )/);                 // markdown view (flows)
   const header = chunks.shift() ?? '';
   const hits = chunks.filter(chunk => chunk.toLowerCase().includes(needle));
   if (hits.length) return [header.trimEnd(), ...hits.map(hit => hit.trimEnd())].join('\n\n') + '\n';

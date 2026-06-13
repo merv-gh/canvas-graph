@@ -19,10 +19,12 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { tmpdir } from 'node:os';
 import { genTest, runProbe } from './probe-client.mjs';
 import { graphQuery } from './graphdb.mjs';
 import { genPlugin } from './gen.mjs';
 import { Tools } from './tools.mjs';
+import { Browser } from './browser.mjs';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const [cmd, ...rest] = process.argv.slice(2);
@@ -56,6 +58,20 @@ switch (cmd) {
     else console.log(source);
     break;
   }
+  case 'app-probe': {
+    // Layout/focus/style oracle against a RUNNING dev server (npm run dev → :5174).
+    // node walker/apptool.mjs app-probe '<json>' [--port 5174]
+    const portArg = rest.indexOf('--port');
+    const port = portArg >= 0 ? Number(rest[portArg + 1]) : 5174;
+    const spec = parseSpec(rest.find(a => a.trim().startsWith('{')) ?? '{}');
+    const browser = new Browser(port, join(tmpdir(), 'walker-app-probe'), () => {});
+    await browser.open()
+      .then(() => browser.probe({ steps: spec.steps ?? [], asserts: spec.asserts ?? [] }))
+      .then(print)
+      .catch(err => { console.error(`app-probe failed (is the dev server on :${port}?): ${err.message}`); process.exitCode = 1; })
+      .finally(() => browser.close());
+    break;
+  }
   case 'graph':
     print(graphQuery(REPO, rest[0], rest[1] ?? ''));
     break;
@@ -80,7 +96,8 @@ switch (cmd) {
     break;
   }
   default:
-    console.log('usage: apptool <events|commands|flows|scenario|gen-test|graph|locate|gen> …  (see file header)');
+    console.log('usage: apptool <events|commands|flows|scenario|gen-test|graph|locate|gen|app-probe> …  (see file header)');
     console.log('       apptool gen <system|feature|ability> <name>   # scaffold a new plugin');
+    console.log("       apptool app-probe '<json>' [--port 5174]      # layout/focus/style oracle (needs npm run dev)");
     process.exit(cmd ? 2 : 0);
 }

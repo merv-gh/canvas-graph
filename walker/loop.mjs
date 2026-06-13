@@ -108,8 +108,13 @@ async function attempt(task, { cycle, n, model, temperature, seed }) {
     }
 
     const tools = new Tools({ ws, browser, log: jlog });
-    tools.defaultTestPath = `tests/commands/walker/${task.id}.test.ts`;
+    // Layout/focus tasks judge a real browser via the oracle (.layout.json spec);
+    // everything else uses a jsdom vitest file.
+    tools.defaultTestPath = task.kind === 'layout'
+      ? `tests/commands/walker/${task.id}.layout.json`
+      : `tests/commands/walker/${task.id}.test.ts`;
     tools.task = task;
+    if (task.kind === 'layout' && !browser) { jlog('layout task needs the app stack, which failed to start — skipping'); outcome = 'fail: no browser'; }
     const system = buildSystemPrompt();
     const notes = [];
     const history = [];
@@ -323,6 +328,24 @@ async function attempt(task, { cycle, n, model, temperature, seed }) {
 
 /** Gate for done() in red/green. Returns {advance: 'green'|'verify'|null, detail}. */
 function phaseGate(tools, ws, task, jlog) {
+  // Layout/focus tasks are judged by the async browser oracle via run_test, which
+  // pins tools.lastRun. done() trusts that just-computed result (re-running the
+  // oracle synchronously here isn't possible); the model always run_tests first.
+  if (task.kind === 'layout') {
+    const specPath = `tests/commands/walker/${task.id}.layout.json`;
+    if (!existsSync(join(ws.dir, specPath))) return { advance: null, detail: `No layout spec at ${specPath} yet — write one with gen_layout_test.` };
+    const lr = tools.lastRun;
+    const stale = !lr || lr.rel !== specPath || !lr.ran;
+    if (tools.phase === 'red') {
+      if (stale) return { advance: null, detail: `Run run_test on ${specPath} so the oracle can judge it before done.` };
+      if (lr.ok) return { advance: null, detail: `Your layout asserts PASS on current code — not red. They must FAIL to prove the bug.` };
+      tools.taskTestPath = specPath; jlog('RED accepted (layout oracle)');
+      return { advance: 'green', detail: 'oracle: asserts fail as required' };
+    }
+    if (stale || !lr.ok) return { advance: null, detail: `Run run_test on ${specPath}; the oracle must PASS before done.` };
+    jlog('GREEN accepted (layout oracle), verifying');
+    return { advance: 'verify', detail: '' };
+  }
   const testPath = `tests/commands/walker/${task.id}.test.ts`;
   if (tools.phase === 'red') {
     if (!existsSync(join(ws.dir, testPath))) return { advance: null, detail: `No test at ${testPath} yet — write it first.` };

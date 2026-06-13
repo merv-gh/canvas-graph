@@ -547,7 +547,7 @@ export class Tools {
     return `wrote ${rel} (${content.split('\n').length} lines)`;
   }
 
-  tool_run_test({ path }) {
+  async tool_run_test({ path }) {
     // No path = "my task test". The full suite is the harness's job (VERIFY);
     // letting the model run it in RED only misleads it — a green suite says
     // nothing about an untested bug.
@@ -555,11 +555,59 @@ export class Tools {
     if (!target) return 'no test path: write your test first, then run_test it';
     const { rel } = this.safePath(target);
     if (!existsSync(join(this.ws.dir, rel))) return `no test at ${rel} — write it first`;
+    // Layout/focus specs run through the live browser oracle, not vitest.
+    if (rel.endsWith('.layout.json')) return this.runLayoutSpec(rel);
     const res = this.ws.vitest(rel);
     // The loop reads this to auto-advance phases on evidence (models forget done()).
     this.lastRun = { rel, ok: res.ok, ran: res.ran, testsRan: res.testsRan };
     if (!res.ran || !res.testsRan) return `CRASH (no test executed — fix syntax/imports)\n${res.output}`;
     return `${res.ok ? 'PASS' : 'FAIL'}\n${res.output}`;
+  }
+
+  /** Run a {steps,asserts} layout spec via the browser oracle; set lastRun like vitest. */
+  async runLayoutSpec(rel) {
+    if (!this.browser) { this.lastRun = { rel, ok: false, ran: false, testsRan: false }; return 'layout oracle unavailable (no browser session)'; }
+    let spec;
+    try { spec = JSON.parse(readFileSync(join(this.ws.dir, rel), 'utf8')); }
+    catch (err) { this.lastRun = { rel, ok: false, ran: false, testsRan: false }; return `layout spec is not valid JSON: ${err.message}`; }
+    await this.browser.fresh();
+    const { pass, results } = await this.browser.probe(spec);
+    this.lastRun = { rel, ok: pass, ran: true, testsRan: true };
+    const lines = results.map(r => `${r.ok ? 'PASS' : 'FAIL'}: ${r.label}${r.ok ? '' : ` — actual: ${JSON.stringify(r.actual)}`}`);
+    return `${pass ? 'PASS' : 'FAIL'} (layout oracle)\n${lines.join('\n')}`;
+  }
+
+  /** Observe layout/focus/style facts live in the real browser — read-only, any phase. */
+  async tool_app_probe({ spec }) {
+    if (!this.browser) return 'app_probe: layout oracle unavailable (no browser session)';
+    const parsed = this.parseSpec(spec);
+    if (!parsed) return 'app_probe: send {steps:[…], asserts:[…]} — asserts use focus / rect / style / path';
+    await this.browser.fresh();
+    const { pass, results } = await this.browser.probe(parsed);
+    return [
+      pass ? 'OK — all asserts pass' : 'NOT OK',
+      ...results.map(r => `${r.ok ? 'PASS' : 'FAIL'}: ${r.label}${r.ok ? '' : ` — actual: ${JSON.stringify(r.actual)}`}`),
+    ].join('\n');
+  }
+
+  /** RED-phase: write the failing layout spec after the oracle confirms it fails now. */
+  async tool_gen_layout_test({ title, spec }) {
+    if (this.phase !== 'red') return 'gen_layout_test is RED-phase only. GREEN edits v2/ and re-runs run_test.';
+    if (!this.browser) return 'gen_layout_test: layout oracle unavailable (no browser session)';
+    const parsed = this.parseSpec(spec);
+    if (!parsed || !Array.isArray(parsed.asserts) || !parsed.asserts.length) {
+      return 'gen_layout_test: send {steps:[…], asserts:[…]} with focus/rect/style/path asserts stating the DESIRED behavior.';
+    }
+    await this.browser.fresh();
+    const { pass, results } = await this.browser.probe(parsed);
+    const lines = results.map(r => `${r.ok ? 'PASS' : 'FAIL'}: ${r.label}${r.ok ? '' : ` — actual: ${JSON.stringify(r.actual)}`}`);
+    if (pass) return `These asserts already PASS on current code — not a red test. Choose asserts for the currently-broken behavior.\n${lines.join('\n')}`;
+    const rel = `tests/commands/walker/${this.task.id}.layout.json`;
+    if (!this.writeAllowed(rel)) return this.phaseDenied(rel);
+    const { abs } = this.safePath(rel);
+    mkdirSync(dirname(abs), { recursive: true });
+    writeFileSync(abs, `${JSON.stringify({ title: title ?? this.task.id, steps: parsed.steps ?? [], asserts: parsed.asserts }, null, 2)}\n`);
+    return `wrote ${rel} — layout oracle is RED (${results.filter(r => !r.ok).length}/${results.length} asserts fail):\n${lines.join('\n')}\nNow run_test it to advance to GREEN, then edit v2/.`;
   }
 
   async tool_app({ action, arg = '' }) {

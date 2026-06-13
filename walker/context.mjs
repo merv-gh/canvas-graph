@@ -40,9 +40,13 @@ export function buildTaskCard(task, phase, extra = '') {
     `TASK ${task.id} [phase: ${phase}] — ${task.title}`,
     task.prompt.trim(),
     task.files ? `Likely files: ${task.files}` : '',
-    phase === 'red'
-      ? `Write the failing test at tests/commands/walker/${task.id}.test.ts then run_test it. import from '../v2-testkit'.`
-      : `Make tests/commands/walker/${task.id}.test.ts pass by editing v2/ only.`,
+    task.kind === 'layout'
+      ? (phase === 'red'
+        ? `LAYOUT task — jsdom can't see this; use the browser oracle. RED: app_probe {steps,asserts} to find the broken focus/layout/style fact (asserts: focus / rect / style / path), then gen_layout_test {title,spec} with asserts stating the DESIRED behavior — it writes tests/commands/walker/${task.id}.layout.json once it confirms they fail. run_test to advance.`
+        : `Make the layout oracle pass by editing v2/ only: run_test re-runs tests/commands/walker/${task.id}.layout.json in a REAL browser; app_probe to iterate cheaply.`)
+      : phase === 'red'
+        ? `Write the failing test at tests/commands/walker/${task.id}.test.ts then run_test it. import from '../v2-testkit'.`
+        : `Make tests/commands/walker/${task.id}.test.ts pass by editing v2/ only.`,
     extra,
   ].filter(Boolean);
   return lines.join('\n');
