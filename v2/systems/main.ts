@@ -20,7 +20,9 @@ export function registerMain(system: Registry) {
       shell.dataset.leftFolded = contexts.fold.folded(LEFT_PANEL_FOLD_ID) ? 'true' : 'false';
       shell.dataset.zen = contexts.fold.folded(ZEN_FOLD_ID) ? 'true' : 'false';
     };
-    contexts.commands.register([{
+    contexts.commands.register([
+      { id: 'view.left.toggle', label: 'Toggle outline.panel', group: 'view', event: 'fold.toggle', shortcut: 'B', input: { on: 'keydown', key: 'b', prevent: true }, payload: () => ({ id: 'outline.panel' }) },
+      {
       id: 'view.zen',
       label: 'Toggle zen mode',
       event: 'fold.toggle',

@@ -73,3 +73,22 @@ must use EVENTS for setup, not invented commands:
 `{"event":"selection.item.select","data":{"kind":"edge","id":"r1"}}`, then run
 NEW command `graph.edge.reverse`, assert `graph.edges[0].From == 'e2'`. GREEN:
 use `add_edge_reverse {}`; it adds the command, handler, and EdgePatch typing.
+
+## left-panel-shortcut
+- kind: feature
+- files: v2/systems/main.ts
+- title: Left panel (outline) has no keyboard shortcut to collapse
+- command: view.left.toggle
+- demo: A;A;wait;b
+
+The left panel can only be collapsed by clicking the ☰ hamburger — no keyboard
+shortcut, breaking the keyboard-first rule (Principle 17). The fold machinery is
+already there: the panel toggles via fold id `outline.panel` (LEFT_PANEL_FOLD_ID
+in v2/systems/main.ts), the shell mirrors it as `ui.shell.leftFolded`, and the
+hamburger is the existing mouse affordance. Add command `view.left.toggle`
+(group `view`, shortcut `B`) so the keyboard can do it too. GREEN: use
+add_fold_toggle {"system":"v2/systems/main.ts","id":"view.left.toggle",
+"foldId":"outline.panel","key":"b","shortcut":"B"} — the fold.toggle event and
+payload are wired for you; no `surface` (the hamburger covers the mouse). RED:
+assert the SPEC, not a side effect — {"command":"view.left.toggle",
+"has":"input.key","value":"b"} fails today, passes once bound.

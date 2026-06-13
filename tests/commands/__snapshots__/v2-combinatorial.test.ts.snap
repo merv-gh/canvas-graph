@@ -272,6 +272,23 @@ exports[`combinatorial action graph > length-1: every auto-runnable command boot
 }
 `;
 
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [view.left.toggle] 1`] = `
+{
+  "sequence": [
+    "view.left.toggle",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": null,
+    "nodes": 0,
+    "scale": 1,
+    "selected": null,
+  },
+}
+`;
+
 exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [view.zen] 1`] = `
 {
   "sequence": [
