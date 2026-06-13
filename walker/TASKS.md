@@ -2,28 +2,10 @@
 
 Format: `## <id>` then `- key: value` bullets, then free-text prompt (this is what
 the model sees — keep it under ~120 words). Keys: `kind` (bug | feature | walk),
-`setup` (script in walker/setup/ that re-introduces the bug into the workspace),
-`files` (≤3 hints), `title`, `disabled` (skip).
+`files` (≤3 hints), `title`, `command` (new feature command id), `disabled` (skip).
 
 Suggested next local-model queue: `detail-shortcuts`, `properties-title`,
-`reverse-edge`, then `duplicate-node`. `choose-invert-shortcut` is landed in the
-real repo and kept here as a benchmark via its setup script.
-
-## zen-canvas
-- kind: bug
-- setup: zen-canvas
-- files: v2/styles.css, v2/systems/main.ts
-- title: Zen mode makes the canvas disappear
-
-Toggling zen mode (command `view.zen`, key `\`) hides the canvas completely —
-the user sees a blank page. Zen sets `.shell[data-zen="true"] { grid-template: 0 1fr / 0 1fr }`
-and hides `.top` + `.left`. The `.stage` grid item then lands in a collapsed track.
-Triage notes: the shell grid rules are near line 47 of v2/styles.css; the `.stage`
-layout block is near line 178. Reproduce via the app (`app command view.zen`,
-`app screenshot`) or by reading those lines. Encode the symptom as a red test
-(CSS rule assertion plus a `fold.toggle {id:'shell.zen'}` replay, like
-tests/commands/recorded/canvas-disappears-on-fold.test.ts), then fix the CSS so
-the stage survives zen and the toggle round-trips.
+`reverse-edge`, then `duplicate-node`.
 
 ## detail-shortcuts
 - kind: feature
@@ -40,23 +22,6 @@ inspect commands). Red scenario asserts:
 {"command":"detail.less","has":"input.key","value":"["} and
 {"command":"detail.more","has":"input.key","value":"]"} — both fail today;
 gen_test renders them. GREEN: edit v2/systems/detail.ts only.
-
-## choose-invert-shortcut
-- kind: feature
-- setup: choose-invert-shortcut
-- files: v2/systems/choose.ts
-- title: choose.invert has no keyboard shortcut
-- demo: A;A;A;Ctrl+A;wait;i
-
-`choose.invert` (invert the chosen set) is palette-only — no keyboard binding.
-Fix: add `shortcut: 'I'` and `input: { on: 'keydown', key: 'i', prevent: true }`
-to the choose.invert command in v2/systems/choose.ts. The cleanest GREEN tool is
-`set_command {"id":"choose.invert","props":{...}}`.
-Red scenario: NO steps needed — assert the binding on the SPEC:
-`{"command":"choose.invert","has":"input.key","value":"i"}` (fails until bound).
-Don't assert post-`choose.invert` selection counts — `editing.node.create` on a
-selected node also wires an edge, so the chosen set isn't what you'd guess;
-the binding assert is the whole bug.
 
 ## edge-inline-edit
 - kind: feature
@@ -75,18 +40,16 @@ changed AND the rendered edge exposes a `[data-editable-title]` element.
 
 ## properties-title
 - kind: bug
-- files: v2/styles.css, v2/core/properties.ts
+- files: v2/styles.css
 - title: Properties modal title field looks uneditable (invisible input)
 
-In the properties modal (select node → ⚙), Width/Height render as visible input
-boxes but Title renders as bare text — its input has class `editable-inline`
-whose computed border is fully transparent at rest, so users think the title
-cannot be edited there. Convention (readme): editable affordances show a dashed
-underline. Fix the styling so `.properties input.editable-inline` is visibly
-editable at rest (dashed bottom border like Help's shortcut inputs). Red test:
-read v2/styles.css and assert a rule gives `.editable-inline` a visible dashed
-border-bottom at rest (not only on :hover/:focus); see
-tests/commands/recorded/canvas-disappears-on-fold.test.ts for the CSS-assert style.
+Properties Title uses `input.editable-inline`, whose global border is transparent
+at rest; users cannot tell it is editable. This is a CSS affordance bug only.
+Do NOT create/select/open modal commands. RED: no steps; use `gen_test` with a
+file assert on `v2/styles.css` requiring a `.properties input.editable-inline`
+rule with visible dashed `border-bottom`. GREEN: use `add_css_rule` after
+`.properties input`, selector `.properties input.editable-inline`, declaration
+`border-bottom: 1px dashed var(--line-strong)`; then `run_test`.
 
 ## walk
 - kind: walk
@@ -105,20 +68,26 @@ suspected bug with `note` (symptom + the exact commands to reproduce). Call
 - kind: feature
 - files: v2/systems/graph.ts
 - title: Reverse the selected edge
+- command: graph.edge.reverse
 
 There is no way to flip an edge's direction. Add command `graph.edge.reverse`
 (group `edge`, shortcut `Shift+E`, available only when an edge is selected) that
-swaps the selected edge's `From` and `To`, then emits the `graph.edge.updated`
-fact. Use `inspect commands edge` and `graph file v2/systems/graph.ts` to see
-the pattern (graph.edge.delete is the closest sibling — selection-aware
-`available` + `payload`). Red test: create two nodes and an edge via scenario
-steps (`graph.edge.create` event with `{From:'e1',To:'e2'}`), select the edge,
-run the new command, assert `graph.edges[0].From` is `e2`.
+swaps the selected edge's `From` and `To`, then emits `graph.edge.updated`. Use
+`inspect commands edge` and `graph file v2/systems/graph.ts`; `graph.edge.delete`
+is the closest sibling (`selectedEdgeId()`, `available`, `payload`). Red scenario
+must use EVENTS for setup, not invented commands:
+`{"event":"graph.node.create","data":{"id":"e1"}}`,
+`{"event":"graph.node.create","data":{"id":"e2"}}`,
+`{"event":"graph.edge.create","data":{"From":"e1","To":"e2"}}`, then
+`{"event":"selection.item.select","data":{"kind":"edge","id":"r1"}}`, then run
+NEW command `graph.edge.reverse`, assert `graph.edges[0].From == 'e2'`. GREEN:
+use `add_edge_reverse {}`; it adds the command, handler, and EdgePatch typing.
 
 ## duplicate-node
 - kind: feature
 - files: v2/features.ts, v2/systems/graph.ts
 - title: Duplicate the selected node
+- command: editing.node.duplicate
 
 Add command `editing.node.duplicate` (group `editing`, shortcut `D`, available
 when a node is selected): creates a new node copying the selected node's Label
@@ -133,6 +102,7 @@ needed — duplicate it, assert `graph.nodes` length 2 and both share the same
 - kind: feature
 - files: v2/core/io.ts, v2/systems/graph.ts
 - title: Export the current graph as JSON
+- command: graph.export.json
 
 Sharing is impossible: no export at all. Add command `graph.export.json`
 (group `graph`, palette-visible) that serializes the current graph —
@@ -147,6 +117,7 @@ assert it contains both node ids. Keep it one system: storage stays untouched.
 - kind: feature
 - files: v2/systems/graph.ts, v2/features.ts
 - title: Insert a node in the middle of the selected edge
+- command: editing.edge.split
 
 Sequence editing lacks the "split this arrow" verb. Add command
 `editing.edge.split` (group `edge`, available when an edge is selected): given

@@ -3,8 +3,7 @@
 //
 //   node walker/loop.mjs                  # endless until walker/STOP exists
 //   node walker/loop.mjs --hours 8        # overnight run
-//   node walker/loop.mjs --task zen-canvas --mock   # prove plumbing, no model
-//   node walker/loop.mjs --task zen-canvas --max-turns 6   # short real smoke
+//   node walker/loop.mjs --task detail-shortcuts --max-turns 6   # short real smoke
 //
 // Cycle = every task in TASKS.md once (+ a walk session). Each attempt runs in
 // a disposable workspace; RED writes a failing test, GREEN makes it pass,
@@ -110,6 +109,7 @@ async function attempt(task, { cycle, n, model, temperature, seed }) {
 
     const tools = new Tools({ ws, browser, log: jlog });
     tools.defaultTestPath = `tests/commands/walker/${task.id}.test.ts`;
+    tools.task = task;
     const system = buildSystemPrompt();
     const notes = [];
     const history = [];

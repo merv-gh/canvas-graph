@@ -94,9 +94,9 @@ existing command), `add_command` (a new verb + auto-declared event + handler),
 tool set, run modes, and journal layout, and `walker/ANALYSIS.md` for what a
 7B/14B model can and can't carry.
 
-Every fixed bug is recorded twice: a `tests/commands/recorded/*.test.ts` and (for
-regressions) a `walker/setup/<id>.mjs` that re-introduces it — so the fix is a
-permanent benchmark case. **Record bugs even when you fix them by hand.**
+Every fixed bug gets a permanent `tests/commands/recorded/*.test.ts`, and the
+finished task card moves from `walker/TASKS.md` to `walker/DONE.md` so the local
+model only sees active work. **Record bugs even when you fix them by hand.**
 
 ### Watch a fix, then approve it (human in the loop)
 

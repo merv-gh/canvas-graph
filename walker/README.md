@@ -10,8 +10,7 @@ model can't fix a small bug here, the code (or its observability) is too clever.
 ```bash
 npm run dx                              # status-first menu: run, watch, preview, gate, land
 node walker/dx.mjs status               # same control plane, direct command mode
-node walker/loop.mjs --task zen-canvas --mock     # prove the plumbing, no model
-node walker/loop.mjs --task zen-canvas --max-turns 8   # short real smoke
+node walker/loop.mjs --task detail-shortcuts --max-turns 8   # short real smoke
 node walker/loop.mjs --hours 8                    # overnight, all tasks, cycles
 touch walker/STOP                                 # graceful stop between attempts
 ```
@@ -32,6 +31,7 @@ task/status table and single-key actions:
 | `p` | preview the latest fixed patch in a disposable app and print the URL |
 | `g` | run the full apply gate for a fixed patch |
 | `l` | gate, apply to the real repo, re-verify, and commit only the patch paths |
+| `d` | move an already-applied task from `TASKS.md` to `DONE.md` |
 | `o` | add the task id to `APPROVALS.md` for the older manual apply flow |
 | `c` | remove old journal runs, keeping the newest N |
 
@@ -43,6 +43,7 @@ node walker/dx.mjs log --follow
 node walker/dx.mjs preview detail-shortcuts
 node walker/dx.mjs gate detail-shortcuts
 node walker/dx.mjs land detail-shortcuts
+node walker/dx.mjs archive detail-shortcuts
 node walker/dx.mjs clean --keep 3
 ```
 
@@ -55,14 +56,12 @@ Per task attempt, in a **disposable workspace** (rsync copy of the repo,
 node_modules symlinked, its own git, its own vite on :5180, its own headless
 Chromium):
 
-1. **setup** — optional script re-introduces a known bug (`walker/setup/<name>.mjs`),
-   so fixed bugs stay usable as benchmark cases forever.
-2. **RED** — model may write ONLY under `tests/commands/walker/`. Its `done` is
+1. **RED** — model may write ONLY under `tests/commands/walker/`. Its `done` is
    accepted only when `tests/commands/walker/<task>.test.ts` exists and FAILS.
    A test that passes immediately is rejected ("not red").
-3. **GREEN** — model may write ONLY under `v2/`. `done` accepted when its red
+2. **GREEN** — model may write ONLY under `v2/`. `done` accepted when its red
    test passes.
-4. **VERIFY** — harness-run, no model: full vitest suite + `tsc --noEmit`.
+3. **VERIFY** — harness-run, no model: full vitest suite + `tsc --noEmit`.
    Regressions are fed back (stay in GREEN); success = `fixed`.
 
 Guards are tool-level, not prompt-level: path allowlists per phase, no shell
@@ -181,7 +180,7 @@ walker/journal/run-<timestamp>/
 ```
 
 Apply a winning patch to the real repo manually after review:
-`git apply walker/journal/run-*/zen-canvas-*/fix.patch` (the patch includes the
+`git apply walker/journal/run-*/<task>-*/fix.patch` (the patch includes the
 red test — keep it; move it under `tests/commands/recorded/` if it's a recorded-class bug).
 The preferred path is `npm run dx` -> `p` preview -> `g` gate -> `l` land+commit,
 which avoids copying patch paths by hand.
@@ -189,9 +188,9 @@ which avoids copying patch paths by hand.
 ## Adding tasks
 
 Edit `TASKS.md` (format documented at the top). For regression-class bugs write
-a `walker/setup/<id>.mjs` that re-breaks a fixed bug in the workspace — exact
-string replacement that throws loudly when the source drifts. Keep prompts
-≤120 words; point at ≤3 files; name the repro commands.
+a task card with the repro and the desired assertion. Keep prompts ≤120 words;
+point at ≤3 files; name the repro commands. When a task lands, `npm run dx` -> `l`
+archives it into `DONE.md` so the active queue stays small.
 
 ## Notes
 
@@ -200,5 +199,5 @@ string replacement that throws loudly when the source drifts. Keep prompts
   (ssh offer), bump `numCtx` / models in config.json — nothing else changes.
 - The walker never touches the real repo: workspaces live in `walker/workspace`
   (recreated per attempt), the only durable output is `walker/journal/`.
-- Known-good cycle proof: `--task zen-canvas --mock` exercises every moving part
-  (setup → red gate → green gate → full verify → patch/journal) deterministically.
+- Known-good proof for the tooling layer is `node walker/selftest.mjs`; real
+  model runs should start with the smallest active card in `TASKS.md`.

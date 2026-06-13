@@ -73,7 +73,7 @@ export class Tools {
    *  Closes the "model paraphrases text it never saw" failure mode. */
   tool_locate({ anchor, dir = 'v2' }) {
     const { rel } = this.safePath(dir);
-    const res = this.ws.run('git', ['grep', '-nE', '-I', anchor, '--', rel], 20000);
+    const res = this.ws.run('git', ['grep', '-nF', '-I', anchor, '--', rel], 20000);
     if (!res.output.trim()) return `no matches for: ${anchor}`;
     const hits = res.output.split('\n').filter(Boolean).slice(0, 4);
     const blocks = hits.map(hit => {
@@ -169,7 +169,7 @@ export class Tools {
     // won't compile. Auto-declare it (no-op if already declared anywhere here).
     const notes = [];
     if (handler && !new RegExp(`['"]${event.replace(/[.]/g, '\\.')}['"]\\s*:`).test(src)) {
-      this._declareEventInLines(lines, event, 'void');
+      this._declareEventInLines(lines, event, parsedSpec.payload ? 'any' : 'void');
       notes.push(`declared event '${event}'`);
     }
     // Pass 2: insert the spec as the first element of register([…]).
@@ -226,6 +226,101 @@ export class Tools {
     return `declared '${event}': ${type} in ${rel}. emit('${event}', …) is now typed; add the emit with patch/add_command.`;
   }
 
+  tool_add_css_rule({ path = 'v2/styles.css', selector, declarations, after }) {
+    if (this.phase !== 'green') return 'add_css_rule is GREEN-phase only (it edits v2/)';
+    if (!selector || !declarations) return 'add_css_rule needs {selector, declarations, after?}';
+    const { abs, rel } = this.safePath(path);
+    if (!this.writeAllowed(rel)) return this.phaseDenied(rel);
+    if (!existsSync(abs)) return `no such file: ${path}`;
+    if (!rel.endsWith('.css')) return `add_css_rule only edits CSS files, got ${rel}`;
+
+    const lines = readFileSync(abs, 'utf8').split('\n');
+    const text = lines.join('\n');
+    const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`(^|\\n)\\s*${escape(selector)}\\s*\\{`).test(text)) {
+      return `add_css_rule: selector '${selector}' already exists in ${rel}; use patch to adjust that existing block.`;
+    }
+    const declText = typeof declarations === 'string'
+      ? declarations.split('\n').map(l => l.trim()).filter(Boolean).map(l => l.endsWith(';') ? l : `${l};`).join('\n')
+      : Object.entries(this.parseSpec(declarations) ?? declarations)
+        .map(([k, v]) => `${k}: ${v};`).join('\n');
+    if (!declText.trim()) return 'add_css_rule: declarations are empty';
+
+    const findRuleEnd = (needle) => {
+      if (!needle) return -1;
+      const start = lines.findIndex(l => l.trim().startsWith(needle) && l.includes('{'));
+      if (start < 0) return -1;
+      let depth = 0;
+      for (let i = start; i < lines.length; i++) {
+        depth += (lines[i].match(/\{/g) ?? []).length;
+        depth -= (lines[i].match(/\}/g) ?? []).length;
+        if (i > start && depth <= 0) return i;
+      }
+      return start;
+    };
+    let insertAfter = findRuleEnd(after) >= 0 ? findRuleEnd(after) : -1;
+    if (insertAfter < 0) insertAfter = findRuleEnd('.properties input');
+    if (insertAfter < 0) insertAfter = lines.length - 1;
+
+    const rule = [
+      `${selector} {`,
+      ...declText.split('\n').map(l => `  ${l.trim()}`),
+      '}',
+    ];
+    lines.splice(insertAfter + 1, 0, '', ...rule);
+    writeFileSync(abs, lines.join('\n'));
+    this.log(`[tool] add_css_rule ${selector} → ${rel}`);
+    const from = Math.max(0, insertAfter - 2);
+    return `added CSS rule in ${rel} after line ${insertAfter + 1}:\n${lines.slice(from, insertAfter + rule.length + 4).map((l, i) => `${from + 1 + i}|${l}`).join('\n')}\nNow run_test to confirm.`;
+  }
+
+  tool_add_edge_reverse() {
+    if (this.phase !== 'green') return 'add_edge_reverse is GREEN-phase only (it edits v2/)';
+
+    const graphModel = this.safePath('v2/model/graph.ts');
+    const graphSystem = this.safePath('v2/systems/graph.ts');
+    let modelSrc = readFileSync(graphModel.abs, 'utf8');
+    if (modelSrc.includes("export type EdgePatch = Partial<Pick<EdgeEntity, 'Label'>>;")) {
+      modelSrc = modelSrc.replace(
+        "export type EdgePatch = Partial<Pick<EdgeEntity, 'Label'>>;",
+        "export type EdgePatch = Partial<Pick<EdgeEntity, 'Label' | 'From' | 'To'>>;",
+      );
+      writeFileSync(graphModel.abs, modelSrc);
+    }
+
+    let lines = readFileSync(graphSystem.abs, 'utf8').split('\n');
+    this._declareEventInLines(lines, 'graph.edge.reverse', '{ id: Id }');
+    const src = () => lines.join('\n');
+    if (!/id:\s*['"]graph\.edge\.reverse['"]/.test(src())) {
+      const regIdx = lines.findIndex(l => /contexts\.commands\.register\(\[/.test(l));
+      if (regIdx < 0) return 'add_edge_reverse: no contexts.commands.register([ found in v2/systems/graph.ts';
+      lines.splice(regIdx + 1, 0,
+        "      { id: 'graph.edge.reverse', label: 'Reverse edge', group: 'edge', shortcut: 'Shift+E', available: () => !!selectedEdgeId(), payload: () => ({ id: selectedEdgeId() }) },",
+      );
+    }
+    if (!/on\('graph\.edge\.reverse'/.test(src())) {
+      const closeIdx = lines.findIndex(l => /\]\);/.test(l));
+      if (closeIdx < 0) return 'add_edge_reverse: could not find command register closing line';
+      lines.splice(closeIdx + 1, 0,
+        '',
+        "    on('graph.edge.reverse', ({ id }) => {",
+        '      const edge = graphs.current.getEdge(id);',
+        '      if (!edge) return;',
+        '      if (graphs.current.updateEdge(id, { From: edge.To, To: edge.From })) {',
+        "        emit('graph.edge.updated', { graphId: graphs.current.id, id });",
+        '      }',
+        '    });',
+      );
+    }
+    writeFileSync(graphSystem.abs, lines.join('\n'));
+    this.log('[tool] add_edge_reverse');
+    return [
+      'added graph.edge.reverse command, handler, and EdgePatch From/To typing.',
+      'Files: v2/systems/graph.ts, v2/model/graph.ts.',
+      'Now run_test to confirm.',
+    ].join('\n');
+  }
+
   phaseDenied(rel) {
     if (this.phase === 'red') return `phase red: writing ${rel} not allowed — RED only writes tests/commands/walker/. If your red test already FAILS, just run_test it; the harness advances you to GREEN automatically.`;
     return `phase ${this.phase}: writing ${rel} is not allowed (green→v2/ only)`;
@@ -268,6 +363,13 @@ export class Tools {
     const all = readFileSync(abs, 'utf8').split('\n');
     const at = (line | 0) - 1;
     if (at < 0 || at >= all.length) return `line ${line} out of range (file has ${all.length} lines)`;
+    if (rel.endsWith('.css') && op === 'insert_after' && /\{/.test(String(text))) {
+      const before = all.slice(0, at + 1).join('\n');
+      const depth = (before.match(/\{/g) ?? []).length - (before.match(/\}/g) ?? []).length;
+      if (depth > 0) {
+        return `line ${line} is inside an open CSS block. Inserting a selector there creates nested/invalid CSS. For styling tasks use add_css_rule {"selector":"...","declarations":{...},"after":"..."} or locate an existing selector and patch outside the block.`;
+      }
+    }
     // Teach tool-selection at the point of the mistake: patching command props
     // into a command-spec line is the wrong move — set_command does it cleanly
     // and keeps the array valid. (Observed: weak models reach for insert_after here.)
@@ -372,6 +474,8 @@ export class Tools {
     if (this.phase !== 'red') return 'gen_test is RED-phase only (it writes a test file)';
     const parsed = this.parseSpec(spec);
     if (!parsed) return 'gen_test: spec is not valid JSON';
+    const badCss = (parsed.asserts ?? []).find(a => a.css && a.op && !['count', 'exists', 'textContains'].includes(a.op));
+    if (badCss) return `gen_test: css asserts support op=count|exists|textContains only. To assert CSS source text (rules like dashed border), use {"file":"v2/styles.css","matches":"..."} with no steps.`;
     const validation = runProbe(this.ws.dir, { mode: 'scenario', steps: parsed.steps ?? [], asserts: [] });
     if (validation.error) return `gen_test: scenario validation failed: ${validation.error}`;
     // UNAVAILABLE = broken preconditions (a spec bug) — block. UNKNOWN commands
@@ -379,7 +483,16 @@ export class Tools {
     // (generated steps assert runCommand(...) === true, failing until GREEN).
     const blocked = validation.steps?.find(s => !s.ok && (s.detail ?? '').includes('UNAVAILABLE'));
     if (blocked) return `gen_test: step has broken preconditions: ${blocked.step} (${blocked.detail}) — fix the steps first via scenario`;
-    const unknownNotes = (validation.steps ?? []).filter(s => !s.ok).map(s => `note: ${s.step} — ${s.detail} (fine if this is the feature under test; the generated test asserts it runs)`);
+    const unknown = (validation.steps ?? []).filter(s => !s.ok && (s.detail ?? '').includes('unknown command'));
+    const allowedUnknown = (s) => {
+      const id = String(s.step ?? '').replace(/^command\s+/, '');
+      return this.task?.kind === 'feature' && id === this.task?.meta?.command;
+    };
+    const badUnknown = unknown.filter(s => !allowedUnknown(s));
+    if (badUnknown.length) {
+      return `gen_test: unknown command step: ${badUnknown.map(s => `${s.step} (${s.detail})`).join('; ')}. Do not invent helper commands; use existing commands from inspect, bus events like selection.item.select, or make the NEW feature command itself the unknown step.`;
+    }
+    const unknownNotes = unknown.map(s => `note: ${s.step} — ${s.detail} (allowed because this new feature command is named in the task card; the generated test asserts it runs)`);
     const source = genTest({ title: title ?? 'walker case', steps: parsed.steps ?? [], asserts: parsed.asserts ?? [] });
     const target = this.defaultTestPath;
     const { abs, rel } = this.safePath(target);

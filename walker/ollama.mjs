@@ -11,6 +11,8 @@ export const TOOL_SCHEMAS = [
   { name: 'set_command', description: 'GREEN: add plain props to an EXISTING command by id. props is data, e.g. {"shortcut":"I","input":{"on":"keydown","key":"i","prevent":true}}. Best tool for shortcut/binding tasks.', parameters: { type: 'object', properties: { id: { type: 'string' }, props: { type: 'object' } }, required: ['id', 'props'] } },
   { name: 'add_command', description: 'GREEN: register a NEW command in a system + (optional) its handler. spec={id,label,group,shortcut?,input?,available?}. handler = JS body for on(event,(data)=>{...}). For new verbs (reverse/duplicate/export).', parameters: { type: 'object', properties: { system: { type: 'string', description: 'v2/systems/*.ts file' }, spec: { type: 'object' }, handler: { type: 'string' } }, required: ['system', 'spec'] } },
   { name: 'declare_event', description: 'GREEN: declare a new typed bus event in a system\'s CustomEvents (e.g. a new past-tense fact before you emit it).', parameters: { type: 'object', properties: { system: { type: 'string' }, event: { type: 'string' }, type: { type: 'string', description: 'TS payload type, default void' } }, required: ['system', 'event'] } },
+  { name: 'add_css_rule', description: 'GREEN: add a CSS selector rule after a nearby existing selector. Safer than line patch for styling tasks. declarations may be an object or CSS text.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'CSS file, default v2/styles.css' }, selector: { type: 'string' }, declarations: { type: 'object', description: 'CSS declarations, e.g. {"border-bottom":"1px dashed var(--line-strong)"}' }, after: { type: 'string', description: 'existing selector to insert after, optional' } }, required: ['selector', 'declarations'] } },
+  { name: 'add_edge_reverse', description: 'GREEN: deterministically add graph.edge.reverse, including EdgePatch From/To typing, command spec, payload, and handler.', parameters: { type: 'object', properties: {} } },
   { name: 'run_test', description: 'Run vitest. No path = full suite + typecheck.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'test file path (optional)' } } } },
   { name: 'app', description: 'Drive the live app. action=command: run a command id. action=snapshot: read state at dot-path (e.g. ui.shell). action=eval: run JS, window.v2 available. action=screenshot: capture + layout summary.', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['command', 'snapshot', 'eval', 'screenshot'] }, arg: { type: 'string' } }, required: ['action'] } },
   { name: 'inspect', description: 'App map. what=commands (ids+shortcuts) | events (who fires/handles) | flows (one event\'s path, filter=event name).', parameters: { type: 'object', properties: { what: { type: 'string', enum: ['commands', 'events', 'flows'] }, filter: { type: 'string' } }, required: ['what'] } },
@@ -68,6 +70,42 @@ export function repairJson(raw) {
   return out;
 }
 
+/** Quote JavaScript-style bare object keys outside strings:
+ *  {"input":{prevent:true}} -> {"input":{"prevent":true}}.
+ *  This catches a common qwen shape without eval or a JS parser. */
+export function quoteBareKeys(raw) {
+  let out = '', mode = 'plain', escaped = false;
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i];
+    if (mode === 'dquote') {
+      out += ch;
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') mode = 'plain';
+      continue;
+    }
+    if (ch === '"') { mode = 'dquote'; out += ch; continue; }
+    if (ch === '{' || ch === ',') {
+      out += ch;
+      i++;
+      let ws = '';
+      while (i < raw.length && /\s/.test(raw[i])) { ws += raw[i]; i++; }
+      const rest = raw.slice(i);
+      const m = rest.match(/^([A-Za-z_$][\w$]*)\s*:/);
+      if (m) {
+        out += `${ws}"${m[1]}":`;
+        i += m[0].length - 1;
+      } else {
+        out += ws;
+        i--;
+      }
+      continue;
+    }
+    out += ch;
+  }
+  return out;
+}
+
 /** Lenient parse: find a tool call in free text. Accepts
  *  ```tool {...}``` / ```json {...}``` / bare {"name":...,"arguments":...} /
  *  name("single arg") call syntax for note/done/give_up. */
@@ -113,7 +151,9 @@ export function parseToolFromText(text) {
   const brace = text.indexOf('{');
   if (brace >= 0) candidates.push(text.slice(brace));
   const tryParse = (slice) => {
-    for (const candidate of [slice, repairJson(slice)]) {
+    const repaired = repairJson(slice);
+    const jsEscapes = repaired.replace(/\\'/g, "'");
+    for (const candidate of [slice, repaired, jsEscapes, quoteBareKeys(repaired), quoteBareKeys(jsEscapes)]) {
       try {
         const obj = JSON.parse(candidate);
         const name = obj.name ?? obj.tool ?? obj.function;

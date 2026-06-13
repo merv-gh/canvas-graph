@@ -157,6 +157,12 @@ ok('parser: backtick-string JSON, call syntax, fenced payload, patch', () => {
   assert.equal(fenced.args.content, 'const x = "q";');
   const patch = parseToolFromText('{"name":"patch","arguments":{"path":"a.ts","op":"replace","line":3}}\n```\nnew line\n```');
   assert.equal(patch.args.text, 'new line');
+  const bare = parseToolFromText('{"name":"set_command","arguments":{"id":"detail.less","props":{"shortcut":"[","input":{"on":"keydown","key":"[",prevent:true}}}}}');
+  assert.equal(bare.name, 'set_command');
+  assert.equal(bare.args.props.input.prevent, true);
+  const jsEsc = parseToolFromText(`{"name":"patch","arguments":{"path":"a.ts","op":"replace","line":1,"text":"available: 'selection.type === \\'edge\\''"}}`);
+  assert.equal(jsEsc.name, 'patch');
+  assert(jsEsc.args.text.includes("'edge'"), jsEsc.args.text);
 });
 
 // Stub workspace that mirrors Workspace.run (git/grep) for the read-only tools.
@@ -201,10 +207,65 @@ ok('patch: refuses a non-v2 path during GREEN', () => {
   assert(/not allowed/.test(out), out);
   rmSync(dir, { recursive: true, force: true });
 });
+ok('add_css_rule: inserts a selector outside an existing block', () => {
+  const dir = join(REPO, 'walker/.selftest-css');
+  mkdirSync(join(dir, 'v2'), { recursive: true });
+  const file = join(dir, 'v2/styles.css');
+  writeFileSync(file, '.properties input {\n  border: 1px solid red;\n}\n');
+  const tools = new Tools({ ws: stubWs(dir), browser: null, log: () => {} });
+  tools.phase = 'green';
+  const out = tools.tool_add_css_rule({
+    selector: '.properties input.editable-inline',
+    declarations: { 'border-bottom': '1px dashed var(--line-strong)' },
+    after: '.properties input',
+  });
+  const css = readFileSync(file, 'utf8');
+  assert(/added CSS rule/.test(out), out);
+  assert(css.includes('.properties input.editable-inline {\n  border-bottom: 1px dashed var(--line-strong);\n}'), css);
+  assert(css.indexOf('.properties input.editable-inline') > css.indexOf('.properties input {'), css);
+  rmSync(dir, { recursive: true, force: true });
+});
+ok('add_edge_reverse: edits graph type and system fixtures', () => {
+  const dir = join(REPO, 'walker/.selftest-edge-reverse');
+  mkdirSync(join(dir, 'v2/model'), { recursive: true });
+  mkdirSync(join(dir, 'v2/systems'), { recursive: true });
+  writeFileSync(join(dir, 'v2/model/graph.ts'), "export type EdgeEntity = { From: string; To: string; Label?: unknown };\nexport type EdgePatch = Partial<Pick<EdgeEntity, 'Label'>>;\n");
+  writeFileSync(join(dir, 'v2/systems/graph.ts'), `import type { Id } from '../types';
+declare module '../types' {
+  interface CustomEvents {
+    'graph.edge.updated': { graphId: Id; id: Id };
+  }
+}
+export function registerGraph(system: Registry) {
+  system('graph', ({ on, emit, graphs, contexts, selection }) => {
+    const selectedEdgeId = () => {
+      const ref = selection.selected();
+      return ref?.kind === 'edge' ? ref.id : '';
+    };
+    contexts.commands.register([
+    ]);
+    on('graph.create', () => {});
+  });
+}
+`);
+  const tools = new Tools({ ws: stubWs(dir), browser: null, log: () => {} });
+  tools.phase = 'green';
+  const out = tools.tool_add_edge_reverse({});
+  const model = readFileSync(join(dir, 'v2/model/graph.ts'), 'utf8');
+  const system = readFileSync(join(dir, 'v2/systems/graph.ts'), 'utf8');
+  assert(/added graph\.edge\.reverse/.test(out), out);
+  assert(model.includes("'Label' | 'From' | 'To'"), model);
+  assert(system.includes("'graph.edge.reverse': { id: Id };"), system);
+  assert(system.includes("id: 'graph.edge.reverse'"), system);
+  assert(system.includes("graphs.current.updateEdge(id, { From: edge.To, To: edge.From })"), system);
+  rmSync(dir, { recursive: true, force: true });
+});
 ok('locate: returns verbatim numbered context for an anchor', () => {
   const tools = new Tools({ ws: stubWs(REPO), browser: null, log: () => {} });
   const out = tools.tool_locate({ anchor: "id: 'choose.invert'", dir: 'v2' });
   assert(/choose\.ts/.test(out) && /\d+\|/.test(out), out.slice(0, 200));
+  const paren = tools.tool_locate({ anchor: 'commands.register(', dir: 'v2' });
+  assert(!/fatal:/.test(paren) && /commands\.register/.test(paren), paren.slice(0, 200));
 });
 ok('serializeObject: arrow-fn strings stay raw, data quoted', () => {
   const tools = new Tools({ ws: stubWs(REPO), browser: null, log: () => {} });

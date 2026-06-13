@@ -12,7 +12,9 @@ RED → make ONE failing test: scenario {steps,asserts} with asserts stating DES
 GREEN → change ONLY v2/ until the test passes. Pick the edit tool by intent:
   • add shortcut/binding/group to an EXISTING command → set_command {id, props}
   • add a NEW command/verb → add_command {system, spec, handler?}
-  • CSS or other code → patch {path, op:"replace"|"insert_after", line, count, text}  (line numbers from read/locate; never retype old text)
+  • add a CSS selector rule → add_css_rule {selector, declarations, after?}
+  • reverse selected edge feature → add_edge_reverse {}
+  • other CSS/code → patch {path, op:"replace"|"insert_after", line, count, text}  (line numbers from read/locate; never retype old text)
 Re-check with scenario, confirm with run_test, then done.
 DISCOVER first with inspect (commands/events/flows) and graph/locate (file:line) — not blind reads.
 

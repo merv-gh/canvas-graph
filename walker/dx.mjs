@@ -13,6 +13,7 @@
 //   node walker/dx.mjs gate <task>
 //   node walker/dx.mjs land <task> [--yes]
 //   node walker/dx.mjs approve <task>
+//   node walker/dx.mjs archive <task>
 //   node walker/dx.mjs add
 //   node walker/dx.mjs clean [--keep 3] [--yes]
 
@@ -24,6 +25,7 @@ import {
   readdirSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from 'node:fs';
 import net from 'node:net';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -33,6 +35,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..');
 const TASKS_FILE = join(HERE, 'TASKS.md');
+const DONE_FILE = join(HERE, 'DONE.md');
 const APPROVALS_FILE = join(HERE, 'APPROVALS.md');
 const JOURNAL_DIR = join(HERE, 'journal');
 
@@ -107,7 +110,6 @@ function parseTasks(md) {
     task.prompt = body.join('\n').trim();
     task.title = task.meta.title ?? task.id;
     task.kind = task.meta.kind ?? 'bug';
-    task.setup = task.meta.setup;
     task.files = task.meta.files;
     task.disabled = Boolean(task.meta.disabled);
     tasks.push(task);
@@ -117,6 +119,23 @@ function parseTasks(md) {
 
 function loadTasks() {
   return parseTasks(readFileSync(TASKS_FILE, 'utf8'));
+}
+
+function loadDoneTasks() {
+  if (!existsSync(DONE_FILE)) return [];
+  return parseTasks(readFileSync(DONE_FILE, 'utf8'));
+}
+
+function splitTaskFile(md) {
+  const parts = md.split(/^## /m);
+  return {
+    preamble: parts[0].trimEnd(),
+    blocks: parts.slice(1).map(block => `## ${block.trimEnd()}\n`),
+  };
+}
+
+function blockId(block) {
+  return block.replace(/^## /, '').split('\n')[0].trim();
 }
 
 function approvedIds() {
@@ -183,15 +202,13 @@ function taskRows() {
     const approved = approvals.has(task.id);
     const status = task.disabled
       ? 'disabled'
-      : landed && task.setup
-        ? 'benchmark'
-        : landed
-          ? 'landed'
-          : fixed
-            ? 'fixed'
-            : latest
-              ? String(latest.outcome).slice(0, 16)
-              : 'queued';
+      : landed
+        ? 'landed'
+        : fixed
+          ? 'fixed'
+          : latest
+            ? String(latest.outcome).slice(0, 16)
+            : 'queued';
     const last = latest
       ? `${latest.outcome} ${latest.minutes ?? '?'}m ${latest.model ?? ''}`.trim()
       : '-';
@@ -209,6 +226,8 @@ function printStatus() {
     const approved = row.approved ? 'yes' : '-';
     console.log(`${pad(row.index, 3)} ${pad(row.task.id, 27)} ${pad(row.task.kind, 8)} ${pad(row.status, 10)} ${pad(patch, 5)} ${pad(approved, 8)} ${pad(row.last, 34)} ${row.task.title}`);
   }
+  const done = loadDoneTasks();
+  if (done.length) console.log(`\ndone: ${done.map(t => t.id).join(', ')}`);
   const latestRun = latestRunDir();
   if (latestRun) console.log(`\nlatest run: ${rel(latestRun)}`);
 }
@@ -285,7 +304,7 @@ async function runModel(rl, targetArg = null, opts = {}) {
     const pending = taskRows()
       .filter(r => !r.task.disabled && !r.landed && !r.fixed && r.task.kind !== 'walk')
       .map(r => r.task.id);
-    if (!pending.length) return console.log('No pending non-landed tasks. Pick a benchmark task explicitly if you want one.');
+    if (!pending.length) return console.log('No pending non-landed tasks. Add a task or archive completed work first.');
     console.log(`Running pending tasks: ${pending.join(', ')}`);
     for (const id of pending) {
       const code = runWalker(id, opts);
@@ -366,6 +385,26 @@ function stagedFiles() {
   return lines(git(['diff', '--cached', '--name-only']));
 }
 
+function archiveTask(id) {
+  if (!existsSync(TASKS_FILE)) return false;
+  const { preamble, blocks } = splitTaskFile(readFileSync(TASKS_FILE, 'utf8'));
+  const block = blocks.find(b => blockId(b) === id);
+  if (!block) return false;
+
+  const remaining = blocks.filter(b => blockId(b) !== id);
+  writeFileSync(TASKS_FILE, `${preamble}\n\n${remaining.map(b => b.trimEnd()).join('\n\n')}\n`);
+
+  const doneText = existsSync(DONE_FILE)
+    ? readFileSync(DONE_FILE, 'utf8')
+    : '# walker done\n\nCompleted tasks live here so `TASKS.md` stays the active local-model queue.\n';
+  const doneIds = new Set(parseTasks(doneText).map(t => t.id));
+  if (!doneIds.has(id)) {
+    const archived = block.replace(/\n$/, '');
+    writeFileSync(DONE_FILE, `${doneText.trimEnd()}\n\n${archived}\n`);
+  }
+  return true;
+}
+
 function ensureCleanLandingPaths(row) {
   const touched = patchTouchedFiles(row.fixed.patch);
   const recorded = `tests/commands/recorded/${row.task.id}.test.ts`;
@@ -412,10 +451,12 @@ async function landTask(row, { yes = false } = {}) {
   ]);
   if (code !== 0) return code;
 
+  const archived = archiveTask(row.task.id);
   const commitPaths = new Set([
     ...patchTouchedFiles(row.fixed.patch),
     `tests/commands/recorded/${row.task.id}.test.ts`,
     `tests/commands/walker/${row.task.id}.test.ts`,
+    ...(archived ? ['walker/TASKS.md', 'walker/DONE.md'] : []),
   ]);
   git(['add', '-A', '--', ...commitPaths]);
   const staged = stagedFiles().filter(p => commitPaths.has(p));
@@ -442,6 +483,16 @@ function approveTask(row) {
   return 0;
 }
 
+function archiveTaskRow(row) {
+  if (!row) return 1;
+  if (!archiveTask(row.task.id)) {
+    console.log(`Task ${row.task.id} is not in ${rel(TASKS_FILE)}.`);
+    return 1;
+  }
+  console.log(`Moved ${row.task.id} from ${rel(TASKS_FILE)} to ${rel(DONE_FILE)}.`);
+  return 0;
+}
+
 async function addTask(rl) {
   console.log('\nNew walker task. Keep it small enough for the local model.');
   const id = (await rl.question('id (kebab-case): ')).trim();
@@ -450,7 +501,6 @@ async function addTask(rl) {
   const kind = (await rl.question('kind [bug|feature|walk] (bug): ')).trim() || 'bug';
   const title = (await rl.question('title: ')).trim() || id;
   const files = (await rl.question('likely files (comma-separated, optional): ')).trim();
-  const setup = (await rl.question('setup script name (optional): ')).trim();
   const demo = (await rl.question('demo scenario macro (optional): ')).trim();
   console.log('Prompt lines. End with a single "." line.');
   const promptLines = [];
@@ -461,7 +511,6 @@ async function addTask(rl) {
   }
   const meta = [
     `- kind: ${kind}`,
-    setup ? `- setup: ${setup}` : '',
     files ? `- files: ${files}` : '',
     `- title: ${title}`,
     demo ? `- demo: ${demo}` : '',
@@ -508,7 +557,8 @@ async function menu() {
       console.log('  r  run local model     n  new task');
       console.log('  w  watch latest log    p  preview fixed patch');
       console.log('  g  gate fixed patch    l  land + commit fixed patch');
-      console.log('  o  approve task id     c  clean old journal runs');
+      console.log('  d  archive done task   o  approve task id');
+      console.log('  c  clean old journal runs');
       console.log('  q  quit');
       const choice = (await rl.question('\ndx> ')).trim().toLowerCase();
       if (!choice || choice === 'q') break;
@@ -529,6 +579,9 @@ async function menu() {
       } else if (choice === 'o') {
         const row = await askTask(rl, { fixedOnly: true });
         if (row) approveTask(row);
+      } else if (choice === 'd') {
+        const row = await askTask(rl, {});
+        if (row) archiveTaskRow(row);
       } else if (choice === 'c') {
         const keepRaw = await rl.question('Keep latest N runs [3]: ');
         await cleanJournal({ keep: keepRaw.trim() || 3 });
@@ -553,6 +606,7 @@ usage:
   node walker/dx.mjs gate <task>
   node walker/dx.mjs land <task> [--yes]
   node walker/dx.mjs approve <task>
+  node walker/dx.mjs archive <task>
   node walker/dx.mjs add
   node walker/dx.mjs clean [--keep 3] [--yes]
 `);
@@ -577,7 +631,7 @@ async function main() {
     try { return addTask(rl); }
     finally { rl.close(); }
   }
-  if (['preview', 'gate', 'land', 'approve'].includes(argv.cmd)) {
+  if (['preview', 'gate', 'land', 'approve', 'archive'].includes(argv.cmd)) {
     const rows = taskRows();
     const row = resolveTask(argv.args[0], rows);
     if (!row) {
@@ -588,6 +642,7 @@ async function main() {
     if (argv.cmd === 'preview') return previewTask(row, { port: argv.opts.port });
     if (argv.cmd === 'gate') return gateTask(row);
     if (argv.cmd === 'approve') return approveTask(row);
+    if (argv.cmd === 'archive') return archiveTaskRow(row);
     return landTask(row, { yes: Boolean(argv.opts.yes) });
   }
   if (argv.cmd === 'clean') return cleanJournal({ keep: argv.opts.keep ?? 3, yes: Boolean(argv.opts.yes) });
