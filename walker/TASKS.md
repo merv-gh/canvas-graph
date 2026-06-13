@@ -25,6 +25,7 @@ the stage survives zen and the toggle round-trips.
 - kind: feature
 - files: v2/systems/detail.ts
 - title: detail.less / detail.more have no keyboard shortcuts
+- demo: A;A;A;Z;wait;[;wait;]
 
 Commands `detail.less` (fold selection / zoom out) and `detail.more` exist but
 are palette-only — no keyboard binding, breaking the keyboard-first rule. Add
@@ -40,15 +41,17 @@ gen_test renders them. GREEN: edit v2/systems/detail.ts only.
 - kind: feature
 - files: v2/systems/choose.ts
 - title: choose.invert has no keyboard shortcut
+- demo: A;A;A;Ctrl+A;wait;i
 
 `choose.invert` (invert the chosen set) is palette-only — no keyboard binding.
-Fix: in v2/systems/choose.ts add to the choose.invert command spec:
-`shortcut: 'I', input: { on: 'keydown', key: 'i', prevent: true }` (copy the
-shape from choose.all directly above it; read the file first). Red scenario:
-steps = `editing.node.create` twice, then command `choose.invert`; asserts =
-{"command":"choose.invert","has":"input.key","value":"i"} (RED: fails until you
-bind it) plus {"path":"selection.count","op":"eq","value":1}. gen_test renders
-both. GREEN: one edit in v2/systems/choose.ts.
+Fix: add `shortcut: 'I'` and `input: { on: 'keydown', key: 'i', prevent: true }`
+to the choose.invert command in v2/systems/choose.ts. The cleanest GREEN tool is
+`set_command {"id":"choose.invert","props":{...}}`.
+Red scenario: NO steps needed — assert the binding on the SPEC:
+`{"command":"choose.invert","has":"input.key","value":"i"}` (fails until bound).
+Don't assert post-`choose.invert` selection counts — `editing.node.create` on a
+selected node also wires an edge, so the chosen set isn't what you'd guess;
+the binding assert is the whole bug.
 
 ## edge-inline-edit
 - kind: feature

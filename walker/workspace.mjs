@@ -73,6 +73,14 @@ export class Workspace {
     return this.run('npx', ['tsc', '--noEmit']);
   }
 
+  /** Full coverage gate: vitest enforces the configured 80% thresholds and exits
+   *  non-zero if any are unmet, so `ok` IS the gate. Slow — apply/ready time only. */
+  coverage() {
+    const res = this.run('npx', ['vitest', 'run', '--coverage', '--reporter=dot'], 600000);
+    const summary = (res.output.match(/% Coverage[^\n]*\n[\s\S]*?All files[^\n]*/) ?? [''])[0];
+    return { ok: res.ok, output: summary || res.output.slice(-1200) };
+  }
+
   async startVite(port) {
     await this.stopVite();
     this.vite = spawn('npx', ['vite', 'v2', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {

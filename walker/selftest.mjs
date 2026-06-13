@@ -181,6 +181,16 @@ ok('patch: replace + insert_after (green-phase v2 path)', () => {
   assert.equal(readFileSync(file, 'utf8'), 'a\na2\nB\nc\n');
   rmSync(dir, { recursive: true, force: true });
 });
+ok('patch: redirects command-prop edits to set_command', () => {
+  const dir = join(REPO, 'walker/.selftest-tmp3');
+  mkdirSync(join(dir, 'v2'), { recursive: true });
+  writeFileSync(join(dir, 'v2/s.ts'), "x\n      { id: 'choose.invert', label: 'Invert' },\ny\n");
+  const tools = new Tools({ ws: stubWs(dir), browser: null, log: () => {} });
+  tools.phase = 'green';
+  const out = tools.tool_patch({ path: 'v2/s.ts', op: 'insert_after', line: 2, text: "shortcut: 'I', input: { key: 'i' }" });
+  assert(/use set_command/.test(out) && /choose\.invert/.test(out), out);
+  rmSync(dir, { recursive: true, force: true });
+});
 ok('patch: refuses a non-v2 path during GREEN', () => {
   const dir = join(REPO, 'walker/.selftest-tmp2');
   mkdirSync(dir, { recursive: true });

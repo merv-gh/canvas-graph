@@ -78,6 +78,15 @@ async function attempt(task, { cycle, n, model, temperature, seed }) {
   mkdirSync(attemptDir, { recursive: true });
   const jlog = (line) => log(`[${task.id}] ${line}`);
   const journal = (entry) => appendFileSync(join(attemptDir, 'messages.jsonl'), JSON.stringify(entry) + '\n');
+  // Compact streaming hint for a tool call — the salient arg, not the whole blob.
+  const argHint = (name, args) => {
+    if (name === 'scenario' || name === 'gen_test') return `${(args.spec?.steps ?? []).length} steps / ${(args.spec?.asserts ?? []).length} asserts`;
+    if (name === 'set_command' || name === 'add_command') return `${args.id ?? args.spec?.id ?? ''} ${Object.keys(args.props ?? args.spec ?? {}).join(',')}`;
+    if (name === 'patch') return `${args.path} ${args.op}@${args.line}`;
+    if (name === 'inspect') return `${args.what} ${args.filter ?? ''}`;
+    if (name === 'graph') return `${args.mode} ${args.query ?? ''}`;
+    return (args.path ?? args.id ?? args.event ?? JSON.stringify(args)).toString().slice(0, 80);
+  };
 
   const ws = new Workspace(REPO, join(HERE, 'workspace'), jlog);
   const chat = MOCK ? new MockChat(task.id, jlog) : new OllamaChat({ ...CONFIG.ollama, temperature }, jlog);
@@ -185,6 +194,7 @@ async function attempt(task, { cycle, n, model, temperature, seed }) {
       if (reply.kind === 'text') {
         parseMisses++;
         journal({ at: Date.now(), dir: 'recv-text', text: reply.text.slice(0, 600) });
+        jlog(`${tools.phase.toUpperCase()}·t${phaseTurns} … prose, not a tool call: "${reply.text.replace(/\s+/g, ' ').slice(0, 90)}"`);
         if (parseMisses >= CONFIG.budgets.parseMisses) { jlog('too many non-tool replies'); break; }
         history.push({ role: 'assistant', content: reply.text.slice(0, 400) });
         history.push({ role: 'user', content: 'Reply with exactly ONE tool call (JSON: {"name":...,"arguments":{...}}). No prose.' });
@@ -202,7 +212,7 @@ async function attempt(task, { cycle, n, model, temperature, seed }) {
         continue;
       }
       journal({ at: Date.now(), dir: 'recv-tool', name, args: JSON.stringify(args).slice(0, 800) });
-      jlog(`→ ${name} ${JSON.stringify(args).slice(0, 120)}`);
+      jlog(`${tools.phase.toUpperCase()}·t${phaseTurns} → ${name} ${argHint(name, args)}`);
 
       // read loops vary from/lines while re-reading the same file — key reads
       // by path so the breaker still sees them; allow more honest re-reads.
@@ -258,6 +268,7 @@ async function attempt(task, { cycle, n, model, temperature, seed }) {
       }
 
       const result = await tools.dispatch(name, args);
+      jlog(`     ⤷ ${String(result).split('\n')[0].slice(0, 150)}`);
       const cap = name === 'read' ? (CONFIG.budgets.readResultChars ?? 2600) : CONFIG.budgets.toolResultChars;
       let trimmed = trimResult(result, cap);
 

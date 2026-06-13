@@ -23,6 +23,7 @@ import { registerItemToolbar } from './item-toolbar';
 import { registerOutline } from './outline';
 import { registerRender } from './render';
 import { registerRenderStage } from './render-stage';
+import { registerScenario } from './scenario';
 import { registerViewPan } from './view-pan';
 import { registerViewZoom } from './view-zoom';
 
@@ -55,5 +56,6 @@ export function registerSystems(system: Registry) {
   registerDetail(system);
   registerDemo(system);
   registerDebug(system);
+  registerScenario(system);
   registerDx(system);
 }

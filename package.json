@@ -3,8 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "vite --host 127.0.0.1 --port 5173",
-    "dev:v1": "vite --host 127.0.0.1 --port 5173",
+    "dev": "vite v2 --host 127.0.0.1 --port 5174",
     "dev:v2": "vite v2 --host 127.0.0.1 --port 5174",
     "test": "npm run test:commands:coverage && npm run test:browser",
     "test:browser": "playwright test",

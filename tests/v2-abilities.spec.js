@@ -25,7 +25,7 @@ test('v2 routes DOM events through input adapter only', async () => {
 });
 
 test('v2 help rejects duplicate shortcuts without saving', async ({ page }) => {
-  await page.goto('/v2/');
+  await page.goto('/');
   await page.locator('[data-command="help.open"]').click();
 
   const helpShortcut = page.locator('.shortcut-edit[data-shortcut-command="help.open"]');
@@ -48,7 +48,7 @@ test('v2 help rejects duplicate shortcuts without saving', async ({ page }) => {
 });
 
 test('v2 configurable ability opens node properties', async ({ page }) => {
-  await page.goto('/v2/');
+  await page.goto('/');
   const nodeTemplate = await page.locator('#tpl-node').evaluate(template => template.innerHTML);
   expect(nodeTemplate).not.toContain('node.collapse.toggle');
   expect(nodeTemplate).not.toContain('item.properties.open');

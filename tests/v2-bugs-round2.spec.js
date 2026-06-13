@@ -7,7 +7,7 @@ const { test, expect } = require('@playwright/test');
  */
 
 const boot = async (page) => {
-  await page.goto('/v2/');
+  await page.goto('/');
   await page.waitForFunction(() => !!window.v2);
 };
 

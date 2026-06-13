@@ -94,6 +94,44 @@ command in a booted copy, and the shortcut tasks reduce to exactly that.
 - **Prompt budget** still warns ~1000–1150 with the task card; acceptable (total
   request stays ~2–3k, well under `num_ctx` 8192).
 
+## Update — smaller-model (7b) run after the constructor tools landed
+
+`qwen2.5-coder:7b` on `choose-invert-shortcut`, 10-min cap, streaming:
+
+- **RED: solved cleanly.** `scenario` → `gen_test` → `run_test` → auto-advance to
+  GREEN, ~4 turns. The pre-tool failure mode (wrong test polarity, gave up in RED)
+  is gone.
+- **GREEN: failed on tool *selection*, not text surgery.** It used `locate` +
+  `patch` (no 20-min `edit` loop — the old catastrophe is gone) but kept choosing
+  `patch insert_after` on the command-spec line instead of `set_command`, which
+  mangles the array. 17 turns, no fix.
+
+Three iterations closed it:
+
+1. **Guard added.** `patch` now detects a command-prop edit on a spec line and
+   redirects to `set_command` — teaching the right tool at the moment of the
+   mistake. Re-run: 7b hit `patch insert_after@43` → got redirected → switched to
+   `set_command` on the very next turn. Tool-selection fixed.
+2. **The residual failure was a mis-specified task, not a tool gap.** 7b's red
+   test (faithfully built from the task card) asserted `selection.count == 1`
+   after create→create→`choose.invert`. `apptool scenario` showed the real value
+   is **2**: the 2nd `editing.node.create` on a selected node auto-wires an edge,
+   and `invert` includes it. The behavior premise was wrong — a human author
+   (us) made the same mistake the model did. The tool caught it instantly.
+3. **Corrected the task to a spec-assert** (`{command:"choose.invert",
+   has:"input.key", value:"i"}`) — the robust red for "missing shortcut" (no
+   side-effecting steps). Final 7b run: **`outcome=fixed`, 4 turns, 2.1 min** —
+   gen_test → red fails → `set_command` → green passes → full suite + typecheck
+   green. The diff is exactly the intended one.
+
+**Net result: a 7B local model fixes a real bug end-to-end in ~2 minutes.** The
+user's bar ("model gets at least one fix right") is met with the *smaller* model.
+14b remains the dependable floor for harder tasks; 7b is now viable for the
+shortcut/CSS class given a clean task card and the guard. The biggest authoring
+lesson: for command/affordance bugs, assert the **spec or a fired event**, not a
+side-effecting behavior — side effects (create-makes-an-edge) make behavior
+asserts fragile, and `scenario`/`apptool` surface the truth before you commit.
+
 ## If you change v2 to help the model further (optional, low priority)
 
 The architecture is already good; these are *small* affordances, not refactors:

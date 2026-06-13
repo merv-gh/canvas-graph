@@ -12,7 +12,7 @@ const goWithFlags = async (page, overrides = {}) => {
   await page.addInitScript(({ overrides }) => {
     try { localStorage.setItem('v2.flags', JSON.stringify(overrides)); } catch (_) { /* */ }
   }, { overrides });
-  await page.goto('/v2/');
+  await page.goto('/');
   await page.waitForFunction(() => !!window.v2);
 };
 
@@ -49,11 +49,11 @@ test('empty-state hint appears when graph has no nodes', async ({ page }) => {
 
 test('memory mode does not write to localStorage', async ({ page }) => {
   // Boot once normally to populate v2.flags
-  await page.goto('/v2/');
+  await page.goto('/');
   await page.waitForFunction(() => !!window.v2);
   await page.evaluate(() => window.v2.flags.set('test.persisted', true));
   // Reboot in memory mode — flag setter should not touch localStorage.
-  await page.goto('/v2/?io=memory');
+  await page.goto('/?io=memory');
   await page.waitForFunction(() => !!window.v2);
   await page.evaluate(() => window.v2.flags.set('test.memory', true));
   const persisted = await page.evaluate(() => {

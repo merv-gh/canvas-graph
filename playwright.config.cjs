@@ -7,7 +7,7 @@ module.exports = defineConfig({
   fullyParallel: true,
   reporter: [['./tests/screenshot-reporter.cjs']],
   use: {
-    baseURL: 'http://127.0.0.1:5173',
+    baseURL: 'http://127.0.0.1:5174',
     viewport: { width: 800, height: 600 },
     deviceScaleFactor: 1,
     screenshot: 'only-on-failure',
@@ -20,8 +20,8 @@ module.exports = defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev -- --host 127.0.0.1 --port 5173',
-    url: 'http://127.0.0.1:5173',
+    command: 'npm run dev',
+    url: 'http://127.0.0.1:5174',
     reuseExistingServer: !process.env.CI,
     stdout: 'pipe',
     stderr: 'pipe',

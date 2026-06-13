@@ -1,17 +1,16 @@
 # ecs-canvas-graph
 
-Two apps live here. **All active development is `v2/`** — read `v2/CLAUDE.md` before touching it.
+The app is **`v2/`** (v1 was removed; v2 is served at root). Read `v2/CLAUDE.md` before touching it; `README.md` is the project hub + automation/DX guide.
 
-- `v2/` — TypeScript event-driven graph editor (systems/abilities/features plugins). Active.
-- `app.js` + `index.html` + `styles.css` (root) — v1, a single-file prototype. Frozen; don't refactor unless explicitly asked.
+- `v2/` — TypeScript event-driven graph editor (systems/abilities/features plugins).
 - `walker/` — local-model TDD loop + app-aware tooling (`node walker/apptool.mjs` for
   commands/events/flows/scenario/graph queries — see `walker/README.md`).
 
 ## Commands
 
 ```bash
-npm run dev:v2                 # v2 at http://127.0.0.1:5174
-npx vitest run                 # fast jsdom suite (tests/commands/, ~543 tests, <60s)
+npm run dev                    # app at http://127.0.0.1:5174 (alias: dev:v2)
+npx vitest run                 # fast jsdom suite (tests/commands/, ~545 tests, <60s)
 npx vitest run -t "<name>"     # one test by name — prefer this while iterating
 npm run test:commands:coverage # + v2-only V8 coverage (80% line/stmt/func gates)
 npm run typecheck              # tsc --noEmit

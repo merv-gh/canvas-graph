@@ -1,0 +1,167 @@
+# ecs-canvas-graph
+
+A keyboard-first graph editor for **writing graphs** — explaining programming
+concepts, sequences, workflows, and nested maps of memory with fast navigation.
+Event-driven, plugin-structured TypeScript; the architecture is judged by how
+cheaply it can be regrouped and how easily a bug can be found, reproduced, and
+fixed — by a human *or* a local model.
+
+> v1 (a single-file prototype) has been removed. The app is `v2/`, served at root.
+
+## Quickstart
+
+```bash
+npm install
+npm run dev                 # app at http://127.0.0.1:5174
+npx vitest run             # fast jsdom suite (tests/commands/, ~545 tests, <60s)
+npx vitest run -t "<name>" # one test by name — prefer while iterating
+npm run typecheck          # tsc --noEmit
+npm run test:browser       # Playwright (slow; layout/screenshots only)
+```
+
+Verify with `npx vitest run` + `npm run typecheck` before claiming done. A DX
+contract validator runs inside every boot — a violation throws in tests, so you
+don't have to eyeball it.
+
+## Repo map
+
+| Path | What |
+|---|---|
+| `v2/` | the app: `core.ts` (bus + registry + contexts), `systems/`, `abilities/`, `features.ts`, `model/`, `types.ts` |
+| `v2/PRINCIPLES.md` | the 22 enforced architecture principles — the design bible |
+| `v2/CLAUDE.md`, `v2/*/CLAUDE.md` | agent routing: which files a task touches, the hard rules |
+| `tests/commands/` | the fast jsdom suite (command-driven) + `recorded/` UI-regression repros + `probes/` |
+| `walker/` | the automated TDD loop + app-aware tooling (this README's automation section) |
+| `walker/ANALYSIS.md` | local-model shakedown findings + coverage matrix |
+
+**Mental model (one sentence):** v2 is a typed event app where entities choose
+abilities, abilities bring UI/commands/behavior, systems provide shared
+infrastructure, and features choreograph cross-system flows. Imperative event
+names are requests (`graph.node.create`); past-tense names are facts emitted by
+the data owner after the change lands (`graph.node.created`); facts drive redraw.
+Read `v2/PRINCIPLES.md` before changing v2.
+
+---
+
+## Automated develop / debug / fix
+
+The loop every change goes through is **reproduce → localize → hint the edit →
+verify**. v2 is built so each stage is a tool call, not a manual hunt. Two
+front-ends share one engine — a CLI for humans/Claude, and model-tools for a
+local LLM (`walker/`):
+
+```bash
+node walker/apptool.mjs commands [filter]   # every command + shortcut + origin
+node walker/apptool.mjs events  [filter]    # every bus event: who fires / emits / handles
+node walker/apptool.mjs flows   <event>     # one event's path + 1-hop downstream
+node walker/apptool.mjs scenario '<json>'   # boot the real app, run steps, check asserts
+node walker/apptool.mjs gen-test '<json>'   # a validated scenario → a runnable vitest file
+node walker/apptool.mjs graph <find|callers|callees|file|tests> <q>   # code index → file:line
+node walker/apptool.mjs locate <anchor>     # grep + verbatim numbered context for the edit
+```
+
+A `scenario` is the verification micro-loop — boot, drive, assert, in ~one second:
+
+```json
+{ "steps":  [ {"command":"editing.node.create"}, {"event":"fold.toggle","data":{"id":"shell.zen"}} ],
+  "asserts": [ {"path":"ui.shell.zen","op":"eq","value":true},
+               {"css":".node","op":"count","value":2},
+               {"file":"v2/styles.css","matches":"grid-row:\\s*2"},
+               {"command":"choose.invert","has":"input.key","value":"i"},
+               {"event":"graph.node.created"} ] }
+```
+
+The asserts span the whole observable surface: snapshot state (`graph.*`,
+`selection.*`, `ui.*`), live DOM (`css`), source text (`file`), command specs
+(`command`/`has`), and the event trace (`event`). State an assert as *desired*
+behavior and it fails today — that's your red test, and `gen-test` writes it.
+
+### The TDD harness (`walker/`)
+
+`walker/loop.mjs` drives a local model (ollama) through strict TDD in a
+disposable workspace (its own copy, git, vite, headless Chromium):
+
+1. **RED** — model writes only under `tests/commands/walker/`; accepted only when
+   its test exists and *fails*. A test that passes immediately is rejected.
+2. **GREEN** — model edits only `v2/`; accepted when the red test passes.
+3. **VERIFY** — harness-run (no model): full suite + `tsc --noEmit`.
+
+Guards are mechanical (path allowlists per phase, no shell tool). The model
+expresses edits as **intent**, not text surgery — `set_command` (props on an
+existing command), `add_command` (a new verb + auto-declared event + handler),
+`declare_event`, `patch` (line-addressed). See `walker/README.md` for the full
+tool set, run modes, and journal layout, and `walker/ANALYSIS.md` for what a
+7B/14B model can and can't carry.
+
+Every fixed bug is recorded twice: a `tests/commands/recorded/*.test.ts` and (for
+regressions) a `walker/setup/<id>.mjs` that re-introduces it — so the fix is a
+permanent benchmark case. **Record bugs even when you fix them by hand.**
+
+### Watch a fix, then approve it (human in the loop)
+
+Fixes are never auto-applied. The gate is your eyes, then your sign-off:
+
+1. **Watch** — `node walker/preview.mjs --task <id> --apply <journal/.../fix.patch>`
+   serves the patched fix in a disposable workspace and prints a URL like
+   `…/?scenario=A;A;A;Ctrl+A;wait;i`. Opening it replays the exact keystrokes with
+   a progress HUD, so you see the fix work (e.g. the new `i` shortcut inverting the
+   selection). Scenarios are a shareable, replayable keystroke macro — also a great
+   bug-report format (`?scenario=…` reproduces it on load).
+2. **Gate** — `node walker/apply.mjs --task <id>` runs the full quality gate in a
+   fresh workspace: vitest suite + `tsc` + **80% coverage**. "Truly ready" = all
+   three green. Dry-run by default — touches nothing.
+3. **Approve + land** — add the task id to `walker/APPROVALS.md`, then
+   `node walker/apply.mjs --task <id> --apply-for-real` re-runs the gate, applies
+   the v2 change to the repo, relocates the model's test into
+   `tests/commands/recorded/`, and re-verifies. Review `git diff`, then commit.
+
+Strong quality gates everywhere: the loop's per-attempt VERIFY (suite + types),
+the apply gate (+ coverage), and your visual approval.
+
+---
+
+## Make it further — the DX & testability contract
+
+The goal is a **hyper-observable, hyper-testable** app where each *new* bug is
+cheap to find, reproduce, and hint — by tooling, not memory. That holds only if
+every feature pays a small observability tax as it lands. The contract:
+
+1. **Every state that can be wrong is in the snapshot.** `core/snapshot.ts` is
+   the single observable surface; each leaf carries the TS expression to assert
+   it. A new visual/structural fact (a panel mode, a selection role, a layout
+   flag) gets a snapshot field in the same PR. If `scenario` can't see it, it
+   can't be tested or auto-fixed. *(zen mode was a one-line fix once `ui.shell.zen`
+   existed; the gap was observability, not logic.)*
+2. **Every mutation is an event, replayable from the bus.** `sim.record/replay`
+   round-trips a session; a recorded user trace reproduces a bug in jsdom in <1s.
+   Never mutate domain state outside an event handler.
+3. **Every capability is a command (data), reachable from `window.v2`.** That's
+   what lets `inspect` enumerate, `scenario` drive, and `set_command`/`add_command`
+   edit mechanically. Keep command literals one-per-line so the constructors can
+   target them.
+4. **Localization is free from the plugin boundary.** Systems toggle off
+   independently (Principle 2), so a flag-bisect narrows a fault to a few files
+   without the model reasoning about it.
+
+### Roadmap (closes the remaining blind spots)
+
+- **Layout oracle (Playwright, data-driven).** jsdom can't compute grid/transform
+  geometry — and *both* recorded layout bugs (fold, zen) were that class. One spec
+  that replays a trace and asserts real `getBoundingClientRect` sizes turns
+  "canvas disappeared" from eyes-only into a machine verdict. Highest priority.
+- **Pointer-stream testkit helpers** (`dragItem`, `resizeItem`) — lifts the
+  gesture-only abilities (resize/drag) out of their coverage hole and lets traces
+  carry gestures.
+- **Persistence as a swappable `io` system** — reload currently loses graphs; a
+  writing app needs durability (and export/import falls out nearly free).
+- **Undo as an inverse-patch listener** on the existing facts — the bus discipline
+  already paid for it (Principle 21); it's observability turned into a feature.
+- **DX runtime hygiene** — surface `sim.orphanEmits()` / `silentListeners()` as
+  warnings, and an acknowledge-list for the known by-design binding overlaps, so
+  boot returns to zero-noise (real warnings stop drowning).
+- **`add_ability {entity, ability}` constructor** — the one missing mechanical
+  edit (the renderer half still needs code), to lift inline-edit-class tasks.
+
+When a bug escapes the tools, the fix is usually one of the above — add the
+missing snapshot field / event / command first, *then* fix the bug, so the next
+one of its kind is auto-coverable.

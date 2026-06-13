@@ -4,7 +4,7 @@ One sentence: a typed event bus where **entities** declare **abilities**, abilit
 commands + UI + behavior, **systems** provide infrastructure, **features** choreograph
 cross-system flows, and render places DOM into named slots.
 
-Authority chain: `PRINCIPLES.md` (22 enforced rules) > this file > `readme.md` (narrative).
+Authority chain: `PRINCIPLES.md` (22 enforced rules) > this file > `../README.md` (project hub + automation).
 The 7-noun ladder lives at the top of `types.ts` (MODEL MAP) — skim it once, it's the
 whole mental model: Renderable → ItemRef → AppEvents → CommandSpec → AbilityDef →
 EntityDef → CollectionDef/ModelDef.
@@ -64,7 +64,7 @@ jsdom with memory IO; `runCommand(ctx, id)`, `await settle()`, then assert on
 Debug surfaces (browser console or tests): `window.v2` = AppCtx; `v2.debug.snapshot()`
 (structured user-visible state, each leaf maps to a TS assertion); `v2.dx.run()`
 (contract issues); `v2.sim.record()/replay()`; `v2.flags` + Help modal toggles any
-system/ability/feature live. Local-model / agent harness plan: `HARNESS.md`.
+system/ability/feature live. Automated dev/debug/fix loop + DX roadmap: `../README.md`; harness: `walker/README.md`.
 
 App-aware queries — prefer these over grep for discovery (each boots the real app):
 `node walker/apptool.mjs commands [filter]` (all commands + shortcuts/origins),

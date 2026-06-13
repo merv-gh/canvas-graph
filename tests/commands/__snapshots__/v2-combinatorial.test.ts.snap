@@ -67,11 +67,11 @@ exports[`combinatorial action graph > length-1: every auto-runnable command boot
   "snap": {
     "containers": 5,
     "dxErrors": 0,
-    "edges": 62,
-    "focused": "node:e43",
-    "nodes": 43,
-    "scale": 0.19,
-    "selected": "node:e43",
+    "edges": 64,
+    "focused": "node:e44",
+    "nodes": 44,
+    "scale": 0.18,
+    "selected": "node:e44",
   },
 }
 `;

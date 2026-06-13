@@ -116,6 +116,24 @@ see pixels). Browser console is captured per attempt. The `walk` task kind uses
 the same tools for open-ended exploration; its `note`s land in
 `journal/run-*/walk-*/observations.md` — feed good ones back into TASKS.md.
 
+## Reading the live stream
+
+stdout is a compact per-turn trace you can watch in real time (also in
+`journal/run-*/walker.log`):
+
+```
+RED·t2  → run_test {}                 # phase · turn → tool call (salient args)
+   ⤷ FAIL                             #   one-line result summary
+RED accepted (auto-advance)           # phase transition (evidence-based)
+GREEN·t1 → set_command choose.invert shortcut,input
+   ⤷ updated v2/systems/choose.ts
+[ollama] qwen2.5-coder:7b 25.6s prompt=2953tok out=21tok   # think time + tokens
+```
+
+`… prose, not a tool call: "…"` flags a non-tool reply (nudged); `aborting:
+identical actions repeated` is the doom-loop breaker; `outcome=fixed|fail|looping|
+gave-up` ends the attempt.
+
 ## Journal (everything an overnight run leaves behind)
 
 ```

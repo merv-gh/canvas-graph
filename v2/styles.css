@@ -688,3 +688,29 @@ button.icon:hover { color: var(--ink); }
   margin-top: 4px;
   border-top: 1px solid var(--line);
 }
+
+/* --- Scenario player HUD (presentation / fix-demo overlay) --- */
+.scenario-hud {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 80vw;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--ink, #1a1a1a);
+  color: var(--bg, #fff);
+  font: 600 13px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .28);
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: scenario-pop .18s ease;
+}
+.scenario-hud.done { background: var(--ok, #1a7f4b); }
+@keyframes scenario-pop { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translateX(-50%); } }

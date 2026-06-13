@@ -268,6 +268,13 @@ export class Tools {
     const all = readFileSync(abs, 'utf8').split('\n');
     const at = (line | 0) - 1;
     if (at < 0 || at >= all.length) return `line ${line} out of range (file has ${all.length} lines)`;
+    // Teach tool-selection at the point of the mistake: patching command props
+    // into a command-spec line is the wrong move — set_command does it cleanly
+    // and keeps the array valid. (Observed: weak models reach for insert_after here.)
+    const idMatch = all[at]?.match(/id:\s*['"]([\w.]+)['"]/);
+    if (idMatch && /\b(shortcut|input|group|hidden)\b/.test(String(text)) && this.phase === 'green') {
+      return `line ${line} is the command spec for '${idMatch[1]}'. Don't patch props into the register array — use set_command {"id":"${idMatch[1]}","props":{…}} (it injects shortcut/input/group correctly).`;
+    }
     const newLines = String(text).replace(/\n$/, '').split('\n');
     if (op === 'replace') all.splice(at, Math.max(1, count | 0), ...newLines);
     else if (op === 'insert_after') all.splice(at + 1, 0, ...newLines);
