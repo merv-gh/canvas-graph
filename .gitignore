@@ -7,5 +7,6 @@ walker/journal/
 walker/workspace/
 walker/preview-ws/
 walker/apply-ws/
+walker/views/
 walker/.selftest-*/
 walker/STOP

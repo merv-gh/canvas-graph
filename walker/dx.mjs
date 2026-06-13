@@ -16,6 +16,7 @@
 //   node walker/dx.mjs archive <task>
 //   node walker/dx.mjs add
 //   node walker/dx.mjs clean [--keep 3] [--yes]
+//   node walker/dx.mjs project <list|status|generate|sync|watch> [commands]
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import {
@@ -581,6 +582,7 @@ async function menu() {
       console.log('  g  gate fixed patch    l  land + commit fixed patch');
       console.log('  d  archive done task   o  approve task id');
       console.log('  c  clean old journal runs');
+      console.log('  v  feature projections');
       console.log('  q  quit');
       const choice = (await rl.question('\ndx> ')).trim().toLowerCase();
       if (!choice || choice === 'q') break;
@@ -607,10 +609,15 @@ async function menu() {
       } else if (choice === 'c') {
         const keepRaw = await rl.question('Keep latest N runs [3]: ');
         await cleanJournal({ keep: keepRaw.trim() || 3, rl });
+      } else if (choice === 'v') {
+        console.log('\nProjection actions: list, status, generate, sync, watch');
+        const action = (await rl.question('Action [status]: ')).trim() || 'status';
+        const name = (await rl.question('Projection [commands]: ')).trim() || 'commands';
+        runNode('walker/projections.mjs', [action, name]);
       } else {
         printHelp();
       }
-      if (!['r', 'p', 'g', 'l', 'w'].includes(choice)) await pause(rl);
+      if (!['r', 'p', 'g', 'l', 'w', 'v'].includes(choice)) await pause(rl);
     }
   } finally {
     rl.close();
@@ -631,6 +638,7 @@ usage:
   node walker/dx.mjs archive <task>
   node walker/dx.mjs add
   node walker/dx.mjs clean [--keep 3] [--yes]
+  node walker/dx.mjs project <list|status|generate|sync|watch> [commands]
 `);
 }
 
@@ -668,6 +676,9 @@ async function main() {
     return landTask(row, { yes: Boolean(argv.opts.yes) });
   }
   if (argv.cmd === 'clean') return cleanJournal({ keep: argv.opts.keep ?? 3, yes: Boolean(argv.opts.yes) });
+  if (['project', 'projection', 'projections', 'view', 'views'].includes(argv.cmd)) {
+    return runNode('walker/projections.mjs', argv.args.length ? argv.args : ['status']);
+  }
   printHelp();
   process.exitCode = 2;
 }

@@ -10,6 +10,7 @@ model can't fix a small bug here, the code (or its observability) is too clever.
 ```bash
 npm run dx                              # status-first menu: run, watch, preview, gate, land
 node walker/dx.mjs status               # same control plane, direct command mode
+node walker/dx.mjs project watch commands          # serve editable command projection
 node walker/loop.mjs --task detail-shortcuts --max-turns 8   # short real smoke
 node walker/loop.mjs --hours 8                    # overnight, all tasks, cycles
 touch walker/STOP                                 # graceful stop between attempts
@@ -34,6 +35,7 @@ task/status table and single-key actions:
 | `d` | move an already-applied task from `TASKS.md` to `DONE.md` |
 | `o` | add the task id to `APPROVALS.md` for the older manual apply flow |
 | `c` | remove old journal runs, keeping the newest N |
+| `v` | generate, sync, or watch feature projections |
 
 Direct equivalents exist for scripts/automation:
 
@@ -45,10 +47,30 @@ node walker/dx.mjs gate detail-shortcuts
 node walker/dx.mjs land detail-shortcuts
 node walker/dx.mjs archive detail-shortcuts
 node walker/dx.mjs clean --keep 3
+node walker/dx.mjs project generate commands
+node walker/dx.mjs project sync commands
+node walker/dx.mjs project watch commands
 ```
 
 The menu deliberately wraps the existing `loop.mjs`, `preview.mjs`, and
 `apply.mjs`; the model harness and quality gates remain in one place.
+
+## Feature projections
+
+Projections are editable views over source-owned slices. They compress context
+without moving ownership: source systems still own their commands/events/etc.,
+while a focused generated file gives humans and small models the relevant
+surface in one place.
+
+The first projection is commands:
+
+```bash
+npm run dx -- project generate commands   # writes walker/views/commands.proj.ts
+npm run dx -- project sync commands       # pushes edited command slices to v2/
+npm run dx -- project watch commands      # two-way watch: projection <-> source
+```
+
+See `PROJECTIONS.md` for the marker format and the extension contract.
 
 ## The loop
 
