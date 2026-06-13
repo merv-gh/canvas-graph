@@ -54,3 +54,22 @@ file assert on `v2/styles.css` requiring a `.properties input.editable-inline`
 rule with visible dashed `border-bottom`. GREEN: use `add_css_rule` after
 `.properties input`, selector `.properties input.editable-inline`, declaration
 `border-bottom: 1px dashed var(--line-strong)`; then `run_test`.
+
+## reverse-edge
+- kind: feature
+- files: v2/systems/graph.ts
+- title: Reverse the selected edge
+- command: graph.edge.reverse
+
+There is no way to flip an edge's direction. Add command `graph.edge.reverse`
+(group `edge`, shortcut `Shift+E`, available only when an edge is selected) that
+swaps the selected edge's `From` and `To`, then emits `graph.edge.updated`. Use
+`inspect commands edge` and `graph file v2/systems/graph.ts`; `graph.edge.delete`
+is the closest sibling (`selectedEdgeId()`, `available`, `payload`). Red scenario
+must use EVENTS for setup, not invented commands:
+`{"event":"graph.node.create","data":{"id":"e1"}}`,
+`{"event":"graph.node.create","data":{"id":"e2"}}`,
+`{"event":"graph.edge.create","data":{"From":"e1","To":"e2"}}`, then
+`{"event":"selection.item.select","data":{"kind":"edge","id":"r1"}}`, then run
+NEW command `graph.edge.reverse`, assert `graph.edges[0].From == 'e2'`. GREEN:
+use `add_edge_reverse {}`; it adds the command, handler, and EdgePatch typing.

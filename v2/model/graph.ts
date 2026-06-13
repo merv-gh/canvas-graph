@@ -24,7 +24,7 @@ export type CreateHints = {
 export type EdgeEntity = { id: Id; kind: 'edge'; From: Id; To: Id; Label?: Label };
 export type EdgeDraft = { From: Id; To: Id; Label?: Label };
 export type EdgeCreateDraft = Partial<EdgeDraft>;
-export type EdgePatch = Partial<Pick<EdgeEntity, 'Label'>>;
+export type EdgePatch = Partial<Pick<EdgeEntity, 'Label' | 'From' | 'To'>>;
 
 type StoredItem = { id?: Id; parent?: Id[] };
 type ItemStore<T = unknown> = () => T[];

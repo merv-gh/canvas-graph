@@ -19,6 +19,7 @@ import type { Id } from '../types';
 
 declare module '../types' {
   interface CustomEvents {
+    'graph.edge.reverse': { id: Id };
     'graph.create': void;
     'graph.created': { id: Id };
     'graph.delete': { id: Id };
@@ -61,6 +62,7 @@ export function registerGraph(system: Registry) {
     };
 
     contexts.commands.register([
+      { id: 'graph.edge.reverse', label: 'Reverse edge', group: 'edge', shortcut: 'Shift+E', available: () => !!selectedEdgeId(), payload: () => ({ id: selectedEdgeId() }) },
       {
         id: 'graph.create',
         label: 'Create graph',
@@ -106,6 +108,14 @@ export function registerGraph(system: Registry) {
         payload: source => ({ id: itemIdFrom(source.target) || selectedEdgeId() }),
       },
     ]);
+
+    on('graph.edge.reverse', ({ id }) => {
+      const edge = graphs.current.getEdge(id);
+      if (!edge) return;
+      if (graphs.current.updateEdge(id, { From: edge.To, To: edge.From })) {
+        emit('graph.edge.updated', { graphId: graphs.current.id, id });
+      }
+    });
 
     on('graph.create', () => {
       const graph = graphs.create();
