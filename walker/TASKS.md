@@ -5,6 +5,10 @@ the model sees — keep it under ~120 words). Keys: `kind` (bug | feature | walk
 `setup` (script in walker/setup/ that re-introduces the bug into the workspace),
 `files` (≤3 hints), `title`, `disabled` (skip).
 
+Suggested next local-model queue: `detail-shortcuts`, `properties-title`,
+`reverse-edge`, then `duplicate-node`. `choose-invert-shortcut` is landed in the
+real repo and kept here as a benchmark via its setup script.
+
 ## zen-canvas
 - kind: bug
 - setup: zen-canvas
@@ -39,6 +43,7 @@ gen_test renders them. GREEN: edit v2/systems/detail.ts only.
 
 ## choose-invert-shortcut
 - kind: feature
+- setup: choose-invert-shortcut
 - files: v2/systems/choose.ts
 - title: choose.invert has no keyboard shortcut
 - demo: A;A;A;Ctrl+A;wait;i

@@ -87,7 +87,7 @@ ok('scenario: command-spec assert (shortcut red) reports actual', () => {
     mode: 'scenario',
     steps: [],
     asserts: [
-      { command: 'choose.invert', has: 'input.key', value: 'i' },   // missing today → red
+      { command: 'detail.less', has: 'input.key', value: '[' },   // missing today -> red
       { command: 'editing.node.create', has: 'input.key', value: 'a' }, // bound → green
     ],
   });
@@ -222,8 +222,8 @@ await okAsync('set_command + add_command take effect in a booted copy', async ()
     const tools = new Tools({ ws, browser: null, log: () => {} });
     tools.phase = 'green';
 
-    // set_command: bind choose.invert to `i`.
-    const sc = tools.tool_set_command({ id: 'choose.invert', props: { shortcut: 'I', input: { on: 'keydown', key: 'i', prevent: true } } });
+    // set_command: bind a currently-unbound detail command.
+    const sc = tools.tool_set_command({ id: 'detail.less', props: { shortcut: '[', input: { on: 'keydown', key: '[', prevent: true } } });
     assert(/updated/.test(sc), `set_command: ${sc}`);
 
     // add_command: register a brand-new verb in graph.ts WITH a handler — and
@@ -246,8 +246,8 @@ await okAsync('set_command + add_command take effect in a booted copy', async ()
 
     // Boot the copy and confirm BOTH command changes are live, AND the new
     // event + declaration typecheck (run_test full = suite + tsc).
-    const inv = runProbe(ws.dir, { mode: 'commands', filter: 'choose.invert' });
-    assert.equal(inv.commands.find(c => c.id === 'choose.invert')?.key, 'keydown:i', JSON.stringify(inv.commands[0]));
+    const detail = runProbe(ws.dir, { mode: 'commands', filter: 'detail.less' });
+    assert.equal(detail.commands.find(c => c.id === 'detail.less')?.key, 'keydown:[', JSON.stringify(detail.commands[0]));
     const rev = runProbe(ws.dir, { mode: 'commands', filter: 'graph.edge.reverse' });
     assert(rev.commands.some(c => c.id === 'graph.edge.reverse'), JSON.stringify(rev));
     const types = ws.typecheck();

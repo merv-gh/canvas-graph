@@ -5,4 +5,7 @@ coverage/
 
 walker/journal/
 walker/workspace/
+walker/preview-ws/
+walker/apply-ws/
+walker/.selftest-*/
 walker/STOP

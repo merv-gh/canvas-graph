@@ -8,6 +8,8 @@ model can't fix a small bug here, the code (or its observability) is too clever.
 ## Run
 
 ```bash
+npm run dx                              # status-first menu: run, watch, preview, gate, land
+node walker/dx.mjs status               # same control plane, direct command mode
 node walker/loop.mjs --task zen-canvas --mock     # prove the plumbing, no model
 node walker/loop.mjs --task zen-canvas --max-turns 8   # short real smoke
 node walker/loop.mjs --hours 8                    # overnight, all tasks, cycles
@@ -16,6 +18,36 @@ touch walker/STOP                                 # graceful stop between attemp
 
 Config: `config.json` (ollama URL/model, budgets, ports). Override per run:
 `--model qwen3.5:35b`, `--cycles 3`, `--task <id>`.
+
+## DX menu
+
+`npm run dx` is the normal human entrypoint. With no arguments it shows a compact
+task/status table and single-key actions:
+
+| Key | Action |
+|---|---|
+| `r` | run the local model for `pending`, `all`, or one selected task |
+| `n` | append a new task card to `TASKS.md` |
+| `w` | show or follow the latest `walker.log` |
+| `p` | preview the latest fixed patch in a disposable app and print the URL |
+| `g` | run the full apply gate for a fixed patch |
+| `l` | gate, apply to the real repo, re-verify, and commit only the patch paths |
+| `o` | add the task id to `APPROVALS.md` for the older manual apply flow |
+| `c` | remove old journal runs, keeping the newest N |
+
+Direct equivalents exist for scripts/automation:
+
+```bash
+node walker/dx.mjs run detail-shortcuts --model qwen2.5-coder:7b
+node walker/dx.mjs log --follow
+node walker/dx.mjs preview detail-shortcuts
+node walker/dx.mjs gate detail-shortcuts
+node walker/dx.mjs land detail-shortcuts
+node walker/dx.mjs clean --keep 3
+```
+
+The menu deliberately wraps the existing `loop.mjs`, `preview.mjs`, and
+`apply.mjs`; the model harness and quality gates remain in one place.
 
 ## The loop
 
@@ -151,6 +183,8 @@ walker/journal/run-<timestamp>/
 Apply a winning patch to the real repo manually after review:
 `git apply walker/journal/run-*/zen-canvas-*/fix.patch` (the patch includes the
 red test — keep it; move it under `tests/commands/recorded/` if it's a recorded-class bug).
+The preferred path is `npm run dx` -> `p` preview -> `g` gate -> `l` land+commit,
+which avoids copying patch paths by hand.
 
 ## Adding tasks
 

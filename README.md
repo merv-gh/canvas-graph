@@ -13,6 +13,7 @@ fixed — by a human *or* a local model.
 ```bash
 npm install
 npm run dev                 # app at http://127.0.0.1:5174
+npm run dx                  # walker task/status menu for local-model fixes
 npx vitest run             # fast jsdom suite (tests/commands/, ~545 tests, <60s)
 npx vitest run -t "<name>" # one test by name — prefer while iterating
 npm run typecheck          # tsc --noEmit
@@ -99,7 +100,10 @@ permanent benchmark case. **Record bugs even when you fix them by hand.**
 
 ### Watch a fix, then approve it (human in the loop)
 
-Fixes are never auto-applied. The gate is your eyes, then your sign-off:
+`npm run dx` is the normal entrypoint for the whole local-model loop: status,
+new task, run, log tail, patch preview, gate, landing commit, and journal cleanup
+from one shortcut-driven terminal menu. The older direct commands are still useful
+when scripting or debugging one layer:
 
 1. **Watch** — `node walker/preview.mjs --task <id> --apply <journal/.../fix.patch>`
    serves the patched fix in a disposable workspace and prints a URL like
@@ -114,6 +118,10 @@ Fixes are never auto-applied. The gate is your eyes, then your sign-off:
    `node walker/apply.mjs --task <id> --apply-for-real` re-runs the gate, applies
    the v2 change to the repo, relocates the model's test into
    `tests/commands/recorded/`, and re-verifies. Review `git diff`, then commit.
+
+The DX menu's `l` action performs that last step in one guarded path: it refuses
+dirty target files, runs the apply gate, applies/re-verifies, stages only the
+patch's paths, and commits them.
 
 Strong quality gates everywhere: the loop's per-attempt VERIFY (suite + types),
 the apply gate (+ coverage), and your visual approval.
