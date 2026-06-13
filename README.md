@@ -59,6 +59,7 @@ node walker/apptool.mjs scenario '<json>'   # boot the real app, run steps, chec
 node walker/apptool.mjs gen-test '<json>'   # a validated scenario → a runnable vitest file
 node walker/apptool.mjs graph <find|callers|callees|file|tests> <q>   # code index → file:line
 node walker/apptool.mjs locate <anchor>     # grep + verbatim numbered context for the edit
+node walker/apptool.mjs gen <kind> <name>   # scaffold a new system/feature/ability (file + wiring + smoke test)
 ```
 
 A `scenario` is the verification micro-loop — boot, drive, assert, in ~one second:

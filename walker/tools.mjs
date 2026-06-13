@@ -172,10 +172,24 @@ export class Tools {
       this._declareEventInLines(lines, event, parsedSpec.payload ? 'any' : 'void');
       notes.push(`declared event '${event}'`);
     }
-    // Pass 2: insert the spec as the first element of register([…]).
+    // Pass 2: insert the spec as the FIRST array element. Handle BOTH the
+    // multi-line `register([` form and the compact `register([{ …` form (the
+    // first object's `{` shares the line with `[`). For the compact form, keep
+    // the `[` and push the trailing content to its own line, so the new element
+    // slots in as a sibling instead of merging INTO the existing object literal
+    // (that produced a syntax error on every compact-array system).
     const regIdx = findReg(lines);
-    const baseIndent = (lines[regIdx].match(/^\s*/) ?? [''])[0];
-    lines.splice(regIdx + 1, 0, `${baseIndent}  ${this.serializeObject(parsedSpec)},`);
+    const regLine = lines[regIdx];
+    const baseIndent = (regLine.match(/^\s*/) ?? [''])[0];
+    const elem = `${baseIndent}  ${this.serializeObject(parsedSpec)},`;
+    const bracket = regLine.indexOf('[', regLine.indexOf('register'));
+    const trailing = regLine.slice(bracket + 1);
+    if (trailing.trim() === '') {
+      lines.splice(regIdx + 1, 0, elem);
+    } else {
+      lines[regIdx] = regLine.slice(0, bracket + 1);
+      lines.splice(regIdx + 1, 0, elem, `${baseIndent}  ${trailing}`);
+    }
     // Pass 3: place the handler right after the register([…]) closes.
     if (handler) {
       const body = typeof this.parseSpec(handler) === 'string' ? this.parseSpec(handler) : String(handler);
@@ -224,6 +238,60 @@ export class Tools {
     writeFileSync(abs, lines.join('\n'));
     this.log(`[tool] declare_event '${event}' → ${rel}`);
     return `declared '${event}': ${type} in ${rel}. emit('${event}', …) is now typed; add the emit with patch/add_command.`;
+  }
+
+  /** Constructor for the "collapse / fold a panel or region" task shape (left
+   *  panel, top bar, event log, zen — the user's panel-collapse family). Fold is
+   *  ONE generic store (core/fold.ts) keyed by a string id; a toggle is just a
+   *  command whose `event` is the already-declared `fold.toggle` fact carrying
+   *  that id (types.ts declares it; foldable.ts handles it). This encodes the
+   *  wiring a weak model fumbles — the fold.toggle event name + the `() => ({id})`
+   *  payload arrow — so the model supplies only {foldId, key}. Reuses
+   *  add_command's boot-proven register-array placement, then optionally
+   *  contributes a toolbar button when the target system exposes `contribute`. */
+  tool_add_fold_toggle({ system, id, foldId, key, shortcut, label, group, surface, glyph, order }) {
+    if (this.phase !== 'green') return 'add_fold_toggle is GREEN-phase only (it edits v2/)';
+    if (!system || !id || !foldId || !key) {
+      return 'add_fold_toggle needs {system, id, foldId, key, shortcut?, surface?, glyph?}, e.g. {"system":"v2/systems/main.ts","id":"view.left.toggle","foldId":"outline.panel","key":"b","shortcut":"B"}. The fold.toggle event + payload are wired for you.';
+    }
+    const spec = {
+      id,
+      label: label || `Toggle ${foldId}`,
+      group: group || 'view',
+      event: 'fold.toggle',
+      ...(shortcut ? { shortcut } : {}),
+      input: { on: 'keydown', key, prevent: true },
+      // Emitted RAW by serializeObject (it detects `=>`), so this becomes real code.
+      payload: `() => ({ id: '${foldId}' })`,
+    };
+    // No handler: fold.toggle is already declared (types.ts) and handled
+    // (foldable.ts). The new command just emits it with this region's id.
+    const cmdResult = this.tool_add_command({ system, spec });
+    if (!/registered '/.test(cmdResult)) return cmdResult;
+
+    let affordanceNote = 'no affordance requested (a [data-fold-id] chevron in the region\'s view is the mouse half — see the hamburger in systems/main.ts)';
+    if (surface) {
+      const { abs, rel } = this.safePath(system);
+      const lines = readFileSync(abs, 'utf8').split('\n');
+      if (!/\bcontribute\b/.test(lines.join('\n'))) {
+        affordanceNote = `affordance NOT added: ${rel} doesn't destructure \`contribute\` in its system(...) args. Add it there, or render a [data-fold-id="${foldId}"] chevron in the region's view (hamburger pattern in systems/main.ts).`;
+      } else {
+        const regIdx = lines.findIndex(l => /commands\.register\(\[/.test(l));
+        let closeIdx = -1;
+        for (let i = regIdx + 1; i < lines.length; i++) { if (/\]\);/.test(lines[i])) { closeIdx = i; break; } }
+        const indent = (lines[regIdx]?.match(/^\s*/) ?? [''])[0];
+        const text = (glyph || '▾').replace(/'/g, "\\'");
+        if (closeIdx >= 0) {
+          lines.splice(closeIdx + 1, 0, `${indent}contribute({ surface: '${surface}', command: '${id}', kind: 'button', text: '${text}', order: ${Number(order) || 50} });`);
+          writeFileSync(abs, lines.join('\n'));
+          affordanceNote = `contributed a '${surface}' button (${text})`;
+        } else {
+          affordanceNote = 'affordance NOT added: could not find the register array close; add contribute(...) with patch.';
+        }
+      }
+    }
+    this.log(`[tool] add_fold_toggle ${id} → fold '${foldId}'${surface ? ` + ${surface} button` : ''}`);
+    return `added fold toggle '${id}' — emits fold.toggle {id:'${foldId}'} in ${system}. ${affordanceNote}.\nrun_test to confirm.`;
   }
 
   tool_add_css_rule({ path = 'v2/styles.css', selector, declarations, after }) {

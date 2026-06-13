@@ -1,8 +1,8 @@
 {
   "ollama": {
     "url": "http://192.168.1.148:11434",
-    "model": "qwen2.5-coder:14b",
-    "escalateModel": "qwen3.5:35b",
+    "model": "qwen2.5-coder:7b",
+    "escalateModel": "qwen3.5:14b",
     "temperature": 0.2,
     "escalateTemperature": 0.4,
     "numCtx": 8192,

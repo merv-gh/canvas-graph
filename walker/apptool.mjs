@@ -21,6 +21,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { genTest, runProbe } from './probe-client.mjs';
 import { graphQuery } from './graphdb.mjs';
+import { genPlugin } from './gen.mjs';
 import { Tools } from './tools.mjs';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -68,7 +69,18 @@ switch (cmd) {
     console.log(new Tools({ ws, browser: null, log: () => {} }).tool_locate({ anchor: rest[0] ?? '', dir: rest[1] ?? 'v2' }));
     break;
   }
+  case 'gen': {
+    const report = genPlugin({ kind: rest[0], name: rest[1], repoRoot: REPO });
+    if (report.error) { console.error(`gen: ${report.error}\nusage: apptool gen <system|feature|ability> <name>`); process.exit(2); }
+    console.log(`generated ${report.kind} '${report.name}'`);
+    console.log(`  written: ${report.written.join(', ') || '-'}`);
+    console.log(`  wired:   ${report.wired.join(', ') || '-'}`);
+    console.log('  next:');
+    report.nextSteps.forEach(s => console.log(`    - ${s}`));
+    break;
+  }
   default:
-    console.log('usage: apptool <events|commands|flows|scenario|gen-test|graph|locate> …  (see file header)');
+    console.log('usage: apptool <events|commands|flows|scenario|gen-test|graph|locate|gen> …  (see file header)');
+    console.log('       apptool gen <system|feature|ability> <name>   # scaffold a new plugin');
     process.exit(cmd ? 2 : 0);
 }

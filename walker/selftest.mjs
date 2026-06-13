@@ -260,6 +260,56 @@ export function registerGraph(system: Registry) {
   assert(system.includes("graphs.current.updateEdge(id, { From: edge.To, To: edge.From })"), system);
   rmSync(dir, { recursive: true, force: true });
 });
+ok('add_fold_toggle: wires fold.toggle command + toolbar affordance', () => {
+  const dir = join(REPO, 'walker/.selftest-fold');
+  mkdirSync(join(dir, 'v2/systems'), { recursive: true });
+  const file = join(dir, 'v2/systems/mock.ts');
+  writeFileSync(file, [
+    "import type { Registry } from '../core';",
+    'export function registerMock(system: Registry) {',
+    "  system('mock', ({ contexts, contribute }) => {",
+    '    contexts.commands.register([',
+    '    ]);',
+    '  });',
+    '}',
+    '',
+  ].join('\n'));
+  const tools = new Tools({ ws: stubWs(dir), browser: null, log: () => {} });
+  tools.phase = 'green';
+  const out = tools.tool_add_fold_toggle({ system: 'v2/systems/mock.ts', id: 'view.top.toggle', foldId: 'shell.top', key: 't', shortcut: 'T', surface: 'top', glyph: '▾' });
+  const src = readFileSync(file, 'utf8');
+  assert(/added fold toggle 'view\.top\.toggle'/.test(out), out);
+  assert(/contributed a 'top' button/.test(out), out);
+  assert(src.includes("event: 'fold.toggle'"), src);
+  assert(src.includes("payload: () => ({ id: 'shell.top' })"), src);            // arrow stays raw
+  assert(src.includes("input: { on: 'keydown', key: 't', prevent: true }"), src);
+  assert(src.includes("contribute({ surface: 'top', command: 'view.top.toggle', kind: 'button', text: '▾', order: 50 });"), src);
+  rmSync(dir, { recursive: true, force: true });
+});
+ok('add_fold_toggle: skips affordance when system lacks contribute (no broken code)', () => {
+  const dir = join(REPO, 'walker/.selftest-fold2');
+  mkdirSync(join(dir, 'v2/systems'), { recursive: true });
+  const file = join(dir, 'v2/systems/mock.ts');
+  writeFileSync(file, [
+    "import type { Registry } from '../core';",
+    'export function registerMock(system: Registry) {',
+    "  system('mock', ({ contexts }) => {",
+    '    contexts.commands.register([',
+    '    ]);',
+    '  });',
+    '}',
+    '',
+  ].join('\n'));
+  const tools = new Tools({ ws: stubWs(dir), browser: null, log: () => {} });
+  tools.phase = 'green';
+  const out = tools.tool_add_fold_toggle({ system: 'v2/systems/mock.ts', id: 'view.left.toggle', foldId: 'outline.panel', key: 'b', shortcut: 'B', surface: 'top' });
+  const src = readFileSync(file, 'utf8');
+  assert(/added fold toggle 'view\.left\.toggle'/.test(out), out);
+  assert(/affordance NOT added/.test(out) && /doesn't destructure/.test(out), out);
+  assert(src.includes("payload: () => ({ id: 'outline.panel' })"), src);
+  assert(!/contribute\(/.test(src), 'must not splice contribute into a system that does not expose it');
+  rmSync(dir, { recursive: true, force: true });
+});
 ok('locate: returns verbatim numbered context for an anchor', () => {
   const tools = new Tools({ ws: stubWs(REPO), browser: null, log: () => {} });
   const out = tools.tool_locate({ anchor: "id: 'choose.invert'", dir: 'v2' });
@@ -304,6 +354,15 @@ await okAsync('set_command + add_command take effect in a booted copy', async ()
     const de = tools.tool_declare_event({ system: 'v2/systems/graph.ts', event: 'graph.exported', type: '{ json: string }' });
     assert(/declared 'graph\.exported'/.test(de), `declare_event: ${de}`);
     assert(/'graph\.exported':\s*\{ json: string \}/.test(readFileSync(join(ws.dir, 'v2/systems/graph.ts'), 'utf8')), 'event not declared in file');
+
+    // add_fold_toggle on the REAL main.ts — whose register opens `register([{`
+    // (compact first element on the same line). This is the exact shape the live
+    // 14b run tripped: the spliced element must stay a sibling, not merge into
+    // the existing object literal. The final ws.typecheck() below is the guard.
+    const ft = tools.tool_add_fold_toggle({ system: 'v2/systems/main.ts', id: 'view.left.toggle', foldId: 'outline.panel', key: 'b', shortcut: 'B' });
+    assert(/added fold toggle 'view\.left\.toggle'/.test(ft), `add_fold_toggle: ${ft}`);
+    const left = runProbe(ws.dir, { mode: 'commands', filter: 'view.left.toggle' });
+    assert.equal(left.commands.find(c => c.id === 'view.left.toggle')?.key, 'keydown:b', JSON.stringify(left.commands));
 
     // Boot the copy and confirm BOTH command changes are live, AND the new
     // event + declaration typecheck (run_test full = suite + tsc).
