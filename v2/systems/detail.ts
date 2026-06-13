@@ -15,8 +15,8 @@ declare module '../types' {
 export function registerDetail(system: Registry) {
   system('detail', ({ on, emit, contexts, selection, graphs }) => {
     contexts.commands.register([
-      { id: 'detail.less', label: 'Less detail (fold / zoom out)', group: 'view' },
-      { id: 'detail.more', label: 'More detail (unfold / zoom in)', group: 'view' },
+      { id: 'detail.less', label: 'Less detail (fold / zoom out)', group: 'view', shortcut: '[', input: { on: 'keydown', key: '[', prevent: true } },
+      { id: 'detail.more', label: 'More detail (unfold / zoom in)', group: 'view', shortcut: ']', input: { on: 'keydown', key: ']', prevent: true } },
     ]);
     const setFold = (open: boolean) =>
       selection.selectedAll().forEach(ref => contexts.fold.set(itemFoldId(ref, graphs.current.id), open));

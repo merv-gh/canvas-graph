@@ -24,22 +24,6 @@ desired (red) asserts {"focus":".modal input"} and
 {"path":"ui.modal.focusedField","op":"truthy"} — both fail today. GREEN: when the
 properties modal opens, move focus to its first field (edit v2/ only).
 
-## detail-shortcuts
-- kind: feature
-- files: v2/systems/detail.ts
-- title: detail.less / detail.more have no keyboard shortcuts
-- demo: A;A;A;Z;wait;[;wait;]
-
-Commands `detail.less` (fold selection / zoom out) and `detail.more` exist but
-are palette-only — no keyboard binding, breaking the keyboard-first rule. Add
-shortcuts in v2/systems/detail.ts: `[` for detail.less, `]` for detail.more —
-set both `shortcut` label AND `input: { on: 'keydown', key: '[', prevent: true }`
-(read the file; copy the input shape from any bound command via
-inspect commands). Red scenario asserts:
-{"command":"detail.less","has":"input.key","value":"["} and
-{"command":"detail.more","has":"input.key","value":"]"} — both fail today;
-gen_test renders them. GREEN: edit v2/systems/detail.ts only.
-
 ## edge-inline-edit
 - kind: feature
 - files: v2/model/entities.ts, v2/abilities/editable.ts
