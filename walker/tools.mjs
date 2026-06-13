@@ -294,6 +294,50 @@ export class Tools {
     return `added fold toggle '${id}' — emits fold.toggle {id:'${foldId}'} in ${system}. ${affordanceNote}.\nrun_test to confirm.`;
   }
 
+  /** Constructor for "make Escape exit a folded region" (zen, and any future
+   *  full-screen/overlay fold). Cancellation is one generic stack
+   *  (core/cancellation.ts): a system registers `{origin, active, cancel}` and
+   *  Escape peels the topmost active one (editable.ts / jump.ts are the exemplars).
+   *  This encodes the fold-specific active/cancel and ensures `contexts`+`origin`
+   *  are destructured, so the model supplies only {system, foldId}. Composes with
+   *  add_fold_toggle: toggle creates the fold, this makes Escape close it. */
+  tool_add_fold_cancellable({ system, foldId }) {
+    if (this.phase !== 'green') return 'add_fold_cancellable is GREEN-phase only (it edits v2/)';
+    if (!system || !foldId) return 'add_fold_cancellable needs {system, foldId}, e.g. {"system":"v2/systems/main.ts","foldId":"shell.zen"} — makes Escape exit that folded region.';
+    const { abs, rel } = this.safePath(system);
+    if (!this.writeAllowed(rel)) return this.phaseDenied(rel);
+    if (!existsSync(abs)) return `no such file: ${system}`;
+    const lines = readFileSync(abs, 'utf8').split('\n');
+    const whole = lines.join('\n');
+    if (/cancellation\.register/.test(whole) && whole.includes(`folded('${foldId}')`)) {
+      return `add_fold_cancellable: ${rel} already registers a cancellable for '${foldId}'`;
+    }
+    const sysIdx = lines.findIndex(l => /\bsystem\(\s*['"][^'"]+['"]/.test(l));
+    if (sysIdx < 0) return `add_fold_cancellable: no system('…', …) registration in ${rel}`;
+    const sysLine = lines[sysIdx];
+    const m = sysLine.match(/\(\s*\{([^}]*)\}\s*\)\s*=>/);
+    if (!m) {
+      return `add_fold_cancellable: the system in ${rel} doesn't use a single-line ({ … }) => ctx destructure, so I can't safely add origin/contexts. Add it by hand (see jump.ts): contexts.cancellation.register({ origin, active: () => contexts.fold.folded('${foldId}'), cancel: () => contexts.fold.set('${foldId}', true) });`;
+    }
+    const current = m[1].split(',').map(s => s.trim()).filter(Boolean);
+    const missing = ['contexts', 'origin'].filter(n => !current.includes(n));
+    if (missing.length) {
+      lines[sysIdx] = sysLine.replace(/\(\s*\{[^}]*\}\s*\)\s*=>/, `({ ${[...current, ...missing].join(', ')} }) =>`);
+    }
+    const indent = (sysLine.match(/^\s*/) ?? [''])[0] + '  ';
+    lines.splice(sysIdx + 1, 0,
+      `${indent}// Escape exits this folded region — cancellation peels the topmost active layer.`,
+      `${indent}contexts.cancellation.register({`,
+      `${indent}  origin,`,
+      `${indent}  active: () => contexts.fold.folded('${foldId}'),`,
+      `${indent}  cancel: () => contexts.fold.set('${foldId}', true),`,
+      `${indent}});`,
+    );
+    writeFileSync(abs, lines.join('\n'));
+    this.log(`[tool] add_fold_cancellable ${foldId} → ${rel}${missing.length ? ` (+${missing.join(',')})` : ''}`);
+    return `added Escape-to-exit cancellable for fold '${foldId}' in ${rel}${missing.length ? ` (added ${missing.join(', ')} to the ctx destructure)` : ''}.\nrun_test to confirm.`;
+  }
+
   tool_add_css_rule({ path = 'v2/styles.css', selector, declarations, after }) {
     if (this.phase !== 'green') return 'add_css_rule is GREEN-phase only (it edits v2/)';
     if (!selector || !declarations) return 'add_css_rule needs {selector, declarations, after?}';

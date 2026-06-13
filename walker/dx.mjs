@@ -419,7 +419,7 @@ function ensureCleanLandingPaths(row) {
   }
 }
 
-async function landTask(row, { yes = false } = {}) {
+async function landTask(row, { yes = false, rl = null } = {}) {
   if (!row?.fixed?.patch) {
     console.log('No fixed patch for that task yet.');
     return 1;
@@ -433,7 +433,7 @@ async function landTask(row, { yes = false } = {}) {
     console.log(`task:  ${row.task.id}`);
     console.log(`patch: ${rel(row.fixed.patch)}`);
     console.log(`msg:   fix: ${row.task.id}`);
-    const answer = await askLine('Type "land" to continue: ');
+    const answer = await ask(rl, 'Type "land" to continue: ');
     if (answer.trim() !== 'land') return 1;
   }
   try {
@@ -468,7 +468,14 @@ async function landTask(row, { yes = false } = {}) {
     cwd: REPO,
     stdio: 'inherit',
   });
-  return commit.status ?? 0;
+  const status = commit.status ?? 0;
+  if (status === 0) {
+    const url = demoUrl(row.task);
+    console.log(`\n🎉 Landed ${row.task.id}.`);
+    if (url) console.log(`   See it: ${url}\n   (run \`npm run dev\` if it isn't up — the ?scenario= macro replays the demo on load)`);
+    else console.log(`   Try it: run \`npm run dev\`, open http://127.0.0.1:5174/  (add a \`demo:\` macro to the task card for a one-click replay link)`);
+  }
+  return status;
 }
 
 function approveTask(row) {
@@ -520,7 +527,7 @@ async function addTask(rl) {
   console.log(`Added ${id} to ${rel(TASKS_FILE)}.`);
 }
 
-async function cleanJournal({ keep = 3, yes = false } = {}) {
+async function cleanJournal({ keep = 3, yes = false, rl = null } = {}) {
   if (!existsSync(JOURNAL_DIR)) return console.log('No journal directory yet.');
   const runs = readdirSync(JOURNAL_DIR)
     .filter(n => n.startsWith('run-'))
@@ -531,7 +538,7 @@ async function cleanJournal({ keep = 3, yes = false } = {}) {
   console.log(`Will remove ${remove.length} old journal run(s), keeping ${keep}:`);
   for (const run of remove) console.log(`- ${rel(run.path)}`);
   if (!yes) {
-    const answer = await askLine('Type "clean" to remove them: ');
+    const answer = await ask(rl, 'Type "clean" to remove them: ');
     if (answer.trim() !== 'clean') return;
   }
   for (const run of remove) rmSync(run.path, { recursive: true, force: true });
@@ -542,6 +549,21 @@ async function askLine(question) {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   try { return await rl.question(question); }
   finally { rl.close(); }
+}
+
+/** Prompt using the caller's readline when it has one. The menu shares a SINGLE
+ *  interface for the whole session; a second interface on the same stdin echoes
+ *  every keystroke twice AND, when it closes, pauses shared stdin so the menu's
+ *  next question never resolves (the input-duplication + unsettled-await bug). */
+async function ask(rl, question) {
+  return rl ? rl.question(question) : askLine(question);
+}
+
+/** A shareable demo link: the dev server replays a `?scenario=` keystroke macro
+ *  on load, so landing a feature hands back a one-click "see it work". */
+function demoUrl(task) {
+  const demo = task?.meta?.demo;
+  return demo ? `http://127.0.0.1:5174/?scenario=${encodeURIComponent(demo)}` : null;
 }
 
 async function pause(rl) {
@@ -575,7 +597,7 @@ async function menu() {
         if (row) gateTask(row);
       } else if (choice === 'l') {
         const row = await askTask(rl, { fixedOnly: true });
-        if (row) await landTask(row, {});
+        if (row) await landTask(row, { rl });
       } else if (choice === 'o') {
         const row = await askTask(rl, { fixedOnly: true });
         if (row) approveTask(row);
@@ -584,7 +606,7 @@ async function menu() {
         if (row) archiveTaskRow(row);
       } else if (choice === 'c') {
         const keepRaw = await rl.question('Keep latest N runs [3]: ');
-        await cleanJournal({ keep: keepRaw.trim() || 3 });
+        await cleanJournal({ keep: keepRaw.trim() || 3, rl });
       } else {
         printHelp();
       }
@@ -650,5 +672,9 @@ async function main() {
   process.exitCode = 2;
 }
 
-const code = await main();
-if (Number.isInteger(code)) process.exitCode = code;
+// No top-level await: the menu's stdin loop can legitimately stay pending until
+// the user quits, and a top-level await over it triggers Node's spurious
+// "unsettled top-level await" warning. `.then` settles the exit code instead.
+main()
+  .then(code => { if (Number.isInteger(code)) process.exitCode = code; })
+  .catch(err => { console.error(err?.stack ?? err); process.exitCode = 1; });

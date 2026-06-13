@@ -96,6 +96,17 @@ function captureUi(ctx: AppCtx) {
   };
   const count = (selector: string) => stageEl?.querySelectorAll(selector).length ?? 0;
   const leftCount = (selector: string) => leftEl?.querySelectorAll(selector).length ?? 0;
+  // Modal field values + which field has focus. The seam for properties/modal
+  // input bugs ("typing resets after one char" / "focus lost on a keystroke"):
+  // a redraw that rebuilds the modal blurs the active input and drops the
+  // in-progress value — invisible until ui.modal.focusedField / .fields exist.
+  const modalFields: Record<string, string> = {};
+  modalEl?.querySelectorAll('[data-field]').forEach(el => {
+    const field = el.getAttribute('data-field');
+    if (field) modalFields[field] = (el as HTMLInputElement).value ?? '';
+  });
+  const activeEl = (modalEl?.ownerDocument ?? document).activeElement as HTMLElement | null;
+  const focusedField = activeEl && modalEl?.contains(activeEl) ? activeEl.getAttribute('data-field') : null;
   return {
     places: {
       top: sizeOf(topEl),
@@ -127,6 +138,8 @@ function captureUi(ctx: AppCtx) {
     },
     modal: {
       open: (modalEl?.children.length ?? 0) > 0,
+      fields: modalFields,
+      focusedField,
     },
   };
 }
@@ -171,6 +184,7 @@ const STAGE_CODE: Record<string, string> = {
 };
 const MODAL_CODE: Record<string, string> = {
   open: "(ctx.contexts.places.el('modal')?.children.length ?? 0) > 0",
+  focusedField: "(() => { const a = document.activeElement; const m = ctx.contexts.places.el('modal'); return a && m?.contains(a) ? a.getAttribute('data-field') : null; })()",
 };
 const OUTLINE_CODE: Record<string, string> = {
   sections: "ctx.contexts.places.el('left')?.querySelectorAll('.outline-section').length",

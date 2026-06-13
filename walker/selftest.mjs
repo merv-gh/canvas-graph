@@ -310,6 +310,49 @@ ok('add_fold_toggle: skips affordance when system lacks contribute (no broken co
   assert(!/contribute\(/.test(src), 'must not splice contribute into a system that does not expose it');
   rmSync(dir, { recursive: true, force: true });
 });
+ok('add_fold_cancellable: registers Escape-to-exit + adds missing origin/contexts', () => {
+  const dir = join(REPO, 'walker/.selftest-cancel');
+  mkdirSync(join(dir, 'v2/systems'), { recursive: true });
+  const file = join(dir, 'v2/systems/mock.ts');
+  writeFileSync(file, [
+    "import type { Registry } from '../core';",
+    'export function registerMock(system: Registry) {',
+    "  system('mock', ({ on, contexts }) => {",
+    '    void on; void contexts;',
+    '  });',
+    '}',
+    '',
+  ].join('\n'));
+  const tools = new Tools({ ws: stubWs(dir), browser: null, log: () => {} });
+  tools.phase = 'green';
+  const out = tools.tool_add_fold_cancellable({ system: 'v2/systems/mock.ts', foldId: 'shell.zen' });
+  const src = readFileSync(file, 'utf8');
+  assert(/added Escape-to-exit cancellable/.test(out), out);
+  assert(src.includes('({ on, contexts, origin }) =>'), src);                     // origin widened in
+  assert(src.includes('contexts.cancellation.register({'), src);
+  assert(src.includes("active: () => contexts.fold.folded('shell.zen')"), src);
+  assert(src.includes("cancel: () => contexts.fold.set('shell.zen', true)"), src);
+  rmSync(dir, { recursive: true, force: true });
+});
+ok('add_fold_cancellable: bails without editing on a ctx => destructure it cannot widen', () => {
+  const dir = join(REPO, 'walker/.selftest-cancel2');
+  mkdirSync(join(dir, 'v2/systems'), { recursive: true });
+  const file = join(dir, 'v2/systems/mock.ts');
+  const before = [
+    "import type { Registry } from '../core';",
+    'export function registerMock(system: Registry) {',
+    "  system('mock', ctx => { void ctx; });",
+    '}',
+    '',
+  ].join('\n');
+  writeFileSync(file, before);
+  const tools = new Tools({ ws: stubWs(dir), browser: null, log: () => {} });
+  tools.phase = 'green';
+  const out = tools.tool_add_fold_cancellable({ system: 'v2/systems/mock.ts', foldId: 'shell.zen' });
+  assert(/doesn't use a single-line/.test(out), out);
+  assert.equal(readFileSync(file, 'utf8'), before, 'file must be untouched on bail');
+  rmSync(dir, { recursive: true, force: true });
+});
 ok('locate: returns verbatim numbered context for an anchor', () => {
   const tools = new Tools({ ws: stubWs(REPO), browser: null, log: () => {} });
   const out = tools.tool_locate({ anchor: "id: 'choose.invert'", dir: 'v2' });
@@ -363,6 +406,12 @@ await okAsync('set_command + add_command take effect in a booted copy', async ()
     assert(/added fold toggle 'view\.left\.toggle'/.test(ft), `add_fold_toggle: ${ft}`);
     const left = runProbe(ws.dir, { mode: 'commands', filter: 'view.left.toggle' });
     assert.equal(left.commands.find(c => c.id === 'view.left.toggle')?.key, 'keydown:b', JSON.stringify(left.commands));
+
+    // add_fold_cancellable on the SAME real main.ts: widens its ({…}) destructure
+    // with `origin` and splices the Escape-to-exit cancellable. The final
+    // ws.typecheck() below is the guard that both edits compile together.
+    const fc = tools.tool_add_fold_cancellable({ system: 'v2/systems/main.ts', foldId: 'shell.zen' });
+    assert(/added Escape-to-exit cancellable/.test(fc), `add_fold_cancellable: ${fc}`);
 
     // Boot the copy and confirm BOTH command changes are live, AND the new
     // event + declaration typecheck (run_test full = suite + tsc).

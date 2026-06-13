@@ -14,6 +14,7 @@ GREEN → change ONLY v2/ until the test passes. Pick the edit tool by intent:
   • add a NEW command/verb → add_command {system, spec, handler?}
   • add a CSS selector rule → add_css_rule {selector, declarations, after?}
   • collapse/fold a panel or region (left panel, top bar, event log, zen) → add_fold_toggle {system, id, foldId, key, shortcut?, surface?}
+  • make Escape exit a folded region (zen/overlay) → add_fold_cancellable {system, foldId}
   • reverse selected edge feature → add_edge_reverse {}
   • other CSS/code → patch {path, op:"replace"|"insert_after", line, count, text}  (line numbers from read/locate; never retype old text)
 Re-check with scenario, confirm with run_test, then done.
@@ -22,7 +23,7 @@ DISCOVER first with inspect (commands/events/flows) and graph/locate (file:line)
 App facts:
 - Typed event bus. Imperative = request (graph.node.create); past-tense = fact emitted by the owner after the change (graph.node.created); facts auto-redraw. Cross-system reactions live in v2/features.ts.
 - Mutate items via emit('item.update',{ref,patch}). Commands are DATA: {id,label,group,shortcut,input:{on:'keydown',key,prevent:true},available,payload}. No document.querySelector in systems — use contexts.places.el(place).
-- scenario assert paths: graph.{nodes,edges,containers}, selection.count, ui.shell.{leftFolded,zen}, ui.rendered.{nodes,edges}, ui.modal.open. Also {command:id,has:"input.key",value} checks a spec; {event:name[,path,op,value]} checks a fired event.
+- scenario assert paths: graph.{nodes,edges,containers}, selection.count, ui.shell.{leftFolded,zen}, ui.rendered.{nodes,edges}, ui.modal.{open,focusedField}. Also {command:id,has:"input.key",value} checks a spec; {event:name[,path,op,value]} checks a fired event.
 
 TOOLS (full args in the schema):
 {TOOL_DOCS}

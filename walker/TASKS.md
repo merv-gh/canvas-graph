@@ -145,3 +145,40 @@ add_fold_toggle {"system":"v2/systems/main.ts","id":"view.left.toggle",
 payload are wired for you; no `surface` (the hamburger covers the mouse). RED:
 assert the SPEC, not a side effect — {"command":"view.left.toggle",
 "has":"input.key","value":"b"} fails today, passes once bound.
+
+## zen-escape
+- kind: feature
+- files: v2/systems/main.ts
+- title: Escape does not exit zen mode (no way back once panels are hidden)
+- demo: A;A;wait;\
+
+Zen mode (`\`) hides the top + left panels, leaving only the canvas (fold id
+`shell.zen` in v2/systems/main.ts, mirrored as `ui.shell.zen`). Once in zen the
+only exit is `\` again — Escape does nothing, which is surprising. Cancellation
+is a generic stack (core/cancellation.ts): a system registers {origin, active,
+cancel} and Escape (which fires `app.cancel`) peels the topmost active one. Make
+zen cancellable. GREEN: use add_fold_cancellable
+{"system":"v2/systems/main.ts","foldId":"shell.zen"} — it widens main's ctx
+destructure with `origin` and registers the cancellable. RED (scenario): step
+{"event":"fold.toggle","data":{"id":"shell.zen"}} to enter zen, then
+{"event":"app.cancel"}; assert {"path":"ui.shell.zen","op":"eq","value":false} —
+fails today (Escape ignored), passes once cancellable.
+
+## properties-name-editable
+- kind: bug
+- disabled: true
+- files: v2/abilities/configurable.ts
+- title: Editing a node's Title in the properties modal loses focus after one char
+
+NOTE: disabled for the walker (jsdom) queue — focus loss is a BROWSER behavior a
+jsdom scenario can't drive. The observability seam is laid: `ui.modal.focusedField`
+(which field has focus) and `ui.modal.fields` (current values). This task is ready
+for the Playwright layout-oracle (README roadmap), not the local loop yet.
+Symptom: the node properties modal (⚙ / item.properties.open) Title field
+(property id `title`, v2/model/entities.ts) commits per keystroke
+(properties.item.input → item.update → redraw) and the redraw rebuilds the modal
+body, blurring the input — you can't type a full title. RED (browser): focus the
+Title input, dispatch two input events, assert document.activeElement stays it
+(ui.modal.focusedField === 'title'). GREEN: don't rebuild the modal on item.update
+for the open item, or restore focus+caret after (see outline.ts's queueMicrotask
+refocus after search).
