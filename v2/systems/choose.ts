@@ -40,7 +40,7 @@ export function registerChoose(system: Registry) {
         available: () => allRefs().length > 0,
       },
       { id: 'choose.none', label: 'Choose none', group: 'choose', available: () => selection.selectedAll().length > 0 },
-      { id: 'choose.invert', label: 'Invert choice', group: 'choose', available: () => allRefs().length > 0 },
+      { id: 'choose.invert', label: 'Invert choice', group: 'choose', available: () => allRefs().length > 0, shortcut: 'I', input: { on: 'keydown', key: 'i', prevent: true } },
       { id: 'choose.follow', label: 'Grow along edges', group: 'choose', available: () => chosenNodes().length > 0 },
       { id: 'choose.radius', label: 'Grow by proximity', group: 'choose', available: () => chosenNodes().length > 0 },
       {
