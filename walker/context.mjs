@@ -14,6 +14,7 @@ FIND THE PLACE by symptom (discover before editing — don't blind-read):
   • visual/render/layout wrong → the ⟳ fact leaf in that flow is where render reads data; go to that file
   • entity data lifecycle (node/edge/container/item/graph) → projection data <entity>
   • missing shortcut/command, or command props → projection commands; event payload/type → projection events; UI affordance → projection command-ui
+  • shell fold/render wiring (dataset mirror, ui.shell snapshot, CSS hide/show) → projection render
 THEN GREEN edit ONLY v2/, by intent:
   • existing command props → set_command {id,props}; new command → add_command {system,spec,handler?}; CSS → add_css_rule
   • fold panel → add_fold_toggle; Escape exits fold → add_fold_cancellable

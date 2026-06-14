@@ -24,6 +24,7 @@ const EVENTS_VIEW = join(VIEWS_DIR, 'events.proj.ts');
 const FLOWS_VIEW = join(VIEWS_DIR, 'flows.proj.md');
 const COMMAND_UI_VIEW = join(VIEWS_DIR, 'command-ui.proj.ts');
 const DATA_VIEW = join(VIEWS_DIR, 'data.proj.md');
+const RENDER_VIEW = join(VIEWS_DIR, 'render.proj.md');
 
 const projections = new Map([
   ['commands', {
@@ -75,6 +76,16 @@ const projections = new Map([
     sync: () => console.log('data is read-only; it is derived from events + handlers in source'),
     watchFiles: () => listSourceFiles(),
     count: () => DATA_ENTITIES.length,
+  }],
+  ['render', {
+    name: 'render',
+    outFile: RENDER_VIEW,
+    description: 'editable shell fold render wiring: dataset mirrors + snapshot fields + CSS rules',
+    render: () => renderRender(collectShellFolds()),
+    generate: generateRender,
+    sync: syncRender,
+    watchFiles: () => [join(SOURCE_ROOT, 'systems/main.ts'), join(SOURCE_ROOT, 'core/snapshot.ts'), join(SOURCE_ROOT, 'styles.css')],
+    count: () => collectShellFolds().length,
   }],
 ]);
 
@@ -188,16 +199,20 @@ function registerRanges(source) {
 
 function extractCommandsFromSource(source, file) {
   const commands = [];
-  const idRe = /\bid\s*:\s*(['"`])([^'"`]+)\1/g;
   for (const range of registerRanges(source)) {
-    idRe.lastIndex = range.start;
-    for (let m; (m = idRe.exec(source)) && m.index < range.end;) {
-      const id = m[2];
-      if (!id.includes('.')) continue;
-      const start = source.lastIndexOf('{', m.index);
-      if (start < range.start) continue;
+    let i = range.start;
+    while (i < range.end) {
+      if (source[i] !== '{') {
+        i++;
+        continue;
+      }
+      const start = i;
       const endBrace = findMatching(source, start, '{', '}');
-      if (endBrace < 0 || endBrace > range.end) continue;
+      if (endBrace < 0 || endBrace > range.end) break;
+      const text = source.slice(start, includeTrailingComma(source, endBrace));
+      const id = text.match(/\bid\s*:\s*(['"`])([^'"`]+)\1/)?.[2];
+      i = endBrace + 1;
+      if (!id || !id.includes('.')) continue;
       const end = includeTrailingComma(source, endBrace);
       commands.push({
         id,
@@ -814,18 +829,240 @@ function generateData({ quiet = false } = {}) {
   writeProjection(def, def.render(), quiet);
 }
 
+// ---- render surface: shell fold dataset/snapshot/CSS wiring ----
+const MAIN_TS = join(SOURCE_ROOT, 'systems/main.ts');
+const SNAPSHOT_TS = join(SOURCE_ROOT, 'core/snapshot.ts');
+const STYLES_CSS = join(SOURCE_ROOT, 'styles.css');
+
+function kebab(value) {
+  return String(value).replace(/[A-Z]/g, m => `-${m.toLowerCase()}`);
+}
+
+function quoteString(value) {
+  return `'${String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+}
+
+function constantsIn(source) {
+  const constants = new Map();
+  const re = /^\s*const\s+([A-Z0-9_]+)\s*=\s*(['"`])([^'"`]+)\2\s*;/gm;
+  for (let m; (m = re.exec(source));) constants.set(m[1], m[3]);
+  return constants;
+}
+
+function foldExprToId(expr, constants) {
+  const raw = String(expr ?? '').trim();
+  const quoted = raw.match(/^(['"`])([^'"`]+)\1$/);
+  if (quoted) return quoted[2];
+  return constants.get(raw) ?? raw;
+}
+
+function cssRuleRanges(source) {
+  const ranges = [];
+  for (let i = 0; i < source.length; i++) {
+    if (source[i] !== '{') continue;
+    const close = findMatching(source, i, '{', '}');
+    if (close < 0) continue;
+    const prevClose = source.lastIndexOf('}', i);
+    let selectorStart = prevClose < 0 ? 0 : prevClose + 1;
+    while (/\s/.test(source[selectorStart] ?? '')) selectorStart++;
+    ranges.push({ start: selectorStart, end: close + 1, text: source.slice(selectorStart, close + 1).trimEnd() });
+    i = close;
+  }
+  return ranges;
+}
+
+function cssForAttr(source, attr) {
+  return cssRuleRanges(source)
+    .filter(rule => rule.text.includes(`[${attr}=`))
+    .map(rule => rule.text)
+    .join('\n');
+}
+
+function collectShellFolds() {
+  if (!existsSync(MAIN_TS)) return [];
+  const main = readFileSync(MAIN_TS, 'utf8');
+  const css = existsSync(STYLES_CSS) ? readFileSync(STYLES_CSS, 'utf8') : '';
+  const constants = constantsIn(main);
+  const folds = [];
+  const re = /^\s*shell\.dataset\.([A-Za-z_$][\w$]*)\s*=\s*contexts\.fold\.folded\(([^)]+)\)\s*\?\s*['"]true['"]\s*:\s*['"]false['"]\s*;/gm;
+  for (let m; (m = re.exec(main));) {
+    const field = m[1];
+    const foldExpr = m[2].trim();
+    const foldId = foldExprToId(foldExpr, constants);
+    const attr = `data-${kebab(field)}`;
+    folds.push({
+      field,
+      foldId,
+      foldExpr,
+      attr,
+      line: lineNumber(main, m.index),
+      css: cssForAttr(css, attr),
+    });
+  }
+  return folds;
+}
+
+function renderRender(folds) {
+  const lines = [
+    '# @walker-projection render v1',
+    '',
+    'Editable shell fold render wiring. Each block syncs:',
+    '- v2/systems/main.ts dataset mirror + fold.changed guard',
+    '- v2/core/snapshot.ts ui.shell mirror',
+    '- v2/styles.css shell CSS rules',
+    '',
+    'Add a new `## shell-fold <field>` block next to siblings to create a render seam.',
+    '',
+  ];
+  for (const fold of folds) {
+    lines.push(`## shell-fold ${fold.field}`);
+    lines.push(`field: ${fold.field}`);
+    lines.push(`foldId: ${fold.foldId}`);
+    if (fold.foldExpr && fold.foldExpr !== quoteString(fold.foldId)) lines.push(`foldExpr: ${fold.foldExpr}`);
+    lines.push(`attr: ${fold.attr}`);
+    lines.push('css:');
+    lines.push('```css');
+    lines.push((fold.css || `.shell[${fold.attr}="true"] { }`).trimEnd());
+    lines.push('```', '');
+  }
+  return lines.join('\n');
+}
+
+function generateRender({ quiet = false } = {}) {
+  const def = selectProjection('render');
+  writeProjection(def, def.render(), quiet);
+}
+
+function parseRender(text) {
+  const blocks = [];
+  const parts = text.split(/\n(?=## shell-fold )/).slice(1);
+  for (const part of parts) {
+    const head = part.match(/^## shell-fold\s+([^\n]+)/);
+    if (!head) continue;
+    const body = part.slice(head[0].length);
+    const get = (key) => body.match(new RegExp(`\\n${key}:\\s*([^\\n]+)`))?.[1]?.trim();
+    const css = body.match(/```css\s*\n([\s\S]*?)```/)?.[1]?.trimEnd() ?? '';
+    const field = get('field') ?? head[1].trim();
+    const foldId = get('foldId');
+    if (!field || !foldId) throw new Error(`render projection shell-fold ${head[1]} needs field and foldId`);
+    blocks.push({
+      field,
+      foldId,
+      foldExpr: get('foldExpr') || quoteString(foldId),
+      attr: get('attr') || `data-${kebab(field)}`,
+      css,
+    });
+  }
+  return blocks;
+}
+
+function replaceBetween(source, startNeedle, endNeedle, replacement) {
+  const startAt = source.indexOf(startNeedle);
+  if (startAt < 0) throw new Error(`render sync: missing start marker ${startNeedle}`);
+  const bodyStart = startAt + startNeedle.length;
+  const endAt = source.indexOf(endNeedle, bodyStart);
+  if (endAt < 0) throw new Error(`render sync: missing end marker ${endNeedle}`);
+  return `${source.slice(0, bodyStart)}${replacement}${source.slice(endAt)}`;
+}
+
+function replaceObjectBody(source, objectName, body) {
+  const re = new RegExp(`const\\s+${objectName}\\s*:[^{]+\\{`, 'm');
+  const m = re.exec(source);
+  if (!m) throw new Error(`render sync: missing ${objectName}`);
+  const open = source.indexOf('{', m.index);
+  const close = findMatching(source, open, '{', '}');
+  if (close < 0) throw new Error(`render sync: unterminated ${objectName}`);
+  return `${source.slice(0, open + 1)}\n${body}\n${source.slice(close)}`;
+}
+
+function removeShellFoldCss(source, folds) {
+  const attrs = new Set(folds.map(fold => fold.attr));
+  let next = source;
+  for (const rule of cssRuleRanges(source).sort((a, b) => b.start - a.start)) {
+    if (![...attrs].some(attr => rule.text.includes(`[${attr}=`))) continue;
+    let start = rule.start;
+    let end = rule.end;
+    while (next[end] === '\n' && next[end + 1] === '\n') end++;
+    next = `${next.slice(0, start)}${next.slice(end)}`;
+  }
+  return next.replace(/\n{3,}/g, '\n\n');
+}
+
+function insertAfterShellRule(source, cssText) {
+  const shell = source.match(/\.shell\s*\{[^}]*\}/);
+  if (!shell) throw new Error('render sync: missing .shell CSS rule');
+  const at = (shell.index ?? 0) + shell[0].length;
+  return `${source.slice(0, at)}\n${cssText.trimEnd()}\n${source.slice(at).replace(/^\n+/, '')}`;
+}
+
+function syncRender({ quiet = false } = {}) {
+  if (!existsSync(RENDER_VIEW)) throw new Error(`${rel(RENDER_VIEW)} does not exist; run generate first`);
+  const folds = parseRender(readFileSync(RENDER_VIEW, 'utf8'));
+  const seen = new Set();
+  for (const fold of folds) {
+    if (seen.has(fold.field)) throw new Error(`duplicate shell fold field ${fold.field}`);
+    seen.add(fold.field);
+  }
+
+  let changedFiles = 0;
+  const writeChanged = (file, next) => {
+    const current = readFileSync(file, 'utf8');
+    if (current === next) return;
+    writeFileSync(file, next);
+    changedFiles++;
+  };
+
+  let main = readFileSync(MAIN_TS, 'utf8');
+  const datasetLines = folds.map(fold =>
+    `      shell.dataset.${fold.field} = contexts.fold.folded(${fold.foldExpr}) ? 'true' : 'false';`).join('\n');
+  main = replaceBetween(main, '      if (!shell) return;\n', '    };', `${datasetLines}\n`);
+  const guard = `      if (${folds.map(fold => `id !== ${fold.foldExpr}`).join(' && ')}) return;`;
+  main = main.replace(/^\s*if \(id !== [^\n]+?\) return;$/m, guard);
+  writeChanged(MAIN_TS, main);
+
+  let snapshot = readFileSync(SNAPSHOT_TS, 'utf8');
+  const shellObject = folds.map(fold => `      ${fold.field}: shellEl?.dataset.${fold.field} === 'true',`).join('\n');
+  snapshot = replaceBetween(snapshot, '    shell: {\n', '    },\n    rendered:', `${shellObject}\n`);
+  const shellCode = folds.map(fold =>
+    `  ${fold.field}: "ctx.contexts.places.el('top')?.parentElement?.dataset.${fold.field} === 'true'",`).join('\n');
+  snapshot = replaceObjectBody(snapshot, 'SHELL_CODE', shellCode);
+  writeChanged(SNAPSHOT_TS, snapshot);
+
+  let css = readFileSync(STYLES_CSS, 'utf8');
+  css = removeShellFoldCss(css, folds);
+  const cssText = folds.map(fold => fold.css.trim()).filter(Boolean).join('\n');
+  if (cssText) css = insertAfterShellRule(css, cssText);
+  writeChanged(STYLES_CSS, css);
+
+  if (!quiet) console.log(`synced ${folds.length} shell fold render seam(s) into ${changedFiles} changed source file(s)`);
+}
+
 // ---- concept brief: fuzzy-search the views by a phrase, for harness injection ----
 const CONCEPT_STOP = new Set(['the', 'and', 'for', 'via', 'not', 'does', 'done', 'with', 'from',
   'into', 'this', 'that', 'out', 'off', 'are', 'way', 'back', 'once', 'mode', 'only', 'has',
   'have', 'its', 'but', 'all', 'any', 'new', 'add', 'make', 'when', 'then', 'now', 'should',
-  'would', 'could', 'item', 'items', 'app', 'still', 'leaving', 'hidden', 'panels', 'panel']);
+  'would', 'could', 'item', 'items', 'app', 'still', 'leaving', 'hidden']);
+
+function conceptWords(query) {
+  const words = new Set(String(query || '').toLowerCase().split(/[^a-z0-9]+/)
+    .filter(word => word.length > 2 && !CONCEPT_STOP.has(word)));
+  if ([...words].some(word => ['collapse', 'collapsed', 'collapsible', 'fold', 'folded', 'hide', 'hidden'].includes(word))) {
+    words.add('fold');
+    words.add('folded');
+    words.add('toggle');
+  }
+  if ([...words].some(word => ['escape', 'cancel', 'cancellable'].includes(word))) {
+    words.add('cancel');
+    words.add('cancellation');
+  }
+  return [...words];
+}
 
 /** Compact, harness-injectable brief for a concept phrase: the matching commands,
  *  the flow trace from the best-matching origin (origin→handlers→⟳ render leaf), and
  *  the data entity if one is named. This is the slice a weak model won't fetch itself. */
 function renderConcept(query) {
-  const words = [...new Set(String(query || '').toLowerCase().split(/[^a-z0-9]+/)
-    .filter(word => word.length > 2 && !CONCEPT_STOP.has(word)))];
+  const words = conceptWords(query);
   if (!words.length) return 'concept: provide a phrase to search\n';
   const score = (text) => { const t = String(text || '').toLowerCase(); return words.reduce((n, w) => n + (t.includes(w) ? 1 : 0), 0); };
   const data = eventFlowData();
@@ -841,6 +1078,34 @@ function renderConcept(query) {
     for (const { command } of commands) {
       const shortcut = command.text.match(/\bshortcut\s*:\s*['"]([^'"]+)/)?.[1];
       lines.push(`  ${command.id}${shortcut ? ` [${shortcut}]` : ''}  ${command.rel}:${command.line}`);
+    }
+    lines.push('');
+  }
+
+  const commandIds = new Set(commands.map(({ command }) => command.id));
+  const affordances = collectCommandUi()
+    .map(item => ({ item, s: commandIds.has(item.id) ? 2 : score(`${item.id} ${item.body}`) }))
+    .filter(entry => entry.s > 0)
+    .sort((a, b) => b.s - a.s)
+    .slice(0, 4);
+  if (affordances.length) {
+    lines.push('ui affordances:');
+    for (const { item } of affordances) {
+      const surface = item.body.match(/\bsurface\s*:\s*['"]([^'"]+)/)?.[1] ?? '?';
+      lines.push(`  ${item.id} on ${surface}  ${item.rel}:${item.line}`);
+    }
+    lines.push('');
+  }
+
+  const renderFolds = collectShellFolds()
+    .map(fold => ({ fold, s: score(`${fold.field} ${fold.foldId} ${fold.attr} ${fold.css}`) }))
+    .filter(entry => entry.s > 0)
+    .sort((a, b) => b.s - a.s)
+    .slice(0, 4);
+  if (renderFolds.length) {
+    lines.push('render seams:');
+    for (const { fold } of renderFolds) {
+      lines.push(`  ${fold.field}: ${fold.foldId} -> ${fold.attr}  main.ts:${fold.line}, snapshot.ts, styles.css`);
     }
     lines.push('');
   }
@@ -946,12 +1211,31 @@ function syncCommandUi({ quiet = false } = {}) {
   const blocks = /export\s+const\s+commandUi\b/.test(viewText)
     ? parseCommandUiArray(viewText)
     : parseMarkedBlocks(viewText, 'command-ui');
+  const index = new Map();
+  for (const item of collectCommandUi()) index.set(item.id, item);
   const byFile = new Map();
+  const addReplacement = (file, replacement) => {
+    if (!byFile.has(file)) byFile.set(file, []);
+    byFile.get(file).push(replacement);
+  };
+  let lastFound = null;
+  let added = 0;
   for (const block of blocks) {
-    const found = collectCommandUi().find(item => item.id === block.id);
-    if (!found) throw new Error(`could not find command UI contribution ${block.id} in source`);
-    if (!byFile.has(found.file)) byFile.set(found.file, []);
-    byFile.get(found.file).push({ ...found, next: `${found.prefix}${block.body.trimEnd()}${found.suffix}` });
+    const found = index.get(block.id);
+    if (found) {
+      lastFound = found;
+      addReplacement(found.file, { ...found, next: `${found.prefix}${block.body.trimEnd()}${found.suffix}` });
+      continue;
+    }
+    if (!lastFound) throw new Error(`new command UI contribution '${block.id}' has no preceding sibling to anchor to`);
+    const source = readFileSync(lastFound.file, 'utf8');
+    const indent = source.slice(source.lastIndexOf('\n', lastFound.start) + 1, lastFound.start);
+    addReplacement(lastFound.file, {
+      start: lastFound.end,
+      end: lastFound.end,
+      next: `\n${indent}${lastFound.prefix}${block.body.trimEnd()}${lastFound.suffix}`,
+    });
+    added++;
   }
   let changedFiles = 0;
   let changedBlocks = 0;
@@ -967,7 +1251,7 @@ function syncCommandUi({ quiet = false } = {}) {
       changedFiles++;
     }
   }
-  if (!quiet) console.log(`synced ${changedBlocks} command UI contribution(s) into ${changedFiles} source file(s)`);
+  if (!quiet) console.log(`synced ${changedBlocks} command UI contribution(s)${added ? ` (+${added} new)` : ''} into ${changedFiles} source file(s)`);
 }
 
 function projectionStatus(def) {
@@ -1062,10 +1346,10 @@ function printHelp() {
 usage:
   node walker/projections.mjs list
   node walker/projections.mjs status
-  node walker/projections.mjs show [commands|events|flows|command-ui|data] [filter]
-  node walker/projections.mjs generate [commands|events|flows|command-ui|data]
-  node walker/projections.mjs sync [commands|events|command-ui]
-  node walker/projections.mjs watch [commands|events|flows|command-ui|data]
+  node walker/projections.mjs show [commands|events|flows|command-ui|data|render] [filter]
+  node walker/projections.mjs generate [commands|events|flows|command-ui|data|render]
+  node walker/projections.mjs sync [commands|events|command-ui|render]
+  node walker/projections.mjs watch [commands|events|flows|command-ui|data|render]
 
 Generated views live in walker/views/. Source files remain the owners.
 `);

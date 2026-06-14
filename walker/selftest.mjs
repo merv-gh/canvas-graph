@@ -164,6 +164,9 @@ ok('projection: commands and flows expose focused architecture views', () => {
   assert(commandsView.includes("id: 'detail.less'"), commandsView);
   const flowsView = execFileSync(process.execPath, ['walker/projections.mjs', 'show', 'flows', 'graph.edge.create'], { cwd: REPO, encoding: 'utf8' });
   assert(flowsView.includes('handlers: v2/systems/graph.ts'), flowsView);
+  const concept = execFileSync(process.execPath, ['walker/projections.mjs', 'concept', 'top panel collapse'], { cwd: REPO, encoding: 'utf8' });
+  assert(concept.includes('view.top.toggle'), concept);
+  assert(concept.includes('topFolded: shell.top'), concept);
 });
 
 ok('projection: commands view is a compilable array and round-trips clean', () => {
@@ -172,6 +175,8 @@ ok('projection: commands view is a compilable array and round-trips clean', () =
   assert(view.includes('export const commands: CommandSpec[] = ['), 'view is not a typed array');
   assert(view.includes('@ts-nocheck'), 'view should be @ts-nocheck (valid TS, no sea of red)');
   assert(!view.includes('// BEGIN command'), 'v2 view should carry no per-slice markers');
+  assert(!/^\s*\{ id: 'outline\.panel'[, }]/m.test(view), 'payload fold id leaked as a fake command');
+  assert(!/^\s*\{ id: 'shell\.top'[, }]/m.test(view), 'payload fold id leaked as a fake command');
   // a no-op sync MUST NOT rewrite source — the watcher saves on every edit.
   const noop = execFileSync(process.execPath, ['walker/projections.mjs', 'sync', 'commands'], { cwd: REPO, encoding: 'utf8' });
   assert(/synced 0 command slice/.test(noop), `no-op sync mutated source: ${noop}`);
@@ -232,6 +237,89 @@ ok('projection: events view is a compilable interface and round-trips clean', ()
   assert(!view.includes('// BEGIN event'), 'events v2 view should carry no markers');
   const noop = execFileSync(process.execPath, ['walker/projections.mjs', 'sync', 'events'], { cwd: REPO, encoding: 'utf8' });
   assert(/synced 0 event declaration/.test(noop), `no-op events sync mutated source: ${noop}`);
+});
+
+ok('projection: render can create a shell fold seam across render, snapshot, and CSS', () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'walker-proj-render-'));
+  const env = { ...process.env, WALKER_PROJECTION_ROOT: scratch };
+  const proj = join(REPO, 'walker/projections.mjs');
+  try {
+    mkdirSync(join(scratch, 'v2/systems'), { recursive: true });
+    mkdirSync(join(scratch, 'v2/core'), { recursive: true });
+    writeFileSync(join(scratch, 'v2/systems/main.ts'), [
+      "const LEFT_PANEL_FOLD_ID = 'outline.panel';",
+      "const ZEN_FOLD_ID = 'shell.zen';",
+      'export function registerMain(system) {',
+      "  system('main', ({ on, contexts }) => {",
+      '    const syncShellFold = () => {',
+      '      const shell = { dataset: {} };',
+      '      if (!shell) return;',
+      "      shell.dataset.leftFolded = contexts.fold.folded(LEFT_PANEL_FOLD_ID) ? 'true' : 'false';",
+      "      shell.dataset.zen = contexts.fold.folded(ZEN_FOLD_ID) ? 'true' : 'false';",
+      '    };',
+      "    on('fold.changed', ({ id }) => {",
+      '      if (id !== LEFT_PANEL_FOLD_ID && id !== ZEN_FOLD_ID) return;',
+      '      syncShellFold();',
+      '    });',
+      '  });',
+      '}',
+      '',
+    ].join('\n'));
+    writeFileSync(join(scratch, 'v2/core/snapshot.ts'), [
+      'export function snapshot() {',
+      '  const shellEl = null;',
+      '  return {',
+      '    shell: {',
+      "      leftFolded: shellEl?.dataset.leftFolded === 'true',",
+      "      zen: shellEl?.dataset.zen === 'true',",
+      '    },',
+      '    rendered: {},',
+      '  };',
+      '}',
+      'const SHELL_CODE: Record<string, string> = {',
+      '  leftFolded: "ctx.contexts.places.el(\'top\')?.parentElement?.dataset.leftFolded === \'true\'",',
+      '  zen: "ctx.contexts.places.el(\'top\')?.parentElement?.dataset.zen === \'true\'",',
+      '};',
+      '',
+    ].join('\n'));
+    writeFileSync(join(scratch, 'v2/styles.css'), [
+      '.shell { display: grid; }',
+      '.shell[data-left-folded="true"] { grid-template-columns: 0 1fr; }',
+      '.shell[data-zen="true"] { grid-template: 0 1fr / 0 1fr; }',
+      '',
+    ].join('\n'));
+    execFileSync(process.execPath, [proj, 'generate', 'render'], { cwd: scratch, env, encoding: 'utf8' });
+    const viewFile = join(scratch, 'walker/views/render.proj.md');
+    const view = readFileSync(viewFile, 'utf8');
+    const topFold = [
+      '## shell-fold topFolded',
+      'field: topFolded',
+      'foldId: shell.top',
+      'attr: data-top-folded',
+      'css:',
+      '```css',
+      '.shell[data-top-folded="true"] { grid-template-rows: 0 1fr; }',
+      '.shell[data-top-folded="true"] .top { display: none; }',
+      '```',
+      '',
+    ].join('\n');
+    writeFileSync(viewFile, view.replace('## shell-fold zen', `${topFold}## shell-fold zen`));
+    const out = execFileSync(process.execPath, [proj, 'sync', 'render'], { cwd: scratch, env, encoding: 'utf8' });
+    assert(/synced 3 shell fold render seam/.test(out), out);
+    assert(/3 changed source file/.test(out), out);
+    const main = readFileSync(join(scratch, 'v2/systems/main.ts'), 'utf8');
+    const snapshot = readFileSync(join(scratch, 'v2/core/snapshot.ts'), 'utf8');
+    const css = readFileSync(join(scratch, 'v2/styles.css'), 'utf8');
+    assert(main.includes("shell.dataset.topFolded = contexts.fold.folded('shell.top') ? 'true' : 'false';"), main);
+    assert(main.includes("id !== 'shell.top'"), main);
+    assert(snapshot.includes("topFolded: shellEl?.dataset.topFolded === 'true'"), snapshot);
+    assert(snapshot.includes('dataset.topFolded'), snapshot);
+    assert(css.includes('.shell[data-top-folded="true"] .top { display: none; }'), css);
+    const noop = execFileSync(process.execPath, [proj, 'sync', 'render'], { cwd: scratch, env, encoding: 'utf8' });
+    assert(/0 changed source file/.test(noop), `no-op render sync mutated source: ${noop}`);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
 });
 
 ok('projection: editing an event type syncs back to source by name', () => {

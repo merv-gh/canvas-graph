@@ -5,6 +5,7 @@
     "escalateModel": "qwen3.5:14b",
     "temperature": 0.2,
     "escalateTemperature": 0.4,
+    "think": false,
     "numCtx": 8192,
     "timeoutMs": 360000,
     "seedBase": 7

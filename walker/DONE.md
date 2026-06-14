@@ -92,3 +92,16 @@ add_fold_toggle {"system":"v2/systems/main.ts","id":"view.left.toggle",
 payload are wired for you; no `surface` (the hamburger covers the mouse). RED:
 assert the SPEC, not a side effect — {"command":"view.left.toggle",
 "has":"input.key","value":"b"} fails today, passes once bound.
+
+## top-panel-collapse
+- kind: feature
+- files: v2/systems/main.ts, v2/styles.css, v2/core/snapshot.ts
+- title: Top panel needs collapse shortcut and UI affordance
+- command: view.top.toggle
+- done: 2026-06-14
+
+Implemented through projections only: `commands` added `view.top.toggle` with
+`T`/`fold.toggle { id:'shell.top' }`, `command-ui` added the top toolbar
+affordance, and `render` added `ui.shell.topFolded`, the shell dataset mirror,
+and CSS hiding for `[data-top-folded="true"]`. Verified by scenario asserting the
+command spec, `ui.shell.topFolded`, and the CSS seam.

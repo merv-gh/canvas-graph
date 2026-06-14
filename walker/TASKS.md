@@ -143,19 +143,6 @@ and `{containerId:'c1', childRef:{kind:'node', id:'e2'}}`; then event
 `graph.containers.length == 0`. GREEN: use add_container_delete_cascade {}, then
 run_test.
 
-## top-panel-collapse
-- kind: feature
-- disabled: true
-- files: v2/systems/main.ts, v2/styles.css, v2/core/snapshot.ts
-- title: Top panel needs collapse shortcut and UI affordance
-- command: view.top.toggle
-
-T2 after fold tooling: add `view.top.toggle` (`T`) using `add_fold_toggle` with
-fold id `shell.top`, contribute a top affordance, mirror it as
-`ui.shell.topFolded`, and hide the top slot in CSS when folded. RED should assert
-the command spec and `ui.shell.topFolded`; browser/layout asserts can prove the
-top slot is hidden.
-
 ## event-log-collapse
 - kind: feature
 - disabled: true

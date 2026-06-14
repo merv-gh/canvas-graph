@@ -116,6 +116,7 @@ function captureUi(ctx: AppCtx) {
     },
     shell: {
       leftFolded: shellEl?.dataset.leftFolded === 'true',
+      topFolded: shellEl?.dataset.topFolded === 'true',
       zen: shellEl?.dataset.zen === 'true',
     },
     rendered: {
@@ -170,6 +171,7 @@ const PLACES_CODE: Record<string, string> = {
 };
 const SHELL_CODE: Record<string, string> = {
   leftFolded: "ctx.contexts.places.el('top')?.parentElement?.dataset.leftFolded === 'true'",
+  topFolded: "ctx.contexts.places.el('top')?.parentElement?.dataset.topFolded === 'true'",
   zen: "ctx.contexts.places.el('top')?.parentElement?.dataset.zen === 'true'",
 };
 const RENDERED_CODE: Record<string, string> = {

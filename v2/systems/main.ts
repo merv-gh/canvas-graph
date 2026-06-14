@@ -18,20 +18,24 @@ export function registerMain(system: Registry) {
       const shell = shellEl();
       if (!shell) return;
       shell.dataset.leftFolded = contexts.fold.folded(LEFT_PANEL_FOLD_ID) ? 'true' : 'false';
+      shell.dataset.topFolded = contexts.fold.folded('shell.top') ? 'true' : 'false';
       shell.dataset.zen = contexts.fold.folded(ZEN_FOLD_ID) ? 'true' : 'false';
     };
     contexts.commands.register([
       { id: 'view.left.toggle', label: 'Toggle outline.panel', group: 'view', event: 'fold.toggle', shortcut: 'B', input: { on: 'keydown', key: 'b', prevent: true }, payload: () => ({ id: 'outline.panel' }) },
+      { id: 'view.top.toggle', label: 'Toggle top panel', group: 'view', event: 'fold.toggle', shortcut: 'T', input: { on: 'keydown', key: 't', prevent: true }, payload: () => ({ id: 'shell.top' }) },
       {
-      id: 'view.zen',
-      label: 'Toggle zen mode',
-      event: 'fold.toggle',
-      group: 'view',
-      shortcut: '\\',
-      input: { on: 'keydown', key: '\\', prevent: true },
-      payload: () => ({ id: ZEN_FOLD_ID }),
-    }]);
+        id: 'view.zen',
+        label: 'Toggle zen mode',
+        event: 'fold.toggle',
+        group: 'view',
+        shortcut: '\\',
+        input: { on: 'keydown', key: '\\', prevent: true },
+        payload: () => ({ id: ZEN_FOLD_ID }),
+      },
+    ]);
     contribute({ surface: 'top', command: 'view.zen', kind: 'button', text: '⛶', order: 80 });
+    contribute({ surface: 'top', command: 'view.top.toggle', kind: 'button', text: '▴', label: 'Toggle top panel', order: 79 });
     const hamburger = () => {
       const folded = !contexts.fold.isOpen(LEFT_PANEL_FOLD_ID, true);
       const btn = document.createElement('button');
@@ -75,7 +79,7 @@ export function registerMain(system: Registry) {
     // The shell class flips on every fold of the left panel; the hamburger
     // aria + glyph also flips, so the toolbar redraws too.
     on('fold.changed', ({ id }) => {
-      if (id !== LEFT_PANEL_FOLD_ID && id !== ZEN_FOLD_ID) return;
+      if (id !== LEFT_PANEL_FOLD_ID && id !== 'shell.top' && id !== ZEN_FOLD_ID) return;
       syncShellFold();
       drawToolbar();
     });

@@ -15,6 +15,7 @@ npm run dx -- project watch commands
 npm run dx -- project generate events
 npm run dx -- project generate flows
 npm run dx -- project generate command-ui
+npm run dx -- project generate render
 ```
 
 - `commands` -> `walker/views/commands.proj.ts`: every command spec from
@@ -26,6 +27,8 @@ npm run dx -- project generate command-ui
 - `command-ui` -> `walker/views/command-ui.proj.ts`: editable
   `contribute({ surface, command, ... })` affordance objects as one
   `SystemAffordance[]` array.
+- `render` -> `walker/views/render.proj.md`: editable shell fold render seams:
+  dataset mirrors in `main.ts`, `ui.shell` snapshot fields, and CSS rules.
 
 ### commands: a compilable array (no markers)
 
@@ -52,9 +55,10 @@ that id, and replaces only its slice. No `file:line` marker is stored or needed.
 reads as real, valid TS (no sea of red) and the loop's VERIFY step (`vitest` +
 `tsc` on the actual source) is the real type/behaviour oracle.
 
-To add a brand-new command, use the `add_command` constructor (it splices into the
-right `register([…])` and declares the request event); sync only edits slices that
-already exist in source.
+To add a brand-new command, place it directly after an existing sibling in the
+projection. Sync anchors on that sibling and inserts the new command into the same
+source `register([…])` call. For commands that also need handlers or event
+declarations, use the `add_command` constructor.
 
 ### events: compilable interface blocks (no markers)
 
@@ -111,9 +115,36 @@ export const commandUi: SystemAffordance[] = [
 ];
 ```
 
-Routing is **by `command`**. Edit affordance data, then `sync`. Add new
-affordances in the owning system (or via a constructor), not by adding anonymous
-projection-only array elements.
+Routing is **by `command`**. Edit affordance data, then `sync`. Add a new
+affordance directly after an existing sibling; sync anchors on that sibling and
+inserts the new `contribute({ ... })` call in the same source file.
+
+### render: shell fold seams
+
+The `render` projection is an editable markdown view for shell folds. Each block
+represents one fold field and syncs three owned source seams together:
+
+````md
+## shell-fold topFolded
+field: topFolded
+foldId: shell.top
+attr: data-top-folded
+css:
+```css
+.shell[data-top-folded="true"] { grid-template-rows: 0 1fr; }
+.shell[data-top-folded="true"] .top { display: none; }
+```
+````
+
+Sync writes:
+
+- `v2/systems/main.ts`: `shell.dataset.<field>` and the `fold.changed` guard.
+- `v2/core/snapshot.ts`: `ui.shell.<field>` and the assertion expression map.
+- `v2/styles.css`: CSS rules for `[data-<field>]`.
+
+Add a new `## shell-fold <field>` block next to the existing shell folds to
+create the whole render seam. This is the missing view layer for panel-collapse
+tasks after `commands` and `command-ui` have created the command and button.
 
 When `watch` is running, edits to a projection sync back automatically; edits to
 source regenerate the projection.
@@ -121,15 +152,15 @@ source regenerate the projection.
 ## Contract
 
 - A projection file is disposable and ignored by git.
-- `commands` routes by `id`, `events` by event name, and `command-ui` by
-  `command`; these identifiers must stay unique, and each slice must keep its
-  identifying field.
+- `commands` routes by `id`, `events` by event name, `command-ui` by `command`,
+  and `render` by shell field; these identifiers must stay unique, and each slice
+  must keep its identifying field.
 - A no-op sync (generate, then sync with no edits) must leave source byte-for-byte
   unchanged; the watcher relies on this. Guarded by `node walker/selftest.mjs`.
 - Projection sync is intentionally narrow: it replaces known slices, not whole
   files.
-- `flows` is read-only because it is derived from commands, declarations,
-  `emit(...)`, and `on(...)`.
+- `flows` and `data` are read-only because they are derived from commands,
+  declarations, `emit(...)`, and `on(...)`.
 
 ## Routing & refactors (why id/name, not line:column)
 
@@ -148,8 +179,8 @@ fails loudly and lists the un-projected source identifiers (the likely rename
 source) so you can see what happened, then:
 
 - to rename, use `refactor_tool` (updates all references) and regenerate the view;
-- to add, use the `add_command` constructor (commands) or declare the event in its
-  owning system (events).
+- to add command/command-ui/render slices, place the new slice after an existing
+  sibling; for new events, declare them in the owning system.
 
 True rename-tracking through a projection would require AST-level identity (match a
 node across an id change), not text slices — a deliberate future step, not something

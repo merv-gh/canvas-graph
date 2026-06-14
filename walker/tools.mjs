@@ -173,6 +173,8 @@ export class Tools {
         ? '\nHint: for event-driven behavior, call projection {"name":"flows","filter":"<event or domain>"} to see handlers and downstream emits.'
         : name === 'flows'
           ? '\nHint: next read/patch the handler file:line shown above; do not call more projections unless the event is missing.'
+          : name === 'render'
+            ? '\nHint: render owns shell fold dataset mirrors, ui.shell snapshot fields, and CSS rules. Use it for panel collapse visibility wiring.'
         : '';
       return `${name} projection${filter ? ` filtered by '${filter}'` : ''}:\n${capped}${more}${hint}`;
     } catch (err) {
