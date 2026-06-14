@@ -105,3 +105,51 @@ Implemented through projections only: `commands` added `view.top.toggle` with
 affordance, and `render` added `ui.shell.topFolded`, the shell dataset mirror,
 and CSS hiding for `[data-top-folded="true"]`. Verified by scenario asserting the
 command spec, `ui.shell.topFolded`, and the CSS seam.
+
+## export-json
+- kind: feature
+- files: v2/systems/graph.ts
+- title: Export the current graph as JSON
+- command: graph.export.json
+- event: graph.exported
+- done: 2026-06-14
+- recorded: tests/commands/walker/export-json.test.ts
+
+`graph.export.json` serializes the current graph to JSON, emits
+`graph.exported { json }`, and writes to the clipboard when the browser API is
+available. The jsdom-safe path is covered by the walker regression.
+
+## zen-escape
+- kind: feature
+- files: v2/systems/main.ts, v2/systems/tool-panel.ts
+- title: Escape exits zen mode
+- command: app.cancel.escape
+- done: 2026-06-14
+- recorded: tests/commands/v2-tool-panel.test.ts
+
+Zen mode now registers with the shared cancellation stack, so Escape unfolds
+`shell.zen` instead of needing the user to press the zen shortcut again. The
+floating top panel also observes zen as collapsed, keeping the canvas focused.
+
+## container-delete-children
+- kind: bug
+- files: v2/systems/containers.ts
+- title: Deleting a container deletes its children
+- done: 2026-06-14
+- recorded: tests/commands/v2-container-commands.test.ts
+
+Container deletion now cascades through direct and nested children by emitting
+the child entity's delete event before deleting the container itself. The old
+"release children on delete" expectation was updated to the desired graph
+cleanup behavior.
+
+## top-floating-tool-panel
+- kind: feature
+- files: v2/systems/tool-panel.ts, v2/systems/main.ts, v2/styles.css
+- title: Top panel is an in-canvas movable/collapsible tool panel
+- done: 2026-06-14
+- recorded: tests/commands/v2-tool-panel.test.ts
+
+The top toolbar moved from a hardcoded shell row into a stage-rendered tool
+panel with drag and collapse handles. `view.top.toggle` and zen both collapse
+the panel, and the debug snapshot exposes `ui.toolPanels.top` for probes.

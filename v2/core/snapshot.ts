@@ -89,6 +89,17 @@ function captureUi(ctx: AppCtx) {
   const topEl = placeEl('top');
   const leftEl = placeEl('left');
   const shellEl = topEl?.parentElement ?? null;
+  const toolPanelInfo = (id: string) => {
+    const el = stageEl?.querySelector(`.tool-panel[data-panel-id="${id}"]`) as HTMLElement | null;
+    return {
+      mounted: !!el,
+      collapsed: el?.dataset.collapsed === 'true',
+      x: Math.round(Number.parseFloat(el?.style.left || '0')),
+      y: Math.round(Number.parseFloat(el?.style.top || '0')),
+      dragHandle: !!el?.querySelector('[data-tool-panel-drag]'),
+      collapseHandle: !!el?.querySelector('[data-fold-id="shell.top"]'),
+    };
+  };
   const sizeOf = (el: HTMLElement | null) => {
     if (!el) return { mounted: false, width: 0, height: 0 };
     const rect = el.getBoundingClientRect();
@@ -128,6 +139,9 @@ function captureUi(ctx: AppCtx) {
     stage: {
       emptyStateVisible: !!stageEl?.querySelector('.empty'),
       itemToolbarVisible: !!stageEl?.querySelector('.item-toolbar'),
+    },
+    toolPanels: {
+      top: toolPanelInfo('top'),
     },
     // Outline shape — how nesting actually renders in the left pane. `nested`
     // counts rows that live inside a parent's children block, so a recorded

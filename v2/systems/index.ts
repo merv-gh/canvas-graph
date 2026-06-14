@@ -24,6 +24,7 @@ import { registerOutline } from './outline';
 import { registerRender } from './render';
 import { registerRenderStage } from './render-stage';
 import { registerScenario } from './scenario';
+import { registerToolPanel } from './tool-panel';
 import { registerViewPan } from './view-pan';
 import { registerViewZoom } from './view-zoom';
 
@@ -34,6 +35,7 @@ export function registerSystems(system: Registry) {
   registerFoldable(system);
   registerCancellation(system);
   registerMain(system);
+  registerToolPanel(system);
   registerLog(system);
   registerOutline(system);
   registerModal(system);

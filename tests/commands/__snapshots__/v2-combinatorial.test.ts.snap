@@ -42,11 +42,11 @@ exports[`combinatorial action graph > length-1: every auto-runnable command boot
   "snap": {
     "containers": 5,
     "dxErrors": 0,
-    "edges": 64,
-    "focused": "node:e44",
-    "nodes": 44,
+    "edges": 65,
+    "focused": "node:e45",
+    "nodes": 45,
     "scale": 0.18,
-    "selected": "node:e44",
+    "selected": "node:e45",
   },
 }
 `;
@@ -123,6 +123,23 @@ exports[`combinatorial action graph > length-1: every auto-runnable command boot
 {
   "sequence": [
     "graph.create",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": null,
+    "nodes": 0,
+    "scale": 1,
+    "selected": null,
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [graph.export.json] 1`] = `
+{
+  "sequence": [
+    "graph.export.json",
   ],
   "snap": {
     "containers": 0,
@@ -276,6 +293,23 @@ exports[`combinatorial action graph > length-1: every auto-runnable command boot
 {
   "sequence": [
     "view.left.toggle",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": null,
+    "nodes": 0,
+    "scale": 1,
+    "selected": null,
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [view.top.toggle] 1`] = `
+{
+  "sequence": [
+    "view.top.toggle",
   ],
   "snap": {
     "containers": 0,

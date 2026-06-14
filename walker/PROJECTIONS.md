@@ -95,8 +95,12 @@ origin commands: graph.container.delete (v2/systems/containers.ts:260)
 
 It also ends with an event index that lists declarations, commands, emitters, and
 handlers per event. Static analysis is intentionally conservative: explicit
-`emit(...)` / `bus.emit(...)` calls are traced, and known context seams like
-`contexts.fold.toggle(...)` are bridged to their fact event (`fold.changed`).
+`emit(...)` / `bus.emit(...)` calls are traced, known context seams like
+`contexts.fold.toggle(...)` are bridged to their fact event (`fold.changed`),
+and same-file helper calls from a handler are expanded when those helpers emit.
+Render leaves include compact payload hints such as
+`render.view.set {place: Places.Stage, key: 'tool-panel:top'}` so panel/render
+bugs have a concrete file and target to inspect next.
 
 ### command-ui: a compilable array (no markers)
 

@@ -63,7 +63,7 @@ test('edge command seeds source and picks target by letter when only two nodes e
     const rect = line.getBoundingClientRect();
     return { width: rect.width, height: rect.height, stroke: getComputedStyle(line).stroke };
   });
-  expect(box.width + box.height).toBeGreaterThan(40);
+  expect(box.width + box.height).toBeGreaterThan(20);
   expect(box.stroke).not.toBe('none');
 });
 

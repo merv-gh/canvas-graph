@@ -5,7 +5,7 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, resolve, relative, dirname } from 'node:path';
-import { genTest, normalizeScenarioSpec, runProbe } from './probe-client.mjs';
+import { genTest, normalizeScenarioSpec, runProbe, validateGenTestSpec, validateScenarioSpec } from './probe-client.mjs';
 import { graphQuery } from './graphdb.mjs';
 import { repairJson } from './ollama.mjs';
 
@@ -192,7 +192,14 @@ export class Tools {
     if (!parsed || typeof parsed !== 'object') return 'set_command: props must be JSON, e.g. {"shortcut":"I","input":{"on":"keydown","key":"i","prevent":true}}';
     const ALLOWED = new Set(['shortcut', 'input', 'group', 'hidden', 'event']);
     const bad = Object.keys(parsed).filter(k => !ALLOWED.has(k));
-    if (bad.length) return `set_command: unsupported props ${bad.join(', ')} (allowed: shortcut, input, group, hidden, event). Functions (available/payload) need edit/patch.`;
+    if (bad.length) {
+      const taskText = `${this.task?.id ?? ''}\n${this.task?.title ?? ''}\n${this.task?.prompt ?? ''}`;
+      const zenEscape = id === 'app.cancel.escape' || /zen|escape|cancel/i.test(taskText);
+      const hint = zenEscape
+        ? " For Escape exits zen/fold tasks, do not edit app.cancel.escape; use add_fold_cancellable {\"system\":\"v2/systems/main.ts\",\"foldId\":\"shell.zen\"}."
+        : '';
+      return `set_command: unsupported props ${bad.join(', ')} (allowed: shortcut, input, group, hidden, event). Functions (available/payload) need edit/patch.${hint}`;
+    }
     const res = this.ws.run('git', ['grep', '-n', `id: '${id}'`, '--', 'v2'], 20000);
     const hit = res.output.split('\n').filter(Boolean)[0];
     if (!hit) return `set_command: no command literal with id '${id}' found under v2/`;
@@ -264,8 +271,15 @@ export class Tools {
     if (!this.writeAllowed(rel)) return this.phaseDenied(rel);
     if (!existsSync(abs)) return `no such file: ${system}`;
     const src = readFileSync(abs, 'utf8');
-    if (new RegExp(`id:\\s*['"]${parsedSpec.id.replace(/[.]/g, '\\.')}['"]`).test(src)) {
-      return `add_command: '${parsedSpec.id}' already exists — use set_command to modify it`;
+    const idPattern = `\\bid\\s*:\\s*['"]${parsedSpec.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"]`;
+    const existing = this.ws.run('git', ['grep', '-nE', idPattern, '--', 'v2'], 20000);
+    if (existing.ok && existing.output.trim()) {
+      const taskText = `${this.task?.id ?? ''}\n${this.task?.title ?? ''}\n${this.task?.prompt ?? ''}`;
+      const hint = parsedSpec.id === 'app.cancel.escape' || /zen|escape|cancel/i.test(taskText)
+        ? ' For Escape exits zen/fold tasks, keep app.cancel.escape as-is and call add_fold_cancellable {"system":"v2/systems/main.ts","foldId":"shell.zen"}.'
+        : '';
+      const first = existing.output.trim().split('\n')[0];
+      return `add_command: '${parsedSpec.id}' already exists at ${first} — use set_command to modify data props.${hint}`;
     }
     const event = parsedSpec.event || parsedSpec.id;
     let lines = src.split('\n');
@@ -815,6 +829,8 @@ export class Tools {
   tool_scenario({ spec }) {
     const parsed = normalizeScenarioSpec(this.parseSpec(spec));
     if (!parsed) return 'scenario: spec is not valid JSON — send {steps:[…],asserts:[…]}';
+    const shapeErrors = validateGenTestSpec(parsed);
+    if (shapeErrors.length) return `scenario: invalid spec shape — ${shapeErrors.join('; ')}`;
     const answer = runProbe(this.ws.dir, { mode: 'scenario', steps: parsed.steps ?? [], asserts: parsed.asserts ?? [] });
     if (answer.error) return `scenario failed: ${answer.error}`;
     const failedSteps = answer.steps.filter(s => !s.ok).map(s => `STEP FAILED: ${s.step} (${s.detail})`);
@@ -838,6 +854,8 @@ export class Tools {
     }
     const parsed = normalizeScenarioSpec(this.parseSpec(spec));
     if (!parsed) return 'gen_test: spec is not valid JSON';
+    const shapeErrors = validateScenarioSpec(parsed);
+    if (shapeErrors.length) return `gen_test: invalid spec shape — ${shapeErrors.join('; ')}`;
     const requiredEvent = this.task?.meta?.event;
     if (requiredEvent && !(parsed.asserts ?? []).some(a => a.event === requiredEvent)) {
       return `gen_test: this task requires an event assert for '${requiredEvent}'. Add {"event":"${requiredEvent}", ...} to asserts.`;

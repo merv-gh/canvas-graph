@@ -44,7 +44,7 @@ button.danger:hover { background: var(--danger-soft); }
 button.icon { padding: 4px 7px; min-width: 26px; color: var(--text-muted); }
 button.icon:hover { color: var(--ink); }
 
-.shell { display: grid; grid-template: 44px 1fr / 260px 1fr; height: 100vh; transition: grid-template-columns .14s ease; }
+.shell { display: grid; grid-template: 0 1fr / 260px 1fr; height: 100vh; transition: grid-template-columns .14s ease; }
 .shell[data-left-folded="true"] { grid-template-columns: 0 1fr; }
 .shell[data-left-folded="true"] .left { display: none; }
 .shell[data-top-folded="true"] { grid-template-rows: 0 1fr; }
@@ -160,10 +160,7 @@ button.icon:hover { color: var(--ink); }
 .top {
   grid-column: 1 / -1;
   grid-row: 1;
-  display: flex; align-items: center; gap: 4px;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel);
+  display: none;
 }
 .toolbar { display: flex; align-items: center; gap: 2px; width: 100%; }
 .toolbar button { white-space: nowrap; font-size: 13px; }
@@ -198,6 +195,51 @@ button.icon:hover { color: var(--ink); }
   touch-action: none;
 }
 .stage.panning { cursor: grabbing; }
+.tool-panel {
+  position: absolute;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: min(920px, calc(100% - 24px));
+  min-height: 34px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  box-shadow: var(--shadow-sm);
+  pointer-events: auto;
+}
+.tool-panel[data-collapsed="true"] {
+  width: auto;
+  min-width: 62px;
+}
+.tool-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  border-right: 1px solid var(--line);
+  padding-right: 4px;
+}
+.tool-panel[data-collapsed="true"] .tool-panel-head {
+  border-right: 0;
+  padding-right: 0;
+}
+.tool-panel-drag,
+.tool-panel-collapse {
+  min-width: 24px;
+  padding: 3px 6px;
+  color: var(--text-muted);
+}
+.tool-panel-drag { cursor: grab; }
+.tool-panel-drag:active { cursor: grabbing; }
+.tool-panel .toolbar {
+  min-width: 0;
+  overflow: auto hidden;
+  scrollbar-width: none;
+}
+.tool-panel .toolbar::-webkit-scrollbar { display: none; }
 .keyboard-capture {
   position: fixed;
   width: 1px;
@@ -551,7 +593,7 @@ button.icon:hover { color: var(--ink); }
 }
 
 /* Modal — keeps weight on purpose: it's a focal surface. */
-.modal-slot { position: fixed; inset: 0; pointer-events: none; }
+.modal-slot { position: fixed; inset: 0; z-index: 50; pointer-events: none; }
 .modal-layer { position: absolute; inset: 0; pointer-events: auto; }
 .backdrop { position: absolute; inset: 0; background: rgba(28,28,28,.18); }
 .modal {

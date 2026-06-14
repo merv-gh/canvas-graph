@@ -10,7 +10,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { genTest, runProbe } from './probe-client.mjs';
+import { genTest, normalizeScenarioSpec, runProbe, validateGenTestSpec, validateScenarioSpec } from './probe-client.mjs';
 import { graphQuery } from './graphdb.mjs';
 import { parseToolFromText } from './ollama.mjs';
 import { Tools } from './tools.mjs';
@@ -133,6 +133,38 @@ ok('gen_test: normalizes command-spec path shorthand', () => {
   assert(source.includes('ctx.contexts.commands.get("detail.less")?.input?.key'), source);
   assert(!source.includes('snapshot().commands.detail.less'), source);
 });
+ok('gen_test: normalizes command-spec object shorthand', () => {
+  const spec = normalizeScenarioSpec({
+    steps: [{ command: 'view.zen' }],
+    asserts: [{ command: 'app.cancel.escape', has: { input: { key: 'Escape' } } }],
+  });
+  assert.equal(spec.asserts[0].has, 'input.key');
+  assert.equal(spec.asserts[0].value, 'Escape');
+});
+ok('gen_test: rejects command.handler assertions (commands are data)', () => {
+  const errors = validateScenarioSpec(normalizeScenarioSpec({
+    steps: [{ command: 'view.zen' }],
+    asserts: [{ command: 'app.cancel.escape', has: 'handler', value: true }],
+  }));
+  assert(errors.some(err => err.includes('command.handler')), errors.join('\n'));
+});
+ok('gen_test: rejects contradictory final-state asserts', () => {
+  const errors = validateScenarioSpec(normalizeScenarioSpec({
+    steps: [{ command: 'view.zen' }, { command: 'app.cancel.escape' }],
+    asserts: [
+      { path: 'ui.shell.zen', op: 'eq', value: true },
+      { path: 'ui.shell.zen', op: 'eq', value: false },
+    ],
+  }));
+  assert(errors.some(err => err.includes('final path')), errors.join('\n'));
+});
+ok('gen_test: rejects assertion-free regression tests', () => {
+  const errors = validateGenTestSpec(normalizeScenarioSpec({
+    steps: [{ command: 'editing.node.create' }],
+    asserts: [],
+  }));
+  assert(errors.some(err => err.includes('at least one assert')), errors.join('\n'));
+});
 
 // --- graph queries ---
 ok('graph find: locates the editable ability source', () => {
@@ -164,6 +196,8 @@ ok('projection: commands and flows expose focused architecture views', () => {
   assert(commandsView.includes("id: 'detail.less'"), commandsView);
   const flowsView = execFileSync(process.execPath, ['walker/projections.mjs', 'show', 'flows', 'graph.edge.create'], { cwd: REPO, encoding: 'utf8' });
   assert(flowsView.includes('handlers: v2/systems/graph.ts'), flowsView);
+  const appStartFlow = execFileSync(process.execPath, ['walker/projections.mjs', 'show', 'flows', 'app.start'], { cwd: REPO, encoding: 'utf8' });
+  assert(appStartFlow.includes("render.view.set {place: Places.Stage, key: 'tool-panel:top'} via drawTopPanel()"), appStartFlow);
   const concept = execFileSync(process.execPath, ['walker/projections.mjs', 'concept', 'top panel collapse'], { cwd: REPO, encoding: 'utf8' });
   assert(concept.includes('view.top.toggle'), concept);
   assert(concept.includes('topFolded: shell.top'), concept);
@@ -609,9 +643,9 @@ await okAsync('set_command + add_command take effect in a booted copy', async ()
     assert(/'graph\.selftest\.ping':\s*void;/.test(graphSrc), 'add_command did not auto-declare its event');
 
     // declare_event (standalone): a new typed fact.
-    const de = tools.tool_declare_event({ system: 'v2/systems/graph.ts', event: 'graph.exported', type: '{ json: string }' });
-    assert(/declared 'graph\.exported'/.test(de), `declare_event: ${de}`);
-    assert(/'graph\.exported':\s*\{ json: string \}/.test(readFileSync(join(ws.dir, 'v2/systems/graph.ts'), 'utf8')), 'event not declared in file');
+    const de = tools.tool_declare_event({ system: 'v2/systems/graph.ts', event: 'graph.selftest.exported', type: '{ json: string }' });
+    assert(/declared 'graph\.selftest\.exported'/.test(de), `declare_event: ${de}`);
+    assert(/'graph\.selftest\.exported':\s*\{ json: string \}/.test(readFileSync(join(ws.dir, 'v2/systems/graph.ts'), 'utf8')), 'event not declared in file');
 
     // add_fold_toggle on the REAL main.ts — whose register opens `register([{`
     // (compact first element on the same line). This is the exact shape the live
@@ -654,7 +688,7 @@ await okAsync('set_command + add_command take effect in a booted copy', async ()
     assert.equal(exported.ok, true, JSON.stringify(exported, null, 2));
 
     const cc = tools.tool_add_container_delete_cascade({});
-    assert(/added recursive container child deletion/.test(cc), `add_container_delete_cascade: ${cc}`);
+    assert(/added recursive container child deletion|already cascades/.test(cc), `add_container_delete_cascade: ${cc}`);
     const cascaded = runProbe(ws.dir, {
       mode: 'scenario',
       steps: [

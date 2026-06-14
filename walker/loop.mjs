@@ -287,7 +287,7 @@ async function attempt(task, { cycle, n, model, temperature, seed }) {
           }
           extra = '';
           history.push({ role: 'assistant', content: `done(green): ${args.summary ?? ''}` });
-          history.push({ role: 'user', content: `Your test passes BUT full verification failed:\n${trimResult(verdict.detail, CONFIG.budgets.toolResultChars)}\nFix without breaking your test.` });
+          history.push({ role: 'user', content: `Your test passes BUT full verification failed:\n${trimResult(verdict.detail, CONFIG.budgets.toolResultChars)}\nFix without breaking your test. If the failing test asserts old behavior that this task intentionally changes, call give_up with "spec conflict" instead of patching random source.` });
           continue;
         }
         history.push({ role: 'assistant', content: `done: ${args.summary ?? ''}` });
@@ -320,7 +320,7 @@ async function attempt(task, { cycle, n, model, temperature, seed }) {
             journal({ at: Date.now(), dir: 'auto', note: 'green verified, fixed' });
             break;
           }
-          trimmed += `\n\nYour test passes BUT full verification failed:\n${trimResult(verdict.detail, CONFIG.budgets.toolResultChars)}\nFix without breaking your test.`;
+          trimmed += `\n\nYour test passes BUT full verification failed:\n${trimResult(verdict.detail, CONFIG.budgets.toolResultChars)}\nFix without breaking your test. If the failing test asserts old behavior that this task intentionally changes, call give_up with "spec conflict" instead of patching random source.`;
         }
       }
       journal({ at: Date.now(), dir: 'tool-result', name, result: trimmed.slice(0, 800) });

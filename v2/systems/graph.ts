@@ -19,6 +19,8 @@ import type { Id } from '../types';
 
 declare module '../types' {
   interface CustomEvents {
+    'graph.exported': { json: string };
+    'graph.export.json': void;
     'graph.edge.reverse': { id: Id };
     'graph.create': void;
     'graph.created': { id: Id };
@@ -62,6 +64,7 @@ export function registerGraph(system: Registry) {
     };
 
     contexts.commands.register([
+      { id: 'graph.export.json', label: 'Export graph JSON', group: 'graph' },
       { id: 'graph.edge.reverse', label: 'Reverse edge', group: 'edge', shortcut: 'Shift+E', available: () => !!selectedEdgeId(), payload: () => ({ id: selectedEdgeId() }) },
       {
         id: 'graph.create',
@@ -108,6 +111,16 @@ export function registerGraph(system: Registry) {
         payload: source => ({ id: itemIdFrom(source.target) || selectedEdgeId() }),
       },
     ]);
+
+    on('graph.export.json', () => {
+      const json = JSON.stringify({
+        nodes: graphs.current.nodes().map(({ id, Label, Position, Size }) => ({ id, Label, Position, Size })),
+        edges: graphs.current.edges().map(({ id, From, To, Label }) => ({ id, From, To, Label })),
+      });
+      const clipboard = globalThis.navigator?.clipboard;
+      void clipboard?.writeText?.(json)?.catch?.(() => {});
+      emit('graph.exported', { json });
+    });
 
     on('graph.edge.reverse', ({ id }) => {
       const edge = graphs.current.getEdge(id);

@@ -623,14 +623,105 @@ function unique(values) {
   return [...new Set(values.filter(Boolean))];
 }
 
-function extractEmits(text) {
+function summarizeEmitCall(callText, event) {
+  if (event === 'render.view.set' || event === 'render.view.clear') {
+    const place = callText.match(/\bplace\s*:\s*([^,\n}]+)/)?.[1]?.trim();
+    const key = callText.match(/\bkey\s*:\s*([^,\n}]+)/)?.[1]?.trim();
+    const bits = [place ? `place: ${place}` : '', key ? `key: ${key}` : ''].filter(Boolean);
+    if (bits.length) return `{${bits.join(', ')}}`;
+  }
+  if (event === 'fold.toggle' || event === 'fold.changed') {
+    const id = callText.match(/\bid\s*:\s*([^,\n}]+)/)?.[1]?.trim();
+    if (id) return `{id: ${id}}`;
+  }
+  return '';
+}
+
+function extractEmitInfos(text) {
   const emits = [];
   const re = /\b(?:emit|bus\.emit)\s*\(\s*(['"`])([^'"`]+)\1/g;
-  for (let m; (m = re.exec(text));) emits.push(m[2]);
+  for (let m; (m = re.exec(text));) {
+    const open = text.indexOf('(', m.index);
+    const close = open >= 0 ? findMatching(text, open, '(', ')') : -1;
+    const callText = close >= 0 ? text.slice(m.index, close + 1) : m[0];
+    emits.push({ event: m[2], detail: summarizeEmitCall(callText, m[2]) });
+    if (close >= 0) re.lastIndex = close + 1;
+  }
   // The fold context owns the actual fact emit in v2/core/fold.ts. Most systems
   // call the context, not `emit('fold.changed')`, so bridge that known seam.
-  if (/\bcontexts\.fold\.(?:toggle|set)\s*\(/.test(text)) emits.push('fold.changed');
-  return unique(emits);
+  if (/\bcontexts\.fold\.(?:toggle|set)\s*\(/.test(text)) emits.push({ event: 'fold.changed', detail: 'via contexts.fold' });
+  const seen = new Set();
+  return emits.filter(info => {
+    const key = `${info.event}\0${info.detail}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function extractEmits(text) {
+  return unique(extractEmitInfos(text).map(info => info.event));
+}
+
+function formatEmitInfos(infos) {
+  return infos.length
+    ? infos.map(info => info.detail ? `${info.event} ${info.detail}` : info.event).join(', ')
+    : '-';
+}
+
+function uniqueEmitInfos(infos) {
+  const seen = new Set();
+  return infos.filter(info => {
+    const key = `${info.event}\0${info.detail}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function collectLocalEmitters(source) {
+  const locals = new Map();
+  const re = /\bconst\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>\s*/g;
+  for (let m; (m = re.exec(source));) {
+    let bodyStart = re.lastIndex;
+    while (/\s/.test(source[bodyStart] ?? '')) bodyStart++;
+    let body = '';
+    if (source[bodyStart] === '{') {
+      const close = findMatching(source, bodyStart, '{', '}');
+      if (close < 0) continue;
+      body = source.slice(bodyStart, close + 1);
+      re.lastIndex = close + 1;
+    } else {
+      const directEmit = source.slice(bodyStart, bodyStart + 24).match(/^(?:emit|bus\.emit)\s*\(/);
+      if (directEmit) {
+        const open = source.indexOf('(', bodyStart);
+        const close = open >= 0 ? findMatching(source, open, '(', ')') : -1;
+        if (close < 0) continue;
+        body = source.slice(bodyStart, close + 1);
+        re.lastIndex = close + 1;
+      } else {
+        const end = source.indexOf(';', bodyStart);
+        body = source.slice(bodyStart, end < 0 ? source.length : end);
+        re.lastIndex = end < 0 ? source.length : end + 1;
+      }
+    }
+    const emits = extractEmitInfos(body);
+    if (emits.length) locals.set(m[1], emits);
+  }
+  return locals;
+}
+
+function expandLocalEmitInfos(handlerText, localEmitters) {
+  const infos = [...extractEmitInfos(handlerText)];
+  const directHandler = handlerText.match(/\bon\s*\(\s*(['"`])[^'"`]+\1\s*,\s*([A-Za-z_$][\w$]*)\s*\)$/)?.[2];
+  for (const [name, emits] of localEmitters) {
+    if (directHandler !== name && !new RegExp(`\\b${escapeRe(name)}\\s*\\(`).test(handlerText)) continue;
+    infos.push(...emits.map(info => ({
+      event: info.event,
+      detail: info.detail ? `${info.detail} via ${name}()` : `via ${name}()`,
+    })));
+  }
+  return uniqueEmitInfos(infos);
 }
 
 function collectEventHandlers() {
@@ -638,17 +729,20 @@ function collectEventHandlers() {
   const re = /\bon\s*\(\s*(['"`])([^'"`]+)\1/g;
   for (const file of listSourceFiles()) {
     const source = readFileSync(file, 'utf8');
+    const localEmitters = collectLocalEmitters(source);
     for (let m; (m = re.exec(source));) {
       const open = source.indexOf('(', m.index);
       const close = findMatching(source, open, '(', ')');
       if (close < 0) continue;
       const text = source.slice(m.index, close + 1);
+      const emitDetails = expandLocalEmitInfos(text, localEmitters);
       handlers.push({
         event: m[2],
         file,
         rel: rel(file),
         line: lineNumber(source, m.index),
-        emits: extractEmits(text),
+        emitDetails,
+        emits: unique(emitDetails.map(info => info.event)),
       });
       re.lastIndex = close + 1;
     }
@@ -711,7 +805,7 @@ function renderFlowEvent(lines, data, event, depth, seen) {
   }
   lines.push(`${pad}- ${event}`);
   for (const handler of handlers) {
-    const emits = handler.emits.length ? handler.emits.join(', ') : '-';
+    const emits = formatEmitInfos(handler.emitDetails ?? handler.emits.map(event => ({ event, detail: '' })));
     lines.push(`${pad}  handler ${formatLoc(handler)} emits ${emits}`);
     for (const next of handler.emits.slice(0, 8)) {
       if (seen.has(next)) {
@@ -1110,6 +1204,21 @@ function renderConcept(query) {
     lines.push('');
   }
 
+  const cancellationRegistrations = collectCancellationRegistrations()
+    .map(item => ({ item, s: score(`${item.rel} ${item.body}`) }))
+    .filter(entry => entry.s > 0 || words.some(word => ['escape', 'cancel', 'cancellation', 'cancellable'].includes(word)))
+    .sort((a, b) => b.s - a.s)
+    .slice(0, 5);
+  if (cancellationRegistrations.length) {
+    lines.push('cancellables (Escape/app.cancel handlers):');
+    for (const { item } of cancellationRegistrations) {
+      const active = item.body.match(/\bactive\s*:\s*([^,\n}]+)/)?.[1]?.trim();
+      const cancel = item.body.match(/\bcancel\s*:\s*([^,\n}]+)/)?.[1]?.trim();
+      lines.push(`  ${item.rel}:${item.line}${active ? ` active=${active}` : ''}${cancel ? ` cancel=${cancel}` : ''}`);
+    }
+    lines.push('');
+  }
+
   // Origins to trace: the matched commands' own events (so a command like view.zen
   // surfaces its fold.toggle cascade) plus any event whose name matches the concept.
   const commandEvents = commands.map(({ command }) =>
@@ -1173,6 +1282,27 @@ function collectCommandUi() {
     }
   }
   items.sort((a, b) => a.rel.localeCompare(b.rel) || a.line - b.line || a.id.localeCompare(b.id));
+  return items;
+}
+
+function collectCancellationRegistrations() {
+  const items = [];
+  const re = /\bcontexts\.cancellation\.register\s*\(/g;
+  for (const file of listSourceFiles()) {
+    const source = readFileSync(file, 'utf8');
+    for (let m; (m = re.exec(source));) {
+      const open = source.indexOf('(', m.index);
+      const close = findMatching(source, open, '(', ')');
+      if (close < 0) continue;
+      let firstArg = open + 1;
+      while (/\s/.test(source[firstArg] ?? '')) firstArg++;
+      const objectEnd = source[firstArg] === '{' ? findMatching(source, firstArg, '{', '}') : close;
+      const body = source.slice(firstArg, objectEnd + 1);
+      if (!/\bactive\s*:/.test(body) || !/\bcancel\s*:/.test(body)) continue;
+      items.push({ rel: rel(file), line: lineNumber(source, m.index), body });
+      re.lastIndex = close + 1;
+    }
+  }
   return items;
 }
 

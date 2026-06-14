@@ -12,8 +12,8 @@ describe('v2 UI command surfaces', () => {
     const ctx = bootV2();
     await createNodes(ctx, 2);
 
-    expect(commandButton('editing.node.create')?.textContent).toBe('+ Node');
-    expect(commandButton('editing.edge.create')?.textContent).toBe('+ Edge');
+    expect(document.querySelector('.top-tool-panel [data-command="editing.node.create"]')?.textContent).toBe('+ Node');
+    expect(document.querySelector('.top-tool-panel [data-command="editing.edge.create"]')?.textContent).toBe('+ Edge');
     expect(document.querySelectorAll('.outline-search')).toHaveLength(0);
 
     const search = document.querySelector<HTMLInputElement>('.outline-title-search[placeholder="Nodes"]')!;

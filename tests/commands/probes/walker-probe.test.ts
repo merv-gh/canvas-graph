@@ -38,7 +38,7 @@ type Assert = {
 };
 
 const getPath = (root: unknown, path: string): unknown =>
-  path.replace(/\[(\d+)\]/g, '.$1').split('.').filter(Boolean)
+  String(path ?? '').replace(/\[(\d+)\]/g, '.$1').split('.').filter(Boolean)
     .reduce<unknown>((acc, key) => (acc as Record<string, unknown> | undefined)?.[key], root);
 
 /** Emission edges are runtime-observed (bus origin index), so a fresh boot has
@@ -157,6 +157,7 @@ async function scenarioAnswer(ctx: AppCtx, steps: Step[], asserts: Assert[]) {
     if (a.event) {
       const matches = fired.filter(e => e.name === a.event);
       if (!a.path) return { desc: `event ${a.event} fired`, pass: matches.length > 0, actual: matches.length ? `fired ${matches.length}×` : 'never fired' };
+      if (typeof a.path !== 'string') return { desc: `event ${a.event} data path`, pass: false, actual: 'invalid path — use a string dot-path like json' };
       const data = matches.at(-1)?.data;
       const actual = getPath(data, a.path);
       const pass = a.op === 'contains' ? String(actual).includes(String(a.value)) : JSON.stringify(actual) === JSON.stringify(a.value);
@@ -165,6 +166,7 @@ async function scenarioAnswer(ctx: AppCtx, steps: Step[], asserts: Assert[]) {
     if (a.command) {
       const spec = ctx.contexts.commands.get(a.command);
       if (!spec) return { desc: `command ${a.command} exists`, pass: false, actual: 'no such command' };
+      if (a.has != null && typeof a.has !== 'string') return { desc: `command ${a.command} has path`, pass: false, actual: 'invalid has — use a string dot-path like input.key' };
       const actual = a.has ? getPath(spec, a.has) : true;
       const pass = a.value === undefined ? actual != null : JSON.stringify(actual) === JSON.stringify(a.value);
       return { desc: `command ${a.command} ${a.has ?? 'exists'} == ${JSON.stringify(a.value)}`, pass, actual };
@@ -179,6 +181,9 @@ async function scenarioAnswer(ctx: AppCtx, steps: Step[], asserts: Assert[]) {
       if (a.op === 'count') return { desc: `css ${a.css} count ${a.value}`, pass: els.length === Number(a.value), actual: els.length };
       if (a.op === 'textContains') return { desc: `css ${a.css} text contains ${a.value}`, pass: [...els].some(el => (el.textContent ?? '').includes(String(a.value))), actual: [...els].map(el => el.textContent).join('|').slice(0, 120) };
       return { desc: `css ${a.css} exists`, pass: els.length > 0, actual: els.length };
+    }
+    if (a.path != null && typeof a.path !== 'string') {
+      return { desc: 'snapshot path', pass: false, actual: 'invalid path — use a string dot-path like ui.shell.zen' };
     }
     if (/^ctx\.|\(\)/.test(a.path ?? '')) {
       return { desc: `${a.path}`, pass: false, actual: 'invalid path — use plain snapshot paths like selection.count, graph.nodes, ui.rendered.nodes, ui.shell.zen (no ctx., no ())' };

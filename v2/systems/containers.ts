@@ -297,8 +297,14 @@ export function registerContainers(system: Registry) {
       const nest = nestHere();
       const c = here.get(id);
       if (!c) return;
-      // Release children (they keep position; lose parent link).
-      [...c.Children].forEach(childRef => nest.remove(childRef));
+      // Delete owned children before deleting this container. Nested containers
+      // recurse through the same owner event; nodes use graph.node.delete so
+      // graph.ts still owns node/incident-edge cleanup.
+      [...c.Children].forEach(childRef => {
+        if (childRef.kind === 'container') emit('graph.container.delete', { id: childRef.id });
+        else if (childRef.kind === 'node') emit('graph.node.delete', { id: childRef.id });
+        else nest.remove(childRef);
+      });
       // If this container was nested, detach from its own parent.
       nest.remove({ kind: 'container', id });
       here.delete(id);

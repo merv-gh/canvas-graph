@@ -1,5 +1,5 @@
 import type { Registry } from '../core';
-import { Places, Slots } from '../types';
+import { Places } from '../types';
 
 /** Shared fold id for the entire left panel. Owned here so the hamburger
  *  in main.ts and the CSS rule on `.shell` reference the same string. */
@@ -10,7 +10,14 @@ const LEFT_PANEL_FOLD_ID = 'outline.panel';
 const ZEN_FOLD_ID = 'shell.zen';
 
 export function registerMain(system: Registry) {
-  system('main', ({ on, emit, contexts, contribute }) => {
+  system('main', ({ on, emit, contexts, contribute, origin }) => {
+    // Escape exits zen mode through the shared cancellation stack.
+    contexts.cancellation.register({
+      origin,
+      active: () => contexts.fold.folded(ZEN_FOLD_ID),
+      cancel: () => contexts.fold.set(ZEN_FOLD_ID, true),
+    });
+
     // `.shell` lives one level above the Top place. Walk up rather than reach
     // for a global selector so principle #5 (render-adjacent DOM access) holds.
     const shellEl = () => contexts.places.el(Places.Top)?.parentElement as HTMLElement | null;
@@ -23,7 +30,7 @@ export function registerMain(system: Registry) {
     };
     contexts.commands.register([
       { id: 'view.left.toggle', label: 'Toggle outline.panel', group: 'view', event: 'fold.toggle', shortcut: 'B', input: { on: 'keydown', key: 'b', prevent: true }, payload: () => ({ id: 'outline.panel' }) },
-      { id: 'view.top.toggle', label: 'Toggle top panel', group: 'view', event: 'fold.toggle', shortcut: 'T', input: { on: 'keydown', key: 't', prevent: true }, payload: () => ({ id: 'shell.top' }) },
+      { id: 'view.top.toggle', label: 'Toggle top panel', group: 'view', event: 'fold.toggle', shortcut: 'Shift+T', input: { on: 'keydown', key: 'T', shift: true, prevent: true }, payload: () => ({ id: 'shell.top' }) },
       {
         id: 'view.zen',
         label: 'Toggle zen mode',
@@ -36,59 +43,12 @@ export function registerMain(system: Registry) {
     ]);
     contribute({ surface: 'top', command: 'view.zen', kind: 'button', text: '⛶', order: 80 });
     contribute({ surface: 'top', command: 'view.top.toggle', kind: 'button', text: '▴', label: 'Toggle top panel', order: 79 });
-    const hamburger = () => {
-      const folded = !contexts.fold.isOpen(LEFT_PANEL_FOLD_ID, true);
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'icon-button hamburger';
-      btn.dataset.foldId = LEFT_PANEL_FOLD_ID;
-      btn.setAttribute('aria-expanded', folded ? 'false' : 'true');
-      btn.setAttribute('aria-label', folded ? 'Show panel' : 'Hide panel');
-      btn.textContent = '☰';
-      return btn;
-    };
-    const drawToolbar = () => emit('render.view.set', {
-      place: Places.Top,
-      key: 'toolbar',
-      view: () => {
-        const root = contexts.templates.clone('toolbar');
-        const start = contexts.templates.slot(root, 'start');
-        const end = contexts.templates.slot(root, 'end');
-        // Hamburger always lives at the very left of the toolbar — clicking it
-        // fires fold.toggle for the left panel via [data-fold-id] selector.
-        start.append(hamburger());
-        contexts.affordances.system('top').forEach(aff => {
-          // Skip buttons whose command says it's unavailable. The same predicate
-          // already blocks `commands.run`; checking here keeps the toolbar from
-          // showing clickable buttons that do nothing.
-          const cmd = contexts.commands.get(aff.command);
-          if (cmd?.available && !cmd.available()) return;
-          const button = document.createElement('button');
-          button.type = 'button';
-          button.dataset.command = aff.command;
-          button.textContent = aff.text ?? aff.command;
-          if (aff.label) button.setAttribute('aria-label', aff.label);
-          if (aff.className) button.classList.add(...aff.className.split(/\s+/).filter(Boolean));
-          (aff.slot === Slots.End ? end : start).append(button);
-        });
-        return root;
-      },
-    });
-    on('app.start', () => { emit('render.shell'); drawToolbar(); syncShellFold(); });
-    on('affordance.contributed', ({ surface }) => { if (surface === 'top') drawToolbar(); });
-    // The shell class flips on every fold of the left panel; the hamburger
-    // aria + glyph also flips, so the toolbar redraws too.
+    on('app.start', () => { emit('render.shell'); syncShellFold(); });
+    // The shell class flips on every fold of the left/top panel or zen mode.
+    // Toolbar rendering lives in tool-panel; this system only mirrors shell state.
     on('fold.changed', ({ id }) => {
       if (id !== LEFT_PANEL_FOLD_ID && id !== 'shell.top' && id !== ZEN_FOLD_ID) return;
       syncShellFold();
-      drawToolbar();
     });
-    // Debug toolbar toggles + record state changes flip the availability of
-    // many command.available predicates — those are sparse events so we redraw
-    // safely. Selection changes are NOT here: principle 8 budgets the toolbar
-    // to ≤2 redraws under bursty mutation, and selection-dependent buttons
-    // (`view.fit.selected`) accept always being rendered + a no-op click.
-    on('debug.enabled.changed', drawToolbar);
-    on('debug.recording.changed', drawToolbar);
   }, { requires: ['render'] });
 }

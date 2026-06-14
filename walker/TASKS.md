@@ -7,8 +7,8 @@ layout), `files` (≤3 hints), `title`, `command` (new feature command id),
 RED writes a `.layout.json` via gen_layout_test (focus/rect/style/path asserts),
 not a vitest file.
 
-Suggested next local-model queue: `zen-escape`, `container-delete-children`,
-then `export-json` or `insert-node-on-edge` if the machine is still free.
+Suggested next local-model queue: `duplicate-node`, then `insert-node-on-edge`.
+Browser/layout tasks should wait for the layout oracle path.
 
 ## modal-focus
 - kind: layout
@@ -67,22 +67,6 @@ a create with a prefilled draft. Red test: create a node, rename intent not
 needed — duplicate it, assert `graph.nodes` length 2 and both share the same
 `Label.text`, and `selection.count` is 1.
 
-## export-json
-- kind: feature
-- files: v2/core/io.ts, v2/systems/graph.ts
-- title: Export the current graph as JSON
-- command: graph.export.json
-- event: graph.exported
-
-Add command `graph.export.json` (group `graph`, palette-visible). It serializes
-`{nodes:[{id,Label,Position,Size}], edges:[{id,From,To,Label}]}`, emits
-`graph.exported { json }` (declare beside the handler), and writes clipboard when
-available (guard jsdom). RED steps: `editing.node.create`, `editing.node.create`,
-`graph.export.json` (unknown in RED is ok: new feature command). Assert event
-`graph.exported` fired and `json` contains `e1` and `e2`. Do not use
-`graph.create`; it opens the graph-create modal. GREEN: use add_graph_export_json
-{}, then run_test. Keep storage untouched.
-
 ## insert-node-on-edge
 - kind: feature
 - files: v2/systems/graph.ts, v2/features.ts
@@ -96,18 +80,6 @@ original edge, create edges A→N and N→B, select N. Fan out through EXISTING
 events (`graph.node.create` / `graph.edge.create` / `graph.edge.delete`) from a
 feature-style listener — no storage changes. Red test: scenario builds A→B,
 run the command, assert `graph.nodes` length 3 and `graph.edges` length 2.
-
-## zen-escape
-- kind: feature
-- files: v2/systems/main.ts
-- title: Escape does not exit zen mode
-- demo: A;A;wait;\
-
-Zen mode (the `\` command) hides the panels for a focused canvas; the only way out
-is `\` again. Escape should also exit zen, the way it backs out of other modes.
-Make Escape leave zen.
-(Terse-card experiment: the symptom only — discover the rest via projection
-flows/data/commands; do NOT spell out events or the constructor here.)
 
 ## properties-name-editable
 - kind: bug
@@ -127,21 +99,6 @@ Title input, dispatch two input events, assert document.activeElement stays it
 (ui.modal.focusedField === 'title'). GREEN: don't rebuild the modal on item.update
 for the open item, or restore focus+caret after (see outline.ts's queueMicrotask
 refocus after search).
-
-## container-delete-children
-- kind: bug
-- files: v2/systems/containers.ts
-- title: Deleting a container leaves its child nodes behind
-
-Deleting a container currently releases its children, then deletes only the
-container. Desired behavior: deleting container C also deletes direct and nested
-children. RED setup: run commands `editing.container.create`,
-`editing.node.create`, `editing.node.create`; then use bus events
-`container.add-child` for `{containerId:'c1', childRef:{kind:'node', id:'e1'}}`
-and `{containerId:'c1', childRef:{kind:'node', id:'e2'}}`; then event
-`graph.container.delete` with `{id:'c1'}`. Assert `graph.nodes.length == 0` and
-`graph.containers.length == 0`. GREEN: use add_container_delete_cascade {}, then
-run_test.
 
 ## event-log-collapse
 - kind: feature
@@ -207,8 +164,10 @@ then smaller models fill the generated blanks.
 - files: v2/systems/item-toolbar.ts, v2/types.ts
 - title: Floating movable tool panels
 
-T4 foundation. Needs a new place type, dragging/persisted panel positions, and
-probably a panel registry. `item-toolbar.ts` is only a partial precedent.
+T4 foundation. The top toolbar is now a movable/collapsible stage tool panel in
+`v2/systems/tool-panel.ts`. Remaining work is the general registry/API for other
+panels plus persisted positions. `item-toolbar.ts` remains a partial precedent
+for entity-local handles.
 
 ## graph-persistence
 - kind: feature

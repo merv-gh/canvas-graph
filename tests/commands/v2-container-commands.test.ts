@@ -81,7 +81,7 @@ describe('v2 containers', () => {
     expect(containers(ctx)[0].Children).toHaveLength(0);
   });
 
-  it('deleting a container releases its children and emits container.deleted', async () => {
+  it('deleting a container deletes its child nodes and emits container.deleted', async () => {
     const ctx = bootV2();
     await settle();
     runCommand(ctx, 'editing.container.create');
@@ -99,8 +99,7 @@ describe('v2 containers', () => {
 
     expect(deletedFired).toEqual([containerId]);
     expect(containers(ctx)).toHaveLength(0);
-    // Child node survives, just without a parent.
-    expect(ctx.graphs.current.getNode(child.id)).toBeDefined();
+    expect(ctx.graphs.current.getNode(child.id)).toBeUndefined();
   });
 
   it('boots with zero DX errors when container ability is fully wired', async () => {
