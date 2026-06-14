@@ -100,20 +100,14 @@ run the command, assert `graph.nodes` length 3 and `graph.edges` length 2.
 ## zen-escape
 - kind: feature
 - files: v2/systems/main.ts
-- title: Escape does not exit zen mode (no way back once panels are hidden)
+- title: Escape does not exit zen mode
 - demo: A;A;wait;\
-- test-requires: fold.toggle,shell.zen,app.cancel
 
-Zen mode (`\`) hides the top + left panels, leaving only the canvas (fold id
-`shell.zen` in v2/systems/main.ts, mirrored as `ui.shell.zen`). Once in zen the
-only exit is `\` again — Escape does nothing, which is surprising. Cancellation
-is a generic stack (core/cancellation.ts): a system registers {origin, active,
-cancel} and Escape (which fires `app.cancel`) peels the topmost active one. Make
-zen cancellable. GREEN: use add_fold_cancellable
-{"system":"v2/systems/main.ts","foldId":"shell.zen"}. RED is invalid unless it
-has BOTH steps: first event `fold.toggle` data `{id:'shell.zen'}` to enter zen,
-then event `app.cancel`; assert `ui.shell.zen == false`. Do not assert false
-after only `fold.toggle` — entering zen should make it true.
+Zen mode (the `\` command) hides the panels for a focused canvas; the only way out
+is `\` again. Escape should also exit zen, the way it backs out of other modes.
+Make Escape leave zen.
+(Terse-card experiment: the symptom only — discover the rest via projection
+flows/data/commands; do NOT spell out events or the constructor here.)
 
 ## properties-name-editable
 - kind: bug

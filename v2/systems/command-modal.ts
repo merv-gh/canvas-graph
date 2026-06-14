@@ -1,5 +1,5 @@
 import { grouped, shortcutOf, systemOf, type Registry } from '../core';
-import { Places, type CommandSpec, type CommandSpecInput } from '../types';
+import { Places, type CommandSpec, type CommandSpecInput, type ItemRef } from '../types';
 
 declare module '../types' {
   interface CustomEvents {
@@ -10,6 +10,8 @@ declare module '../types' {
     'shortcut.edit.preview': { id: string; shortcut: string };
     'shortcut.edit.commit': { id: string; shortcut: string };
     'flag.toggle': { name: string; on: boolean };
+    // Universal search: a non-command palette result that navigates to an item.
+    'palette.goto': ItemRef;
   }
 }
 
@@ -102,8 +104,39 @@ export function registerCommandModal(system: Registry) {
       });
       return section;
     };
+    // Universal search: match graph items by title against the hierarchy — the
+    // canonical "what exists" list jump/picker already use. A hit navigates via the
+    // generic select + fit events, so this is a thin source over data the app owns,
+    // not a parallel index.
+    const itemResults = (query: string) => {
+      const q = query.trim().toLowerCase();
+      if (!q) return [];
+      return contexts.hierarchy.targets()
+        .filter(item => item.label.toLowerCase().includes(q))
+        .slice(0, NUMBERED_ROWS);
+    };
+    const gotoSection = (items: { ref: ItemRef; label: string }[]) => {
+      const section = contexts.templates.clone('command-section');
+      const rows = contexts.templates.slot(section, 'rows');
+      contexts.templates.text(section, 'group', 'go to');
+      items.forEach(item => {
+        const row = contexts.templates.clone<HTMLElement>('command-row');
+        row.dataset.command = 'palette.goto';
+        row.dataset.gotoKind = item.ref.kind;
+        row.dataset.gotoId = item.ref.id;
+        contexts.templates.text(row, 'label', item.label);
+        contexts.templates.text(row, 'id', item.ref.kind);
+        row.querySelector('kbd')?.remove();
+        rows.append(row);
+      });
+      return section;
+    };
     const renderList = (modal: CommandModalDef, query = '') => {
       const fragment = document.createDocumentFragment();
+      if (modal.id === 'palette' && query.trim()) {
+        const items = itemResults(query);
+        if (items.length) fragment.append(gotoSection(items));
+      }
       let row = 0;
       const nextNumber = () => modal.id === 'palette' && row < NUMBERED_ROWS ? ++row : null;
       grouped(orderedCommands(modal, query), command => command.group ?? systemOf(command.id))
@@ -202,6 +235,16 @@ export function registerCommandModal(system: Registry) {
         hidden: true,
         payload: ({ target }) => ({ commandId: target?.closest('[data-command-id]')?.getAttribute('data-command-id') ?? '' }),
       },
+      {
+        id: 'palette.goto',
+        label: 'Go to item',
+        group: 'modal',
+        hidden: true,
+        payload: ({ target }) => {
+          const el = target?.closest('[data-goto-id]') ?? null;
+          return el ? { kind: el.getAttribute('data-goto-kind') as ItemRef['kind'], id: el.getAttribute('data-goto-id')! } : undefined;
+        },
+      },
       ...Array.from({ length: NUMBERED_ROWS }, (_, i) => ({
         id: `commandModal.run.${i + 1}`,
         label: `Run palette item ${i + 1}`,
@@ -268,6 +311,12 @@ export function registerCommandModal(system: Registry) {
       if (!contexts.commands.get(commandId)) return;
       emit('modal.close');
       contexts.commands.run(commandId, { origin: 'palette' });
+    });
+    on('palette.goto', (ref) => {
+      if (!ref?.id) return;
+      emit('modal.close');
+      emit('selection.item.select', ref);
+      emit('view.fit.item', ref);
     });
     on('commandModal.search.changed', ({ modalId, query }) => {
       const modal = commandModals[modalId as CommandModalDef['id']];

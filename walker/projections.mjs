@@ -23,6 +23,7 @@ const COMMANDS_VIEW = join(VIEWS_DIR, 'commands.proj.ts');
 const EVENTS_VIEW = join(VIEWS_DIR, 'events.proj.ts');
 const FLOWS_VIEW = join(VIEWS_DIR, 'flows.proj.md');
 const COMMAND_UI_VIEW = join(VIEWS_DIR, 'command-ui.proj.ts');
+const DATA_VIEW = join(VIEWS_DIR, 'data.proj.md');
 
 const projections = new Map([
   ['commands', {
@@ -64,6 +65,16 @@ const projections = new Map([
     sync: syncCommandUi,
     watchFiles: commandUiSourceFiles,
     count: () => collectCommandUi().length,
+  }],
+  ['data', {
+    name: 'data',
+    outFile: DATA_VIEW,
+    description: 'per-entity data lifecycle: commands → mutation requests → handler → fact (⟳ render)',
+    render: renderData,
+    generate: generateData,
+    sync: () => console.log('data is read-only; it is derived from events + handlers in source'),
+    watchFiles: () => listSourceFiles(),
+    count: () => DATA_ENTITIES.length,
   }],
 ]);
 
@@ -729,6 +740,60 @@ function generateFlows({ quiet = false } = {}) {
   writeProjection(def, def.render(), quiet);
 }
 
+// ---- data flows: the entity axis of the event graph ----
+const DATA_ENTITIES = ['node', 'edge', 'container', 'item', 'graph'];
+
+/** Which data entity an event concerns, by dotted-name segment (graph.NODE.created → node). */
+function entityOf(event) {
+  const segs = event.split('.');
+  return DATA_ENTITIES.find(e => segs.includes(e)) ?? null;
+}
+
+// Per-entity data lifecycle: command → mutation request → handler (the data owner)
+// → the fact it emits. The fact is a WRITE that auto-redraws, so it's where the
+// entity's data changed and the UI re-reads it. Complements `flows` (event cascade)
+// with the data axis — to find where an entity is created/updated/deleted, and the
+// render leaf that reads it, without opening every system.
+function renderData() {
+  const data = eventFlowData();
+  const lines = [
+    '# @walker-projection data v1',
+    '',
+    'Per-entity data lifecycle: command → mutation request → handler (owner) → fact (⟳ render).',
+    'The fact is where the data changed and the UI re-reads it. Read-only.',
+    'Trace one entity: `project show data node`.',
+    '',
+  ];
+  for (const entity of DATA_ENTITIES) {
+    const events = data.events.filter(event => entityOf(event) === entity);
+    if (!events.length) continue;
+    const requests = events.filter(event => !FACT_RE.test(event));
+    const facts = events.filter(event => FACT_RE.test(event));
+    const commands = [...new Set(events.flatMap(event =>
+      (data.commandsByEvent.get(event) ?? []).map(command => `${command.id} (${formatLoc(command)})`)))];
+    lines.push(`## ${entity}`);
+    if (commands.length) lines.push(`commands: ${commands.join(', ')}`);
+    lines.push('writes (request → owner handler → fact emitted):');
+    let wrote = false;
+    for (const request of requests) {
+      for (const handler of data.handlersByEvent.get(request) ?? []) {
+        const emitted = handler.emits.length ? handler.emits.join(', ') : '(emits no fact)';
+        lines.push(`  ${request} → ${formatLoc(handler)} → ${emitted}`);
+        wrote = true;
+      }
+    }
+    if (!wrote) lines.push('  (no static request handlers found — may mutate via item.update or a store)');
+    if (facts.length) lines.push(`facts (data changed → ⟳ render reads here): ${facts.join(', ')}`);
+    lines.push('');
+  }
+  return lines.join('\n');
+}
+
+function generateData({ quiet = false } = {}) {
+  const def = selectProjection('data');
+  writeProjection(def, def.render(), quiet);
+}
+
 function collectCommandUi() {
   const items = [];
   const re = /\bcontribute\s*\(/g;
@@ -919,10 +984,10 @@ function printHelp() {
 usage:
   node walker/projections.mjs list
   node walker/projections.mjs status
-  node walker/projections.mjs show [commands|events|flows|command-ui] [filter]
-  node walker/projections.mjs generate [commands|events|flows|command-ui]
+  node walker/projections.mjs show [commands|events|flows|command-ui|data] [filter]
+  node walker/projections.mjs generate [commands|events|flows|command-ui|data]
   node walker/projections.mjs sync [commands|events|command-ui]
-  node walker/projections.mjs watch [commands|events|flows|command-ui]
+  node walker/projections.mjs watch [commands|events|flows|command-ui|data]
 
 Generated views live in walker/views/. Source files remain the owners.
 `);
