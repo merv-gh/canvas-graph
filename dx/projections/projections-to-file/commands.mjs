@@ -1,9 +1,10 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import {
   COMMANDS_VIEW,
   escapeRe,
   findMatching,
   rel,
+  writeChanged,
 } from '../shared.mjs';
 import { collectCommands } from '../file-to-projection/commands.mjs';
 
@@ -92,10 +93,7 @@ export function syncCommands({ quiet = false } = {}) {
       if (nextSource.slice(edit.start, edit.end) !== edit.next) changedBlocks++;
       nextSource = `${nextSource.slice(0, edit.start)}${edit.next}${nextSource.slice(edit.end)}`;
     }
-    if (nextSource !== source) {
-      writeFileSync(file, nextSource);
-      changedFiles++;
-    }
+    if (writeChanged(file, nextSource)) changedFiles++;
   }
 
   if (!quiet) console.log(`synced ${changedBlocks} command slice(s)${added ? ` (+${added} new)` : ''} into ${changedFiles} source file(s)`);

@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { EVENTS_VIEW, findMatching, rel } from '../shared.mjs';
+import { existsSync, readFileSync } from 'node:fs';
+import { EVENTS_VIEW, findMatching, rel, writeChanged } from '../shared.mjs';
 import { collectEventDecls } from '../file-to-projection/events.mjs';
 
 function parseEventInterfaces(text) {
@@ -51,10 +51,7 @@ export function syncEvents({ quiet = false } = {}) {
       if (nextSource.slice(replacement.start, replacement.end) !== replacement.next) changedBlocks++;
       nextSource = `${nextSource.slice(0, replacement.start)}${replacement.next}${nextSource.slice(replacement.end)}`;
     }
-    if (nextSource !== source) {
-      writeFileSync(file, nextSource);
-      changedFiles++;
-    }
+    if (writeChanged(file, nextSource)) changedFiles++;
   }
   if (!quiet) console.log(`synced ${changedBlocks} event declaration(s) into ${changedFiles} source file(s)`);
 }

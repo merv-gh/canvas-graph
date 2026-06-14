@@ -685,7 +685,10 @@ async function main() {
   }
   if (argv.cmd === 'clean') return cleanJournal({ keep: argv.opts.keep ?? 3, yes: Boolean(argv.opts.yes) });
   if (['project', 'projection', 'projections', 'view', 'views'].includes(argv.cmd)) {
-    return runNode('dx/projections/projections.mjs', argv.args.length ? argv.args : ['status']);
+    const passthroughFlags = Object.entries(argv.opts)
+      .flatMap(([key, value]) => (value === true ? [`--${key}`] : [`--${key}`, String(value)]));
+    const passed = (argv.args.length ? argv.args : ['status']).concat(passthroughFlags);
+    return runNode('dx/projections/projections.mjs', passed);
   }
   // Bare task id: `dx <task-id> [--human]` is shorthand for `dx run <task-id>`.
   if (argv.cmd && resolveTask(argv.cmd)) {

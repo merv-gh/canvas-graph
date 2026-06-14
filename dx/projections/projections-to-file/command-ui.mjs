@@ -1,10 +1,11 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import {
   COMMAND_UI_VIEW,
   escapeRe,
   findMatching,
   rel,
   sourcePathFromMarker,
+  writeChanged,
 } from '../shared.mjs';
 import { collectCommandUi } from '../file-to-projection/command-ui.mjs';
 
@@ -96,10 +97,7 @@ export function syncCommandUi({ quiet = false } = {}) {
       if (nextSource.slice(replacement.start, replacement.end) !== replacement.next) changedBlocks++;
       nextSource = `${nextSource.slice(0, replacement.start)}${replacement.next}${nextSource.slice(replacement.end)}`;
     }
-    if (nextSource !== source) {
-      writeFileSync(file, nextSource);
-      changedFiles++;
-    }
+    if (writeChanged(file, nextSource)) changedFiles++;
   }
   if (!quiet) console.log(`synced ${changedBlocks} command UI contribution(s)${added ? ` (+${added} new)` : ''} into ${changedFiles} source file(s)`);
 }

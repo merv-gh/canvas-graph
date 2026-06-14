@@ -34,10 +34,17 @@ export const TOOL_SCHEMAS = [
 
 const toOllamaTools = () => TOOL_SCHEMAS.map(t => ({ type: 'function', function: t }));
 
+/** Tools offered for a walk: drive + observe + record only. Walk is
+ *  reconnaissance, so withholding gen_test/write/run_test/constructors stops the
+ *  model reaching for TDD muscle memory (it did, and looped to the turn cap). */
+export const WALK_TOOLS = new Set(['app', 'inspect', 'note', 'done']);
+
 /** One-line-per-tool docs for the prompt. First clause only — the loop
  *  re-injects full protocol detail on the specific failure, so the standing
- *  reminder stays cheap. Native-tool models still get the full schema. */
-export const toolDocsText = () => TOOL_SCHEMAS
+ *  reminder stays cheap. Native-tool models still get the full schema.
+ *  Filtered to WALK_TOOLS for the walk phase. */
+export const toolDocsText = (phase) => TOOL_SCHEMAS
+  .filter(t => phase !== 'walk' || WALK_TOOLS.has(t.name))
   .map(t => `${t.name}(${Object.keys(t.parameters.properties ?? {}).join(',')})`)
   .join(' ');
 
@@ -152,6 +159,26 @@ export function parseToolFromText(text) {
   const call = text.match(/^\s*(\w+)\(\s*["'`]?([\s\S]*?)["'`]?\s*\)\s*$/m);
   if (call && CALL_SYNTAX_ARG[call[1]]) {
     return { name: call[1], args: { [CALL_SYNTAX_ARG[call[1]]]: call[2] } };
+  }
+  // `name {args}` form (qwen favorite for note/app): a known tool name at line
+  // start immediately before a JSON object. The name sits OUTSIDE the braces, so
+  // the generic {"name":…,"arguments":…} path below can't find it. Try the object
+  // span (longest first), repairing bare keys / control chars as usual.
+  const nameWord = text.match(/^[ \t]*([A-Za-z_]\w*)[ \t]*\{/m);
+  if (nameWord && TOOL_SCHEMAS.some(t => t.name === nameWord[1])) {
+    const name = nameWord[1];
+    const from = text.indexOf('{', nameWord.index);
+    for (let end = text.length; (end = text.lastIndexOf('}', end - 1)) > from;) {
+      const slice = text.slice(from, end + 1);
+      for (const candidate of [slice, repairJson(slice), quoteBareKeys(repairJson(slice))]) {
+        try {
+          const args = JSON.parse(candidate);
+          if (args && typeof args === 'object' && !Array.isArray(args)) {
+            return attachFences({ name, args }, text);
+          }
+        } catch { /* next candidate */ }
+      }
+    }
   }
   const fence = text.match(/```(?:tool|json)?\s*\n?([\s\S]*?)```/);
   const candidates = [];

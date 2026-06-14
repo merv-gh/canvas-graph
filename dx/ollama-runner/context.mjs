@@ -30,7 +30,22 @@ TOOLS (args in schema):
 
 Terse. Discover, then one decisive edit.`;
 
-export function buildSystemPrompt() {
+const WALK_SYSTEM = `Explore a live TypeScript graph app and report what's broken. ONE tool call per reply. Reconnaissance only — no tests, no edits, no fixes.
+
+Each turn: drive ONE command, then observe, then judge.
+  • app {action:"command", arg:"<id>"} — run a command (get ids from inspect {what:"commands"})
+  • app {action:"snapshot", arg:"ui"} or arg:"graph" — read state; app {action:"screenshot"} — layout summary
+  • Did state change the way the command NAME promises? If nothing happened / it errored / it did the wrong thing → that's a bug.
+Save every suspected bug: note {text:"<symptom> — repro: <command ids>"}.
+Drive at least 10 DISTINCT commands across areas (create/select/layout/view/fold/palette), then done {summary}.
+
+TOOLS (args in schema):
+{TOOL_DOCS}
+
+Terse. Drive, observe, note bugs — never edit.`;
+
+export function buildSystemPrompt(phase) {
+  if (phase === 'walk') return WALK_SYSTEM.replace('{TOOL_DOCS}', toolDocsText('walk'));
   return SYSTEM_BASE.replace('{TOOL_DOCS}', toolDocsText());
 }
 
@@ -42,13 +57,15 @@ export function buildTaskCard(task, phase, extra = '', autoContext = '') {
     task.prompt.trim(),
     task.files ? `Likely files: ${task.files}` : '',
     autoContext ? `\n${autoContext.trim()}` : '',
-    task.kind === 'layout'
-      ? (phase === 'red'
-        ? `LAYOUT task — jsdom can't see this; use the browser oracle. RED: app_probe {steps,asserts} to find the broken focus/layout/style fact (asserts: focus / rect / style / path), then gen_layout_test {title,spec} with asserts stating the DESIRED behavior — it writes tests/commands/dx/${task.id}.layout.json once it confirms they fail. run_test to advance.`
-        : `Make the layout oracle pass by editing frontend/ only: run_test re-runs tests/commands/dx/${task.id}.layout.json in a REAL browser; app_probe to iterate cheaply.`)
-      : phase === 'red'
-        ? `Write the failing test at tests/commands/dx/${task.id}.test.ts then run_test it. import from '../testkit'.`
-        : `Make tests/commands/dx/${task.id}.test.ts pass by editing frontend/ only.`,
+    task.kind === 'walk'
+      ? `WALK — drive ≥10 distinct commands via app, note each suspected bug with its repro, then done. No tests, no edits.`
+      : task.kind === 'layout'
+        ? (phase === 'red'
+          ? `LAYOUT task — jsdom can't see this; use the browser oracle. RED: app_probe {steps,asserts} to find the broken focus/layout/style fact (asserts: focus / rect / style / path), then gen_layout_test {title,spec} with asserts stating the DESIRED behavior — it writes tests/commands/dx/${task.id}.layout.json once it confirms they fail. run_test to advance.`
+          : `Make the layout oracle pass by editing frontend/ only: run_test re-runs tests/commands/dx/${task.id}.layout.json in a REAL browser; app_probe to iterate cheaply.`)
+        : phase === 'red'
+          ? `Write the failing test at tests/commands/dx/${task.id}.test.ts then run_test it. import from '../testkit'.`
+          : `Make tests/commands/dx/${task.id}.test.ts pass by editing frontend/ only.`,
     extra,
   ].filter(Boolean);
   return lines.join('\n');

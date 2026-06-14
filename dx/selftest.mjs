@@ -264,6 +264,30 @@ ok('projection: adding a new command next to a sibling syncs into its file', () 
   }
 });
 
+ok('projection: sync --dry-run reports source changes but writes nothing', () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'dx-proj-dry-'));
+  const env = { ...process.env, DX_PROJECTION_ROOT: scratch };
+  const proj = join(REPO, 'dx/projections/projections.mjs');
+  try {
+    mkdirSync(join(scratch, 'frontend/systems'), { recursive: true });
+    const srcPath = join(scratch, 'frontend/systems/x.ts');
+    const original = 'export function r(s) {\n  s.commands.register([\n    { id: \'x.go\', label: \'Go\', group: \'x\' },\n  ]);\n}\n';
+    writeFileSync(srcPath, original);
+    execFileSync(process.execPath, [proj, 'generate', 'commands'], { cwd: scratch, env, encoding: 'utf8' });
+    const viewFile = join(scratch, 'views/commands.proj.ts');
+    writeFileSync(viewFile, readFileSync(viewFile, 'utf8').replace("group: 'x' }", "group: 'x', shortcut: 'G' }"));
+    const out = execFileSync(process.execPath, [proj, 'sync', 'commands', '--dry-run'], { cwd: scratch, env, encoding: 'utf8' });
+    assert(/DRY RUN/.test(out), `expected dry-run banner: ${out}`);
+    assert(/x\.ts/.test(out), `dry-run should name the file it would change: ${out}`);
+    assert(readFileSync(srcPath, 'utf8') === original, 'dry-run must NOT write source');
+    // a real sync after the dry-run still writes for real
+    execFileSync(process.execPath, [proj, 'sync', 'commands'], { cwd: scratch, env, encoding: 'utf8' });
+    assert(readFileSync(srcPath, 'utf8').includes("shortcut: 'G'"), 'real sync should write after a dry-run');
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
 ok('projection: events view is a compilable interface and round-trips clean', () => {
   execFileSync(process.execPath, ['dx/projections/projections.mjs', 'generate', 'events'], { cwd: REPO, encoding: 'utf8' });
   const view = readFileSync(join(REPO, 'views/events.proj.ts'), 'utf8');
@@ -394,6 +418,14 @@ ok('parser: backtick-string JSON, call syntax, fenced payload, patch', () => {
   const jsEsc = parseToolFromText(`{"name":"patch","arguments":{"path":"a.ts","op":"replace","line":1,"text":"available: 'selection.type === \\'edge\\''"}}`);
   assert.equal(jsEsc.name, 'patch');
   assert(jsEsc.args.text.includes("'edge'"), jsEsc.args.text);
+  // `name {args}` form with bare keys — the walk model's shape (name outside the
+  // braces, no "name" key inside). Both note and app must route.
+  const noteForm = parseToolFromText('note {text:"view.left.toggle — repro: view.left.toggle — left panel folded"}');
+  assert.equal(noteForm?.name, 'note', 'note {args} form should parse');
+  assert(noteForm.args.text.includes('left panel folded'), noteForm.args.text);
+  const appForm = parseToolFromText('app {action:"command", arg:"view.top.toggle"}');
+  assert.equal(appForm?.name, 'app', 'app {args} form should parse');
+  assert.equal(appForm.args.arg, 'view.top.toggle');
 });
 
 // Stub workspace that mirrors Workspace.run (git/grep) for the read-only tools.

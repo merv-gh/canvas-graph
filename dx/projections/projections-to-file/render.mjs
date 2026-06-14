@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import {
   MAIN_TS,
   RENDER_VIEW,
@@ -6,6 +6,7 @@ import {
   STYLES_CSS,
   findMatching,
   rel,
+  writeChanged,
 } from '../shared.mjs';
 import { cssRuleRanges, kebab, quoteString } from '../file-to-projection/render.mjs';
 
@@ -81,12 +82,6 @@ export function syncRender({ quiet = false } = {}) {
   }
 
   let changedFiles = 0;
-  const writeChanged = (file, next) => {
-    const current = readFileSync(file, 'utf8');
-    if (current === next) return;
-    writeFileSync(file, next);
-    changedFiles++;
-  };
 
   let main = readFileSync(MAIN_TS, 'utf8');
   const datasetLines = folds.map(fold =>
@@ -94,7 +89,7 @@ export function syncRender({ quiet = false } = {}) {
   main = replaceBetween(main, '      if (!shell) return;\n', '    };', `${datasetLines}\n`);
   const guard = `      if (${folds.map(fold => `id !== ${fold.foldExpr}`).join(' && ')}) return;`;
   main = main.replace(/^\s*if \(id !== [^\n]+?\) return;$/m, guard);
-  writeChanged(MAIN_TS, main);
+  if (writeChanged(MAIN_TS, main)) changedFiles++;
 
   let snapshot = readFileSync(SNAPSHOT_TS, 'utf8');
   const shellObject = folds.map(fold => `      ${fold.field}: shellEl?.dataset.${fold.field} === 'true',`).join('\n');
@@ -102,13 +97,13 @@ export function syncRender({ quiet = false } = {}) {
   const shellCode = folds.map(fold =>
     `  ${fold.field}: "ctx.contexts.places.el('top')?.parentElement?.dataset.${fold.field} === 'true'",`).join('\n');
   snapshot = replaceObjectBody(snapshot, 'SHELL_CODE', shellCode);
-  writeChanged(SNAPSHOT_TS, snapshot);
+  if (writeChanged(SNAPSHOT_TS, snapshot)) changedFiles++;
 
   let css = readFileSync(STYLES_CSS, 'utf8');
   css = removeShellFoldCss(css, folds);
   const cssText = folds.map(fold => fold.css.trim()).filter(Boolean).join('\n');
   if (cssText) css = insertAfterShellRule(css, cssText);
-  writeChanged(STYLES_CSS, css);
+  if (writeChanged(STYLES_CSS, css)) changedFiles++;
 
   if (!quiet) console.log(`synced ${folds.length} shell fold render seam(s) into ${changedFiles} changed source file(s)`);
 }

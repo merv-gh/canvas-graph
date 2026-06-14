@@ -139,11 +139,13 @@ async function attempt(task, { cycle, n, model, temperature, seed }) {
       : `tests/commands/dx/${task.id}.test.ts`;
     tools.task = task;
     if (task.kind === 'layout' && !browser) { jlog('layout task needs the app stack, which failed to start — skipping'); outcome = 'fail: no browser'; }
-    const system = buildSystemPrompt();
     const notes = [];
     const history = [];
     const isWalk = task.kind === 'walk';
     tools.phase = isWalk ? 'walk' : 'red';
+    // Built once with the initial phase; walk gets a reconnaissance-only prompt +
+    // tool palette (red/green share SYSTEM_BASE, so 'red' is correct for both).
+    const system = buildSystemPrompt(tools.phase);
     let parseMisses = 0;
     let extra = '';
     // Doom-loop breaker: small models repeat an identical failing action forever.
@@ -333,6 +335,13 @@ async function attempt(task, { cycle, n, model, temperature, seed }) {
         : '';
       history.push({ role: 'assistant', content: JSON.stringify({ name, arguments: args }) });
       history.push({ role: 'user', content: `RESULT of ${name}:\n${trimmed}${pressure}` });
+    }
+
+    // A walk that ran out of turns/time (never called done) still produced
+    // observations — salvage them and label it walked, not fail.
+    if (isWalk && outcome === 'fail') {
+      outcome = 'walked';
+      writeFileSync(join(attemptDir, 'observations.md'), notes.join('\n'));
     }
 
     // ---------- wrap up ----------

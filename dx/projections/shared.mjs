@@ -139,3 +139,36 @@ export function writeProjection(def, text, quiet) {
   }
   if (!quiet) console.log(`generated ${rel(def.outFile)} (${def.count()} slice(s))`);
 }
+
+// Dry-run write guard for the views-only dogfood. With it on, sync computes the
+// source edits exactly as usual but writes NOTHING — every would-be write is
+// recorded instead. That lets a big model (or human) edit only views/ and see
+// whether a whole feature is expressible as view edits (clean source diff) or
+// hits a wall (a routing error = the view layer can't yet express it). All four
+// editable sync modules route their final write through writeChanged().
+let DRY_RUN = false;
+const dryRunLedger = [];
+
+export function setDryRun(on) {
+  DRY_RUN = Boolean(on);
+  if (DRY_RUN) dryRunLedger.length = 0;
+}
+
+export function isDryRun() {
+  return DRY_RUN;
+}
+
+export function takeDryRunLedger() {
+  return dryRunLedger.splice(0);
+}
+
+export function writeChanged(file, next) {
+  const current = existsSync(file) ? readFileSync(file, 'utf8') : '';
+  if (current === next) return false;
+  if (DRY_RUN) {
+    dryRunLedger.push({ file, before: current, after: next });
+    return true;
+  }
+  writeFileSync(file, next);
+  return true;
+}

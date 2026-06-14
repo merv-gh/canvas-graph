@@ -163,6 +163,12 @@ source regenerate the projection.
   unchanged; the watcher relies on this. Guarded by `node dx/selftest.mjs`.
 - Projection sync is intentionally narrow: it replaces known slices, not whole
   files.
+- `sync`/`watch` accept `--dry-run` (aka `--no-write`/`--no-sync`): the source
+  edits a view change implies are computed and reported (which files, +/- lines)
+  but **nothing is written**. This is the views-only dogfood guard — edit only
+  `views/`, confirm the whole change is expressible as a clean source diff (✓
+  deliverable) or hits a routing error (✗ the view layer can't express it yet =
+  the next projection to build). Drop the flag to actually land it.
 - `flows` and `data` are read-only because they are derived from commands,
   declarations, `emit(...)`, and `on(...)`.
 
