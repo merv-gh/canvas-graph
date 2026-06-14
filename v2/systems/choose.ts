@@ -39,6 +39,12 @@ export function registerChoose(system: Registry) {
         input: { on: 'keydown', key: 'a', ctrl: true, prevent: true },
         available: () => allRefs().length > 0,
       },
+      {
+        id: 'choose.all.cmd', label: 'Choose all (Cmd+A)', event: 'choose.all',
+        group: 'choose', hidden: true, shortcut: 'Cmd+A',
+        input: { on: 'keydown', key: 'a', meta: true, prevent: true },
+        available: () => allRefs().length > 0,
+      },
       { id: 'choose.none', label: 'Choose none', group: 'choose', available: () => selection.selectedAll().length > 0 },
       { id: 'choose.invert', label: 'Invert choice', group: 'choose', available: () => allRefs().length > 0, shortcut: 'I', input: { on: 'keydown', key: 'i', prevent: true } },
       { id: 'choose.follow', label: 'Grow along edges', group: 'choose', available: () => chosenNodes().length > 0 },

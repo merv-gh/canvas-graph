@@ -33,6 +33,27 @@ describe('v2 choose — multi-item set + bulk actions', () => {
     nodeIds(ctx).forEach(id => expect(nodeEl(id)?.classList.contains('selected')).toBe(true));
   });
 
+  it('Cmd+A aliases choose.all without selecting page text', async () => {
+    const ctx = bootV2();
+    await settle();
+    runCommand(ctx, 'editing.node.create');
+    runCommand(ctx, 'editing.node.create');
+    await settle();
+
+    document.body.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'a',
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    }));
+    await settle();
+
+    const total = ctx.graphs.current.nodes().length + ctx.graphs.current.edges().length;
+    expect(ctx.contexts.commands.get('choose.all.cmd')?.event).toBe('choose.all');
+    expect(ctx.selection.selectedAll()).toHaveLength(total);
+    expect(document.getSelection()?.toString() ?? '').toBe('');
+  });
+
   it('toggle adds and removes a single item (random access)', async () => {
     const ctx = bootV2();
     await settle();

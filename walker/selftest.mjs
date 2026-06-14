@@ -621,6 +621,15 @@ await okAsync('set_command + add_command take effect in a booted copy', async ()
   try {
     ws.create();
     const tools = new Tools({ ws, browser: null, log: () => {} });
+    const shortcutSpec = tools.tool_gen_test({
+      title: 'shortcut spec',
+      spec: {
+        steps: [{ command: 'item.properties.open' }],
+        asserts: [{ command: 'item.properties.open', has: 'input.key', value: '.' }],
+      },
+    });
+    assert(/command-spec asserts inspect the registry/.test(shortcutSpec), `gen_test command-spec hint: ${shortcutSpec}`);
+
     tools.phase = 'green';
 
     // set_command: bind a currently-unbound command while keeping redundant
@@ -641,6 +650,20 @@ await okAsync('set_command + add_command take effect in a booted copy', async ()
     const graphSrc = readFileSync(join(ws.dir, 'v2/systems/graph.ts'), 'utf8');
     assert(/on\('graph\.selftest\.ping'/.test(graphSrc), 'handler not spliced');
     assert(/'graph\.selftest\.ping':\s*void;/.test(graphSrc), 'add_command did not auto-declare its event');
+
+    const alias = tools.tool_add_command_alias({
+      system: 'v2/systems/choose.ts',
+      id: 'choose.selftest.cmd',
+      event: 'choose.all',
+      key: 'a',
+      shortcut: 'Cmd+A',
+      meta: true,
+      group: 'choose',
+    });
+    assert(/registered 'choose\.selftest\.cmd'/.test(alias), `add_command_alias: ${alias}`);
+    const aliasProbe = runProbe(ws.dir, { mode: 'commands', filter: 'choose.selftest.cmd' });
+    assert.equal(aliasProbe.commands.find(c => c.id === 'choose.selftest.cmd')?.event, 'choose.all', JSON.stringify(aliasProbe.commands));
+    assert.equal(aliasProbe.commands.find(c => c.id === 'choose.selftest.cmd')?.key, 'keydown:a+meta', JSON.stringify(aliasProbe.commands));
 
     // declare_event (standalone): a new typed fact.
     const de = tools.tool_declare_event({ system: 'v2/systems/graph.ts', event: 'graph.selftest.exported', type: '{ json: string }' });

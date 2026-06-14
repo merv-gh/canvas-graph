@@ -83,7 +83,7 @@ function commandsAnswer(ctx: AppCtx, filter?: string) {
     label: c.label,
     group: c.group ?? null,
     shortcut: c.shortcut ?? null,
-    key: c.input ? `${c.input.on}${c.input.key ? `:${c.input.key}` : ''}${c.input.shift ? '+shift' : ''}${c.input.ctrl ? '+ctrl' : ''}` : null,
+    key: c.input ? `${c.input.on}${c.input.key ? `:${c.input.key}` : ''}${c.input.shift ? '+shift' : ''}${c.input.ctrl ? '+ctrl' : ''}${c.input.alt ? '+alt' : ''}${c.input.meta ? '+meta' : ''}` : null,
     event: c.event,
     hidden: !!c.hidden,
     origin: c.origin ?? null,

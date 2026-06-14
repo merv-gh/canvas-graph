@@ -3,15 +3,17 @@
 Format: `## <id>` then `- key: value` bullets, then free-text prompt (this is what
 the model sees — keep it under ~120 words). Keys: `kind` (bug | feature | walk |
 layout), `files` (≤3 hints), `title`, `command` (new feature command id),
-`disabled` (skip). `layout` tasks are judged in a REAL browser by the oracle:
-RED writes a `.layout.json` via gen_layout_test (focus/rect/style/path asserts),
-not a vitest file.
+`delegate` (ready | blocked:<reason>), `disabled` (skip). `layout` tasks are
+judged in a REAL browser by the oracle: RED writes a `.layout.json` via
+gen_layout_test (focus/rect/style/path asserts), not a vitest file.
 
-Suggested next local-model queue: `duplicate-node`, then `insert-node-on-edge`.
+Suggested next local-model queue: none until the next ready card is carved out.
 Browser/layout tasks should wait for the layout oracle path.
 
 ## modal-focus
 - kind: layout
+- disabled: true
+- delegate: blocked:layout-oracle-churn
 - files: v2/systems/command-modal.ts, v2/abilities/configurable.ts
 - title: Properties modal opens but keyboard focus stays on the node
 
@@ -26,6 +28,8 @@ properties modal opens, move focus to its first field (edit v2/ only).
 
 ## edge-inline-edit
 - kind: feature
+- disabled: true
+- delegate: blocked:test-constructor-needed
 - files: v2/model/entities.ts, v2/abilities/editable.ts
 - title: Edge labels cannot be edited inline
 
@@ -54,6 +58,8 @@ suspected bug with `note` (symptom + the exact commands to reproduce). Call
 
 ## duplicate-node
 - kind: feature
+- disabled: true
+- delegate: blocked:setup-constructor-needed
 - files: v2/features.ts, v2/systems/graph.ts
 - title: Duplicate the selected node
 - command: editing.node.duplicate
@@ -69,6 +75,8 @@ needed — duplicate it, assert `graph.nodes` length 2 and both share the same
 
 ## insert-node-on-edge
 - kind: feature
+- disabled: true
+- delegate: blocked:constructor-needed
 - files: v2/systems/graph.ts, v2/features.ts
 - title: Insert a node in the middle of the selected edge
 - command: editing.edge.split
@@ -81,9 +89,36 @@ events (`graph.node.create` / `graph.edge.create` / `graph.edge.delete`) from a
 feature-style listener — no storage changes. Red test: scenario builds A→B,
 run the command, assert `graph.nodes` length 3 and `graph.edges` length 2.
 
+## node-title-only
+- kind: bug
+- disabled: true
+- delegate: blocked:collapse-model-split
+- files: v2/model/entities.ts, v2/index.html, v2/styles.css
+- title: Simple nodes should render only a centered title
+
+Simple graph nodes show body/meta text like `e1` and expose a collapse icon even
+when there is no body to collapse. Remove the node id/body-description from the
+default node render and keep the title vertically centered. Existing node tests
+still expect the generic `collapsible` ability, so first split "plain title-only
+node" from future rich/markdown nodes or define when collapse is meaningful.
+
+## node-inline-title-edit-stable
+- kind: layout
+- disabled: true
+- delegate: blocked:browser-focus-oracle
+- files: v2/abilities/editable.ts, v2/model/entities.ts
+- title: Inline node title editing should keep focus and commit full titles
+
+Node title editing from the canvas should accept multi-character edits without
+losing focus or committing partial text. This needs a browser-focused repro:
+enter edit mode on a node title, type two characters, assert the active element
+is still `[data-editable-title]` and `graph.nodes[0].Label.text` equals the full
+string after commit.
+
 ## properties-name-editable
 - kind: bug
 - disabled: true
+- delegate: blocked:browser-focus-oracle
 - files: v2/abilities/configurable.ts
 - title: Editing a node's Title in the properties modal loses focus after one char
 
@@ -100,9 +135,59 @@ Title input, dispatch two input events, assert document.activeElement stays it
 for the open item, or restore focus+caret after (see outline.ts's queueMicrotask
 refocus after search).
 
+## left-panel-tool-panel
+- kind: feature
+- disabled: true
+- delegate: blocked:tool-panel-registry
+- files: v2/systems/tool-panel.ts, v2/systems/outline.ts, v2/types.ts
+- title: Left panel should be render-place configurable tool panel
+
+Refactor the outline/left panel into a tool panel whose render place is
+configurable: `stage` for floating canvas mode, `left` to preserve the old shell
+look. This should not duplicate outline rendering. First build a small panel
+registry/config seam in `tool-panel.ts`, then move outline mounting behind that
+seam and assert both render places.
+
+## debug-tool-panel
+- kind: feature
+- disabled: true
+- delegate: blocked:tool-panel-registry
+- files: v2/systems/debug.ts, v2/systems/tool-panel.ts
+- title: Debug/event log should be a top-right tool panel when enabled
+
+Extract debug/log UI into a separate tool panel anchored top right. It should
+mount only when debug/log is enabled, stay hidden in normal mode, and reuse the
+same movable/collapsible panel registry as top/left panels. RED needs a snapshot
+field like `ui.toolPanels.debug.mounted`.
+
+## zoom-fit-tool-panel
+- kind: feature
+- disabled: true
+- delegate: blocked:tool-panel-registry
+- files: v2/systems/view-zoom.ts, v2/systems/tool-panel.ts
+- title: Zoom and fit buttons should live in a bottom-right tool panel
+
+Move `view.zoom.*`, `view.fit.all`, and `view.fit.selected` affordances out of
+the top toolbar into a bottom-right stage tool panel. Keep existing keyboard
+shortcuts. Needs the panel registry plus a way for command affordances to target
+named tool panels rather than only `surface:'top'`.
+
+## layout-picker-button
+- kind: feature
+- disabled: true
+- delegate: blocked:picker-or-popover-seam
+- files: v2/systems/layout.ts, v2/systems/tool-panel.ts
+- title: Layout buttons should collapse into one layout picker
+
+Replace separate Tidy/Radial/Grid toolbar buttons with one Layout button. Clicking
+it opens a small picker/popover with layout choices; choosing radial or tidy
+applies the layout and then emits `view.fit.all`. Keep direct command ids for
+palette/keyboard. Needs a deterministic popover/picker seam before delegation.
+
 ## event-log-collapse
 - kind: feature
 - disabled: true
+- delegate: blocked:tool-panel-registry
 - files: v2/systems/log.ts, v2/styles.css, v2/core/snapshot.ts
 - title: Event log panel needs collapse shortcut and UI affordance
 - command: view.log.toggle
@@ -161,6 +246,7 @@ then smaller models fill the generated blanks.
 ## floating-tool-panels
 - kind: feature
 - disabled: true
+- delegate: blocked:big-model-seam
 - files: v2/systems/item-toolbar.ts, v2/types.ts
 - title: Floating movable tool panels
 
@@ -169,9 +255,22 @@ T4 foundation. The top toolbar is now a movable/collapsible stage tool panel in
 panels plus persisted positions. `item-toolbar.ts` remains a partial precedent
 for entity-local handles.
 
+## history-undo-redo
+- kind: feature
+- disabled: true
+- delegate: blocked:mutation-journal-seam
+- files: v2/core, v2/systems/graph.ts, v2/systems/containers.ts
+- title: Implement history, undo, and redo
+
+Add a command/event history seam that records reversible graph/container/item
+mutations, then expose `history.undo` and `history.redo` with shortcuts. This is
+not a small patch until mutation events have inverse payloads or a snapshot diff
+strategy. Start with graph node/edge create/update/delete, then containers.
+
 ## graph-persistence
 - kind: feature
 - disabled: true
+- delegate: blocked:io-seam
 - files: v2/systems/graph.ts, v2/core/io.ts
 - title: Persist graphs to localStorage or IndexedDB
 
@@ -179,15 +278,65 @@ T4 Principle 9 debt. Add an IO system with `io.read`, `io.write`, and
 `io.changed` events, start with localStorage, then make IndexedDB an adapter.
 Only delegate after the persistence seam and serialization contract are clear.
 
+## graph-import-json
+- kind: feature
+- disabled: true
+- delegate: blocked:serializer-contract
+- files: v2/systems/graph.ts, v2/core/io.ts
+- title: Import graph JSON matching the export format
+- command: graph.import.json
+
+`graph.export.json` exists. Add the inverse import command after the graph JSON
+schema is named/tested in one helper. Import should validate nodes/edges, replace
+or create a graph deterministically, emit `graph.imported`, and leave the graph
+selected/fitted. Needs malformed JSON tests before delegation.
+
 ## deep-links
 - kind: feature
 - disabled: true
+- delegate: blocked:url-state-seam
 - files: v2/systems/scenario.ts, v2/systems/view-zoom.ts
-- title: Deep links for graph, camera, coordinates, and focus
+- title: Deep links for graph, selection, zoom, and pan
 
 T4. `?scenario=` keystroke macros exist, but state links are new. Define URL
-serialization for `{ graphId, camera, selection/focus }`, parse on boot, and
-update URL after stable changes without noisy history spam.
+serialization for `{ graphId, camera:{x,y,scale}, selected nodes/edges }`, parse
+on boot, and update URL after stable changes without noisy history spam.
+
+## node-media-types
+- kind: feature
+- disabled: true
+- delegate: blocked:model-schema-design
+- files: v2/model/entities.ts, v2/model/graph.ts
+- title: Add image, video, and link node types
+
+Introduce typed node variants for image, video, and link content. This needs a
+schema decision first: one `node` entity with `Kind`/`Content`, or separate item
+kinds. After the schema is chosen, delegate renderers/properties/tests in small
+cards per type.
+
+## node-markdown-descriptions
+- kind: feature
+- disabled: true
+- delegate: blocked:description-schema-and-renderer
+- files: v2/model/entities.ts, v2/abilities/configurable.ts
+- title: Markdown descriptions for all node types
+
+Add a markdown description field to node types and render it safely. Needs a
+description property schema, collapsed/expanded display rules, and a markdown
+renderer/sanitizer decision. Delegate only after the first text-node description
+path has a red test and deterministic renderer seam.
+
+## layout-collapsed-container-sizes
+- kind: bug
+- disabled: true
+- delegate: blocked:layout-measurement-seam
+- files: v2/systems/layout.ts, v2/systems/containers.ts, v2/core/view.ts
+- title: Layout should use actual node sizes when containers are collapsed
+
+Layout currently reasons from model sizes, but collapsed containers and rendered
+nodes can have different effective sizes. Add a measurement seam that layout can
+query for current rendered bounds, then make tidy/radial respect collapsed
+container extents. Needs browser/layout assertions before delegation.
 
 ## universal-search
 - kind: feature

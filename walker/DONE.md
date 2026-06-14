@@ -153,3 +153,39 @@ cleanup behavior.
 The top toolbar moved from a hardcoded shell row into a stage-rendered tool
 panel with drag and collapse handles. `view.top.toggle` and zen both collapse
 the panel, and the debug snapshot exposes `ui.toolPanels.top` for probes.
+
+## dx-binding-duplicates
+- kind: bug
+- files: v2/systems/dx.ts, v2/systems/graph.ts
+- title: Clear noisy binding.duplicate warnings
+- done: 2026-06-14
+- recorded: tests/commands/v2-branch-commands.test.ts
+
+DX no longer warns for input bindings that are gated by explicit runtime context
+(`input.when`), such as independent pointer drag/resize/panel gestures. Real
+unscoped key collisions still warn. `graph.switch.next` also moved from the
+ambiguous `g/G` path to `Alt+G`.
+
+## item-properties-hotkey
+- kind: feature
+- files: v2/abilities/configurable.ts
+- title: Pressing . opens item properties
+- command: item.properties.open
+- done: 2026-06-14
+- recorded: tests/commands/v2-node-commands.test.ts
+
+`item.properties.open` now has the `.` keyboard binding. Qwen produced and
+verified the same small patch through dx; the final change is covered in the
+node command regression.
+
+## cmd-a-select-all
+- kind: feature
+- files: v2/systems/choose.ts
+- title: Cmd+A selects graph items instead of browser text
+- command: choose.all.cmd
+- done: 2026-06-14
+- recorded: tests/commands/v2-choose.test.ts
+
+Added hidden alias command `choose.all.cmd` that forwards to the existing
+`choose.all` event with `Cmd+A`. The alias preserves Ctrl+A and avoids creating a
+new behavior event.

@@ -328,6 +328,29 @@ export class Tools {
     return `registered '${parsedSpec.id}' in ${rel} — ${notes.join('; ')}.\n${lines.slice(at, at + 3).map((l, i) => `${at + 1 + i}|${l}`).join('\n')}\nrun_test to confirm; refine logic with patch.`;
   }
 
+  /** Shortcut-alias constructor: add a hidden command id that forwards to an
+   *  existing event. This covers Ctrl/Cmd variants and prevents the common
+   *  failure where a model creates a brand-new event (`foo.cmd`) instead of
+   *  aliasing the real behavior (`foo`). */
+  tool_add_command_alias({ system, id, event, key, shortcut, group = 'alias', ctrl = false, shift = false, alt = false, meta = false }) {
+    if (this.phase !== 'green') return 'add_command_alias is GREEN-phase only (it edits v2/)';
+    if (!system || !id || !event || !key) {
+      return 'add_command_alias: send {system,id,event,key,shortcut,ctrl?,shift?,alt?,meta?}; example {"system":"v2/systems/choose.ts","id":"choose.all.cmd","event":"choose.all","key":"a","shortcut":"Cmd+A","meta":true}';
+    }
+    return this.tool_add_command({
+      system,
+      spec: {
+        id,
+        label: shortcut ? `${event} (${shortcut})` : `${event} alias`,
+        event,
+        group,
+        hidden: true,
+        shortcut: shortcut ?? undefined,
+        input: { on: 'keydown', key, ctrl: !!ctrl, shift: !!shift, alt: !!alt, meta: !!meta, prevent: true },
+      },
+    });
+  }
+
   /** Splice `'event': type;` into a file's CustomEvents interface, creating the
    *  declare-module block after imports if absent. Mutates `lines` in place. */
   _declareEventInLines(lines, event, type) {
@@ -877,6 +900,11 @@ export class Tools {
     // are allowed: for feature tasks the not-yet-existing command IS the red
     // (generated steps assert runCommand(...) === true, failing until GREEN).
     const blocked = validation.steps?.find(s => !s.ok && (s.detail ?? '').includes('UNAVAILABLE'));
+    const commandSpecOnly = (parsed.asserts ?? []).length > 0
+      && (parsed.asserts ?? []).every(a => a.command && !a.event && !a.path && !a.file && !a.css);
+    if (blocked && commandSpecOnly) {
+      return `gen_test: command-spec asserts inspect the registry without running commands. Remove all steps and keep only asserts like {"command":"${(parsed.asserts ?? [])[0]?.command}","has":"input.key","value":"."}.`;
+    }
     if (blocked) return `gen_test: step has broken preconditions: ${blocked.step} (${blocked.detail}) — fix the steps first via scenario`;
     const unknown = (validation.steps ?? []).filter(s => !s.ok && (s.detail ?? '').includes('unknown command'));
     const allowedUnknown = (s) => {

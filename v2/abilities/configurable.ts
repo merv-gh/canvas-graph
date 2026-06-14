@@ -79,6 +79,8 @@ export function registerConfigurable(system: Registry) {
         id: 'item.properties.open',
         label: 'Open item properties',
         group: 'item',
+        shortcut: '.',
+        input: { on: 'keydown', key: '.', prevent: true },
         available: source => !!itemRefFrom(source?.target) || !!selected(),
         payload: source => itemRefFrom(source.target) ?? selected() ?? undefined,
       },

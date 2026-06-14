@@ -148,14 +148,16 @@ to produce code that boots *and* typechecks:
 |---|---|
 | `set_command {id, props}` | inject plain props (`shortcut`, `input`, `group`, `hidden`, `event`) into an existing command literal — the shortcut/binding tasks |
 | `add_command {system, spec, handler?}` | splice a new command into a system's `register([…])`; auto-declares the command's request event and places `on(event, handler)` — new-verb tasks |
+| `add_command_alias {system, id, event, key, …}` | add a hidden command that forwards to an existing event with another shortcut — Ctrl/Cmd variants without bogus new events |
 | `add_fold_toggle {system, id, foldId, key, …}` | the panel-collapse family (left/top/log/zen): wires the existing `fold.toggle` event + the `{id}` payload for you, optionally contributes a toolbar button — supply only `foldId`+`key` |
 | `declare_event {system, event, type?}` | add a typed event to a system's `CustomEvents` (creating the `declare module` block if absent) |
 | `patch {path, op, line, count, text}` | line-addressed replace/insert using read's numbers — no old-text matching (CSS and everything else) |
 
 Decision tree the model is given: existing-command prop → `set_command`; new verb →
-`add_command`; collapse/fold a panel or region → `add_fold_toggle`; new fact →
-`declare_event`; anything else → `patch` (line numbers from `read`/`locate`).
-`edit`/`write` remain as fallbacks.
+`add_command`; shortcut alias to existing behavior → `add_command_alias`;
+collapse/fold a panel or region → `add_fold_toggle`; new fact → `declare_event`;
+anything else → `patch` (line numbers from `read`/`locate`). `edit`/`write`
+remain as fallbacks.
 
 scenario/gen-test JSON: `{"steps":[{"command":"editing.node.create"},{"event":"fold.toggle","data":{"id":"shell.zen"}}],`
 `"asserts":[{"path":"ui.shell.zen","op":"eq","value":true},{"css":".node","op":"count","value":2},{"file":"v2/styles.css","matches":"grid-row"}]}`.

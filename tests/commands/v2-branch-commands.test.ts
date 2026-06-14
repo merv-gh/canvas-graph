@@ -134,4 +134,15 @@ describe('v2 defensive command branches', () => {
     expect(issues.some(issue => issue.rule === 'entity.kind-no-declaration' && issue.message.includes('widget'))).toBe(true);
     expect(issues.some(issue => issue.rule === 'entity.kind-no-collection' && issue.message.includes('widget'))).toBe(true);
   });
+
+  it('does not warn on context-scoped input bindings', () => {
+    const ctx = bootV2();
+    const issues = runDx(ctx);
+
+    expect(issues.filter(issue => issue.rule === 'binding.duplicate')).toEqual([]);
+    expect(ctx.contexts.commands.get('graph.switch.next')?.input).toMatchObject({
+      key: 'g',
+      alt: true,
+    });
+  });
 });

@@ -38,7 +38,9 @@ describe('v2 node commands', () => {
     expect(runCommand(ctx, 'item.nudge.right')).toBe(true);
     expect(node.Position).toEqual({ x: before.x + 24, y: before.y });
 
-    expect(runCommand(ctx, 'item.properties.open')).toBe(true);
+    expect(ctx.contexts.commands.get('item.properties.open')?.input).toMatchObject({ key: '.' });
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '.', bubbles: true, cancelable: true }));
+    await settle();
     expect(document.querySelector('.modal-head')?.textContent).toContain('Node Properties');
     const title = document.querySelector<HTMLInputElement>('.properties [data-field="title"]')!;
     title.value = 'Configured';

@@ -16,7 +16,8 @@ FIND THE PLACE by symptom (discover before editing — don't blind-read):
   • missing shortcut/command, or command props → projection commands; event payload/type → projection events; UI affordance → projection command-ui
   • shell fold/render wiring (dataset mirror, ui.shell snapshot, CSS hide/show) → projection render
 THEN GREEN edit ONLY v2/, by intent:
-  • existing command props → set_command {id,props}; new command → add_command {system,spec,handler?}; CSS → add_css_rule
+  • existing command props → set_command {id,props}; new command → add_command {system,spec,handler?}; shortcut alias to existing event → add_command_alias
+  • CSS → add_css_rule
   • fold panel → add_fold_toggle; Escape exits fold → add_fold_cancellable
   • known mechanical tasks → add_edge_reverse / add_graph_export_json / add_container_delete_cascade
   • other code → patch with line numbers from read/locate

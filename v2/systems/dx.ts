@@ -108,9 +108,11 @@ export function runDx(ctx: AppCtx): DxIssue[] {
     const b = c.input; if (!b) return null;
     return [b.on, b.key ?? '', b.ctrl ? 'C' : '', b.shift ? 'S' : '', b.alt ? 'A' : '', b.meta ? 'M' : '', b.selector ?? ''].join('|');
   };
+  const scopedBinding = (c: CommandSpec) => !!c.input?.when;
   const seenBindings = new Map<string, CommandSpec>();
   ctx.contexts.commands.enabled().forEach(c => {
     const key = bindingKey(c); if (!key) return;
+    if (scopedBinding(c)) return;
     const prev = seenBindings.get(key);
     if (prev) warn('binding.duplicate', `commands "${prev.id}" and "${c.id}" share input binding ${key}`);
     else seenBindings.set(key, c);

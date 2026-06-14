@@ -78,8 +78,8 @@ export function registerGraph(system: Registry) {
         label: 'Switch graph',
         event: 'graph.switch',
         group: 'graph',
-        shortcut: 'G',
-        input: { on: 'keydown', key: 'g', prevent: true },
+        shortcut: 'Alt+G',
+        input: { on: 'keydown', key: 'g', alt: true, prevent: true },
         payload: () => ({ id: nextGraphId(graphs) }),
       },
       {
