@@ -32,13 +32,14 @@ export function buildSystemPrompt() {
   return SYSTEM_BASE.replace('{TOOL_DOCS}', toolDocsText());
 }
 
-export function buildTaskCard(task, phase, extra = '') {
+export function buildTaskCard(task, phase, extra = '', autoContext = '') {
   const lines = [
     `TASK ${task.id} [phase: ${phase}] — ${task.title}`,
     task.meta?.command ? `New command id: ${task.meta.command}` : '',
     task.meta?.event ? `Required event assert: ${task.meta.event}` : '',
     task.prompt.trim(),
     task.files ? `Likely files: ${task.files}` : '',
+    autoContext ? `\n${autoContext.trim()}` : '',
     task.kind === 'layout'
       ? (phase === 'red'
         ? `LAYOUT task — jsdom can't see this; use the browser oracle. RED: app_probe {steps,asserts} to find the broken focus/layout/style fact (asserts: focus / rect / style / path), then gen_layout_test {title,spec} with asserts stating the DESIRED behavior — it writes tests/commands/walker/${task.id}.layout.json once it confirms they fail. run_test to advance.`

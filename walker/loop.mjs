@@ -9,6 +9,7 @@
 // a disposable workspace; RED writes a failing test, GREEN makes it pass,
 // VERIFY runs the full suite + typecheck. Everything lands in walker/journal/.
 
+import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -73,6 +74,22 @@ function parseTasks(md) {
   return tasks;
 }
 
+// Harness-injected context: fuzzy-search the views by the task's concept and prepend
+// the brief (matching commands + flow trace + entity) to the card — so a weak model
+// HAS the cross-file context it won't fetch itself, and cards can stay terse.
+function gatherAutoContext(wsDir, concept) {
+  if (!concept || !concept.trim()) return '';
+  try {
+    const out = execFileSync(process.execPath, [join(HERE, 'projections.mjs'), 'concept', concept], {
+      cwd: wsDir, encoding: 'utf8', timeout: 15000, maxBuffer: 1024 * 1024,
+      env: { ...process.env, WALKER_PROJECTION_ROOT: wsDir },
+    });
+    const trimmed = out.trim();
+    if (!trimmed || /no command\/flow match|provide a phrase/.test(trimmed)) return '';
+    return trimmed.length > 1100 ? `${trimmed.slice(0, 1100)}\n…` : trimmed;
+  } catch { return ''; }
+}
+
 // ---------- one attempt ----------
 async function attempt(task, { cycle, n, model, temperature, seed }) {
   const attemptDir = join(runDir, `${task.id}-c${cycle}a${n}`);
@@ -102,6 +119,8 @@ async function attempt(task, { cycle, n, model, temperature, seed }) {
   try {
     ws.create();
     await ws.applySetup(task.setup);
+    const autoContext = gatherAutoContext(ws.dir, task.meta?.concept ?? task.title);
+    if (autoContext) jlog(`[context] injected ${estTokens(autoContext)}tok concept brief`);
     try {
       await ws.startVite(CONFIG.ports.vite);
       browser = new Browser(CONFIG.ports.vite, join(attemptDir, 'shots'), jlog);
@@ -151,7 +170,7 @@ async function attempt(task, { cycle, n, model, temperature, seed }) {
 
     while (Date.now() < deadline) {
       if (phaseTurns >= phaseTurnCap()) { jlog(`phase ${tools.phase}: turn cap`); break; }
-      const card = buildTaskCard(task, tools.phase, extra);
+      const card = buildTaskCard(task, tools.phase, extra, autoContext);
       const { messages, tokens } = buildMessages({ system, taskCard: card, notes, history, budgets: CONFIG.budgets, log: jlog });
       journal({ at: Date.now(), dir: 'send', phase: tools.phase, staticTokens: tokens, lastUser: messages.at(-1)?.content?.slice(0, 400) });
 

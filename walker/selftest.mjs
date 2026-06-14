@@ -200,6 +200,31 @@ ok('projection: editing a field syncs back to the owning source file by id', () 
   }
 });
 
+ok('projection: adding a new command next to a sibling syncs into its file', () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'walker-proj-add-'));
+  const env = { ...process.env, WALKER_PROJECTION_ROOT: scratch };
+  const proj = join(REPO, 'walker/projections.mjs');
+  try {
+    mkdirSync(join(scratch, 'v2/systems'), { recursive: true });
+    writeFileSync(join(scratch, 'v2/systems/x.ts'),
+      'export function r(s) {\n  s.commands.register([\n    { id: \'x.go\', label: \'Go\', group: \'x\' },\n  ]);\n}\n');
+    execFileSync(process.execPath, [proj, 'generate', 'commands'], { cwd: scratch, env, encoding: 'utf8' });
+    const viewFile = join(scratch, 'walker/views/commands.proj.ts');
+    const view = readFileSync(viewFile, 'utf8');
+    // add a brand-new command right after the existing sibling x.go
+    writeFileSync(viewFile, view.replace(
+      "{ id: 'x.go', label: 'Go', group: 'x' },",
+      "{ id: 'x.go', label: 'Go', group: 'x' },\n  { id: 'x.stop', label: 'Stop', group: 'x' },"));
+    const out = execFileSync(process.execPath, [proj, 'sync', 'commands'], { cwd: scratch, env, encoding: 'utf8' });
+    assert(/\+1 new/.test(out), `expected a new command added: ${out}`);
+    const src = readFileSync(join(scratch, 'v2/systems/x.ts'), 'utf8');
+    assert(src.includes("id: 'x.stop'"), `new command did not reach source:\n${src}`);
+    assert(src.indexOf("x.go") < src.indexOf("x.stop"), 'new command should follow its sibling');
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
 ok('projection: events view is a compilable interface and round-trips clean', () => {
   execFileSync(process.execPath, ['walker/projections.mjs', 'generate', 'events'], { cwd: REPO, encoding: 'utf8' });
   const view = readFileSync(join(REPO, 'walker/views/events.proj.ts'), 'utf8');

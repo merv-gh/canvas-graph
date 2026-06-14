@@ -355,31 +355,51 @@ function syncCommands({ quiet = false } = {}) {
   for (const command of collectCommands()) index.set(command.id, command);
   const projectionIds = new Set(blocks.map(block => block.id));
 
-  const byFile = new Map();
+  // Edits per file: replacements for existing slices, plus insertions for NEW
+  // commands. A new command anchors on the preceding existing element in the
+  // projection — it lands in that sibling's file, right after it. This makes the
+  // projection a CREATE surface, not just an edit surface.
+  const edits = new Map(); // file -> [{ start, end, text }]
+  const addEdit = (file, edit) => { if (!edits.has(file)) edits.set(file, []); edits.get(file).push(edit); };
+  let lastFound = null;
+  let added = 0;
+  let changedBlocks = 0;
+  const pendingByAnchor = new Map(); // anchor.end -> { file, at, indent, bodies: [] }
+
   for (const block of blocks) {
     const found = index.get(block.id);
-    if (!found) {
-      // Likely a rename: the id was edited, so its old slice is now un-projected.
-      const orphans = [...index.keys()].filter(id => !projectionIds.has(id));
-      const hint = orphans.length
-        ? ` Source still has un-projected command(s): ${orphans.slice(0, 5).join(', ')}${orphans.length > 5 ? ', …' : ''}. If you renamed an id, sync won't auto-rename (other references — events, tests, paletteCommand — would dangle); do renames with refactor_tool, then regenerate.`
-        : '';
-      throw new Error(`command '${block.id}' is not in any source file. Add new commands with the add_command tool (it splices into the right register([…]) and declares the event); the projection only edits existing slices.${hint}`);
+    if (found) {
+      lastFound = found;
+      let next = block.body.trimEnd();
+      if (found.text.trimEnd().endsWith(',') && !next.endsWith(',')) next += ',';
+      addEdit(found.file, { start: found.start, end: found.end, next });
+      continue;
     }
-    let next = block.body.trimEnd();
-    if (found.text.trimEnd().endsWith(',') && !next.endsWith(',')) next += ',';
-    if (!byFile.has(found.file)) byFile.set(found.file, []);
-    byFile.get(found.file).push({ ...found, next });
+    // New command: needs a preceding existing sibling to inherit a target file.
+    if (!lastFound) {
+      const orphans = [...index.keys()].filter(id => !projectionIds.has(id));
+      const hint = orphans.length ? ` (un-projected source commands that may have been renamed: ${orphans.slice(0, 5).join(', ')})` : '';
+      throw new Error(`new command '${block.id}' has no preceding existing command to anchor to. Put a new command right after an existing one so sync knows which file + register([…]) it joins.${hint}`);
+    }
+    const source0 = readFileSync(lastFound.file, 'utf8');
+    const indent = source0.slice(source0.lastIndexOf('\n', lastFound.start) + 1, lastFound.start);
+    const key = `${lastFound.file}@${lastFound.end}`;
+    if (!pendingByAnchor.has(key)) pendingByAnchor.set(key, { file: lastFound.file, at: lastFound.end, indent, bodies: [] });
+    pendingByAnchor.get(key).bodies.push(block.body.trimEnd().replace(/,\s*$/, ''));
+    added++;
+  }
+  // Turn each anchor's pending new commands into one insertion (preserving order).
+  for (const { file, at, indent, bodies } of pendingByAnchor.values()) {
+    addEdit(file, { start: at, end: at, next: bodies.map(body => `\n${indent}${body},`).join('') });
   }
 
   let changedFiles = 0;
-  let changedBlocks = 0;
-  for (const [file, replacements] of byFile) {
+  for (const [file, fileEdits] of edits) {
     const source = readFileSync(file, 'utf8');
     let nextSource = source;
-    for (const replacement of [...replacements].sort((a, b) => b.start - a.start)) {
-      if (nextSource.slice(replacement.start, replacement.end) !== replacement.next) changedBlocks++;
-      nextSource = `${nextSource.slice(0, replacement.start)}${replacement.next}${nextSource.slice(replacement.end)}`;
+    for (const edit of [...fileEdits].sort((a, b) => b.start - a.start)) {
+      if (nextSource.slice(edit.start, edit.end) !== edit.next) changedBlocks++;
+      nextSource = `${nextSource.slice(0, edit.start)}${edit.next}${nextSource.slice(edit.end)}`;
     }
     if (nextSource !== source) {
       writeFileSync(file, nextSource);
@@ -387,7 +407,7 @@ function syncCommands({ quiet = false } = {}) {
     }
   }
 
-  if (!quiet) console.log(`synced ${changedBlocks} command slice(s) into ${changedFiles} source file(s)`);
+  if (!quiet) console.log(`synced ${changedBlocks} command slice(s)${added ? ` (+${added} new)` : ''} into ${changedFiles} source file(s)`);
   return changedBlocks;
 }
 
@@ -794,6 +814,64 @@ function generateData({ quiet = false } = {}) {
   writeProjection(def, def.render(), quiet);
 }
 
+// ---- concept brief: fuzzy-search the views by a phrase, for harness injection ----
+const CONCEPT_STOP = new Set(['the', 'and', 'for', 'via', 'not', 'does', 'done', 'with', 'from',
+  'into', 'this', 'that', 'out', 'off', 'are', 'way', 'back', 'once', 'mode', 'only', 'has',
+  'have', 'its', 'but', 'all', 'any', 'new', 'add', 'make', 'when', 'then', 'now', 'should',
+  'would', 'could', 'item', 'items', 'app', 'still', 'leaving', 'hidden', 'panels', 'panel']);
+
+/** Compact, harness-injectable brief for a concept phrase: the matching commands,
+ *  the flow trace from the best-matching origin (origin→handlers→⟳ render leaf), and
+ *  the data entity if one is named. This is the slice a weak model won't fetch itself. */
+function renderConcept(query) {
+  const words = [...new Set(String(query || '').toLowerCase().split(/[^a-z0-9]+/)
+    .filter(word => word.length > 2 && !CONCEPT_STOP.has(word)))];
+  if (!words.length) return 'concept: provide a phrase to search\n';
+  const score = (text) => { const t = String(text || '').toLowerCase(); return words.reduce((n, w) => n + (t.includes(w) ? 1 : 0), 0); };
+  const data = eventFlowData();
+  const lines = [`concept "${words.join(' ')}" — auto-gathered from the views:`, ''];
+
+  const commands = collectCommands()
+    .map(command => ({ command, s: score(`${command.id} ${command.text}`) }))
+    .filter(entry => entry.s > 0)
+    .sort((a, b) => b.s - a.s)
+    .slice(0, 6);
+  if (commands.length) {
+    lines.push('commands:');
+    for (const { command } of commands) {
+      const shortcut = command.text.match(/\bshortcut\s*:\s*['"]([^'"]+)/)?.[1];
+      lines.push(`  ${command.id}${shortcut ? ` [${shortcut}]` : ''}  ${command.rel}:${command.line}`);
+    }
+    lines.push('');
+  }
+
+  // Origins to trace: the matched commands' own events (so a command like view.zen
+  // surfaces its fold.toggle cascade) plus any event whose name matches the concept.
+  const commandEvents = commands.map(({ command }) =>
+    command.text.match(/\bevent\s*:\s*['"]([^'"]+)/)?.[1] ?? command.id);
+  const wordEvents = [...new Set([...data.handlersByEvent.keys(), ...data.commandsByEvent.keys()])]
+    .map(event => ({ event, s: score(event) }))
+    .filter(entry => entry.s > 0)
+    .sort((a, b) => b.s - a.s)
+    .map(entry => entry.event);
+  const origins = [...new Set([...commandEvents, ...wordEvents])]
+    .filter(event => data.handlersByEvent.has(event))
+    .slice(0, 2);
+  if (origins.length) {
+    lines.push('flow (origin → handlers → ⟳ render leaf):');
+    for (const event of origins) renderFlowEvent(lines, data, event, 1, new Set());
+    lines.push('');
+  }
+
+  const entity = DATA_ENTITIES.find(e => words.includes(e));
+  if (entity) lines.push(`entity '${entity}' lifecycle: project show data ${entity}`);
+
+  if (!commands.length && !origins.length && !entity) {
+    return `concept "${words.join(' ')}": no command/flow match — discover with inspect or projection.\n`;
+  }
+  return `${lines.join('\n').trimEnd()}\n`;
+}
+
 function collectCommandUi() {
   const items = [];
   const re = /\bcontribute\s*\(/g;
@@ -1008,6 +1086,7 @@ function main() {
     for (const def of defs) projectionStatus(def);
     return;
   }
+  if (cmd === 'concept') return console.log(renderConcept(argv.slice(1).join(' ')));
   if (cmd === 'show') return showProjection(selectProjection(name ?? 'commands'), argv.slice(2).join(' '));
   if (cmd === 'generate') return runForSelected(name, 'generate');
   if (cmd === 'sync') return runForSelected(name, 'sync');
