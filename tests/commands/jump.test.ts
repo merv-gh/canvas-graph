@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bootV2, runCommand, settle } from './v2-testkit';
+import { bootApp, runCommand, settle } from './testkit';
 
 const LETTERS = 'asdfghjklqwertyuiopzxcvbnm';
 
@@ -11,7 +11,7 @@ const overlay = (letter: string) =>
 
 describe('jump system (single-file vimium-style mode)', () => {
   it('renders one letter overlay per focusable item on start', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     const a = ctx.graphs.current.node({ Label: { text: 'A' } });
     const b = ctx.graphs.current.node({ Label: { text: 'B' } });
     ctx.bus.emit('graph.node.created', { graphId: ctx.graphs.current.id, id: a.id });
@@ -28,7 +28,7 @@ describe('jump system (single-file vimium-style mode)', () => {
   });
 
   it('focuses the matching item and fits view on letter press', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     const a = ctx.graphs.current.node({ Label: { text: 'A' } });
     const b = ctx.graphs.current.node({ Label: { text: 'B' } });
     ctx.bus.emit('graph.node.created', { graphId: ctx.graphs.current.id, id: a.id });
@@ -52,7 +52,7 @@ describe('jump system (single-file vimium-style mode)', () => {
   });
 
   it('escape cancels without focusing anything', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     const a = ctx.graphs.current.node({ Label: { text: 'A' } });
     ctx.bus.emit('graph.node.created', { graphId: ctx.graphs.current.id, id: a.id });
     await settle();
@@ -71,7 +71,7 @@ describe('jump system (single-file vimium-style mode)', () => {
   });
 
   it('unmapped letters cancel jump mode', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     const a = ctx.graphs.current.node({ Label: { text: 'A' } });
     ctx.bus.emit('graph.node.created', { graphId: ctx.graphs.current.id, id: a.id });
     await settle();
@@ -88,7 +88,7 @@ describe('jump system (single-file vimium-style mode)', () => {
   });
 
   it('targets edges as well as nodes', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     const a = ctx.graphs.current.node({ Label: { text: 'A' }, Position: { x: 0, y: 0 } });
     const b = ctx.graphs.current.node({ Label: { text: 'B' }, Position: { x: 200, y: 0 } });
     ctx.bus.emit('graph.node.created', { graphId: ctx.graphs.current.id, id: a.id });

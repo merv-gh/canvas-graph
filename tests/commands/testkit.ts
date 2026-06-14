@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { registerAbilitySystems } from '../../v2/abilities';
+import { registerAbilitySystems } from '../../frontend/abilities';
 import {
   createAppContext,
   createFlags,
@@ -8,19 +8,19 @@ import {
   registry,
   withKind,
   type AppCtx,
-} from '../../v2/core';
-import { registerFeatures } from '../../v2/features';
-import { appModel, graphStore } from '../../v2/model';
-import { installRuntimeFeatureManager } from '../../v2/runtime';
-import { registerSystems } from '../../v2/systems';
-import { Places, type CommandSource, type FeatureFlags } from '../../v2/types';
+} from '../../frontend/core';
+import { registerFeatures } from '../../frontend/features';
+import { appModel, graphStore } from '../../frontend/model';
+import { installRuntimeFeatureManager } from '../../frontend/runtime';
+import { registerSystems } from '../../frontend/systems';
+import { Places, type CommandSource, type FeatureFlags } from '../../frontend/types';
 
-const html = readFileSync(resolve(process.cwd(), 'v2/index.html'), 'utf8')
+const html = readFileSync(resolve(process.cwd(), 'frontend/index.html'), 'utf8')
   .replace(/<script\b[^>]*><\/script>/g, '');
 
 /** Flag overrides only. Registry declares each system/ability/feature ON at boot,
  *  so an empty object boots everything. Pass `{ render: false }` to disable. */
-export function bootV2(flags: FeatureFlags = {}) {
+export function bootApp(flags: FeatureFlags = {}) {
   if (!globalThis.requestAnimationFrame) {
     globalThis.requestAnimationFrame = callback => setTimeout(() => callback(performance.now()), 0) as unknown as number;
     globalThis.cancelAnimationFrame = id => clearTimeout(id);
@@ -37,7 +37,7 @@ export function bootV2(flags: FeatureFlags = {}) {
   plugins.start(ctx);
   ctx.bus.emit('app.start');
   const booted = ctx;
-  window.v2 = booted;
+  window.app = booted;
   const stage = ctx.contexts.places.el(Places.Stage);
   if (stage) {
     stage.getBoundingClientRect = () => ({

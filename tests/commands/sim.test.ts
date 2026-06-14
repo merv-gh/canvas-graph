@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { bootV2, runCommand, settle } from './v2-testkit';
+import { bootApp, runCommand, settle } from './testkit';
 
-describe('v2 sim harness', () => {
+describe('frontend sim harness', () => {
   it('records every event flowing through the bus', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     const recorder = ctx.sim.record();
     recorder.start();
@@ -24,7 +24,7 @@ describe('v2 sim harness', () => {
     // whole trace would double-cascade. The intended replay pattern is to pick a
     // slice — here, only the user's editing intents — and let the systems regenerate
     // the downstream events. This is what makes recorded sessions deterministic.
-    const a = bootV2();
+    const a = bootApp();
     await settle();
     const recorder = a.sim.record();
     recorder.start();
@@ -37,7 +37,7 @@ describe('v2 sim harness', () => {
     const intents = trace.filter(event => event.name.startsWith('editing.'));
     expect(intents).toHaveLength(2);
 
-    const b = bootV2();
+    const b = bootApp();
     await settle();
     b.sim.replay(intents);
     await settle();
@@ -45,7 +45,7 @@ describe('v2 sim harness', () => {
   });
 
   it('reports orphan emits (emitted with no listener) and silent listeners', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     // The base app should have no silent listeners at the request side — any request
     // event a system declares has at least the matching handler in the same app.
@@ -55,7 +55,7 @@ describe('v2 sim harness', () => {
   });
 
   it('emitMany fires a synchronous sequence through the bus', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     ctx.sim.emitMany([
       { name: 'editing.node.create', data: { Label: { text: 'a' } } },

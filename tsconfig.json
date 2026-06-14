@@ -8,5 +8,5 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["v2/**/*.ts"]
+  "include": ["frontend/**/*.ts"]
 }

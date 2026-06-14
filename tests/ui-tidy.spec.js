@@ -2,11 +2,11 @@ const { test, expect } = require('@playwright/test');
 
 const boot = async (page) => {
   await page.goto('/');
-  await page.waitForFunction(() => !!window.v2);
+  await page.waitForFunction(() => !!window.app);
 };
 
 const createSmallGraph = async (page) => page.evaluate(() => {
-  const v = window.v2;
+  const v = window.app;
   v.bus.emit('editing.node.create', { Label: { text: 'Alpha' } });
   v.bus.emit('editing.node.create', { Label: { text: 'Beta' } });
   const [a, b] = v.graphs.current.nodes();

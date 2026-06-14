@@ -30,7 +30,7 @@ export class Browser {
 
   async goto() {
     await this.page.goto(this.url, { waitUntil: 'load' });
-    await this.page.waitForFunction(() => !!window.v2, undefined, { timeout: 8000 });
+    await this.page.waitForFunction(() => !!window.app, undefined, { timeout: 8000 });
   }
 
   /** Reload to pick up HMR-independent edits; cheap and avoids stale state. */
@@ -40,7 +40,7 @@ export class Browser {
 
   async runCommand(id) {
     return this.page.evaluate(async (cmdId) => {
-      const ok = window.v2.contexts.commands.run(cmdId, { origin: 'programmatic' });
+      const ok = window.app.contexts.commands.run(cmdId, { origin: 'programmatic' });
       await new Promise(r => requestAnimationFrame(() => setTimeout(r, 30)));
       return { ran: ok, notice: window.__lastNotice ?? null };
     }, id);
@@ -48,7 +48,7 @@ export class Browser {
 
   async snapshot(path) {
     return this.page.evaluate((p) => {
-      let node = window.v2.debug.snapshot();
+      let node = window.app.debug.snapshot();
       if (p) for (const key of p.split('.')) {
         node = node?.[key];
         if (node === undefined) return `no such path: ${p}`;
@@ -60,8 +60,8 @@ export class Browser {
   async evalJs(js) {
     return this.page.evaluate(async (code) => {
       try {
-        const fn = new Function('v2', `return (async () => (${code}))()`);
-        const value = await fn(window.v2);
+        const fn = new Function('frontend', `return (async () => (${code}))()`);
+        const value = await fn(window.app);
         return JSON.stringify(value)?.slice(0, 4000) ?? 'undefined';
       } catch (err) { return `eval error: ${err.message}`; }
     }, js);
@@ -73,14 +73,14 @@ export class Browser {
     const file = join(this.shotDir, `${String(++this.shotCount).padStart(2, '0')}-${label}.png`);
     await this.page.screenshot({ path: file });
     const summary = await this.page.evaluate(() => {
-      const v2 = window.v2;
+      const frontend = window.app;
       const r = (place) => {
-        const el = v2.contexts.places.el(place);
+        const el = frontend.contexts.places.el(place);
         if (!el) return 'missing';
         const b = el.getBoundingClientRect();
         return `${Math.round(b.width)}x${Math.round(b.height)}@${Math.round(b.x)},${Math.round(b.y)}`;
       };
-      const ui = v2.debug.snapshot().ui;
+      const ui = frontend.debug.snapshot().ui;
       return `places top=${r('top')} left=${r('left')} stage=${r('stage')} modal=${r('modal')} | rendered nodes=${ui.rendered.nodes} edges=${ui.rendered.edges} containers=${ui.rendered.containers} | shell leftFolded=${ui.shell.leftFolded} zen=${ui.shell.zen} | modalOpen=${ui.modal.open}`;
     });
     this.log(`[browser] screenshot ${file}`);

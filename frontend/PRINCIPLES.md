@@ -1,4 +1,4 @@
-# v2 Design Principles
+# frontend Design Principles
 
 The non-negotiables. When a choice is ambiguous, walk this list top-down — the higher
 principle wins.
@@ -17,7 +17,7 @@ the core.
 > **Test:** `core.ts` size ≤ 400 lines. New core APIs require deleting at least
 > as many lines elsewhere. **And** `ctx.contexts` ≤ 14 entries — the shared
 > mental-model surface ratchets: adding a context means merging two first
-> (`contexts.budget` DX rule + `v2-principles.test.ts`).
+> (`contexts.budget` DX rule + `principles.test.ts`).
 
 Current status: `core.ts` is below this target after extracting IO, flags, DX,
 selection, and other small adapters. The context surface shrank by merging
@@ -82,7 +82,7 @@ claim "swap to React for free."
 
 > **Test:** A grep for `document.querySelector` outside render-adjacent files
 > returns zero in `systems/` and `abilities/` (enforced in
-> `v2-principles.test.ts`). New renderers return `Renderable`.
+> `principles.test.ts`). New renderers return `Renderable`.
 
 ## 6. DX validator is progressively aggressive
 
@@ -106,7 +106,7 @@ The validator should be **noisy enough to catch refactors that break invariants*
 
 Three rules:
 - Every public surface (commands, events, flags, render places) is reachable
-  from `window.v2` for devtool poking and Playwright assertions.
+  from `window.app` for devtool poking and Playwright assertions.
 - Commands take a `CommandSource` so a test can dispatch them without
   synthesizing DOM events.
 - The bus exposes `_subscribed` / `_emitted` sets for DX *and* tests to
@@ -261,7 +261,7 @@ Three rules guarantee the budget holds:
    If the user has already given you the answer (e.g. selection = From for
    edge create), the step skips itself. The fast path is the default path.
 
-> **Test:** `tests/commands/v2-journey-budget.test.ts` enforces each row.
+> **Test:** `tests/commands/frontend-journey-budget.test.ts` enforces each row.
 > When you add a new entity ability, add the corresponding journey row before
 > shipping.
 
@@ -290,7 +290,7 @@ it from entity data into the `fold` store is the open follow-up, per Principle 1
 
 > **Test:** Move a node into a container → it renders inside that container's
 > `.outline-children` and is not a loose top-level row
-> (`v2-outline-tree.test.ts`, `v2-principles.test.ts`).
+> (`outline-tree.test.ts`, `principles.test.ts`).
 
 ## 19. Concepts merge and split safely
 
@@ -314,7 +314,7 @@ the map and descends only into the layer they need. The map can't rot because
 it's checked against the real definitions and their order.
 
 > **Test:** the MAP precedes the first definition AND its nouns are defined in
-> the documented order (`v2-principles.test.ts`).
+> the documented order (`principles.test.ts`).
 
 ## 21. Every domain mutation is reversible and replayable
 
@@ -326,7 +326,7 @@ inverse-patch consumer *and* what powers the record → assert → generate test
 pipeline. Never mutate domain state outside an event handler.
 
 > **Test:** replaying a recorded trace into a fresh boot reconstructs the same
-> state (`v2-debug.test.ts`). Undo, when it lands, is the inverse-patch listener
+> state (`frontend-debug.test.ts`). Undo, when it lands, is the inverse-patch listener
 > on these same facts.
 
 ## 22. Actions operate on the chosen set — choosing is higher than selecting
@@ -348,7 +348,7 @@ proof the rest of the stack is robust.
 
 > **Test:** `choose.all` then delete empties the graph; `group` folds the set
 > into a container that nests them; nudging {container + child} moves the child
-> once, not twice (`v2-choose.test.ts`).
+> once, not twice (`frontend-choose.test.ts`).
 
 ---
 

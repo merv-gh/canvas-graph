@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { bootV2, settle } from './v2-testkit';
-import { parseScenario } from '../../v2/systems/scenario';
+import { bootApp, settle } from './testkit';
+import { parseScenario } from '../../frontend/systems/scenario';
 
 /** The scenario player replays a keystroke macro through the real input router —
  *  the engine behind shareable `?scenario=` reproductions and fix demos. */
@@ -17,7 +17,7 @@ describe('scenario player', () => {
   });
 
   it('replays keystrokes as real commands (A creates nodes)', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     // speed 0 → steps fire back-to-back on the macrotask queue.
     ctx.scenario!.play('A;A;A', { speed: 0 });
@@ -27,7 +27,7 @@ describe('scenario player', () => {
   });
 
   it('mounts a progress HUD while playing and clears nothing prematurely', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     ctx.scenario!.play('A;A', { speed: 0 });
     await settle();
@@ -36,7 +36,7 @@ describe('scenario player', () => {
   });
 
   it('drives the zen toggle through the same path the bug-demo uses', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     ctx.scenario!.play('\\', { speed: 0 });
     for (let i = 0; i < 4; i++) await settle();

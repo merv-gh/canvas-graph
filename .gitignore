@@ -8,10 +8,10 @@ coverage/
 .env.*
 !.env.example
 
-walker/journal/
-walker/workspace/
-walker/preview-ws/
-walker/apply-ws/
-walker/views/
-walker/.selftest-*/
-walker/STOP
+dx/journal/
+dx/ollama-runner/workspace/
+dx/cli/preview-ws/
+dx/cli/apply-ws/
+views/
+dx/.selftest-*/
+dx/STOP

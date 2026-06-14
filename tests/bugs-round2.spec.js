@@ -8,7 +8,7 @@ const { test, expect } = require('@playwright/test');
 
 const boot = async (page) => {
   await page.goto('/');
-  await page.waitForFunction(() => !!window.v2);
+  await page.waitForFunction(() => !!window.app);
 };
 
 test('outline lists an "edges" section (edge collection in model)', async ({ page }) => {
@@ -21,7 +21,7 @@ test('outline lists an "edges" section (edge collection in model)', async ({ pag
 test('editing.edge.create is a registered command, while graph.edge.create stays storage', async ({ page }) => {
   await boot(page);
   const registered = await page.evaluate(() => {
-    const c = window.v2.contexts.commands.all();
+    const c = window.app.contexts.commands.all();
     return {
       create: !!c.find(x => x.id === 'editing.edge.create'),
       del:    !!c.find(x => x.id === 'graph.edge.delete'),
@@ -33,7 +33,7 @@ test('editing.edge.create is a registered command, while graph.edge.create stays
 
 test('palette can find edge actions by name', async ({ page }) => {
   await boot(page);
-  await page.evaluate(() => window.v2.contexts.commands.run('palette.open'));
+  await page.evaluate(() => window.app.contexts.commands.run('palette.open'));
   const search = page.locator('.palette-search');
   await search.fill('edge');
   const rows = await page.locator('.command-row b').allTextContents();
@@ -45,7 +45,7 @@ test('after view.fit.all, no node DOM extends into the left panel', async ({ pag
   await boot(page);
   // Build a wide horizontal graph: 1 root, 8 leaves connected
   await page.evaluate(() => {
-    const v = window.v2;
+    const v = window.app;
     v.bus.emit('editing.node.create', { Label: { text: 'Root' } });
     const root = v.selection.selected();
     for (let i = 0; i < 8; i++) {
@@ -67,12 +67,12 @@ test('after view.fit.all, no node DOM extends into the left panel', async ({ pag
 
 test('DX warns when bus emits graph.<kind>.* events but no entity/collection covers that kind', async ({ page }) => {
   await boot(page);
-  const issues = await page.evaluate(() => window.v2.dx.run());
+  const issues = await page.evaluate(() => window.app.dx.run());
   // Edge kind has bus events but currently no entity declaration AND no collection.
   // RED until either a DX rule fires here OR the model gains edges + collection (which
   // satisfies the contract — this test passes when the model is fixed).
   const hasCoverage = issues.some(i => i.rule === 'entity.kind-no-collection' && i.message.includes('edge'));
   const modelHasEdgeCollection = await page.evaluate(() =>
-    !!window.v2.model.collections().find(c => c.id === 'edges'));
+    !!window.app.model.collections().find(c => c.id === 'edges'));
   expect(hasCoverage || modelHasEdgeCollection).toBe(true);
 });

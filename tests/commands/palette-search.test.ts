@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { bootV2, runCommand, settle } from './v2-testkit';
+import { bootApp, runCommand, settle } from './testkit';
 
 // Universal search: the palette finds graph items by title (not just commands) and
 // navigating to one selects + fits it. The "go to" rows are a thin source over the
 // hierarchy (the canonical item list) wired to the generic select/fit events.
 describe('palette universal search', () => {
   it('finds graph items by title and navigates to the chosen one', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     ctx.graphs.current.createNode({ Label: { text: 'Findme' } });
     ctx.graphs.current.createNode({ Label: { text: 'Other' } });
     await settle();
@@ -30,7 +30,7 @@ describe('palette universal search', () => {
   });
 
   it('shows no item rows for a query that matches nothing', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     ctx.graphs.current.createNode({ Label: { text: 'Alpha' } });
     await settle();
     expect(runCommand(ctx, 'palette.open')).toBe(true);

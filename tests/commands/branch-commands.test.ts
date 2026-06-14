@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { createAppContext, createFlags, localStorageIo, memoryIo, registry } from '../../v2/core';
-import { graphStore } from '../../v2/model';
-import { registerCollections } from '../../v2/systems/collections';
-import { runDx } from '../../v2/systems/dx';
-import type { ModelDef } from '../../v2/types';
-import { bootV2, commandButton, runCommand, settle } from './v2-testkit';
+import { createAppContext, createFlags, localStorageIo, memoryIo, registry } from '../../frontend/core';
+import { graphStore } from '../../frontend/model';
+import { registerCollections } from '../../frontend/systems/collections';
+import { runDx } from '../../frontend/systems/dx';
+import type { ModelDef } from '../../frontend/types';
+import { bootApp, commandButton, runCommand, settle } from './testkit';
 
-describe('v2 defensive command branches', () => {
+describe('frontend defensive command branches', () => {
   it('covers localStorage IO success and fallback paths', () => {
     const io = localStorageIo();
     io.set('ok', { value: 1 });
@@ -19,7 +19,7 @@ describe('v2 defensive command branches', () => {
   });
 
   it('runs modal default, close, and malformed command form paths', () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
 
     // modal.open is an event other systems emit (no user command/button now).
     ctx.bus.emit('modal.open', {});
@@ -33,7 +33,7 @@ describe('v2 defensive command branches', () => {
   });
 
   it('runs selection next, clear, and unavailable selected-only commands', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
 
     expect(runCommand(ctx, 'selection.node.next')).toBe(false);
     expect(runCommand(ctx, 'view.fit.selected')).toBe(false);
@@ -54,7 +54,7 @@ describe('v2 defensive command branches', () => {
   });
 
   it('runs pan and wheel zoom through command payloads', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     const stage = ctx.contexts.places.el('stage')!;
 
     expect(runCommand(ctx, 'view.zoom.wheel', {
@@ -79,7 +79,7 @@ describe('v2 defensive command branches', () => {
   });
 
   it('runs missing-data paths for graph, layout, command modal, and title edit', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
 
     ctx.bus.emit('graph.switch', { id: 'fresh' });
     expect(ctx.graphs.current.id).toBe('fresh');
@@ -136,7 +136,7 @@ describe('v2 defensive command branches', () => {
   });
 
   it('does not warn on context-scoped input bindings', () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     const issues = runDx(ctx);
 
     expect(issues.filter(issue => issue.rule === 'binding.duplicate')).toEqual([]);

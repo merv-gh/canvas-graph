@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { bootV2, runCommand, settle } from './v2-testkit';
-import { snapshot } from '../../v2/core';
-import type { ItemRef } from '../../v2/types';
+import { bootApp, runCommand, settle } from './testkit';
+import { snapshot } from '../../frontend/core';
+import type { ItemRef } from '../../frontend/types';
 
 /** Multi-item "choose → act" is the robustness probe for the whole stack:
  *  decorations (the set is painted), selection (a set with a primary),
@@ -9,15 +9,15 @@ import type { ItemRef } from '../../v2/types';
  *  (group reuses container + add-child). Every bulk action fans out into the
  *  SAME per-item events single-select uses — so if these pass, the seams hold. */
 
-const nodeIds = (ctx: ReturnType<typeof bootV2>) => ctx.graphs.current.nodes().map(n => n.id);
-const nodeRefs = (ctx: ReturnType<typeof bootV2>): ItemRef[] => nodeIds(ctx).map(id => ({ kind: 'node', id }));
+const nodeIds = (ctx: ReturnType<typeof bootApp>) => ctx.graphs.current.nodes().map(n => n.id);
+const nodeRefs = (ctx: ReturnType<typeof bootApp>): ItemRef[] => nodeIds(ctx).map(id => ({ kind: 'node', id }));
 const nodeEl = (id: string) => document.querySelector(`.node[data-item-kind="node"][data-item-id="${id}"]`);
-const containers = (ctx: ReturnType<typeof bootV2>) =>
+const containers = (ctx: ReturnType<typeof bootApp>) =>
   ctx.graphs.current.itemsOfKind<{ id: string; Children: ItemRef[] }>('container');
 
-describe('v2 choose — multi-item set + bulk actions', () => {
+describe('frontend choose — multi-item set + bulk actions', () => {
   it('choose.all selects every item and paints the set (decorations)', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.node.create');
     runCommand(ctx, 'editing.node.create');
@@ -34,7 +34,7 @@ describe('v2 choose — multi-item set + bulk actions', () => {
   });
 
   it('Cmd+A aliases choose.all without selecting page text', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.node.create');
     runCommand(ctx, 'editing.node.create');
@@ -55,7 +55,7 @@ describe('v2 choose — multi-item set + bulk actions', () => {
   });
 
   it('toggle adds and removes a single item (random access)', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.node.create');
     runCommand(ctx, 'editing.node.create');
@@ -77,7 +77,7 @@ describe('v2 choose — multi-item set + bulk actions', () => {
   });
 
   it('delete acts on the whole set and cleans up selection + DOM + redraw', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.node.create');
     runCommand(ctx, 'editing.node.create');
@@ -95,7 +95,7 @@ describe('v2 choose — multi-item set + bulk actions', () => {
   });
 
   it('choose.none clears the set; Escape-equivalent', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.node.create');
     await settle();
@@ -108,7 +108,7 @@ describe('v2 choose — multi-item set + bulk actions', () => {
   });
 
   it('move (nudge) shifts every chosen node by the same delta', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     const a = ctx.graphs.current.createNode({ Label: { text: 'a' }, Position: { x: 0, y: 0 } });
     const b = ctx.graphs.current.createNode({ Label: { text: 'b' }, Position: { x: 100, y: 0 } });
@@ -121,7 +121,7 @@ describe('v2 choose — multi-item set + bulk actions', () => {
   });
 
   it('move does not double-apply to a child whose container is also chosen', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.container.create');
     await settle();
@@ -139,7 +139,7 @@ describe('v2 choose — multi-item set + bulk actions', () => {
   });
 
   it('group folds the chosen items into a new container that nests them', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.node.create');
     runCommand(ctx, 'editing.node.create');
@@ -161,7 +161,7 @@ describe('v2 choose — multi-item set + bulk actions', () => {
   });
 
   it('follow grows the set one hop along edges', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     const a = ctx.graphs.current.createNode({ Label: { text: 'a' } });
     const b = ctx.graphs.current.createNode({ Label: { text: 'b' } });
@@ -178,7 +178,7 @@ describe('v2 choose — multi-item set + bulk actions', () => {
   });
 
   it('search chooses every item whose label matches', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     ctx.graphs.current.createNode({ Label: { text: 'Alpha' } });
     ctx.graphs.current.createNode({ Label: { text: 'Beta' } });
@@ -190,7 +190,7 @@ describe('v2 choose — multi-item set + bulk actions', () => {
   });
 
   it('radius grows the set to spatially-adjacent nodes', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     const a = ctx.graphs.current.createNode({ Label: { text: 'a' }, Position: { x: 0, y: 0 } });
     const near = ctx.graphs.current.createNode({ Label: { text: 'near' }, Position: { x: 120, y: 0 } });
@@ -204,7 +204,7 @@ describe('v2 choose — multi-item set + bulk actions', () => {
   });
 
   it('invert flips set membership across all items', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     const a = ctx.graphs.current.createNode({ Label: { text: 'a' } });
     const b = ctx.graphs.current.createNode({ Label: { text: 'b' } });

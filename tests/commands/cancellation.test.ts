@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { bootV2, runCommand, settle } from './v2-testkit';
+import { bootApp, runCommand, settle } from './testkit';
 
 const pressEscape = () =>
   document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
 
-const stageBackgroundClick = (ctx: ReturnType<typeof bootV2>) => {
+const stageBackgroundClick = (ctx: ReturnType<typeof bootApp>) => {
   const stage = document.querySelector('[data-place="stage"]')!;
   stage.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
 };
 
 describe('first-class cancellation', () => {
   it('Escape clears selection when nothing more specific is active', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     ctx.graphs.current.createNode({ Label: { text: 'A' } });
     ctx.bus.emit('selection.node.select', { id: 'e1' });
     await settle();
@@ -23,7 +23,7 @@ describe('first-class cancellation', () => {
   });
 
   it('Escape pops the topmost transient mode before touching selection', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     ctx.graphs.current.createNode({ Label: { text: 'A' } });
     ctx.bus.emit('selection.node.select', { id: 'e1' });
     await settle();
@@ -47,7 +47,7 @@ describe('first-class cancellation', () => {
   });
 
   it('background click on stage cancels the topmost active mode', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     ctx.graphs.current.createNode({ Label: { text: 'A' } });
     await settle();
 
@@ -61,7 +61,7 @@ describe('first-class cancellation', () => {
   });
 
   it('exposes who is currently cancellable for devtools/tests', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     ctx.graphs.current.createNode({ Label: { text: 'A' } });
     ctx.bus.emit('selection.node.select', { id: 'e1' });
     await settle();
@@ -75,7 +75,7 @@ describe('first-class cancellation', () => {
   });
 
   it('modal blocks background hotkeys until closed', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     ctx.graphs.current.createNode({ Label: { text: 'seed' } });
     ctx.bus.emit('item.properties.open', { kind: 'node', id: 'e1' });
     await settle();
@@ -96,7 +96,7 @@ describe('first-class cancellation', () => {
   });
 
   it('clicks on background data-command buttons are blocked while modal is open', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     ctx.graphs.current.createNode({ Label: { text: 'seed' } });
     ctx.bus.emit('item.properties.open', { kind: 'node', id: 'e1' });
     await settle();
@@ -114,7 +114,7 @@ describe('first-class cancellation', () => {
   });
 
   it('Escape commits an in-progress title edit', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     const node = ctx.graphs.current.createNode({ Label: { text: 'old' } });
     ctx.bus.emit('selection.node.select', { id: node.id });
     await settle();

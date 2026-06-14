@@ -2,9 +2,9 @@
 // preview — serve a workspace (optionally with a fix applied) and print a URL
 // that autoplays a scenario, so a human can WATCH the fix with their eyes.
 //
-//   node walker/preview.mjs --task choose-invert-shortcut --apply <fix.patch>
-//   node walker/preview.mjs --task choose-invert-shortcut          # current tree
-//   node walker/preview.mjs --scenario 'A;A;i' --port 5191         # ad-hoc
+//   node dx/cli/preview.mjs --task choose-invert-shortcut --apply <fix.patch>
+//   node dx/cli/preview.mjs --task choose-invert-shortcut          # current tree
+//   node dx/cli/preview.mjs --scenario 'A;A;i' --port 5191         # ad-hoc
 //
 // The server stays up until Ctrl+C (then the workspace is destroyed). The fix is
 // NOT applied to the real repo — preview runs in a disposable copy.
@@ -12,11 +12,12 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Workspace } from './workspace.mjs';
-import { runProbe } from './probe-client.mjs';
+import { Workspace } from '../ollama-runner/workspace.mjs';
+import { runProbe } from '../ollama-runner/probe-client.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO = resolve(HERE, '..');
+const DX_ROOT = resolve(HERE, '..');
+const REPO = resolve(DX_ROOT, '..');
 const argv = process.argv.slice(2);
 const opt = (n, d) => { const i = argv.indexOf(`--${n}`); return i >= 0 && argv[i + 1] ? argv[i + 1] : d; };
 
@@ -34,7 +35,7 @@ function encodeCommands(wsDir, ids) {
 }
 
 function taskDemo(id) {
-  const md = readFileSync(join(HERE, 'TASKS.md'), 'utf8');
+  const md = readFileSync(join(DX_ROOT, 'tasks', 'TASKS.md'), 'utf8');
   const block = md.split(/^## /m).slice(1).find(b => b.split('\n')[0].trim() === id);
   if (!block) return null;
   const m = block.match(/^- demo:\s*(.+)$/m);

@@ -1,32 +1,34 @@
 #!/usr/bin/env node
-// apptool — app-aware tooling over the BOOTED v2 app + the code knowledge graph.
-// Same capabilities the walker model gets; runnable by humans and by Claude.
+// apptool — app-aware tooling over the BOOTED frontend app + the code knowledge graph.
+// Same capabilities the dx model gets; runnable by humans and by Claude.
 //
-//   node walker/apptool.mjs events [filter]            # all bus events + who fires/handles
-//   node walker/apptool.mjs commands [filter]          # all commands + shortcuts/origins
-//   node walker/apptool.mjs flows <event>              # who fires/handles an event + downstream
-//   node walker/apptool.mjs scenario '<json>'          # run {steps,asserts} against a fresh boot
-//   node walker/apptool.mjs gen-test '<json>' [out]    # scenario json + title → vitest file
-//   node walker/apptool.mjs graph <find|callers|callees|file|tests> <query>
+//   node dx/cli/apptool.mjs events [filter]            # all bus events + who fires/handles
+//   node dx/cli/apptool.mjs commands [filter]          # all commands + shortcuts/origins
+//   node dx/cli/apptool.mjs flows <event>              # who fires/handles an event + downstream
+//   node dx/cli/apptool.mjs scenario '<json>'          # run {steps,asserts} against a fresh boot
+//   node dx/cli/apptool.mjs gen-test '<json>' [out]    # scenario json + title → vitest file
+//   node dx/cli/apptool.mjs graph <find|callers|callees|file|tests> <query>
 //
 // scenario json shape:
 //   { "steps": [ {"command":"editing.node.create"}, {"event":"fold.toggle","data":{"id":"shell.zen"}} ],
 //     "asserts": [ {"path":"ui.shell.zen","op":"eq","value":true},
 //                  {"css":".node","op":"count","value":2},
-//                  {"file":"v2/styles.css","matches":"grid-row:\\s*2"} ] }
+//                  {"file":"frontend/styles.css","matches":"grid-row:\\s*2"} ] }
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
-import { genTest, runProbe } from './probe-client.mjs';
-import { graphQuery } from './graphdb.mjs';
+import { genTest, runProbe } from '../ollama-runner/probe-client.mjs';
+import { graphQuery } from '../ollama-runner/graphdb.mjs';
 import { genPlugin } from './gen.mjs';
-import { Tools } from './tools.mjs';
-import { Browser } from './browser.mjs';
+import { Tools } from '../ollama-runner/tools.mjs';
+import { Browser } from '../ollama-runner/browser.mjs';
 
-const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const HERE = dirname(fileURLToPath(import.meta.url));
+const DX_ROOT = resolve(HERE, '..');
+const REPO = resolve(DX_ROOT, '..');
 const [cmd, ...rest] = process.argv.slice(2);
 
 const print = (x) => console.log(JSON.stringify(x, null, 1));
@@ -60,11 +62,11 @@ switch (cmd) {
   }
   case 'app-probe': {
     // Layout/focus/style oracle against a RUNNING dev server (npm run dev → :5174).
-    // node walker/apptool.mjs app-probe '<json>' [--port 5174]
+    // node dx/cli/apptool.mjs app-probe '<json>' [--port 5174]
     const portArg = rest.indexOf('--port');
     const port = portArg >= 0 ? Number(rest[portArg + 1]) : 5174;
     const spec = parseSpec(rest.find(a => a.trim().startsWith('{')) ?? '{}');
-    const browser = new Browser(port, join(tmpdir(), 'walker-app-probe'), () => {});
+    const browser = new Browser(port, join(tmpdir(), 'dx-app-probe'), () => {});
     await browser.open()
       .then(() => browser.probe({ steps: spec.steps ?? [], asserts: spec.asserts ?? [] }))
       .then(print)
@@ -82,7 +84,7 @@ switch (cmd) {
       catch (e) { return { ok: false, output: `${e.stdout ?? ''}\n${e.stderr ?? ''}` }; }
     } };
     void readFileSync; void join;
-    console.log(new Tools({ ws, browser: null, log: () => {} }).tool_locate({ anchor: rest[0] ?? '', dir: rest[1] ?? 'v2' }));
+    console.log(new Tools({ ws, browser: null, log: () => {} }).tool_locate({ anchor: rest[0] ?? '', dir: rest[1] ?? 'frontend' }));
     break;
   }
   case 'gen': {

@@ -1,22 +1,22 @@
 #!/usr/bin/env node
-// Unified control plane for walker.
+// Unified control plane for dx.
 //
 // No args opens the small terminal menu:
-//   node walker/dx.mjs
+//   node dx/cli/dx.mjs
 //   npm run dx
 //
 // Direct commands are intentionally thin wrappers around the existing harness:
-//   node walker/dx.mjs status
-//   node walker/dx.mjs run <task|pending|all> [--mock] [--model <name>]
-//   node walker/dx.mjs log [--follow]
-//   node walker/dx.mjs preview <task>
-//   node walker/dx.mjs gate <task>
-//   node walker/dx.mjs land <task> [--yes]
-//   node walker/dx.mjs approve <task>
-//   node walker/dx.mjs archive <task>
-//   node walker/dx.mjs add
-//   node walker/dx.mjs clean [--keep 3] [--yes]
-//   node walker/dx.mjs project <list|status|show|generate|sync|watch> [projection] [filter]
+//   node dx/cli/dx.mjs status
+//   node dx/cli/dx.mjs run <task|pending|all> [--mock] [--model <name>]
+//   node dx/cli/dx.mjs log [--follow]
+//   node dx/cli/dx.mjs preview <task>
+//   node dx/cli/dx.mjs gate <task>
+//   node dx/cli/dx.mjs land <task> [--yes]
+//   node dx/cli/dx.mjs approve <task>
+//   node dx/cli/dx.mjs archive <task>
+//   node dx/cli/dx.mjs add
+//   node dx/cli/dx.mjs clean [--keep 3] [--yes]
+//   node dx/cli/dx.mjs project <list|status|show|generate|sync|watch> [projection] [filter]
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import {
@@ -34,11 +34,12 @@ import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO = resolve(HERE, '..');
-const TASKS_FILE = join(HERE, 'TASKS.md');
-const DONE_FILE = join(HERE, 'DONE.md');
-const APPROVALS_FILE = join(HERE, 'APPROVALS.md');
-const JOURNAL_DIR = join(HERE, 'journal');
+const DX_ROOT = resolve(HERE, '..');
+const REPO = resolve(DX_ROOT, '..');
+const TASKS_FILE = join(DX_ROOT, 'tasks', 'TASKS.md');
+const DONE_FILE = join(DX_ROOT, 'tasks', 'DONE.md');
+const APPROVALS_FILE = join(DX_ROOT, 'tasks', 'APPROVALS.md');
+const JOURNAL_DIR = join(DX_ROOT, 'journal');
 
 const argv = parseArgv(process.argv.slice(2));
 
@@ -219,7 +220,7 @@ function taskRows() {
 
 function printStatus() {
   const rows = taskRows();
-  console.log('\nwalker dx');
+  console.log('\ndx');
   console.log(`${pad('#', 3)} ${pad('task', 27)} ${pad('kind', 8)} ${pad('status', 10)} ${pad('patch', 5)} ${pad('approved', 8)} ${pad('last', 34)} title`);
   console.log(`${'-'.repeat(3)} ${'-'.repeat(27)} ${'-'.repeat(8)} ${'-'.repeat(10)} ${'-'.repeat(5)} ${'-'.repeat(8)} ${'-'.repeat(34)} ${'-'.repeat(20)}`);
   for (const row of rows) {
@@ -248,7 +249,7 @@ function latestRunDir() {
 function latestLogPath() {
   const run = latestRunDir();
   if (!run) return null;
-  const log = join(run, 'walker.log');
+  const log = join(run, 'dx.log');
   return existsSync(log) ? log : null;
 }
 
@@ -280,8 +281,8 @@ async function askTask(rl, { fixedOnly = false, includeLanded = true } = {}) {
   return resolveTask(answer, rows);
 }
 
-function runWalker(target, opts = {}) {
-  const args = ['walker/loop.mjs', '--cycles', String(opts.cycles ?? 1)];
+function runDxRunner(target, opts = {}) {
+  const args = ['dx/ollama-runner/loop.mjs', '--cycles', String(opts.cycles ?? 1)];
   if (target && target !== 'all' && target !== 'pending') args.push('--task', target);
   if (opts.mock) args.push('--mock');
   if (opts.human) args.push('--human');
@@ -293,7 +294,7 @@ function runWalker(target, opts = {}) {
 async function runModel(rl, targetArg = null, opts = {}) {
   let target = targetArg;
   if (opts.human && (!target || target === 'pending' || target === 'all')) {
-    console.log('Human mode drives one task by hand: node walker/dx.mjs <task-id> --human');
+    console.log('Human mode drives one task by hand: node dx/cli/dx.mjs <task-id> --human');
     return 1;
   }
   if (!target) {
@@ -313,18 +314,18 @@ async function runModel(rl, targetArg = null, opts = {}) {
     if (!pending.length) return console.log('No pending non-landed tasks. Add a task or archive completed work first.');
     console.log(`Running pending tasks: ${pending.join(', ')}`);
     for (const id of pending) {
-      const code = runWalker(id, opts);
+      const code = runDxRunner(id, opts);
       if (code !== 0) return code;
     }
     return 0;
   }
-  return runWalker(target, opts);
+  return runDxRunner(target, opts);
 }
 
 function showLog({ follow = false } = {}) {
   const log = latestLogPath();
   if (!log) {
-    console.log('No walker.log found yet.');
+    console.log('No dx.log found yet.');
     return 1;
   }
   console.log(`log: ${rel(log)}\n`);
@@ -356,7 +357,7 @@ async function previewTask(row, opts = {}) {
   }
   const port = opts.port ? Number(opts.port) : await findFreePort(5190);
   console.log(`Previewing ${row.task.id} on port ${port}. Ctrl+C stops the preview workspace.`);
-  return runNode('walker/preview.mjs', [
+  return runNode('dx/cli/preview.mjs', [
     '--task', row.task.id,
     '--apply', row.fixed.patch,
     '--port', String(port),
@@ -369,7 +370,7 @@ function gateTask(row) {
     return 1;
   }
   console.log(`Running apply gate for ${row.task.id}: ${rel(row.fixed.patch)}`);
-  return runNode('walker/apply.mjs', ['--task', row.task.id, '--patch', row.fixed.patch]);
+  return runNode('dx/cli/apply.mjs', ['--task', row.task.id, '--patch', row.fixed.patch]);
 }
 
 function patchTouchedFiles(patch) {
@@ -402,7 +403,7 @@ function archiveTask(id) {
 
   const doneText = existsSync(DONE_FILE)
     ? readFileSync(DONE_FILE, 'utf8')
-    : '# walker done\n\nCompleted tasks live here so `TASKS.md` stays the active local-model queue.\n';
+    : '# dx done\n\nCompleted tasks live here so `TASKS.md` stays the active local-model queue.\n';
   const doneIds = new Set(parseTasks(doneText).map(t => t.id));
   if (!doneIds.has(id)) {
     const archived = block.replace(/\n$/, '');
@@ -449,7 +450,7 @@ async function landTask(row, { yes = false, rl = null } = {}) {
     return 1;
   }
 
-  const code = runNode('walker/apply.mjs', [
+  const code = runNode('dx/cli/apply.mjs', [
     '--task', row.task.id,
     '--patch', row.fixed.patch,
     '--apply-for-real',
@@ -461,8 +462,8 @@ async function landTask(row, { yes = false, rl = null } = {}) {
   const commitPaths = new Set([
     ...patchTouchedFiles(row.fixed.patch),
     `tests/commands/recorded/${row.task.id}.test.ts`,
-    `tests/commands/walker/${row.task.id}.test.ts`,
-    ...(archived ? ['walker/TASKS.md', 'walker/DONE.md'] : []),
+    `tests/commands/dx/${row.task.id}.test.ts`,
+    ...(archived ? ['dx/tasks/TASKS.md', 'dx/tasks/DONE.md'] : []),
   ]);
   const addPaths = [...commitPaths].filter(path => existsSync(join(REPO, path)) || statusForPaths([path]).length);
   git(['add', '-A', '--', ...addPaths]);
@@ -508,7 +509,7 @@ function archiveTaskRow(row) {
 }
 
 async function addTask(rl) {
-  console.log('\nNew walker task. Keep it small enough for the local model.');
+  console.log('\nNew dx task. Keep it small enough for the local model.');
   const id = (await rl.question('id (kebab-case): ')).trim();
   if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) return console.log('Bad id. Use lowercase kebab-case.');
   if (loadTasks().some(t => t.id === id)) return console.log(`Task ${id} already exists.`);
@@ -619,7 +620,7 @@ async function menu() {
         console.log('\nProjection actions: list, status, show, generate, sync, watch');
         const action = (await rl.question('Action [status]: ')).trim() || 'status';
         const name = (await rl.question('Projection [commands]: ')).trim() || 'commands';
-        runNode('walker/projections.mjs', [action, name]);
+        runNode('dx/projections/projections.mjs', [action, name]);
       } else {
         printHelp();
       }
@@ -634,17 +635,17 @@ function printHelp() {
   console.log(`
 usage:
   npm run dx
-  node walker/dx.mjs status
-  node walker/dx.mjs run <task|pending|all> [--mock] [--model <name>] [--max-turns <n>]
-  node walker/dx.mjs log [--follow]
-  node walker/dx.mjs preview <task>
-  node walker/dx.mjs gate <task>
-  node walker/dx.mjs land <task> [--yes]
-  node walker/dx.mjs approve <task>
-  node walker/dx.mjs archive <task>
-  node walker/dx.mjs add
-  node walker/dx.mjs clean [--keep 3] [--yes]
-  node walker/dx.mjs project <list|status|show|generate|sync|watch> [projection] [filter]
+  node dx/cli/dx.mjs status
+  node dx/cli/dx.mjs run <task|pending|all> [--mock] [--model <name>] [--max-turns <n>]
+  node dx/cli/dx.mjs log [--follow]
+  node dx/cli/dx.mjs preview <task>
+  node dx/cli/dx.mjs gate <task>
+  node dx/cli/dx.mjs land <task> [--yes]
+  node dx/cli/dx.mjs approve <task>
+  node dx/cli/dx.mjs archive <task>
+  node dx/cli/dx.mjs add
+  node dx/cli/dx.mjs clean [--keep 3] [--yes]
+  node dx/cli/dx.mjs project <list|status|show|generate|sync|watch> [projection] [filter]
 `);
 }
 
@@ -672,7 +673,7 @@ async function main() {
     const rows = taskRows();
     const row = resolveTask(argv.args[0], rows);
     if (!row) {
-      console.error('Task not found. Run `node walker/dx.mjs status` for ids.');
+      console.error('Task not found. Run `node dx/cli/dx.mjs status` for ids.');
       process.exitCode = 1;
       return;
     }
@@ -684,7 +685,7 @@ async function main() {
   }
   if (argv.cmd === 'clean') return cleanJournal({ keep: argv.opts.keep ?? 3, yes: Boolean(argv.opts.yes) });
   if (['project', 'projection', 'projections', 'view', 'views'].includes(argv.cmd)) {
-    return runNode('walker/projections.mjs', argv.args.length ? argv.args : ['status']);
+    return runNode('dx/projections/projections.mjs', argv.args.length ? argv.args : ['status']);
   }
   // Bare task id: `dx <task-id> [--human]` is shorthand for `dx run <task-id>`.
   if (argv.cmd && resolveTask(argv.cmd)) {

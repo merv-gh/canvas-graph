@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { itemFoldId, nodeRect } from '../../v2/core';
-import { Places } from '../../v2/types';
-import { bootV2, commandButton, field, runCommand, settle } from './v2-testkit';
+import { itemFoldId, nodeRect } from '../../frontend/core';
+import { Places } from '../../frontend/types';
+import { bootApp, commandButton, field, runCommand, settle } from './testkit';
 
 const containsRect = (
   outer: { x: number; y: number; w: number; h: number },
@@ -15,9 +15,9 @@ const waitCamera = async () => {
   await settle();
 };
 
-describe('v2 node commands', () => {
+describe('frontend node commands', () => {
   it('creates, selects, focuses, renders, collapses, nudges, and configures a node', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
 
     expect(runCommand(ctx, 'editing.node.create')).toBe(true);
     await settle();
@@ -58,7 +58,7 @@ describe('v2 node commands', () => {
   });
 
   it('routes keyboard and click input through the command registry', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
 
     document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true }));
     await settle();
@@ -70,7 +70,7 @@ describe('v2 node commands', () => {
   });
 
   it('fits to a newly created node when attached placement lands offscreen', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     const anchor = ctx.graphs.current.createNode({
       Label: { text: 'edge anchor' },
       Position: { x: 840, y: 300 },
@@ -89,7 +89,7 @@ describe('v2 node commands', () => {
   });
 
   it('moves DOM focus when selecting nodes by pointer or Tab', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     runCommand(ctx, 'editing.node.create');
     runCommand(ctx, 'editing.node.create');
     await settle();
@@ -119,7 +119,7 @@ describe('v2 node commands', () => {
   });
 
   it('edits title from the rendered node and restores empty commits', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     runCommand(ctx, 'editing.node.create');
     await settle();
     const node = ctx.graphs.current.nodes()[0];
@@ -135,7 +135,7 @@ describe('v2 node commands', () => {
   });
 
   it('drags only from the explicit drag handle (now in ephemeral node-toolbar)', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     runCommand(ctx, 'editing.node.create');
     await settle();
     const node = ctx.graphs.current.nodes()[0];
@@ -157,14 +157,14 @@ describe('v2 node commands', () => {
   });
 
   it('can disable an ability and hide its commands from the model', () => {
-    const ctx = bootV2({ 'ability.collapsible': false });
+    const ctx = bootApp({ 'ability.collapsible': false });
 
     expect(ctx.contexts.commands.get('item.collapse.toggle')).toBeUndefined();
     expect(ctx.model.entity('node')?.abilities.map(ability => ability.id)).not.toContain('collapsible');
   });
 
   it('creates, switches, deletes graphs, and cascades node deletion to edges', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     expect(runCommand(ctx, 'graph.create')).toBe(true);
     expect(ctx.graphs.current.id).toBe('g2');
 
@@ -190,7 +190,7 @@ describe('v2 node commands', () => {
   });
 
   it('deletes a selected node with the general X shortcut', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     const a = ctx.graphs.current.createNode({ Label: { text: 'a' } });
     const b = ctx.graphs.current.createNode({ Label: { text: 'b' } });
     ctx.bus.emit('graph.edge.create', { From: a.id, To: b.id });

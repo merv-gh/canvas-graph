@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 // apply — gate a model's fix and (when approved) land it in the real repo.
 //
-//   node walker/apply.mjs --task <id>                  # dry-run: gate + report
-//   node walker/apply.mjs --task <id> --apply-for-real # land it (needs approval)
-//   node walker/apply.mjs --task <id> --patch <file>   # gate a specific patch
+//   node dx/cli/apply.mjs --task <id>                  # dry-run: gate + report
+//   node dx/cli/apply.mjs --task <id> --apply-for-real # land it (needs approval)
+//   node dx/cli/apply.mjs --task <id> --patch <file>   # gate a specific patch
 //
 // The gate runs in a fresh workspace: full vitest suite + tsc + 80% coverage.
 // "Truly ready" = all three green. Landing also requires the task id in
-// walker/APPROVALS.md (the human gate) unless --force. Landing applies the v2/
+// dx/tasks/APPROVALS.md (the human gate) unless --force. Landing applies the frontend/
 // change to the repo, relocates the model's test into tests/commands/recorded/,
 // then re-verifies the real repo. Nothing touches the repo without --apply-for-real.
 
@@ -15,10 +15,11 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Workspace } from './workspace.mjs';
+import { Workspace } from '../ollama-runner/workspace.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO = resolve(HERE, '..');
+const DX_ROOT = resolve(HERE, '..');
+const REPO = resolve(DX_ROOT, '..');
 const argv = process.argv.slice(2);
 const has = (n) => argv.includes(`--${n}`);
 const opt = (n, d) => { const i = argv.indexOf(`--${n}`); return i >= 0 && argv[i + 1] ? argv[i + 1] : d; };
@@ -35,7 +36,7 @@ const fail = (l) => { console.error(`✗ ${l}`); process.exit(1); };
 
 /** Most recent journal attempt for the task whose result.json says fixed. */
 function latestFixedPatch(id) {
-  const journal = join(HERE, 'journal');
+  const journal = join(DX_ROOT, 'journal');
   if (!existsSync(journal)) return null;
   const candidates = [];
   for (const run of readdirSync(journal)) {
@@ -54,7 +55,7 @@ function latestFixedPatch(id) {
 }
 
 function approved(id) {
-  const f = join(HERE, 'APPROVALS.md');
+  const f = join(DX_ROOT, 'tasks', 'APPROVALS.md');
   if (!existsSync(f)) return false;
   return readFileSync(f, 'utf8').split('\n')
     .map(l => l.trim()).filter(l => l && !l.startsWith('#') && !l.startsWith('##'))
@@ -62,7 +63,7 @@ function approved(id) {
 }
 
 const patch = patchPath ? resolve(patchPath) : latestFixedPatch(taskId);
-if (!patch || !existsSync(patch)) fail(`no fixed patch found for "${taskId}" (run the walker first, or pass --patch)`);
+if (!patch || !existsSync(patch)) fail(`no fixed patch found for "${taskId}" (run the dx first, or pass --patch)`);
 log(`[apply] patch: ${patch.replace(REPO + '/', '')}`);
 
 const ws = new Workspace(REPO, join(HERE, 'apply-ws'), log);
@@ -88,21 +89,21 @@ const ws = new Workspace(REPO, join(HERE, 'apply-ws'), log);
     log('\n✅ READY — all gates green.');
 
     if (!forReal) {
-      log(`\n(dry-run) To land it: ensure "${taskId ?? '<id>'}" is in walker/APPROVALS.md, then re-run with --apply-for-real`);
+      log(`\n(dry-run) To land it: ensure "${taskId ?? '<id>'}" is in dx/tasks/APPROVALS.md, then re-run with --apply-for-real`);
       return;
     }
     if (!taskId) fail('--apply-for-real needs --task <id> (for the approval check + test relocation)');
-    if (!force && !approved(taskId)) fail(`not approved — add "${taskId}" to walker/APPROVALS.md (or pass --force)`);
+    if (!force && !approved(taskId)) fail(`not approved — add "${taskId}" to dx/tasks/APPROVALS.md (or pass --force)`);
 
     // ---- Land in the real repo ----
     log('\n[land] applying to the real repo…');
     try { execFileSync('git', ['apply', '--3way', patch], { cwd: REPO }); }
     catch { execFileSync('git', ['apply', patch], { cwd: REPO }); }
     // Relocate the model's scratch test into the permanent regression corpus.
-    const scratch = join(REPO, `tests/commands/walker/${taskId}.test.ts`);
+    const scratch = join(REPO, `tests/commands/dx/${taskId}.test.ts`);
     if (existsSync(scratch)) {
-      execFileSync('git', ['add', '-A', 'tests/commands/walker'], { cwd: REPO });
-      execFileSync('git', ['mv', '-f', `tests/commands/walker/${taskId}.test.ts`, `tests/commands/recorded/${taskId}.test.ts`], { cwd: REPO });
+      execFileSync('git', ['add', '-A', 'tests/commands/dx'], { cwd: REPO });
+      execFileSync('git', ['mv', '-f', `tests/commands/dx/${taskId}.test.ts`, `tests/commands/recorded/${taskId}.test.ts`], { cwd: REPO });
       log(`[land] moved test → tests/commands/recorded/${taskId}.test.ts`);
     }
     // Re-verify the real repo (fast gate; coverage already proven in the workspace).

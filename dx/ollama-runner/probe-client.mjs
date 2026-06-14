@@ -1,16 +1,16 @@
-// Shared client for the walker probe (tests/commands/probes/walker-probe.test.ts).
+// Shared client for the dx probe (tests/commands/probes/dx-probe.test.ts).
 // Spawns vitest on the probe file with the request in env, reads the JSON answer.
-// Used by both the apptool CLI (repo cwd) and the walker model tools (workspace cwd).
+// Used by both the apptool CLI (repo cwd) and the dx model tools (workspace cwd).
 
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const PROBE_PATH = 'tests/commands/probes/walker-probe.test.ts';
+const PROBE_PATH = 'tests/commands/probes/dx-probe.test.ts';
 
 export function runProbe(cwd, request, timeoutMs = 120000) {
-  const dir = mkdtempSync(join(tmpdir(), 'walker-probe-'));
+  const dir = mkdtempSync(join(tmpdir(), 'dx-probe-'));
   const out = join(dir, 'answer.json');
   const normalizedRequest = request?.mode === 'scenario'
     ? { ...request, ...normalizeScenarioSpec(request) }
@@ -151,11 +151,11 @@ export function genTest(input) {
   const tracePre = needsTrace ? `    const rec = ctx.sim.record();\n    rec.start();\n` : '';
   const tracePost = needsTrace ? `    const fired = rec.stop();\n` : '';
   return `${needsFs ? "import { readFileSync } from 'node:fs';\nimport { resolve } from 'node:path';\n" : ''}import { describe, expect, it } from 'vitest';
-import { bootV2, runCommand, settle } from '../v2-testkit';
+import { bootApp, runCommand, settle } from '../testkit';
 
 describe(${JSON.stringify(title)}, () => {
   it('replays the sequence and asserts', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
 ${tracePre}${stepLines}
 ${tracePost}${assertLines}

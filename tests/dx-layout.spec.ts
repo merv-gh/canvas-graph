@@ -1,6 +1,6 @@
-// Browser coverage for landed layout/focus tasks. Each walker `layout` task lands
-// a tests/commands/walker/<id>.layout.json ({steps, asserts}); this spec runs every
-// one through the SAME oracle the walker loop used (walker/layout-probe.mjs), so a
+// Browser coverage for landed layout/focus tasks. Each dx `layout` task lands
+// a tests/commands/dx/<id>.layout.json ({steps, asserts}); this spec runs every
+// one through the SAME oracle the dx loop used (dx/ollama-runner/layout-probe.mjs), so a
 // fix proven in the loop is permanently guarded by `npm run test:browser`.
 //
 // jsdom can't see focus/geometry/computed-style — these run in real Chromium.
@@ -10,7 +10,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
 
-const SPEC_DIR = join(process.cwd(), 'tests', 'commands', 'walker');
+const SPEC_DIR = join(process.cwd(), 'tests', 'commands', 'dx');
 const specs = existsSync(SPEC_DIR)
   ? readdirSync(SPEC_DIR).filter(name => name.endsWith('.layout.json'))
   : [];
@@ -18,9 +18,9 @@ const specs = existsSync(SPEC_DIR)
 for (const file of specs) {
   const spec = JSON.parse(readFileSync(join(SPEC_DIR, file), 'utf8'));
   test(`layout: ${spec.title ?? file}`, async ({ page }) => {
-    const { runLayoutProbe } = await import('../walker/layout-probe.mjs');
+    const { runLayoutProbe } = await import('../dx/ollama-runner/layout-probe.mjs');
     await page.goto('/?io=memory');
-    await page.waitForFunction(() => !!(window as unknown as { v2?: unknown }).v2, undefined, { timeout: 8000 });
+    await page.waitForFunction(() => !!(window as unknown as { app?: unknown }).app, undefined, { timeout: 8000 });
     const { pass, results } = await runLayoutProbe(page, spec);
     const failed = results.filter(r => !r.ok).map(r => `${r.label} — actual: ${JSON.stringify(r.actual)}`);
     expect(pass, `layout oracle failed:\n${failed.join('\n')}`).toBe(true);

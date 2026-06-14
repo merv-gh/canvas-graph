@@ -17,7 +17,7 @@ import { Places } from '../types';
  *   - `wait` → pause one extra beat (let an animation settle).
  *
  * This is presentation + reproduction infrastructure: inert unless `?scenario=`
- * is present or `window.v2.scenario.play(...)` is called (tests/devtools).
+ * is present or `window.app.scenario.play(...)` is called (tests/devtools).
  */
 
 declare module '../types' {

@@ -2,23 +2,23 @@ const { test, expect } = require('@playwright/test');
 
 const boot = async (page) => {
   await page.goto('/');
-  await page.waitForFunction(() => !!window.v2);
+  await page.waitForFunction(() => !!window.app);
 };
 
 const createNodes = async (page, labels) => page.evaluate((labels) => {
-  const v = window.v2;
+  const v = window.app;
   labels.forEach(text => v.bus.emit('editing.node.create', { Label: { text } }));
   return v.graphs.current.nodes().map(node => ({ id: node.id, label: node.Label.text }));
 }, labels);
 
-test('v2 boots current TypeScript entrypoint with edge creation UI enabled', async ({ page }) => {
+test('frontend boots current TypeScript entrypoint with edge creation UI enabled', async ({ page }) => {
   await boot(page);
 
   await expect(page.locator('.toolbar [data-command="editing.edge.create"]')).toHaveText('+ Edge');
   const state = await page.evaluate(() => ({
-    commandFormOn: window.v2.flags.isOn('commandForm'),
-    commandFormRegistered: !!window.v2.contexts.commands.get('commandForm.submit'),
-    edgeCommandEvent: window.v2.contexts.commands.get('editing.edge.create')?.event,
+    commandFormOn: window.app.flags.isOn('commandForm'),
+    commandFormRegistered: !!window.app.contexts.commands.get('commandForm.submit'),
+    edgeCommandEvent: window.app.contexts.commands.get('editing.edge.create')?.event,
   }));
 
   expect(state).toEqual({
@@ -45,18 +45,18 @@ test('edge command seeds source and picks target by letter when only two nodes e
   const nodes = await createNodes(page, ['A', 'B']);
 
   await page.evaluate((sourceId) => {
-    const v = window.v2;
+    const v = window.app;
     v.bus.emit('selection.node.select', { id: sourceId });
   }, nodes[0].id);
 
   await page.locator('.toolbar [data-command="editing.edge.create"]').click();
   await expect(page.locator('.picker-letter')).toHaveCount(1);
-  await expect.poll(() => page.evaluate(() => window.v2.graphs.current.edges().length)).toBe(0);
+  await expect.poll(() => page.evaluate(() => window.app.graphs.current.edges().length)).toBe(0);
 
   await page.keyboard.press('a');
 
   await expect.poll(() => page.evaluate(() =>
-    window.v2.graphs.current.edges().map(edge => ({ From: edge.From, To: edge.To })),
+    window.app.graphs.current.edges().map(edge => ({ From: edge.From, To: edge.To })),
   )).toEqual([{ From: nodes[0].id, To: nodes[1].id }]);
   await expect(page.locator('.edges .edge-line')).toHaveCount(1);
   const box = await page.locator('.edges .edge-line').evaluate(line => {
@@ -72,7 +72,7 @@ test('edge command lets the user choose among several target letters', async ({ 
   const nodes = await createNodes(page, ['A', 'B', 'C']);
 
   await page.evaluate((sourceId) => {
-    const v = window.v2;
+    const v = window.app;
     v.bus.emit('selection.node.select', { id: sourceId });
   }, nodes[0].id);
 
@@ -83,7 +83,7 @@ test('edge command lets the user choose among several target letters', async ({ 
 
   await expect(page.locator('.modal-layer')).toHaveCount(0);
   await expect.poll(() => page.evaluate(() =>
-    window.v2.graphs.current.edges().map(edge => ({ From: edge.From, To: edge.To })),
+    window.app.graphs.current.edges().map(edge => ({ From: edge.From, To: edge.To })),
   )).toEqual([{ From: nodes[0].id, To: nodes[2].id }]);
   await expect(page.locator('.edges .edge-line')).toHaveCount(1);
 });
@@ -92,7 +92,7 @@ test('focused edge uses graph styling without a browser focus rectangle', async 
   await boot(page);
   const nodes = await createNodes(page, ['A', 'B']);
   const edgeId = await page.evaluate(([from, to]) => {
-    const v = window.v2;
+    const v = window.app;
     v.bus.emit('graph.edge.create', { From: from.id, To: to.id });
     return v.graphs.current.edges()[0].id;
   }, nodes);
@@ -109,7 +109,7 @@ test('graph storage rejects self-loop and missing-endpoint edge creates', async 
   const nodes = await createNodes(page, ['A']);
 
   const count = await page.evaluate((id) => {
-    const v = window.v2;
+    const v = window.app;
     v.bus.emit('graph.edge.create', { From: id, To: id });
     v.bus.emit('graph.edge.create', { From: id, To: 'missing' });
     return v.graphs.current.edges().length;

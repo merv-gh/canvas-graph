@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-// walker — overnight TDD loop for local models.
+// dx — overnight TDD loop for local models.
 //
-//   node walker/loop.mjs                  # endless until walker/STOP exists
-//   node walker/loop.mjs --hours 8        # overnight run
-//   node walker/loop.mjs --task detail-shortcuts --max-turns 6   # short real smoke
+//   node dx/ollama-runner/loop.mjs                  # endless until dx/STOP exists
+//   node dx/ollama-runner/loop.mjs --hours 8        # overnight run
+//   node dx/ollama-runner/loop.mjs --task detail-shortcuts --max-turns 6
 //
-// Cycle = every task in TASKS.md once (+ a walk session). Each attempt runs in
+// Cycle = every task in dx/tasks/TASKS.md once (+ a walk session). Each attempt runs in
 // a disposable workspace; RED writes a failing test, GREEN makes it pass,
-// VERIFY runs the full suite + typecheck. Everything lands in walker/journal/.
+// VERIFY runs the full suite + typecheck. Everything lands in dx/journal/.
 
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -22,8 +22,9 @@ import { Workspace } from './workspace.mjs';
 import { Browser } from './browser.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO = resolve(HERE, '..');
-const CONFIG = JSON.parse(readFileSync(join(HERE, 'config.json'), 'utf8'));
+const DX_ROOT = resolve(HERE, '..');
+const REPO = resolve(DX_ROOT, '..');
+const CONFIG = JSON.parse(readFileSync(join(DX_ROOT, 'config.json'), 'utf8'));
 
 // ---------- CLI ----------
 const argv = process.argv.slice(2);
@@ -42,14 +43,14 @@ const MAX_TURNS = Number(opt('max-turns', 0));
 
 // ---------- journal ----------
 const runId = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-const runDir = join(HERE, 'journal', `run-${runId}`);
+const runDir = join(DX_ROOT, 'journal', `run-${runId}`);
 mkdirSync(runDir, { recursive: true });
 const reportPath = join(runDir, 'report.md');
-appendFileSync(reportPath, `# walker run ${runId}\n\nmodel: ${MODEL_OVERRIDE ?? CONFIG.ollama.model} | mock: ${MOCK}\n\n| task | attempt | model | outcome | turns | minutes |\n|---|---|---|---|---|---|\n`);
+appendFileSync(reportPath, `# dx run ${runId}\n\nmodel: ${MODEL_OVERRIDE ?? CONFIG.ollama.model} | mock: ${MOCK}\n\n| task | attempt | model | outcome | turns | minutes |\n|---|---|---|---|---|---|\n`);
 const log = (line) => {
   const stamp = new Date().toISOString().slice(11, 19);
   console.log(`${stamp} ${line}`);
-  appendFileSync(join(runDir, 'walker.log'), `${stamp} ${line}\n`);
+  appendFileSync(join(runDir, 'dx.log'), `${stamp} ${line}\n`);
 };
 
 // ---------- tasks ----------
@@ -80,9 +81,9 @@ function parseTasks(md) {
 function gatherAutoContext(wsDir, concept) {
   if (!concept || !concept.trim()) return '';
   try {
-    const out = execFileSync(process.execPath, [join(HERE, 'projections.mjs'), 'concept', concept], {
+    const out = execFileSync(process.execPath, [join(DX_ROOT, 'projections', 'projections.mjs'), 'concept', concept], {
       cwd: wsDir, encoding: 'utf8', timeout: 15000, maxBuffer: 1024 * 1024,
-      env: { ...process.env, WALKER_PROJECTION_ROOT: wsDir },
+      env: { ...process.env, DX_PROJECTION_ROOT: wsDir },
     });
     const trimmed = out.trim();
     if (!trimmed || /no command\/flow match|provide a phrase/.test(trimmed)) return '';
@@ -134,8 +135,8 @@ async function attempt(task, { cycle, n, model, temperature, seed }) {
     // Layout/focus tasks judge a real browser via the oracle (.layout.json spec);
     // everything else uses a jsdom vitest file.
     tools.defaultTestPath = task.kind === 'layout'
-      ? `tests/commands/walker/${task.id}.layout.json`
-      : `tests/commands/walker/${task.id}.test.ts`;
+      ? `tests/commands/dx/${task.id}.layout.json`
+      : `tests/commands/dx/${task.id}.test.ts`;
     tools.task = task;
     if (task.kind === 'layout' && !browser) { jlog('layout task needs the app stack, which failed to start — skipping'); outcome = 'fail: no browser'; }
     const system = buildSystemPrompt();
@@ -274,7 +275,7 @@ async function attempt(task, { cycle, n, model, temperature, seed }) {
         if (check.advance === 'green') {
           tools.phase = 'green'; phaseTurns = 0; extra = '';
           history.push({ role: 'assistant', content: `done(red): ${args.summary ?? ''}` });
-          history.push({ role: 'user', content: `RED ACCEPTED — your test fails as required:\n${check.detail}\nNow PHASE GREEN: edit v2/ to make it pass.` });
+          history.push({ role: 'user', content: `RED ACCEPTED — your test fails as required:\n${check.detail}\nNow PHASE GREEN: edit frontend/ to make it pass.` });
           if (browser) await browser.screenshot('red-accepted').catch(() => {});
           continue;
         }
@@ -310,7 +311,7 @@ async function attempt(task, { cycle, n, model, temperature, seed }) {
           tools.taskTestPath = lastRun.rel;
           jlog('RED accepted (auto-advance)');
           if (browser) await browser.screenshot('red-accepted').catch(() => {});
-          trimmed += `\n\n✅ RED ACCEPTED — your test fails as required. You are now in PHASE GREEN: edit code under v2/ until this test passes (scenario to iterate, run_test to confirm).`;
+          trimmed += `\n\n✅ RED ACCEPTED — your test fails as required. You are now in PHASE GREEN: edit code under frontend/ until this test passes (scenario to iterate, run_test to confirm).`;
         } else if (tools.phase === 'green' && lastRun.ok) {
           jlog('GREEN accepted (auto-advance), verifying');
           const verdict = verify(ws, jlog);
@@ -327,7 +328,7 @@ async function attempt(task, { cycle, n, model, temperature, seed }) {
       const turnsLeft = phaseTurnCap() - phaseTurns;
       const pressure = turnsLeft === 4 && !isWalk
         ? (tools.phase === 'red'
-          ? `\n\n⚠ Only 4 turns left in RED. STOP exploring — write tests/commands/walker/${task.id}.test.ts NOW with what you know, run_test it, then done.`
+          ? `\n\n⚠ Only 4 turns left in RED. STOP exploring — write tests/commands/dx/${task.id}.test.ts NOW with what you know, run_test it, then done.`
           : '\n\n⚠ Only 4 turns left in GREEN. Apply your best fix NOW, run_test, then done.')
         : '';
       history.push({ role: 'assistant', content: JSON.stringify({ name, arguments: args }) });
@@ -356,7 +357,7 @@ function phaseGate(tools, ws, task, jlog) {
   // pins tools.lastRun. done() trusts that just-computed result (re-running the
   // oracle synchronously here isn't possible); the model always run_tests first.
   if (task.kind === 'layout') {
-    const specPath = `tests/commands/walker/${task.id}.layout.json`;
+    const specPath = `tests/commands/dx/${task.id}.layout.json`;
     if (!existsSync(join(ws.dir, specPath))) return { advance: null, detail: `No layout spec at ${specPath} yet — write one with gen_layout_test.` };
     const lr = tools.lastRun;
     const stale = !lr || lr.rel !== specPath || !lr.ran;
@@ -370,7 +371,7 @@ function phaseGate(tools, ws, task, jlog) {
     jlog('GREEN accepted (layout oracle), verifying');
     return { advance: 'verify', detail: '' };
   }
-  const testPath = `tests/commands/walker/${task.id}.test.ts`;
+  const testPath = `tests/commands/dx/${task.id}.test.ts`;
   if (tools.phase === 'red') {
     if (!existsSync(join(ws.dir, testPath))) return { advance: null, detail: `No test at ${testPath} yet — write it first.` };
     const res = ws.vitest(testPath);
@@ -405,7 +406,7 @@ function verify(ws, jlog) {
 }
 
 // ---------- main ----------
-const tasks = parseTasks(readFileSync(join(HERE, 'TASKS.md'), 'utf8'))
+const tasks = parseTasks(readFileSync(join(DX_ROOT, 'tasks', 'TASKS.md'), 'utf8'))
   .filter(t => !ONLY_TASK || t.id === ONLY_TASK);
 if (!tasks.length) { console.error('no tasks matched'); process.exit(1); }
 
@@ -417,7 +418,7 @@ log(`run ${runId}: ${tasks.length} task(s) — ${tasks.map(t => t.id).join(', ')
 for (;;) {
   cycle++;
   for (const task of tasks) {
-    if (existsSync(join(HERE, 'STOP'))) { log('STOP file found — exiting'); process.exit(0); }
+    if (existsSync(join(DX_ROOT, 'STOP'))) { log('STOP file found — exiting'); process.exit(0); }
     if (endAt && Date.now() > endAt) { log('time budget reached'); process.exit(0); }
     if (task.kind === 'walk' && cycle % (CONFIG.walkEveryNCycles || 1) !== 0) continue;
 
@@ -436,4 +437,4 @@ for (;;) {
   if (HUMAN) { log('human: single pass'); break; } // you drive once; no auto-retry/escalation
   if (!CYCLES && !endAt && MOCK) break; // mock: single pass
 }
-log('walker finished');
+log('dx finished');

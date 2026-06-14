@@ -1,6 +1,6 @@
 // Shared layout/focus/style probe — the oracle's brain, used by both the live
-// walker Browser session (walker/browser.mjs) and the committed Playwright spec
-// (tests/walker-layout.spec.ts) so the loop and CI judge a layout fix identically.
+// dx Browser session (dx/browser.mjs) and the committed Playwright spec
+// (tests/dx-layout.spec.ts) so the loop and CI judge a layout fix identically.
 //
 // Mirrors the jsdom `scenario` {steps, asserts} shape, but evaluates the assert
 // kinds jsdom can't observe against a REAL Playwright page:
@@ -14,15 +14,15 @@ export async function runLayoutSteps(page, steps = []) {
   for (const step of steps) {
     if (step.command) {
       await page.evaluate(async (id) => {
-        window.v2.contexts.commands.run(id, { origin: 'programmatic' });
+        window.app.contexts.commands.run(id, { origin: 'programmatic' });
         await new Promise(r => requestAnimationFrame(() => setTimeout(r, 30)));
       }, step.command);
     } else if (step.event) {
       await page.evaluate(({ name, data }) => {
-        const v2 = window.v2;
-        if (v2.sim?.replay) v2.sim.replay([{ name, data: data ?? null, at: 0 }]);
-        else if (typeof v2.emit === 'function') v2.emit(name, data ?? undefined);
-        else v2.bus?.emit?.(name, data ?? undefined);
+        const frontend = window.app;
+        if (frontend.sim?.replay) frontend.sim.replay([{ name, data: data ?? null, at: 0 }]);
+        else if (typeof frontend.emit === 'function') frontend.emit(name, data ?? undefined);
+        else frontend.bus?.emit?.(name, data ?? undefined);
       }, { name: step.event, data: step.data ?? null });
     }
     await page.evaluate(() => new Promise(r => requestAnimationFrame(() => setTimeout(r, 30))));
@@ -76,7 +76,7 @@ export async function evaluateLayoutAsserts(page, asserts = []) {
           return { label: `style ${a.style}${a.pseudo ?? ''} ${a.prop}`, ok: !!el && cmp(actual, a.op, a.value), actual };
         }
         if (a.path !== undefined) {
-          let node = window.v2.debug.snapshot();
+          let node = window.app.debug.snapshot();
           for (const key of a.path.split('.')) node = node?.[key];
           return { label: `path ${a.path} ${a.op ?? 'eq'} ${a.value}`, ok: cmp(node, a.op, a.value), actual: node };
         }

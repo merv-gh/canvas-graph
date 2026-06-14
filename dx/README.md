@@ -1,6 +1,6 @@
-# walker — overnight TDD loop for local models
+# dx — overnight TDD loop for local models
 
-A local model (ollama) fixes bugs in v2 under strict, mechanical TDD. The model
+A local model (ollama) fixes bugs in frontend under strict, mechanical TDD. The model
 is assumed weak; the harness supplies reproduction, verification, isolation, and
 context selection. Success pressure flows back into the architecture: if a 7B
 model can't fix a small bug here, the code (or its observability) is too clever.
@@ -9,11 +9,11 @@ model can't fix a small bug here, the code (or its observability) is too clever.
 
 ```bash
 npm run dx                              # status-first menu: run, watch, preview, gate, land
-node walker/dx.mjs status               # same control plane, direct command mode
-node walker/dx.mjs project watch commands          # serve editable command projection
-node walker/loop.mjs --task detail-shortcuts --max-turns 8   # short real smoke
-node walker/loop.mjs --hours 8                    # overnight, all tasks, cycles
-touch walker/STOP                                 # graceful stop between attempts
+node dx/cli/dx.mjs status               # same control plane, direct command mode
+node dx/cli/dx.mjs project watch commands          # serve editable command projection
+node dx/ollama-runner/loop.mjs --task detail-shortcuts --max-turns 8   # short real smoke
+node dx/ollama-runner/loop.mjs --hours 8                    # overnight, all tasks, cycles
+touch dx/STOP                                 # graceful stop between attempts
 ```
 
 Config: `config.json` (ollama URL/model, budgets, ports). Override per run:
@@ -28,7 +28,7 @@ task/status table and single-key actions:
 |---|---|
 | `r` | run the local model for `pending`, `all`, or one selected task |
 | `n` | append a new task card to `TASKS.md` |
-| `w` | show or follow the latest `walker.log` |
+| `w` | show or follow the latest `dx.log` |
 | `p` | preview the latest fixed patch in a disposable app and print the URL |
 | `g` | run the full apply gate for a fixed patch |
 | `l` | gate, apply to the real repo, re-verify, and commit only the patch paths |
@@ -37,24 +37,24 @@ task/status table and single-key actions:
 | `c` | remove old journal runs, keeping the newest N |
 | `v` | generate, sync, or watch feature projections |
 
-Direct equivalents exist for scripts/automation:
+Direct equivalents exist for automation:
 
 ```bash
-node walker/dx.mjs run detail-shortcuts --model qwen2.5-coder:7b
-node walker/dx.mjs log --follow
-node walker/dx.mjs preview detail-shortcuts
-node walker/dx.mjs gate detail-shortcuts
-node walker/dx.mjs land detail-shortcuts
-node walker/dx.mjs archive detail-shortcuts
-node walker/dx.mjs clean --keep 3
-node walker/dx.mjs project generate commands
-node walker/dx.mjs project show flows graph.edge.create
-node walker/dx.mjs project sync commands
-node walker/dx.mjs project watch commands
+node dx/cli/dx.mjs run detail-shortcuts --model qwen2.5-coder:7b
+node dx/cli/dx.mjs log --follow
+node dx/cli/dx.mjs preview detail-shortcuts
+node dx/cli/dx.mjs gate detail-shortcuts
+node dx/cli/dx.mjs land detail-shortcuts
+node dx/cli/dx.mjs archive detail-shortcuts
+node dx/cli/dx.mjs clean --keep 3
+node dx/cli/dx.mjs project generate commands
+node dx/cli/dx.mjs project show flows graph.edge.create
+node dx/cli/dx.mjs project sync commands
+node dx/cli/dx.mjs project watch commands
 ```
 
-The menu deliberately wraps the existing `loop.mjs`, `preview.mjs`, and
-`apply.mjs`; the model harness and quality gates remain in one place.
+The menu deliberately wraps the runner, preview, and apply entrypoints; the
+model harness and quality gates remain in one place.
 
 ## Feature projections
 
@@ -66,9 +66,9 @@ surface in one place.
 Available projections:
 
 ```bash
-npm run dx -- project generate commands   # writes walker/views/commands.proj.ts
+npm run dx -- project generate commands   # writes views/commands.proj.ts
 npm run dx -- project show flows graph.edge.create
-npm run dx -- project sync commands       # pushes edited command slices to v2/
+npm run dx -- project sync commands       # pushes edited command slices to frontend/
 npm run dx -- project watch commands      # two-way watch: projection <-> source
 npm run dx -- project generate events     # editable event declaration lines
 npm run dx -- project generate flows      # read-only command/event flow map
@@ -76,7 +76,7 @@ npm run dx -- project generate command-ui # editable contribute(...) calls
 npm run dx -- project generate render     # editable shell fold render seams
 ```
 
-See `PROJECTIONS.md` for the marker format and the extension contract.
+See `dx/projections/README.md` for the view format and extension contract.
 
 ## The loop
 
@@ -84,10 +84,10 @@ Per task attempt, in a **disposable workspace** (rsync copy of the repo,
 node_modules symlinked, its own git, its own vite on :5180, its own headless
 Chromium):
 
-1. **RED** — model may write ONLY under `tests/commands/walker/`. Its `done` is
-   accepted only when `tests/commands/walker/<task>.test.ts` exists and FAILS.
+1. **RED** — model may write ONLY under `tests/commands/dx/`. Its `done` is
+   accepted only when `tests/commands/dx/<task>.test.ts` exists and FAILS.
    A test that passes immediately is rejected ("not red").
-2. **GREEN** — model may write ONLY under `v2/`. `done` accepted when its red
+2. **GREEN** — model may write ONLY under `frontend/`. `done` accepted when its red
    test passes.
 3. **VERIFY** — harness-run, no model: full vitest suite + `tsc --noEmit`.
    Regressions are fed back (stay in GREEN); success = `fixed`.
@@ -122,8 +122,8 @@ tool, exact-match `edit` (unique old-text required), everything else read-only.
 
 ## App toolbox (model tools ⇄ human CLI)
 
-Every capability is dual-exposed: a walker tool for the model and
-`node walker/apptool.mjs <cmd>` for humans/Claude. Self-test: `node walker/selftest.mjs`.
+Every capability is dual-exposed: a dx tool for the model and
+`node dx/cli/apptool.mjs <cmd>` for humans/Claude. Self-test: `node dx/selftest.mjs`.
 
 | Tool / CLI | What it answers |
 |---|---|
@@ -160,21 +160,21 @@ anything else → `patch` (line numbers from `read`/`locate`). `edit`/`write`
 remain as fallbacks.
 
 scenario/gen-test JSON: `{"steps":[{"command":"editing.node.create"},{"event":"fold.toggle","data":{"id":"shell.zen"}}],`
-`"asserts":[{"path":"ui.shell.zen","op":"eq","value":true},{"css":".node","op":"count","value":2},{"file":"v2/styles.css","matches":"grid-row"}]}`.
-Implementation: `tests/commands/probes/walker-probe.test.ts` (skipped without `PROBE_REQUEST`;
-boots the CURRENT tree — in walker runs that's the model's edited workspace).
+`"asserts":[{"path":"ui.shell.zen","op":"eq","value":true},{"css":".node","op":"count","value":2},{"file":"frontend/styles.css","matches":"grid-row"}]}`.
+Implementation: `tests/commands/probes/dx-probe.test.ts` (skipped without `PROBE_REQUEST`;
+boots the CURRENT tree — in dx runs that's the model's edited workspace).
 Graph queries hit the repo's `.code-review-graph/graph.db` (may lag edits by a build).
 
 The intended RED loop for the model: `inspect`/`graph` to discover → `scenario`
 with desired-behavior asserts (failing now) → `gen_test` writes the file →
-`run_test` confirms red → `done`. GREEN: edit v2/, `scenario` to iterate cheaply,
+`run_test` confirms red → `done`. GREEN: edit frontend/, `scenario` to iterate cheaply,
 `run_test` to confirm.
 
 ## Eyes: app tools + screenshots + logs
 
 The `app` tool drives the live workspace app through Playwright:
 `app command view.zen` (run any command id), `app snapshot ui.shell` (any
-dot-path of `debug.snapshot()`), `app eval <js>` (window.v2 in scope),
+dot-path of `debug.snapshot()`), `app eval <js>` (window.app in scope),
 `app screenshot` (PNG saved to the journal; the model gets a one-line layout
 summary — place sizes, rendered counts, shell state — since text models can't
 see pixels). Browser console is captured per attempt. The `walk` task kind uses
@@ -191,7 +191,7 @@ can't observe, returning a structured pass/fail + actuals:
 
 ```bash
 npm run dev   # serve the app first (or pass --port for another server)
-node walker/apptool.mjs app-probe '{
+node dx/cli/apptool.mjs app-probe '{
   "steps":[{"command":"editing.node.create"},{"command":"item.properties.open"}],
   "asserts":[
     {"focus":".modal input"},                                  # real document.activeElement
@@ -211,25 +211,25 @@ property, with optional `pseudo` for `::before`/`::after`), and `path` (any
 In the loop, a `kind: layout` task is judged by the oracle instead of jsdom. The
 model gets two tools: `app_probe {spec}` (observe the failing focus/layout fact,
 any phase) and `gen_layout_test {title, spec}` (RED-only — writes
-`tests/commands/walker/<id>.layout.json` once the oracle confirms the asserts fail
+`tests/commands/dx/<id>.layout.json` once the oracle confirms the asserts fail
 now). `run_test` routes that `.layout.json` through the live `Browser` session, so
 RED→GREEN→VERIFY auto-advance exactly as for vitest tasks. When such a task lands,
-`tests/walker-layout.spec.ts` runs every committed `.layout.json` through the same
-`walker/layout-probe.mjs` oracle under `npm run test:browser`, so the fix stays
+`tests/dx-layout.spec.ts` runs every committed `.layout.json` through the same
+`dx/layout-probe.mjs` oracle under `npm run test:browser`, so the fix stays
 guarded in CI. (Proven: a 7B reached RED autonomously — `app_probe` →
 `gen_layout_test` → `run_test` FAIL → RED accepted — on the `modal-focus` task.)
 
 ## Reading the live stream
 
 stdout is a compact per-turn trace you can watch in real time (also in
-`journal/run-*/walker.log`):
+`journal/run-*/dx.log`):
 
 ```
 RED·t2  → run_test {}                 # phase · turn → tool call (salient args)
    ⤷ FAIL                             #   one-line result summary
 RED accepted (auto-advance)           # phase transition (evidence-based)
 GREEN·t1 → set_command choose.invert shortcut,input
-   ⤷ updated v2/systems/choose.ts
+   ⤷ updated frontend/systems/choose.ts
 [ollama] qwen2.5-coder:7b 25.6s prompt=2953tok out=21tok   # think time + tokens
 ```
 
@@ -240,9 +240,9 @@ gave-up` ends the attempt.
 ## Journal (everything an overnight run leaves behind)
 
 ```
-walker/journal/run-<timestamp>/
+dx/journal/run-<timestamp>/
   report.md            # one table row per attempt: outcome, turns, minutes
-  walker.log
+  dx.log
   <task>-c<cycle>a<n>/
     messages.jsonl     # full conversation + tool traffic
     fix.patch          # git diff of the workspace at end of attempt
@@ -252,7 +252,7 @@ walker/journal/run-<timestamp>/
 ```
 
 Apply a winning patch to the real repo manually after review:
-`git apply walker/journal/run-*/<task>-*/fix.patch` (the patch includes the
+`git apply dx/journal/run-*/<task>-*/fix.patch` (the patch includes the
 red test — keep it; move it under `tests/commands/recorded/` if it's a recorded-class bug).
 The preferred path is `npm run dx` -> `p` preview -> `g` gate -> `l` land+commit,
 which avoids copying patch paths by hand.
@@ -269,7 +269,7 @@ archives it into `DONE.md` so the active queue stays small.
 - Default model `qwen2.5-coder:7b`; 3b is too weak for GREEN, usable for walk.
   If you later expose bigger ctx or pull new coder models on the ollama box
   (ssh offer), bump `numCtx` / models in config.json — nothing else changes.
-- The walker never touches the real repo: workspaces live in `walker/workspace`
-  (recreated per attempt), the only durable output is `walker/journal/`.
-- Known-good proof for the tooling layer is `node walker/selftest.mjs`; real
+- The dx never touches the real repo: workspaces live in `dx/workspace`
+  (recreated per attempt), the only durable output is `dx/journal/`.
+- Known-good proof for the tooling layer is `node dx/selftest.mjs`; real
   model runs should start with the smallest active card in `TASKS.md`.

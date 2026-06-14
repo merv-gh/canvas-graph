@@ -3,15 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dx": "node walker/dx.mjs",
-    "dev": "vite v2 --host 127.0.0.1 --port 5174",
-    "dev:v2": "vite v2 --host 127.0.0.1 --port 5174",
+    "dx": "node dx/cli/dx.mjs",
+    "dev": "node dx/cli/dev.mjs",
+    "dev:frontend": "vite frontend --host 127.0.0.1 --port 5174 --strictPort",
     "test": "npm run test:commands:coverage && npm run test:browser",
     "test:browser": "playwright test",
     "test:commands": "vitest run",
     "test:commands:coverage": "vitest run --coverage",
-    "typecheck": "tsc --noEmit",
-    "explore": "node scripts/explore.mjs"
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@playwright/test": "^1.44.0",

@@ -18,13 +18,13 @@ window.addEventListener('DOMContentLoaded', () => {
   const io = useMemoryIo ? memoryIo() : localStorageIo();
 
   // Flags default to ON via registry.declare. Persisted overrides (via io adapter)
-  // win. To force a flag off at boot, pass it here or call window.v2.flags.set(...).
+  // win. To force a flag off at boot, pass it here or call window.app.flags.set(...).
   const flags = createFlags({}, io);
   const ctx = createAppContext(graphStore(), appModel, flags, io);
   installRuntimeFeatureManager(ctx, plugins);
   plugins.start(ctx);
   ctx.bus.emit('app.start');
-  window.v2 = ctx;
+  window.app = ctx;
 });
 
 export {};

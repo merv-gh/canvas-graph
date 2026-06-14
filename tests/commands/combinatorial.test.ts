@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { bootV2, runCommand, settle } from './v2-testkit';
-import type { AppCtx } from '../../v2/core';
+import { bootApp, runCommand, settle } from './testkit';
+import type { AppCtx } from '../../frontend/core';
 
 /**
  * Combinatorial action graph — exhaustive sweep.
@@ -60,7 +60,7 @@ const autoRunnableAtBoot = (ctx: AppCtx) =>
 /** Run a sequence in a fresh boot. Returns the post-state snapshot, or throws
  *  with the offending step labeled. */
 const runSequence = async (sequence: string[]): Promise<Snapshot> => {
-  const ctx = bootV2();
+  const ctx = bootApp();
   await settle();
   for (const id of sequence) {
     try {
@@ -74,7 +74,7 @@ const runSequence = async (sequence: string[]): Promise<Snapshot> => {
 };
 
 describe('combinatorial action graph', () => {
-  const probe = bootV2();
+  const probe = bootApp();
   const commands = autoRunnableAtBoot(probe);
 
   describe('length-1: every auto-runnable command boots and runs', () => {

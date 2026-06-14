@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { bootV2, runCommand, settle } from './v2-testkit';
-import { defaultEventFilter, snapshot, snapshotTree, flattenSnapshotTree, traceToTest } from '../../v2/core';
+import { bootApp, runCommand, settle } from './testkit';
+import { defaultEventFilter, snapshot, snapshotTree, flattenSnapshotTree, traceToTest } from '../../frontend/core';
 
-describe('v2 debug system', () => {
+describe('frontend debug system', () => {
   it('toggles enabled state and exposes ctx.debug', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     expect(ctx.debug).toBeDefined();
     expect(ctx.debug!.enabled()).toBe(false);
@@ -14,7 +14,7 @@ describe('v2 debug system', () => {
   });
 
   it('record → events → stop captures only what the user did', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     ctx.debug!.setEnabled(true);
     await settle();
@@ -42,7 +42,7 @@ describe('v2 debug system', () => {
   });
 
   it('clear empties the trace without affecting recording state', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     ctx.debug!.setEnabled(true);
     ctx.debug!.start();
@@ -57,7 +57,7 @@ describe('v2 debug system', () => {
   });
 
   it('snapshot exposes graph / selection / view / flags / dx', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.node.create');
     await settle();
@@ -70,7 +70,7 @@ describe('v2 debug system', () => {
   });
 
   it('snapshot tree carries clickable code paths', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.node.create');
     await settle();
@@ -85,7 +85,7 @@ describe('v2 debug system', () => {
   });
 
   it('traceToTest produces a runnable file with replay + assertions', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     ctx.debug!.setEnabled(true);
     ctx.debug!.start();
@@ -106,7 +106,7 @@ describe('v2 debug system', () => {
   });
 
   it('paste-and-replay reconstructs state from a trace', async () => {
-    const author = bootV2();
+    const author = bootApp();
     await settle();
     author.debug!.setEnabled(true);
     author.debug!.start();
@@ -118,7 +118,7 @@ describe('v2 debug system', () => {
     const trace = author.debug!.trace().filter(defaultEventFilter);
 
     // Fresh boot, replay the captured trace.
-    const replayCtx = bootV2();
+    const replayCtx = bootApp();
     await settle();
     replayCtx.sim.replay(trace);
     await settle();
@@ -126,7 +126,7 @@ describe('v2 debug system', () => {
   });
 
   it('record/stop/clear commands gate on enabled flag', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     // Disabled: record start should be unavailable, so commands.run returns false.
     expect(ctx.contexts.commands.run('debug.record.start')).toBe(false);

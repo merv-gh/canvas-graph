@@ -78,7 +78,7 @@ export type SystemCtx = AppCtx & Pick<Bus, 'on' | 'emit' | 'forward'> & {
   origin: string;
   /** Shorthand: contribute an affordance tagged with this system's origin. */
   contribute(aff: import('./types').SystemAffordance): void;
-  /** Publish a typed devtools/test surface on window.v2 without app.ts knowing the system. */
+  /** Publish a typed devtools/test surface on window.app without app.ts knowing the system. */
   expose<K extends keyof AppCtx>(key: K, value: AppCtx[K]): void;
 };
 export type AppSystem = (ctx: SystemCtx) => void | Disposer;
@@ -101,7 +101,7 @@ export type Registry = ((name: string, setup: AppSystem, opts?: RegistryEntryOpt
   kindOf(name: string): FlagKind | undefined;
 };
 
-declare global { interface Window { v2?: AppCtx } }
+declare global { interface Window { app?: AppCtx } }
 
 export const systemOf = (id: string) => id.split('.')[0] || 'app';
 

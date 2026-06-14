@@ -1,9 +1,9 @@
-// walker/human.mjs — YOU are the model. A drop-in replacement for OllamaChat that
+// dx/human.mjs — YOU are the model. A drop-in replacement for OllamaChat that
 // reads the exact context the model gets, lets you edit the workspace files in your
 // own editor, and invoke the same tools by hand. The eval question this answers:
 // is the view/context enough to act, or does the harness over-steer / spoon-feed?
 //
-// Used by `node walker/loop.mjs --task <id> --human` (or `npm run dx <id> --human`).
+// Used by `node dx/ollama-runner/loop.mjs --task <id> --human` (or `npm run dx <id> --human`).
 // The rest of the loop (dispatch, phase gates, run_test, verify) is unchanged — only
 // the "what does the agent do next" decision moves from the model to you.
 

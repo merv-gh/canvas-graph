@@ -1,19 +1,19 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, it } from 'vitest';
-import { bootV2, runCommand, settle } from '../v2-testkit';
-import { introspect } from '../../../v2/core';
-import type { AppCtx } from '../../../v2/core';
+import { bootApp, runCommand, settle } from '../testkit';
+import { introspect } from '../../../frontend/core';
+import type { AppCtx } from '../../../frontend/core';
 
 /**
- * walker probe — answers structured queries about the BOOTED app for tooling
- * (walker/apptool.mjs CLI and the walker model tools). Driven entirely by env:
+ * dx probe — answers structured queries about the BOOTED app for tooling
+ * (dx/cli/apptool.mjs CLI and the dx model tools). Driven entirely by env:
  *
  *   PROBE_REQUEST  JSON {mode: 'events'|'commands'|'flows'|'scenario', ...}
  *   PROBE_OUT      file path to write the JSON answer to
  *
  * Without PROBE_REQUEST the test is skipped, so the normal suite ignores it.
- * It boots the real app (bootV2) — answers reflect the CURRENT working tree,
+ * It boots the real app (bootApp) — answers reflect the CURRENT working tree,
  * which is what makes `scenario` a verification micro-loop for agents.
  */
 
@@ -23,7 +23,7 @@ type Assert = {
   path?: string;
   /** CSS selector checked against the booted DOM. */
   css?: string;
-  /** Regex (string) checked against a repo file's text, e.g. v2/styles.css. */
+  /** Regex (string) checked against a repo file's text, e.g. frontend/styles.css. */
   file?: string; matches?: string;
   /** Command-spec assert: command id + property path into its spec, e.g.
    *  {command:'choose.invert', has:'input.key', value:'i'} — the red test for
@@ -225,7 +225,7 @@ it.skipIf(!process.env.PROBE_REQUEST)('answers PROBE_REQUEST', async () => {
   const out = process.env.PROBE_OUT!;
   let answer: unknown;
   try {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     if (request.mode === 'events' || request.mode === 'flows') await warmup(ctx);
     if (request.mode === 'events') answer = eventsAnswer(ctx, request.filter);

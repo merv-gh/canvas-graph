@@ -13,20 +13,20 @@ import {
   parseShortcut,
   shortcutOf,
   tagItem,
-} from '../../v2/core';
-import { Graph, graphStore } from '../../v2/model';
-import type { CommandSpec } from '../../v2/types';
-import { bootV2, runCommand, settle } from './v2-testkit';
+} from '../../frontend/core';
+import { Graph, graphStore } from '../../frontend/model';
+import type { CommandSpec } from '../../frontend/types';
+import { bootApp, runCommand, settle } from './testkit';
 
-declare module '../../v2/types' {
+declare module '../../frontend/types' {
   interface CustomItemKinds {
     container: unknown;
   }
 }
 
-describe('v2 selection polymorphism', () => {
+describe('frontend selection polymorphism', () => {
   it('holds an ItemRef of any kind, with typed node/edge projections', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     runCommand(ctx, 'editing.node.create');
     runCommand(ctx, 'editing.node.create');
     await new Promise(r => setTimeout(r, 0));
@@ -49,7 +49,7 @@ describe('v2 selection polymorphism', () => {
   });
 
   it('focuses and highlights any ItemRef through item modes', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     runCommand(ctx, 'editing.node.create');
     runCommand(ctx, 'editing.node.create');
     await settle();
@@ -69,7 +69,7 @@ describe('v2 selection polymorphism', () => {
   });
 
   it('selects and focuses canvas edges through the generic item command', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     runCommand(ctx, 'editing.node.create');
     runCommand(ctx, 'editing.node.create');
     await settle();
@@ -91,7 +91,7 @@ describe('v2 selection polymorphism', () => {
   });
 
   it('exposes ItemRef targets, overlays, and keyboard capture for future modes', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     // Direct create — smart-A (Principle 17) auto-attaches the second create
     // to the first, which adds an extra edge. This test only cares about the
     // targets surface, so go straight to the data layer.
@@ -127,7 +127,7 @@ describe('v2 selection polymorphism', () => {
   });
 });
 
-describe('v2 model and core helpers', () => {
+describe('frontend model and core helpers', () => {
   it('creates nodes, edges, updates, deletes, and cascades incident edges', () => {
     const graph = Graph.new('g-test');
     const a = graph.createNode({ Label: { text: 'A' }, Position: { x: 10, y: 20 } });
@@ -167,7 +167,7 @@ describe('v2 model and core helpers', () => {
   });
 
   it('derives collection defaults and commands from collection kind', () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     const graphs = ctx.model.collection<Graph>('graphs')!;
     const nodes = ctx.model.collection<{ id: string; Label: { text: string } }>('nodes')!;
     const fake = { id: 'foos', label: 'Foos', items: () => [{ id: 'f1' }] };
@@ -215,7 +215,7 @@ describe('v2 model and core helpers', () => {
   });
 
   it('tracks command overrides, conflicts, availability, and disabled commands', () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     const commands = ctx.contexts.commands;
     const help = commands.get('help.open') as CommandSpec;
     expect(commandShortcut(commands, 'help.open')).toBe('?');
@@ -236,7 +236,7 @@ describe('v2 model and core helpers', () => {
   });
 
   it('treats a blank shortcut override as unbound, not wildcard', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     const commands = ctx.contexts.commands;
 
     expect(commands.setShortcut('help.open', '')).toBe(true);

@@ -1,4 +1,4 @@
-# v2 — read this, then ONLY the files your task touches
+# frontend — read this, then ONLY the files your task touches
 
 One sentence: a typed event bus where **entities** declare **abilities**, abilities bring
 commands + UI + behavior, **systems** provide infrastructure, **features** choreograph
@@ -56,20 +56,20 @@ npx vitest run tests/commands/<relevant>.test.ts   # seconds
 npx vitest run && npm run typecheck                # before done
 ```
 
-Test pattern (`tests/commands/v2-testkit.ts`): `bootV2(flags?)` boots the real app in
+Test pattern (`tests/commands/testkit.ts`): `bootApp(flags?)` boots the real app in
 jsdom with memory IO; `runCommand(ctx, id)`, `await settle()`, then assert on
 `ctx.graphs.current` / `ctx.debug.snapshot()` / DOM. A UI bug repro = replay a trace:
 `ctx.sim.replay([{ name, data, at: 0 }])` — see `tests/commands/recorded/*` for the idiom.
 
-Debug surfaces (browser console or tests): `window.v2` = AppCtx; `v2.debug.snapshot()`
-(structured user-visible state, each leaf maps to a TS assertion); `v2.dx.run()`
-(contract issues); `v2.sim.record()/replay()`; `v2.flags` + Help modal toggles any
-system/ability/feature live. Automated dev/debug/fix loop + DX roadmap: `../README.md`; harness: `walker/README.md`.
+Debug surfaces (browser console or tests): `window.app` = AppCtx; `frontend.debug.snapshot()`
+(structured user-visible state, each leaf maps to a TS assertion); `frontend.dx.run()`
+(contract issues); `frontend.sim.record()/replay()`; `frontend.flags` + Help modal toggles any
+system/ability/feature live. Automated dev/debug/fix loop + DX roadmap: `../README.md`; harness: `dx/README.md`.
 
 App-aware queries — prefer these over grep for discovery (each boots the real app):
-`node walker/apptool.mjs commands [filter]` (all commands + shortcuts/origins),
+`node dx/cli/apptool.mjs commands [filter]` (all commands + shortcuts/origins),
 `… events [filter]` / `… flows <event>` (who fires/handles, downstream chain),
 `… scenario '<json>'` ({steps,asserts} against a fresh boot — instant behavior check),
 `… gen-test '<json>' [out]` (scenario → vitest file), `… graph find|callers|file <q>`
 (code index → file:line), `… locate <anchor>` (grep + verbatim numbered context).
-Shapes in `walker/README.md`; `walker/ANALYSIS.md` has the local-model coverage matrix.
+Shapes and local-model delegation guidance live in `dx/README.md`.

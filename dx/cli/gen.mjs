@@ -1,11 +1,11 @@
 // Plugin scaffolder — the "add a new system / feature / ability" task shape made
 // one command instead of copy-an-exemplar + remember-to-wire-index + write-a-smoke.
-// Mirrors v2's house style exactly (see v2/systems/jump.ts, v2/abilities/nudgeable.ts,
+// Mirrors frontend's house style exactly (see frontend/systems/jump.ts, frontend/abilities/nudgeable.ts,
 // the registration-name conventions, and Principle 7's flag off→on smoke test).
 //
-//   node walker/apptool.mjs gen system  tool-panels
-//   node walker/apptool.mjs gen feature autoFit
-//   node walker/apptool.mjs gen ability lockable
+//   node dx/cli/apptool.mjs gen system  tool-panels
+//   node dx/cli/apptool.mjs gen feature autoFit
+//   node dx/cli/apptool.mjs gen ability lockable
 //
 // Each scaffold is contract-complete: it compiles, boots DX-clean with its flag on
 // AND off, and ships a smoke test — so the only work left is filling in the TODOs.
@@ -107,19 +107,19 @@ const featureBlock = (n) => `  feature('${n.camel}', () => {
 `;
 
 const smokeTest = (n, { flag, cmdId }) => `import { describe, expect, it } from 'vitest';
-import { bootV2, settle } from './v2-testkit';
+import { bootApp, settle } from './testkit';
 
 // Principle 7: a new plugin ships with a flag off→on smoke test.
 describe('${n.kebab} ${flag.startsWith('ability.') ? 'ability' : cmdId ? 'system' : 'feature'}', () => {
-  const errors = (ctx: ReturnType<typeof bootV2>) =>
+  const errors = (ctx: ReturnType<typeof bootApp>) =>
     (ctx.dx?.run() ?? []).filter(i => i.level === 'error');
 
   it('boots DX-clean with the plugin on and off', async () => {
-    const on = bootV2();
+    const on = bootApp();
     await settle();
     expect(errors(on), 'errors on boot').toEqual([]);
 ${cmdId ? `    expect(on.contexts.commands.all().some(c => c.id === '${cmdId}'), '${cmdId} present when on').toBe(true);\n` : ''}
-    const off = bootV2({ '${flag}': false });
+    const off = bootApp({ '${flag}': false });
     await settle();
     expect(errors(off), 'errors with the plugin off').toEqual([]);
 ${cmdId ? `    expect(off.contexts.commands.all().some(c => c.id === '${cmdId}'), '${cmdId} gone when off').toBe(false);\n` : ''}  });
@@ -159,40 +159,40 @@ export function genPlugin({ kind, name, repoRoot }) {
   const p = (...parts) => join(repoRoot, ...parts);
 
   if (kind === 'system') {
-    const file = p('v2/systems', `${n.kebab}.ts`);
-    if (existsSync(file)) return { error: `already exists: v2/systems/${n.kebab}.ts` };
-    const idx = p('v2/systems/index.ts');
+    const file = p('frontend/systems', `${n.kebab}.ts`);
+    if (existsSync(file)) return { error: `already exists: frontend/systems/${n.kebab}.ts` };
+    const idx = p('frontend/systems/index.ts');
     if (new RegExp(`register${n.Pascal}\\b`).test(readFileSync(idx, 'utf8'))) return { error: `register${n.Pascal} already wired in systems/index.ts` };
-    writeFileSync(file, systemFile(n)); written.push(`v2/systems/${n.kebab}.ts`);
+    writeFileSync(file, systemFile(n)); written.push(`frontend/systems/${n.kebab}.ts`);
     editFile(idx, ls => insertAfterLast(ls, /^import \{ register\w+ \} from '\.\//, `import { register${n.Pascal} } from './${n.kebab}';`)) && wired.push('systems/index.ts import');
     // Register before registerDx (the validator) so it stays last.
     editFile(idx, ls => insertBeforeFirst(ls, /^\s*registerDx\(system\);/, `  register${n.Pascal}(system);`)) && wired.push('systems/index.ts register call');
-    addClaudeLine(p('v2/systems/CLAUDE.md'), `- \`${n.kebab}.ts\` — TODO: one-line description of what ${n.Pascal} owns.`, /^Adding one:/) && wired.push('systems/CLAUDE.md');
+    addClaudeLine(p('frontend/systems/CLAUDE.md'), `- \`${n.kebab}.ts\` — TODO: one-line description of what ${n.Pascal} owns.`, /^Adding one:/) && wired.push('systems/CLAUDE.md');
     const test = p('tests/commands', `${n.kebab}.smoke.test.ts`);
     writeFileSync(test, smokeTest(n, { flag: n.dot, cmdId: `${n.dot}.run` })); written.push(`tests/commands/${n.kebab}.smoke.test.ts`);
   }
 
   if (kind === 'ability') {
-    const file = p('v2/abilities', `${n.kebab}.ts`);
-    if (existsSync(file)) return { error: `already exists: v2/abilities/${n.kebab}.ts` };
-    const idx = p('v2/abilities/index.ts');
+    const file = p('frontend/abilities', `${n.kebab}.ts`);
+    if (existsSync(file)) return { error: `already exists: frontend/abilities/${n.kebab}.ts` };
+    const idx = p('frontend/abilities/index.ts');
     if (new RegExp(`register${n.Pascal}\\b`).test(readFileSync(idx, 'utf8'))) return { error: `register${n.Pascal} already wired in abilities/index.ts` };
-    writeFileSync(file, abilityFile(n)); written.push(`v2/abilities/${n.kebab}.ts`);
+    writeFileSync(file, abilityFile(n)); written.push(`frontend/abilities/${n.kebab}.ts`);
     editFile(idx, ls => insertAfterLast(ls, /^import \{ register\w+ \} from '\.\//, `import { register${n.Pascal} } from './${n.kebab}';`)) && wired.push('abilities/index.ts import');
     editFile(idx, ls => insertAfterLast(ls, /^export \{ \w+ \} from '\.\//, `export { ${n.camel} } from './${n.kebab}';`)) && wired.push('abilities/index.ts export');
     editFile(idx, ls => insertAfterLast(ls, /^\s*register\w+\(system\);/, `  register${n.Pascal}(system);`)) && wired.push('abilities/index.ts register call');
-    addClaudeLine(p('v2/abilities/CLAUDE.md'), `- \`${n.kebab}.ts\` — TODO: one-line description of the ${n.Pascal} capability.`, /^Mutations always go/) && wired.push('abilities/CLAUDE.md');
+    addClaudeLine(p('frontend/abilities/CLAUDE.md'), `- \`${n.kebab}.ts\` — TODO: one-line description of the ${n.Pascal} capability.`, /^Mutations always go/) && wired.push('abilities/CLAUDE.md');
     const test = p('tests/commands', `${n.kebab}.smoke.test.ts`);
     writeFileSync(test, smokeTest(n, { flag: `ability.${n.camel}`, cmdId: `item.${n.camel}` })); written.push(`tests/commands/${n.kebab}.smoke.test.ts`);
-    todo.push(`Activate it: add \`${n.camel}()\` to an entity's \`abilities: [...]\` in v2/model/entities.ts (and mark its renderer's hook if the action needs one).`);
+    todo.push(`Activate it: add \`${n.camel}()\` to an entity's \`abilities: [...]\` in frontend/model/entities.ts (and mark its renderer's hook if the action needs one).`);
   }
 
   if (kind === 'feature') {
-    const featuresPath = p('v2/features.ts');
+    const featuresPath = p('frontend/features.ts');
     const src = readFileSync(featuresPath, 'utf8');
     if (new RegExp(`feature\\('${n.camel}'`).test(src)) return { error: `feature '${n.camel}' already exists in features.ts` };
     const ok = editFile(featuresPath, ls => insertAfterLast(ls, /export function registerFeatures\(feature: Registry\) \{/, featureBlock(n).replace(/\n$/, '')));
-    if (!ok) return { error: 'could not find registerFeatures(...) in v2/features.ts' };
+    if (!ok) return { error: 'could not find registerFeatures(...) in frontend/features.ts' };
     wired.push('features.ts feature block');
     const test = p('tests/commands', `${n.kebab}.smoke.test.ts`);
     writeFileSync(test, smokeTest(n, { flag: n.camel, cmdId: '' })); written.push(`tests/commands/${n.kebab}.smoke.test.ts`);

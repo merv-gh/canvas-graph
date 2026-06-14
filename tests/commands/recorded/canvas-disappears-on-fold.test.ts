@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { bootV2, settle } from '../v2-testkit';
+import { bootApp, settle } from '../testkit';
 
-const stylesText = readFileSync(resolve(process.cwd(), 'v2/styles.css'), 'utf8');
+const stylesText = readFileSync(resolve(process.cwd(), 'frontend/styles.css'), 'utf8');
 
 /**
  * Discovered via the in-app debug recorder. Original symptom: folding the left
@@ -36,7 +36,7 @@ describe('regression: left panel collapse keeps stage visible', () => {
   };
 
   it('stage is explicitly pinned to grid-column 2', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     void ctx;
     // The fix: .stage must have an explicit grid-column declaration so it
@@ -45,7 +45,7 @@ describe('regression: left panel collapse keeps stage visible', () => {
   });
 
   it('folding the left panel marks the shell and keeps the stage mounted', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
 
     // Replay the recorded user gesture — clicking the hamburger.
@@ -64,7 +64,7 @@ describe('regression: left panel collapse keeps stage visible', () => {
   });
 
   it('snapshot.ui.shell.leftFolded flips with the fold toggle', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     expect(ctx.debug!.snapshot().ui.shell.leftFolded).toBe(false);
     ctx.sim.replay([{ name: 'fold.toggle', data: { id: 'outline.panel' }, at: 0 }]);

@@ -10,10 +10,10 @@ const { test, expect } = require('@playwright/test');
 
 const goWithFlags = async (page, overrides = {}) => {
   await page.addInitScript(({ overrides }) => {
-    try { localStorage.setItem('v2.flags', JSON.stringify(overrides)); } catch (_) { /* */ }
+    try { localStorage.setItem('frontend.flags', JSON.stringify(overrides)); } catch (_) { /* */ }
   }, { overrides });
   await page.goto('/');
-  await page.waitForFunction(() => !!window.v2);
+  await page.waitForFunction(() => !!window.app);
 };
 
 test('toolbar contributions disappear when their owning system is off', async ({ page }) => {
@@ -26,7 +26,7 @@ test('toolbar contributions disappear when their owning system is off', async ({
 
 test('disabling an ability removes its commands and entity affordances', async ({ page }) => {
   await goWithFlags(page, { 'ability.collapsible': false });
-  const collapseCmd = await page.evaluate(() => !!window.v2.contexts.commands.get('node.collapse.toggle'));
+  const collapseCmd = await page.evaluate(() => !!window.app.contexts.commands.get('node.collapse.toggle'));
   expect(collapseCmd).toBe(false);
   await page.getByRole('button', { name: '+ Node' }).click();
   const collapseBtn = await page.locator('.node [data-command="node.collapse.toggle"]').count();
@@ -48,16 +48,16 @@ test('empty-state hint appears when graph has no nodes', async ({ page }) => {
 });
 
 test('memory mode does not write to localStorage', async ({ page }) => {
-  // Boot once normally to populate v2.flags
+  // Boot once normally to populate frontend.flags
   await page.goto('/');
-  await page.waitForFunction(() => !!window.v2);
-  await page.evaluate(() => window.v2.flags.set('test.persisted', true));
+  await page.waitForFunction(() => !!window.app);
+  await page.evaluate(() => window.app.flags.set('test.persisted', true));
   // Reboot in memory mode — flag setter should not touch localStorage.
   await page.goto('/?io=memory');
-  await page.waitForFunction(() => !!window.v2);
-  await page.evaluate(() => window.v2.flags.set('test.memory', true));
+  await page.waitForFunction(() => !!window.app);
+  await page.evaluate(() => window.app.flags.set('test.memory', true));
   const persisted = await page.evaluate(() => {
-    const raw = localStorage.getItem('v2.flags');
+    const raw = localStorage.getItem('frontend.flags');
     if (!raw) return { hasPersisted: false, hasMemory: false };
     const obj = JSON.parse(raw);
     return { hasPersisted: obj['test.persisted'] === true, hasMemory: 'test.memory' in obj };
@@ -68,7 +68,7 @@ test('memory mode does not write to localStorage', async ({ page }) => {
 
 test('requires.unmet warning fires when a dependency is disabled', async ({ page }) => {
   await goWithFlags(page, { graph: false });
-  const warnings = await page.evaluate(() => window.v2.contexts.dx.issues()
+  const warnings = await page.evaluate(() => window.app.contexts.dx.issues()
     .filter(i => i.rule === 'requires.unmet')
     .map(i => i.message));
   expect(warnings.some(w => w.includes('outline') && w.includes('graph'))).toBe(true);
@@ -76,15 +76,15 @@ test('requires.unmet warning fires when a dependency is disabled', async ({ page
 
 test('split view: zoom and pan toggle independently', async ({ page }) => {
   await goWithFlags(page, { 'view.pan': false });
-  const panStart = await page.evaluate(() => !!window.v2.contexts.commands.get('view.pan.start'));
-  const zoomIn = await page.evaluate(() => !!window.v2.contexts.commands.get('view.zoom.in'));
+  const panStart = await page.evaluate(() => !!window.app.contexts.commands.get('view.pan.start'));
+  const zoomIn = await page.evaluate(() => !!window.app.contexts.commands.get('view.zoom.in'));
   expect(panStart).toBe(false);
   expect(zoomIn).toBe(true);
 });
 
 test('DX validator stores boot issues on contexts.dx', async ({ page }) => {
   await goWithFlags(page);
-  const issues = await page.evaluate(() => window.v2.contexts.dx.issues());
+  const issues = await page.evaluate(() => window.app.contexts.dx.issues());
   // Baseline app should have only known warnings (binding.duplicate × 3 acknowledged).
   const errors = issues.filter(i => i.level === 'error');
   expect(errors).toEqual([]);

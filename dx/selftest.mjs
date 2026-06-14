@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Self-test for the walker toolbox: probe modes, scenario verdicts, test
+// Self-test for the dx toolbox: probe modes, scenario verdicts, test
 // generation round-trip, knowledge-graph queries, and parser shapes.
 //
-//   node walker/selftest.mjs        (~40s; boots the real app several times)
+//   node dx/selftest.mjs        (~40s; boots the real app several times)
 
 import assert from 'node:assert';
 import { execFileSync } from 'node:child_process';
@@ -10,11 +10,11 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { genTest, normalizeScenarioSpec, runProbe, validateGenTestSpec, validateScenarioSpec } from './probe-client.mjs';
-import { graphQuery } from './graphdb.mjs';
-import { parseToolFromText } from './ollama.mjs';
-import { Tools } from './tools.mjs';
-import { Workspace } from './workspace.mjs';
+import { genTest, normalizeScenarioSpec, runProbe, validateGenTestSpec, validateScenarioSpec } from './ollama-runner/probe-client.mjs';
+import { graphQuery } from './ollama-runner/graphdb.mjs';
+import { parseToolFromText } from './ollama-runner/ollama.mjs';
+import { Tools } from './ollama-runner/tools.mjs';
+import { Workspace } from './ollama-runner/workspace.mjs';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 let passed = 0;
@@ -112,14 +112,14 @@ ok('gen_test: source runs green when asserting current behavior', () => {
   const source = genTest({
     title: 'selftest generated',
     steps: [{ event: 'fold.toggle', data: { id: 'shell.zen' } }],
-    asserts: [{ path: 'ui.shell.zen', op: 'eq', value: true }, { file: 'v2/styles.css', matches: 'grid-row:\\s*2' }],
+    asserts: [{ path: 'ui.shell.zen', op: 'eq', value: true }, { file: 'frontend/styles.css', matches: 'grid-row:\\s*2' }],
   });
-  const dir = join(REPO, 'tests/commands/walker');
+  const dir = join(REPO, 'tests/commands/dx');
   mkdirSync(dir, { recursive: true });
   const file = join(dir, '_selftest-gen.test.ts');
   writeFileSync(file, source);
   try {
-    execFileSync('npx', ['vitest', 'run', '--reporter=dot', 'tests/commands/walker/_selftest-gen.test.ts'], { cwd: REPO, timeout: 120000, stdio: 'pipe' });
+    execFileSync('npx', ['vitest', 'run', '--reporter=dot', 'tests/commands/dx/_selftest-gen.test.ts'], { cwd: REPO, timeout: 120000, stdio: 'pipe' });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -169,14 +169,14 @@ ok('gen_test: rejects assertion-free regression tests', () => {
 // --- graph queries ---
 ok('graph find: locates the editable ability source', () => {
   const hits = graphQuery(REPO, 'find', 'registerEditable');
-  assert(hits.some(h => h.file === 'v2/abilities/editable.ts'), JSON.stringify(hits).slice(0, 300));
+  assert(hits.some(h => h.file === 'frontend/abilities/editable.ts'), JSON.stringify(hits).slice(0, 300));
 });
 ok('graph callers: someone calls registerJump', () => {
   const hits = graphQuery(REPO, 'callers', 'registerJump');
   assert(hits.length >= 1 && hits[0].file.includes('systems'), JSON.stringify(hits).slice(0, 300));
 });
 ok('graph file: symbols of containers.ts', () => {
-  const hits = graphQuery(REPO, 'file', 'v2/systems/containers.ts');
+  const hits = graphQuery(REPO, 'file', 'frontend/systems/containers.ts');
   assert(hits.some(h => h.name === 'registerContainers'), JSON.stringify(hits.map(h => h.name)));
 });
 
@@ -192,47 +192,47 @@ ok('scenario: event-trace assert sees a fired fact', () => {
 });
 
 ok('projection: commands and flows expose focused architecture views', () => {
-  const commandsView = execFileSync(process.execPath, ['walker/projections.mjs', 'show', 'commands', 'detail.less'], { cwd: REPO, encoding: 'utf8' });
+  const commandsView = execFileSync(process.execPath, ['dx/projections/projections.mjs', 'show', 'commands', 'detail.less'], { cwd: REPO, encoding: 'utf8' });
   assert(commandsView.includes("id: 'detail.less'"), commandsView);
-  const flowsView = execFileSync(process.execPath, ['walker/projections.mjs', 'show', 'flows', 'graph.edge.create'], { cwd: REPO, encoding: 'utf8' });
-  assert(flowsView.includes('handlers: v2/systems/graph.ts'), flowsView);
-  const appStartFlow = execFileSync(process.execPath, ['walker/projections.mjs', 'show', 'flows', 'app.start'], { cwd: REPO, encoding: 'utf8' });
+  const flowsView = execFileSync(process.execPath, ['dx/projections/projections.mjs', 'show', 'flows', 'graph.edge.create'], { cwd: REPO, encoding: 'utf8' });
+  assert(flowsView.includes('handlers: frontend/systems/graph.ts'), flowsView);
+  const appStartFlow = execFileSync(process.execPath, ['dx/projections/projections.mjs', 'show', 'flows', 'app.start'], { cwd: REPO, encoding: 'utf8' });
   assert(appStartFlow.includes("render.view.set {place: Places.Stage, key: 'tool-panel:top'} via drawTopPanel()"), appStartFlow);
-  const concept = execFileSync(process.execPath, ['walker/projections.mjs', 'concept', 'top panel collapse'], { cwd: REPO, encoding: 'utf8' });
+  const concept = execFileSync(process.execPath, ['dx/projections/projections.mjs', 'concept', 'top panel collapse'], { cwd: REPO, encoding: 'utf8' });
   assert(concept.includes('view.top.toggle'), concept);
   assert(concept.includes('topFolded: shell.top'), concept);
 });
 
 ok('projection: commands view is a compilable array and round-trips clean', () => {
-  execFileSync(process.execPath, ['walker/projections.mjs', 'generate', 'commands'], { cwd: REPO, encoding: 'utf8' });
-  const view = readFileSync(join(REPO, 'walker/views/commands.proj.ts'), 'utf8');
+  execFileSync(process.execPath, ['dx/projections/projections.mjs', 'generate', 'commands'], { cwd: REPO, encoding: 'utf8' });
+  const view = readFileSync(join(REPO, 'views/commands.proj.ts'), 'utf8');
   assert(view.includes('export const commands: CommandSpec[] = ['), 'view is not a typed array');
   assert(view.includes('@ts-nocheck'), 'view should be @ts-nocheck (valid TS, no sea of red)');
-  assert(!view.includes('// BEGIN command'), 'v2 view should carry no per-slice markers');
+  assert(!view.includes('// BEGIN command'), 'frontend view should carry no per-slice markers');
   assert(!/^\s*\{ id: 'outline\.panel'[, }]/m.test(view), 'payload fold id leaked as a fake command');
   assert(!/^\s*\{ id: 'shell\.top'[, }]/m.test(view), 'payload fold id leaked as a fake command');
   // a no-op sync MUST NOT rewrite source — the watcher saves on every edit.
-  const noop = execFileSync(process.execPath, ['walker/projections.mjs', 'sync', 'commands'], { cwd: REPO, encoding: 'utf8' });
+  const noop = execFileSync(process.execPath, ['dx/projections/projections.mjs', 'sync', 'commands'], { cwd: REPO, encoding: 'utf8' });
   assert(/synced 0 command slice/.test(noop), `no-op sync mutated source: ${noop}`);
 });
 
 ok('projection: editing a field syncs back to the owning source file by id', () => {
-  // isolated scratch repo so we never touch the real v2/ tree.
-  const scratch = mkdtempSync(join(tmpdir(), 'walker-proj-'));
-  const env = { ...process.env, WALKER_PROJECTION_ROOT: scratch };
-  const proj = join(REPO, 'walker/projections.mjs');
+  // isolated scratch repo so we never touch the real frontend/ tree.
+  const scratch = mkdtempSync(join(tmpdir(), 'dx-proj-'));
+  const env = { ...process.env, DX_PROJECTION_ROOT: scratch };
+  const proj = join(REPO, 'dx/projections/projections.mjs');
   try {
-    mkdirSync(join(scratch, 'v2/systems'), { recursive: true });
-    writeFileSync(join(scratch, 'v2/systems/x.ts'),
+    mkdirSync(join(scratch, 'frontend/systems'), { recursive: true });
+    writeFileSync(join(scratch, 'frontend/systems/x.ts'),
       'export function r(s) {\n  s.commands.register([\n    { id: \'x.go\', label: \'Go\', group: \'x\' },\n  ]);\n}\n');
     execFileSync(process.execPath, [proj, 'generate', 'commands'], { cwd: scratch, env, encoding: 'utf8' });
-    const viewFile = join(scratch, 'walker/views/commands.proj.ts');
+    const viewFile = join(scratch, 'views/commands.proj.ts');
     const view = readFileSync(viewFile, 'utf8');
     assert(view.includes("id: 'x.go'"), 'scratch view missing x.go');
     writeFileSync(viewFile, view.replace("group: 'x' }", "group: 'x', shortcut: 'G' }"));
     const out = execFileSync(process.execPath, [proj, 'sync', 'commands'], { cwd: scratch, env, encoding: 'utf8' });
     assert(/synced 1 command slice/.test(out), `expected 1 synced slice: ${out}`);
-    const src = readFileSync(join(scratch, 'v2/systems/x.ts'), 'utf8');
+    const src = readFileSync(join(scratch, 'frontend/systems/x.ts'), 'utf8');
     assert(src.includes("shortcut: 'G'"), `edit did not reach source:\n${src}`);
   } finally {
     rmSync(scratch, { recursive: true, force: true });
@@ -240,15 +240,15 @@ ok('projection: editing a field syncs back to the owning source file by id', () 
 });
 
 ok('projection: adding a new command next to a sibling syncs into its file', () => {
-  const scratch = mkdtempSync(join(tmpdir(), 'walker-proj-add-'));
-  const env = { ...process.env, WALKER_PROJECTION_ROOT: scratch };
-  const proj = join(REPO, 'walker/projections.mjs');
+  const scratch = mkdtempSync(join(tmpdir(), 'dx-proj-add-'));
+  const env = { ...process.env, DX_PROJECTION_ROOT: scratch };
+  const proj = join(REPO, 'dx/projections/projections.mjs');
   try {
-    mkdirSync(join(scratch, 'v2/systems'), { recursive: true });
-    writeFileSync(join(scratch, 'v2/systems/x.ts'),
+    mkdirSync(join(scratch, 'frontend/systems'), { recursive: true });
+    writeFileSync(join(scratch, 'frontend/systems/x.ts'),
       'export function r(s) {\n  s.commands.register([\n    { id: \'x.go\', label: \'Go\', group: \'x\' },\n  ]);\n}\n');
     execFileSync(process.execPath, [proj, 'generate', 'commands'], { cwd: scratch, env, encoding: 'utf8' });
-    const viewFile = join(scratch, 'walker/views/commands.proj.ts');
+    const viewFile = join(scratch, 'views/commands.proj.ts');
     const view = readFileSync(viewFile, 'utf8');
     // add a brand-new command right after the existing sibling x.go
     writeFileSync(viewFile, view.replace(
@@ -256,7 +256,7 @@ ok('projection: adding a new command next to a sibling syncs into its file', () 
       "{ id: 'x.go', label: 'Go', group: 'x' },\n  { id: 'x.stop', label: 'Stop', group: 'x' },"));
     const out = execFileSync(process.execPath, [proj, 'sync', 'commands'], { cwd: scratch, env, encoding: 'utf8' });
     assert(/\+1 new/.test(out), `expected a new command added: ${out}`);
-    const src = readFileSync(join(scratch, 'v2/systems/x.ts'), 'utf8');
+    const src = readFileSync(join(scratch, 'frontend/systems/x.ts'), 'utf8');
     assert(src.includes("id: 'x.stop'"), `new command did not reach source:\n${src}`);
     assert(src.indexOf("x.go") < src.indexOf("x.stop"), 'new command should follow its sibling');
   } finally {
@@ -265,22 +265,22 @@ ok('projection: adding a new command next to a sibling syncs into its file', () 
 });
 
 ok('projection: events view is a compilable interface and round-trips clean', () => {
-  execFileSync(process.execPath, ['walker/projections.mjs', 'generate', 'events'], { cwd: REPO, encoding: 'utf8' });
-  const view = readFileSync(join(REPO, 'walker/views/events.proj.ts'), 'utf8');
+  execFileSync(process.execPath, ['dx/projections/projections.mjs', 'generate', 'events'], { cwd: REPO, encoding: 'utf8' });
+  const view = readFileSync(join(REPO, 'views/events.proj.ts'), 'utf8');
   assert(view.includes('interface CustomEvents {'), 'events view should be an interface block');
-  assert(!view.includes('// BEGIN event'), 'events v2 view should carry no markers');
-  const noop = execFileSync(process.execPath, ['walker/projections.mjs', 'sync', 'events'], { cwd: REPO, encoding: 'utf8' });
+  assert(!view.includes('// BEGIN event'), 'events frontend view should carry no markers');
+  const noop = execFileSync(process.execPath, ['dx/projections/projections.mjs', 'sync', 'events'], { cwd: REPO, encoding: 'utf8' });
   assert(/synced 0 event declaration/.test(noop), `no-op events sync mutated source: ${noop}`);
 });
 
 ok('projection: render can create a shell fold seam across render, snapshot, and CSS', () => {
-  const scratch = mkdtempSync(join(tmpdir(), 'walker-proj-render-'));
-  const env = { ...process.env, WALKER_PROJECTION_ROOT: scratch };
-  const proj = join(REPO, 'walker/projections.mjs');
+  const scratch = mkdtempSync(join(tmpdir(), 'dx-proj-render-'));
+  const env = { ...process.env, DX_PROJECTION_ROOT: scratch };
+  const proj = join(REPO, 'dx/projections/projections.mjs');
   try {
-    mkdirSync(join(scratch, 'v2/systems'), { recursive: true });
-    mkdirSync(join(scratch, 'v2/core'), { recursive: true });
-    writeFileSync(join(scratch, 'v2/systems/main.ts'), [
+    mkdirSync(join(scratch, 'frontend/systems'), { recursive: true });
+    mkdirSync(join(scratch, 'frontend/core'), { recursive: true });
+    writeFileSync(join(scratch, 'frontend/systems/main.ts'), [
       "const LEFT_PANEL_FOLD_ID = 'outline.panel';",
       "const ZEN_FOLD_ID = 'shell.zen';",
       'export function registerMain(system) {',
@@ -299,7 +299,7 @@ ok('projection: render can create a shell fold seam across render, snapshot, and
       '}',
       '',
     ].join('\n'));
-    writeFileSync(join(scratch, 'v2/core/snapshot.ts'), [
+    writeFileSync(join(scratch, 'frontend/core/snapshot.ts'), [
       'export function snapshot() {',
       '  const shellEl = null;',
       '  return {',
@@ -316,14 +316,14 @@ ok('projection: render can create a shell fold seam across render, snapshot, and
       '};',
       '',
     ].join('\n'));
-    writeFileSync(join(scratch, 'v2/styles.css'), [
+    writeFileSync(join(scratch, 'frontend/styles.css'), [
       '.shell { display: grid; }',
       '.shell[data-left-folded="true"] { grid-template-columns: 0 1fr; }',
       '.shell[data-zen="true"] { grid-template: 0 1fr / 0 1fr; }',
       '',
     ].join('\n'));
     execFileSync(process.execPath, [proj, 'generate', 'render'], { cwd: scratch, env, encoding: 'utf8' });
-    const viewFile = join(scratch, 'walker/views/render.proj.md');
+    const viewFile = join(scratch, 'views/render.proj.md');
     const view = readFileSync(viewFile, 'utf8');
     const topFold = [
       '## shell-fold topFolded',
@@ -341,9 +341,9 @@ ok('projection: render can create a shell fold seam across render, snapshot, and
     const out = execFileSync(process.execPath, [proj, 'sync', 'render'], { cwd: scratch, env, encoding: 'utf8' });
     assert(/synced 3 shell fold render seam/.test(out), out);
     assert(/3 changed source file/.test(out), out);
-    const main = readFileSync(join(scratch, 'v2/systems/main.ts'), 'utf8');
-    const snapshot = readFileSync(join(scratch, 'v2/core/snapshot.ts'), 'utf8');
-    const css = readFileSync(join(scratch, 'v2/styles.css'), 'utf8');
+    const main = readFileSync(join(scratch, 'frontend/systems/main.ts'), 'utf8');
+    const snapshot = readFileSync(join(scratch, 'frontend/core/snapshot.ts'), 'utf8');
+    const css = readFileSync(join(scratch, 'frontend/styles.css'), 'utf8');
     assert(main.includes("shell.dataset.topFolded = contexts.fold.folded('shell.top') ? 'true' : 'false';"), main);
     assert(main.includes("id !== 'shell.top'"), main);
     assert(snapshot.includes("topFolded: shellEl?.dataset.topFolded === 'true'"), snapshot);
@@ -357,21 +357,21 @@ ok('projection: render can create a shell fold seam across render, snapshot, and
 });
 
 ok('projection: editing an event type syncs back to source by name', () => {
-  const scratch = mkdtempSync(join(tmpdir(), 'walker-proj-ev-'));
-  const env = { ...process.env, WALKER_PROJECTION_ROOT: scratch };
-  const proj = join(REPO, 'walker/projections.mjs');
+  const scratch = mkdtempSync(join(tmpdir(), 'dx-proj-ev-'));
+  const env = { ...process.env, DX_PROJECTION_ROOT: scratch };
+  const proj = join(REPO, 'dx/projections/projections.mjs');
   try {
-    mkdirSync(join(scratch, 'v2'), { recursive: true });
-    writeFileSync(join(scratch, 'v2/types.ts'),
+    mkdirSync(join(scratch, 'frontend'), { recursive: true });
+    writeFileSync(join(scratch, 'frontend/types.ts'),
       "declare module './x' {\n  interface CustomEvents {\n    'demo.ping': { n: number };\n  }\n}\n");
     execFileSync(process.execPath, [proj, 'generate', 'events'], { cwd: scratch, env, encoding: 'utf8' });
-    const viewFile = join(scratch, 'walker/views/events.proj.ts');
+    const viewFile = join(scratch, 'views/events.proj.ts');
     const view = readFileSync(viewFile, 'utf8');
     assert(view.includes("'demo.ping'"), 'scratch events view missing demo.ping');
     writeFileSync(viewFile, view.replace("'demo.ping': { n: number };", "'demo.ping': { n: number; tag: string };"));
     const out = execFileSync(process.execPath, [proj, 'sync', 'events'], { cwd: scratch, env, encoding: 'utf8' });
     assert(/synced 1 event declaration/.test(out), `expected 1 synced decl: ${out}`);
-    const src = readFileSync(join(scratch, 'v2/types.ts'), 'utf8');
+    const src = readFileSync(join(scratch, 'frontend/types.ts'), 'utf8');
     assert(src.includes('tag: string'), `edit did not reach source:\n${src}`);
   } finally {
     rmSync(scratch, { recursive: true, force: true });
@@ -406,46 +406,46 @@ const stubWs = (dir) => ({
 });
 
 // --- pure fs tools (instant, no boot) ---
-ok('patch: replace + insert_after (green-phase v2 path)', () => {
-  const dir = join(REPO, 'walker/.selftest-tmp');
-  mkdirSync(join(dir, 'v2'), { recursive: true });
-  const file = join(dir, 'v2/x.ts');
+ok('patch: replace + insert_after (green-phase frontend path)', () => {
+  const dir = join(REPO, 'dx/.selftest-tmp');
+  mkdirSync(join(dir, 'frontend'), { recursive: true });
+  const file = join(dir, 'frontend/x.ts');
   writeFileSync(file, 'a\nb\nc\n');
   const tools = new Tools({ ws: stubWs(dir), browser: null, log: () => {} });
   tools.phase = 'green';
-  tools.tool_patch({ path: 'v2/x.ts', op: 'replace', line: 2, count: 1, text: 'B' });
-  tools.tool_patch({ path: 'v2/x.ts', op: 'insert_after', line: 1, text: 'a2' });
+  tools.tool_patch({ path: 'frontend/x.ts', op: 'replace', line: 2, count: 1, text: 'B' });
+  tools.tool_patch({ path: 'frontend/x.ts', op: 'insert_after', line: 1, text: 'a2' });
   assert.equal(readFileSync(file, 'utf8'), 'a\na2\nB\nc\n');
   rmSync(dir, { recursive: true, force: true });
 });
 ok('patch: redirects command-prop edits to set_command', () => {
-  const dir = join(REPO, 'walker/.selftest-tmp3');
-  mkdirSync(join(dir, 'v2'), { recursive: true });
-  writeFileSync(join(dir, 'v2/s.ts'), "x\n      { id: 'choose.invert', label: 'Invert' },\ny\n");
+  const dir = join(REPO, 'dx/.selftest-tmp3');
+  mkdirSync(join(dir, 'frontend'), { recursive: true });
+  writeFileSync(join(dir, 'frontend/s.ts'), "x\n      { id: 'choose.invert', label: 'Invert' },\ny\n");
   const tools = new Tools({ ws: stubWs(dir), browser: null, log: () => {} });
   tools.phase = 'green';
-  const out = tools.tool_patch({ path: 'v2/s.ts', op: 'insert_after', line: 2, text: "shortcut: 'I', input: { key: 'i' }" });
+  const out = tools.tool_patch({ path: 'frontend/s.ts', op: 'insert_after', line: 2, text: "shortcut: 'I', input: { key: 'i' }" });
   assert(/use set_command/.test(out) && /choose\.invert/.test(out), out);
   rmSync(dir, { recursive: true, force: true });
 });
 ok('patch: blocks command-register rewrites from payload shape', () => {
-  const dir = join(REPO, 'walker/.selftest-tmp4');
-  mkdirSync(join(dir, 'v2'), { recursive: true });
-  writeFileSync(join(dir, 'v2/s.ts'), "system('x', ({ contexts }) => {\n  contexts.commands.register([\n    { id: 'detail.less', label: 'Less', group: 'view' },\n  ]);\n});\n");
+  const dir = join(REPO, 'dx/.selftest-tmp4');
+  mkdirSync(join(dir, 'frontend'), { recursive: true });
+  writeFileSync(join(dir, 'frontend/s.ts'), "system('x', ({ contexts }) => {\n  contexts.commands.register([\n    { id: 'detail.less', label: 'Less', group: 'view' },\n  ]);\n});\n");
   const tools = new Tools({ ws: stubWs(dir), browser: null, log: () => {} });
   tools.phase = 'green';
   const out = tools.tool_patch({
-    path: 'v2/s.ts',
+    path: 'frontend/s.ts',
     op: 'replace',
     line: 2,
     text: "    { id: 'detail.less', label: 'Less', group: 'view', shortcut: '[', input: { on: 'keydown', key: '[', prevent: true } },",
   });
   assert(/looks like command specs/.test(out) && /set_command/.test(out), out);
-  assert(readFileSync(join(dir, 'v2/s.ts'), 'utf8').includes('contexts.commands.register(['), 'file must be untouched');
+  assert(readFileSync(join(dir, 'frontend/s.ts'), 'utf8').includes('contexts.commands.register(['), 'file must be untouched');
   rmSync(dir, { recursive: true, force: true });
 });
-ok('patch: refuses a non-v2 path during GREEN', () => {
-  const dir = join(REPO, 'walker/.selftest-tmp2');
+ok('patch: refuses a non-frontend path during GREEN', () => {
+  const dir = join(REPO, 'dx/.selftest-tmp2');
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'y.ts'), 'x\n');
   const tools = new Tools({ ws: stubWs(dir), browser: null, log: () => {} });
@@ -455,9 +455,9 @@ ok('patch: refuses a non-v2 path during GREEN', () => {
   rmSync(dir, { recursive: true, force: true });
 });
 ok('add_css_rule: inserts a selector outside an existing block', () => {
-  const dir = join(REPO, 'walker/.selftest-css');
-  mkdirSync(join(dir, 'v2'), { recursive: true });
-  const file = join(dir, 'v2/styles.css');
+  const dir = join(REPO, 'dx/.selftest-css');
+  mkdirSync(join(dir, 'frontend'), { recursive: true });
+  const file = join(dir, 'frontend/styles.css');
   writeFileSync(file, '.properties input {\n  border: 1px solid red;\n}\n');
   const tools = new Tools({ ws: stubWs(dir), browser: null, log: () => {} });
   tools.phase = 'green';
@@ -473,11 +473,11 @@ ok('add_css_rule: inserts a selector outside an existing block', () => {
   rmSync(dir, { recursive: true, force: true });
 });
 ok('add_edge_reverse: edits graph type and system fixtures', () => {
-  const dir = join(REPO, 'walker/.selftest-edge-reverse');
-  mkdirSync(join(dir, 'v2/model'), { recursive: true });
-  mkdirSync(join(dir, 'v2/systems'), { recursive: true });
-  writeFileSync(join(dir, 'v2/model/graph.ts'), "export type EdgeEntity = { From: string; To: string; Label?: unknown };\nexport type EdgePatch = Partial<Pick<EdgeEntity, 'Label'>>;\n");
-  writeFileSync(join(dir, 'v2/systems/graph.ts'), `import type { Id } from '../types';
+  const dir = join(REPO, 'dx/.selftest-edge-reverse');
+  mkdirSync(join(dir, 'frontend/model'), { recursive: true });
+  mkdirSync(join(dir, 'frontend/systems'), { recursive: true });
+  writeFileSync(join(dir, 'frontend/model/graph.ts'), "export type EdgeEntity = { From: string; To: string; Label?: unknown };\nexport type EdgePatch = Partial<Pick<EdgeEntity, 'Label'>>;\n");
+  writeFileSync(join(dir, 'frontend/systems/graph.ts'), `import type { Id } from '../types';
 declare module '../types' {
   interface CustomEvents {
     'graph.edge.updated': { graphId: Id; id: Id };
@@ -498,8 +498,8 @@ export function registerGraph(system: Registry) {
   const tools = new Tools({ ws: stubWs(dir), browser: null, log: () => {} });
   tools.phase = 'green';
   const out = tools.tool_add_edge_reverse({});
-  const model = readFileSync(join(dir, 'v2/model/graph.ts'), 'utf8');
-  const system = readFileSync(join(dir, 'v2/systems/graph.ts'), 'utf8');
+  const model = readFileSync(join(dir, 'frontend/model/graph.ts'), 'utf8');
+  const system = readFileSync(join(dir, 'frontend/systems/graph.ts'), 'utf8');
   assert(/added graph\.edge\.reverse/.test(out), out);
   assert(model.includes("'Label' | 'From' | 'To'"), model);
   assert(system.includes("'graph.edge.reverse': { id: Id };"), system);
@@ -508,9 +508,9 @@ export function registerGraph(system: Registry) {
   rmSync(dir, { recursive: true, force: true });
 });
 ok('add_fold_toggle: wires fold.toggle command + toolbar affordance', () => {
-  const dir = join(REPO, 'walker/.selftest-fold');
-  mkdirSync(join(dir, 'v2/systems'), { recursive: true });
-  const file = join(dir, 'v2/systems/mock.ts');
+  const dir = join(REPO, 'dx/.selftest-fold');
+  mkdirSync(join(dir, 'frontend/systems'), { recursive: true });
+  const file = join(dir, 'frontend/systems/mock.ts');
   writeFileSync(file, [
     "import type { Registry } from '../core';",
     'export function registerMock(system: Registry) {',
@@ -523,7 +523,7 @@ ok('add_fold_toggle: wires fold.toggle command + toolbar affordance', () => {
   ].join('\n'));
   const tools = new Tools({ ws: stubWs(dir), browser: null, log: () => {} });
   tools.phase = 'green';
-  const out = tools.tool_add_fold_toggle({ system: 'v2/systems/mock.ts', id: 'view.top.toggle', foldId: 'shell.top', key: 't', shortcut: 'T', surface: 'top', glyph: '▾' });
+  const out = tools.tool_add_fold_toggle({ system: 'frontend/systems/mock.ts', id: 'view.top.toggle', foldId: 'shell.top', key: 't', shortcut: 'T', surface: 'top', glyph: '▾' });
   const src = readFileSync(file, 'utf8');
   assert(/added fold toggle 'view\.top\.toggle'/.test(out), out);
   assert(/contributed a 'top' button/.test(out), out);
@@ -534,9 +534,9 @@ ok('add_fold_toggle: wires fold.toggle command + toolbar affordance', () => {
   rmSync(dir, { recursive: true, force: true });
 });
 ok('add_fold_toggle: skips affordance when system lacks contribute (no broken code)', () => {
-  const dir = join(REPO, 'walker/.selftest-fold2');
-  mkdirSync(join(dir, 'v2/systems'), { recursive: true });
-  const file = join(dir, 'v2/systems/mock.ts');
+  const dir = join(REPO, 'dx/.selftest-fold2');
+  mkdirSync(join(dir, 'frontend/systems'), { recursive: true });
+  const file = join(dir, 'frontend/systems/mock.ts');
   writeFileSync(file, [
     "import type { Registry } from '../core';",
     'export function registerMock(system: Registry) {',
@@ -549,7 +549,7 @@ ok('add_fold_toggle: skips affordance when system lacks contribute (no broken co
   ].join('\n'));
   const tools = new Tools({ ws: stubWs(dir), browser: null, log: () => {} });
   tools.phase = 'green';
-  const out = tools.tool_add_fold_toggle({ system: 'v2/systems/mock.ts', id: 'view.left.toggle', foldId: 'outline.panel', key: 'b', shortcut: 'B', surface: 'top' });
+  const out = tools.tool_add_fold_toggle({ system: 'frontend/systems/mock.ts', id: 'view.left.toggle', foldId: 'outline.panel', key: 'b', shortcut: 'B', surface: 'top' });
   const src = readFileSync(file, 'utf8');
   assert(/added fold toggle 'view\.left\.toggle'/.test(out), out);
   assert(/affordance NOT added/.test(out) && /doesn't destructure/.test(out), out);
@@ -558,9 +558,9 @@ ok('add_fold_toggle: skips affordance when system lacks contribute (no broken co
   rmSync(dir, { recursive: true, force: true });
 });
 ok('add_fold_cancellable: registers Escape-to-exit + adds missing origin/contexts', () => {
-  const dir = join(REPO, 'walker/.selftest-cancel');
-  mkdirSync(join(dir, 'v2/systems'), { recursive: true });
-  const file = join(dir, 'v2/systems/mock.ts');
+  const dir = join(REPO, 'dx/.selftest-cancel');
+  mkdirSync(join(dir, 'frontend/systems'), { recursive: true });
+  const file = join(dir, 'frontend/systems/mock.ts');
   writeFileSync(file, [
     "import type { Registry } from '../core';",
     'export function registerMock(system: Registry) {',
@@ -572,7 +572,7 @@ ok('add_fold_cancellable: registers Escape-to-exit + adds missing origin/context
   ].join('\n'));
   const tools = new Tools({ ws: stubWs(dir), browser: null, log: () => {} });
   tools.phase = 'green';
-  const out = tools.tool_add_fold_cancellable({ system: 'v2/systems/mock.ts', foldId: 'shell.zen' });
+  const out = tools.tool_add_fold_cancellable({ system: 'frontend/systems/mock.ts', foldId: 'shell.zen' });
   const src = readFileSync(file, 'utf8');
   assert(/added Escape-to-exit cancellable/.test(out), out);
   assert(src.includes('({ on, contexts, origin }) =>'), src);                     // origin widened in
@@ -582,9 +582,9 @@ ok('add_fold_cancellable: registers Escape-to-exit + adds missing origin/context
   rmSync(dir, { recursive: true, force: true });
 });
 ok('add_fold_cancellable: bails without editing on a ctx => destructure it cannot widen', () => {
-  const dir = join(REPO, 'walker/.selftest-cancel2');
-  mkdirSync(join(dir, 'v2/systems'), { recursive: true });
-  const file = join(dir, 'v2/systems/mock.ts');
+  const dir = join(REPO, 'dx/.selftest-cancel2');
+  mkdirSync(join(dir, 'frontend/systems'), { recursive: true });
+  const file = join(dir, 'frontend/systems/mock.ts');
   const before = [
     "import type { Registry } from '../core';",
     'export function registerMock(system: Registry) {',
@@ -595,16 +595,16 @@ ok('add_fold_cancellable: bails without editing on a ctx => destructure it canno
   writeFileSync(file, before);
   const tools = new Tools({ ws: stubWs(dir), browser: null, log: () => {} });
   tools.phase = 'green';
-  const out = tools.tool_add_fold_cancellable({ system: 'v2/systems/mock.ts', foldId: 'shell.zen' });
+  const out = tools.tool_add_fold_cancellable({ system: 'frontend/systems/mock.ts', foldId: 'shell.zen' });
   assert(/doesn't use a single-line/.test(out), out);
   assert.equal(readFileSync(file, 'utf8'), before, 'file must be untouched on bail');
   rmSync(dir, { recursive: true, force: true });
 });
 ok('locate: returns verbatim numbered context for an anchor', () => {
   const tools = new Tools({ ws: stubWs(REPO), browser: null, log: () => {} });
-  const out = tools.tool_locate({ anchor: "id: 'choose.invert'", dir: 'v2' });
+  const out = tools.tool_locate({ anchor: "id: 'choose.invert'", dir: 'frontend' });
   assert(/choose\.ts/.test(out) && /\d+\|/.test(out), out.slice(0, 200));
-  const paren = tools.tool_locate({ anchor: 'commands.register(', dir: 'v2' });
+  const paren = tools.tool_locate({ anchor: 'commands.register(', dir: 'frontend' });
   assert(!/fatal:/.test(paren) && /commands\.register/.test(paren), paren.slice(0, 200));
 });
 ok('serializeObject: arrow-fn strings stay raw, data quoted', () => {
@@ -617,7 +617,7 @@ ok('serializeObject: arrow-fn strings stay raw, data quoted', () => {
 
 // --- constructor tools, verified in a disposable workspace copy ---
 await okAsync('set_command + add_command take effect in a booted copy', async () => {
-  const ws = new Workspace(REPO, join(REPO, 'walker/.selftest-ws'), () => {});
+  const ws = new Workspace(REPO, join(REPO, 'dx/.selftest-ws'), () => {});
   try {
     ws.create();
     const tools = new Tools({ ws, browser: null, log: () => {} });
@@ -642,17 +642,17 @@ await okAsync('set_command + add_command take effect in a booted copy', async ()
     // no manual declare first, so this also exercises add_command's auto-declare
     // of the command's own request event (else the on(...) wouldn't typecheck).
     const ac = tools.tool_add_command({
-      system: 'v2/systems/graph.ts',
+      system: 'frontend/systems/graph.ts',
       spec: { id: 'graph.selftest.ping', label: 'Selftest ping', group: 'graph' },
       handler: 'void data;',
     });
     assert(/registered 'graph\.selftest\.ping'/.test(ac), `add_command: ${ac}`);
-    const graphSrc = readFileSync(join(ws.dir, 'v2/systems/graph.ts'), 'utf8');
+    const graphSrc = readFileSync(join(ws.dir, 'frontend/systems/graph.ts'), 'utf8');
     assert(/on\('graph\.selftest\.ping'/.test(graphSrc), 'handler not spliced');
     assert(/'graph\.selftest\.ping':\s*void;/.test(graphSrc), 'add_command did not auto-declare its event');
 
     const alias = tools.tool_add_command_alias({
-      system: 'v2/systems/choose.ts',
+      system: 'frontend/systems/choose.ts',
       id: 'choose.selftest.cmd',
       event: 'choose.all',
       key: 'a',
@@ -666,15 +666,15 @@ await okAsync('set_command + add_command take effect in a booted copy', async ()
     assert.equal(aliasProbe.commands.find(c => c.id === 'choose.selftest.cmd')?.key, 'keydown:a+meta', JSON.stringify(aliasProbe.commands));
 
     // declare_event (standalone): a new typed fact.
-    const de = tools.tool_declare_event({ system: 'v2/systems/graph.ts', event: 'graph.selftest.exported', type: '{ json: string }' });
+    const de = tools.tool_declare_event({ system: 'frontend/systems/graph.ts', event: 'graph.selftest.exported', type: '{ json: string }' });
     assert(/declared 'graph\.selftest\.exported'/.test(de), `declare_event: ${de}`);
-    assert(/'graph\.selftest\.exported':\s*\{ json: string \}/.test(readFileSync(join(ws.dir, 'v2/systems/graph.ts'), 'utf8')), 'event not declared in file');
+    assert(/'graph\.selftest\.exported':\s*\{ json: string \}/.test(readFileSync(join(ws.dir, 'frontend/systems/graph.ts'), 'utf8')), 'event not declared in file');
 
     // add_fold_toggle on the REAL main.ts — whose register opens `register([{`
     // (compact first element on the same line). This is the exact shape the live
     // 14b run tripped: the spliced element must stay a sibling, not merge into
     // the existing object literal. The final ws.typecheck() below is the guard.
-    const ft = tools.tool_add_fold_toggle({ system: 'v2/systems/main.ts', id: 'view.selftest.toggle', foldId: 'selftest.panel', key: 'v', shortcut: 'V' });
+    const ft = tools.tool_add_fold_toggle({ system: 'frontend/systems/main.ts', id: 'view.selftest.toggle', foldId: 'selftest.panel', key: 'v', shortcut: 'V' });
     assert(/added fold toggle 'view\.selftest\.toggle'/.test(ft), `add_fold_toggle: ${ft}`);
     const toggle = runProbe(ws.dir, { mode: 'commands', filter: 'view.selftest.toggle' });
     assert.equal(toggle.commands.find(c => c.id === 'view.selftest.toggle')?.key, 'keydown:v', JSON.stringify(toggle.commands));
@@ -682,7 +682,7 @@ await okAsync('set_command + add_command take effect in a booted copy', async ()
     // add_fold_cancellable on the SAME real main.ts: widens its ({…}) destructure
     // with `origin` and splices the Escape-to-exit cancellable. The final
     // ws.typecheck() below is the guard that both edits compile together.
-    const fc = tools.tool_add_fold_cancellable({ system: 'v2/systems/main.ts', foldId: 'shell.zen' });
+    const fc = tools.tool_add_fold_cancellable({ system: 'frontend/systems/main.ts', foldId: 'shell.zen' });
     assert(/added Escape-to-exit cancellable/.test(fc), `add_fold_cancellable: ${fc}`);
 
     // Boot the copy and confirm BOTH command changes are live, AND the new

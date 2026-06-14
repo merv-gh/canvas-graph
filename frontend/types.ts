@@ -2,7 +2,7 @@
  * ============================================================================
  *  MODEL MAP — read top-down; stop when you have enough.
  * ============================================================================
- *  v2 is a handful of nouns. Grasp these and you have the whole model; the full
+ *  frontend is a handful of nouns. Grasp these and you have the whole model; the full
  *  type for each is defined further down, in this same order (high → low), so
  *  you can skim the ladder and only descend into the detail you need.
  *
@@ -65,7 +65,7 @@
  *    - Declare `PropertyDef<T, Patch>[]` on `EntityDef.properties`.
  *    - The `configurable` ability + the properties modal render them.
  *
- *  DEVTOOL / TEST surface on `window.v2`
+ *  DEVTOOL / TEST surface on `window.app`
  *    - Augment `CustomExposable` near the system; call `ctx.expose('key', value)`.
  *
  *  ----------------------------------------------------------------------------
@@ -172,7 +172,7 @@ export interface CustomExposable {}
 
 export type ModalVisual = 'panel' | 'command' | 'properties';
 
-/** Framework events guaranteed by the v2 runtime. Domain events live next to
+/** Framework events guaranteed by the frontend runtime. Domain events live next to
  *  their owners via `CustomEvents` augmentation. */
 interface BuiltinEvents {
   /** Fired once after every system / ability / feature has started. */

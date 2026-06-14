@@ -1,4 +1,4 @@
-# walker feature projections
+# dx feature projections
 
 Feature projections are editable local views over source-owned slices. They are
 for context compression, not new ownership: the source files keep the structure,
@@ -18,16 +18,16 @@ npm run dx -- project generate command-ui
 npm run dx -- project generate render
 ```
 
-- `commands` -> `walker/views/commands.proj.ts`: every command spec from
+- `commands` -> `views/commands.proj.ts`: every command spec from
   `contexts.commands.register(...)` as one compilable `CommandSpec[]` array.
-- `events` -> `walker/views/events.proj.ts`: editable event declaration lines
+- `events` -> `views/events.proj.ts`: editable event declaration lines
   from `CustomEvents` / `BuiltinEvents`.
-- `flows` -> `walker/views/flows.proj.md`: read-only event streams from origin
+- `flows` -> `views/flows.proj.md`: read-only event streams from origin
   command/event through handlers and downstream emits, plus an event index.
-- `command-ui` -> `walker/views/command-ui.proj.ts`: editable
+- `command-ui` -> `views/command-ui.proj.ts`: editable
   `contribute({ surface, command, ... })` affordance objects as one
   `SystemAffordance[]` array.
-- `render` -> `walker/views/render.proj.md`: editable shell fold render seams:
+- `render` -> `views/render.proj.md`: editable shell fold render seams:
   dataset mirrors in `main.ts`, `ui.shell` snapshot fields, and CSS rules.
 
 ### commands: a compilable array (no markers)
@@ -37,11 +37,11 @@ The `commands` projection is one valid TypeScript file — a single
 `// ── <file> ──` header per group:
 
 ```ts
-// @ts-nocheck — @walker-projection commands v2. Source files still own these slices.
-import type { CommandSpec } from '../../v2/types';
+// @ts-nocheck — @dx-projection commands frontend. Source files still own these slices.
+import type { CommandSpec } from '../frontend/types';
 
 export const commands: CommandSpec[] = [
-  // ── v2/systems/detail.ts ──
+  // ── frontend/systems/detail.ts ──
   { id: 'detail.less', label: 'Less detail (fold / zoom out)', group: 'view' },
   ...
 ];
@@ -67,9 +67,9 @@ The `events` projection is also one valid TypeScript file — the `CustomEvents`
 re-emitted as `interface` blocks grouped by source file:
 
 ```ts
-// @ts-nocheck — @walker-projection events v2. Source declares these in `declare module '../types'`.
+// @ts-nocheck — @dx-projection events frontend. Source declares these in `declare module '../types'`.
 interface CustomEvents {
-  // ── v2/systems/foldable.ts ──
+  // ── frontend/systems/foldable.ts ──
   'fold.toggle': { id: string };
   ...
 }
@@ -87,9 +87,9 @@ between systems:
 
 ```md
 ## stream graph.container.delete
-origin commands: graph.container.delete (v2/systems/containers.ts:260)
+origin commands: graph.container.delete (frontend/systems/containers.ts:260)
 - graph.container.delete
-  handler v2/systems/containers.ts:295 emits container.deleted
+  handler frontend/systems/containers.ts:295 emits container.deleted
     - container.deleted -> no static handlers
 ```
 
@@ -110,11 +110,11 @@ inside each `contribute({ ... })` call; sync re-wraps it with the original call,
 indentation, and semicolon.
 
 ```ts
-// @ts-nocheck — @walker-projection command-ui v2.
-import type { SystemAffordance } from '../../v2/types';
+// @ts-nocheck — @dx-projection command-ui frontend.
+import type { SystemAffordance } from '../frontend/types';
 
 export const commandUi: SystemAffordance[] = [
-  // ── v2/systems/main.ts ──
+  // ── frontend/systems/main.ts ──
   { surface: 'top', command: 'view.zen', kind: 'button', text: '⛶', order: 80 },
 ];
 ```
@@ -142,9 +142,9 @@ css:
 
 Sync writes:
 
-- `v2/systems/main.ts`: `shell.dataset.<field>` and the `fold.changed` guard.
-- `v2/core/snapshot.ts`: `ui.shell.<field>` and the assertion expression map.
-- `v2/styles.css`: CSS rules for `[data-<field>]`.
+- `frontend/systems/main.ts`: `shell.dataset.<field>` and the `fold.changed` guard.
+- `frontend/core/snapshot.ts`: `ui.shell.<field>` and the assertion expression map.
+- `frontend/styles.css`: CSS rules for `[data-<field>]`.
 
 Add a new `## shell-fold <field>` block next to the existing shell folds to
 create the whole render seam. This is the missing view layer for panel-collapse
@@ -160,7 +160,7 @@ source regenerate the projection.
   and `render` by shell field; these identifiers must stay unique, and each slice
   must keep its identifying field.
 - A no-op sync (generate, then sync with no edits) must leave source byte-for-byte
-  unchanged; the watcher relies on this. Guarded by `node walker/selftest.mjs`.
+  unchanged; the watcher relies on this. Guarded by `node dx/selftest.mjs`.
 - Projection sync is intentionally narrow: it replaces known slices, not whole
   files.
 - `flows` and `data` are read-only because they are derived from commands,
@@ -192,10 +192,18 @@ the current text-slice sync should fake.
 
 ## Adding another projection
 
-Add one definition in `walker/projections.mjs`:
+Add the concept in three small pieces:
+
+- `dx/projections/file-to-projection/<name>.mjs`: collect source slices and render
+  the view file.
+- `dx/projections/projections-to-file/<name>.mjs`: parse edited projection slices
+  and sync them back, if the projection is editable.
+- `dx/projections/registry.mjs`: wire the projection definition.
+
+The registry shape is:
 
 ```js
-projections.set('name', {
+['name', {
   name: 'name',
   outFile,
   description,
@@ -203,7 +211,7 @@ projections.set('name', {
   sync,
   watchFiles,
   count,
-});
+}]
 ```
 
 The useful shape is:

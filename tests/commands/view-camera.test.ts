@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { nodeRect } from '../../v2/core';
-import { Places } from '../../v2/types';
-import { bootV2, settle } from './v2-testkit';
+import { nodeRect } from '../../frontend/core';
+import { Places } from '../../frontend/types';
+import { bootApp, settle } from './testkit';
 
 const containsRect = (
   outer: { x: number; y: number; w: number; h: number },
@@ -16,9 +16,9 @@ const waitCamera = async () => {
   await settle();
 };
 
-describe('v2 gentle item camera', () => {
+describe('frontend gentle item camera', () => {
   it('animates a pan-only reveal when the item fits at the current zoom', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     const node = ctx.graphs.current.createNode({
       Label: { text: 'far' },
       Position: { x: 1050, y: 300 },
@@ -36,7 +36,7 @@ describe('v2 gentle item camera', () => {
   });
 
   it('zooms out a little when the item fits the stage but not the comfort zone', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     const node = ctx.graphs.current.createNode({
       Label: { text: 'wide' },
       Position: { x: 450, y: 300 },
@@ -51,7 +51,7 @@ describe('v2 gentle item camera', () => {
   });
 
   it('zooms out more when panning cannot create enough room', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     const node = ctx.graphs.current.createNode({
       Label: { text: 'huge' },
       Position: { x: 450, y: 300 },

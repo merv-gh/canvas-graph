@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bootV2, runCommand, settle } from './v2-testkit';
+import { bootApp, runCommand, settle } from './testkit';
 
 /**
  * Happy-path journey: a fresh user does the most ordinary thing — create a
@@ -13,15 +13,15 @@ import { bootV2, runCommand, settle } from './v2-testkit';
  *   - DX still passes at every checkpoint.
  *   - the captured state matches expectations.
  */
-describe('v2 journey smoke (happy path)', () => {
-  const expectClean = async (ctx: ReturnType<typeof bootV2>, label: string) => {
+describe('frontend journey smoke (happy path)', () => {
+  const expectClean = async (ctx: ReturnType<typeof bootApp>, label: string) => {
     const issues = ctx.dx?.run() ?? [];
     const errors = issues.filter(i => i.level === 'error');
     expect(errors, `${label}: ${errors.map(e => `${e.rule}: ${e.message}`).join('; ')}`).toEqual([]);
   };
 
   it('creates → edges → edits → configures → deletes → switches without DX drift', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     await expectClean(ctx, 'boot');
 
@@ -74,9 +74,9 @@ describe('v2 journey smoke (happy path)', () => {
   });
 
   it('introspect reflects current shape — adding a node shows up immediately', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
-    const { introspect } = await import('../../v2/core');
+    const { introspect } = await import('../../frontend/core');
     const snap = introspect(ctx);
     // Node + edge entities are declared; collections list them; selectable et al
     // declare themselves on the node entity.

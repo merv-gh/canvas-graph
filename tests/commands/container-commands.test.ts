@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { bootV2, runCommand, settle } from './v2-testkit';
-import type { Id, ItemRef } from '../../v2/types';
+import { bootApp, runCommand, settle } from './testkit';
+import type { Id, ItemRef } from '../../frontend/types';
 
 type ContainerLite = { id: Id; kind: 'container'; Label: { text: string }; Children: ItemRef[]; Position: { x: number; y: number } };
 
-const containers = (ctx: ReturnType<typeof bootV2>) =>
+const containers = (ctx: ReturnType<typeof bootApp>) =>
   ctx.graphs.current.itemsOfKind<ContainerLite>('container');
 
-describe('v2 containers', () => {
+describe('frontend containers', () => {
   it('creates a container, focuses it, and lists it in hierarchy targets', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.container.create');
     await settle();
@@ -20,7 +20,7 @@ describe('v2 containers', () => {
   });
 
   it('drag-cascades children: moving a container moves nested nodes by the same delta', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
 
     // Two nodes + one container — keep ids stable by creating in order.
@@ -47,7 +47,7 @@ describe('v2 containers', () => {
   });
 
   it('cycle guard rejects nesting a container into its own descendant', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.container.create');
     await settle();
@@ -67,7 +67,7 @@ describe('v2 containers', () => {
   });
 
   it('remove-child detaches the ref and unfocuses the parent linkage', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.container.create');
     await settle();
@@ -82,7 +82,7 @@ describe('v2 containers', () => {
   });
 
   it('deleting a container deletes its child nodes and emits container.deleted', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.container.create');
     await settle();
@@ -103,7 +103,7 @@ describe('v2 containers', () => {
   });
 
   it('boots with zero DX errors when container ability is fully wired', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     const errors = (ctx.dx?.run() ?? []).filter(i => i.level === 'error');
     expect(errors).toEqual([]);

@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { bootV2, settle } from '../v2-testkit';
+import { bootApp, settle } from '../testkit';
 
-const stylesText = readFileSync(resolve(process.cwd(), 'v2/styles.css'), 'utf8');
+const stylesText = readFileSync(resolve(process.cwd(), 'frontend/styles.css'), 'utf8');
 
 /**
  * Sibling of canvas-disappears-on-fold. Original symptom: toggling zen mode
@@ -34,7 +34,7 @@ describe('regression: zen mode keeps stage visible', () => {
   });
 
   it('toggling zen marks the shell and keeps the stage mounted', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
 
     // Replay the recorded user gesture — the `\` shortcut fires fold.toggle

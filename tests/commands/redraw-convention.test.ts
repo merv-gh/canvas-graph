@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { factScope } from '../../v2/core';
-import { FACT_SUFFIXES } from '../../v2/types';
-import { bootV2, runCommand, settle } from './v2-testkit';
+import { factScope } from '../../frontend/core';
+import { FACT_SUFFIXES } from '../../frontend/types';
+import { bootApp, runCommand, settle } from './testkit';
 
-describe('v2 redraw suffix convention', () => {
+describe('frontend redraw suffix convention', () => {
   it('classifies every canonical fact suffix and ignores non-facts', () => {
     expect(FACT_SUFFIXES).toContain('.created');
     expect(factScope('graph.node.created')).toBe('both');
@@ -19,7 +19,7 @@ describe('v2 redraw suffix convention', () => {
   });
 
   it('coalesces N rapid node creates into a single render flush', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     const before = ctx.render!.flushes();
     const N = 30;
@@ -39,7 +39,7 @@ describe('v2 redraw suffix convention', () => {
   // `render.view.set` scope (stage:nodes, stage:overlays, left:outline, …) flips
   // at most twice (one initial + one post-burst).
   it('100 rapid node creates → ≤ 2 render.view.set per scope', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     const setCalls = new Map<string, number>();
     ctx.bus.on('render.view.set', ({ place, key }) => {
@@ -56,7 +56,7 @@ describe('v2 redraw suffix convention', () => {
   }, 15000);
 
   it('triggers a redraw for any past-tense event, even one not hardcoded before', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     const before = ctx.render!.flushes();
     // graph.edge.updated was in the old regex; emit it directly to confirm scheduler
@@ -68,7 +68,7 @@ describe('v2 redraw suffix convention', () => {
   });
 
   it('does not redraw for request (imperative) events alone', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     const before = ctx.render!.flushes();
     // .create is a request, not a fact. The graph system will turn it into .created

@@ -6,7 +6,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-const EXCLUDES = ['node_modules', '.git', 'walker', 'test-results', 'coverage', 'explore-out', 'cases', '.claude', '.code-review-graph'];
+const EXCLUDES = ['node_modules', '.git', 'dx', 'test-results', 'coverage', '.claude', '.code-review-graph'];
 
 export class Workspace {
   constructor(repoRoot, dir, log = () => {}) {
@@ -22,10 +22,10 @@ export class Workspace {
     const args = ['-a', ...EXCLUDES.flatMap(e => ['--exclude', e]), `${this.repoRoot}/`, `${this.dir}/`];
     execFileSync('rsync', args);
     symlinkSync(join(this.repoRoot, 'node_modules'), join(this.dir, 'node_modules'));
-    mkdirSync(join(this.dir, 'tests/commands/walker'), { recursive: true });
+    mkdirSync(join(this.dir, 'tests/commands/dx'), { recursive: true });
     this.git('init', '-q');
     this.git('add', '-A');
-    this.git('-c', 'user.email=walker@local', '-c', 'user.name=walker', 'commit', '-qm', 'base');
+    this.git('-c', 'user.email=dx@local', '-c', 'user.name=dx', 'commit', '-qm', 'base');
     this.log(`[ws] created ${this.dir}`);
   }
 
@@ -35,15 +35,15 @@ export class Workspace {
 
   diff() {
     this.git('add', '-A');
-    return this.git('-c', 'user.email=walker@local', '-c', 'user.name=walker', 'diff', '--cached');
+    return this.git('-c', 'user.email=dx@local', '-c', 'user.name=dx', 'diff', '--cached');
   }
 
   async applySetup(setupName) {
     if (!setupName) return;
-    const mod = await import(join(this.repoRoot, 'walker/setup', `${setupName}.mjs`));
+    const mod = await import(join(this.repoRoot, 'dx/setup', `${setupName}.mjs`));
     await mod.setup(this.dir);
     this.git('add', '-A');
-    this.git('-c', 'user.email=walker@local', '-c', 'user.name=walker', 'commit', '-qm', `setup: ${setupName}`);
+    this.git('-c', 'user.email=dx@local', '-c', 'user.name=dx', 'commit', '-qm', `setup: ${setupName}`);
     this.log(`[ws] setup applied: ${setupName}`);
   }
 
@@ -83,7 +83,7 @@ export class Workspace {
 
   async startVite(port) {
     await this.stopVite();
-    this.vite = spawn('npx', ['vite', 'v2', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
+    this.vite = spawn('npx', ['vite', 'frontend', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
       cwd: this.dir, stdio: ['ignore', 'pipe', 'pipe'], detached: false,
     });
     let out = '';

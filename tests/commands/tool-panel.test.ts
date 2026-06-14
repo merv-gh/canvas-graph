@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { bootV2, runCommand, settle } from './v2-testkit';
+import { bootApp, runCommand, settle } from './testkit';
 
 describe('floating tool panels', () => {
   it('renders the top toolbar as a movable collapsible stage panel', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
 
     const panel = () => document.querySelector('.tool-panel[data-panel-id="top"]') as HTMLElement | null;
@@ -33,7 +33,7 @@ describe('floating tool panels', () => {
   });
 
   it('collapses the top tool panel while zen is active', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
 
     expect(runCommand(ctx, 'view.zen')).toBe(true);

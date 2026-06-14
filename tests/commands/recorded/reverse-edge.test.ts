@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { bootV2, runCommand, settle } from '../v2-testkit';
+import { bootApp, runCommand, settle } from '../testkit';
 
 describe("Reverse Edge Direction", () => {
   it('replays the sequence and asserts', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     ctx.sim.replay([{ name: "graph.node.create", data: {"id":"e1"}, at: 0 }]);
     await settle();

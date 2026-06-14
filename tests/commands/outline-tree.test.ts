@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { bootV2, runCommand, settle } from './v2-testkit';
-import { snapshot } from '../../v2/core';
+import { bootApp, runCommand, settle } from './testkit';
+import { snapshot } from '../../frontend/core';
 
 /** The outline is the mission-critical "nested navigation" surface. These tests
  *  assert that containment is *visible in the left pane*, not just stored —
@@ -9,12 +9,12 @@ import { snapshot } from '../../v2/core';
  *  harness can see the nesting. */
 
 const section = (id: string) => document.querySelector(`.outline-section[data-collection-id="${id}"]`);
-const containerId = (ctx: ReturnType<typeof bootV2>) =>
+const containerId = (ctx: ReturnType<typeof bootApp>) =>
   (ctx.graphs.current.itemsOfKind('container')[0] as { id: string }).id;
 
-describe('v2 outline — nested navigation', () => {
+describe('frontend outline — nested navigation', () => {
   it('lists a loose node flat in the Nodes section', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.node.create');
     await settle();
@@ -26,7 +26,7 @@ describe('v2 outline — nested navigation', () => {
   });
 
   it('nests a node under its container in the unified Outline tree', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.container.create');
     await settle();
@@ -61,7 +61,7 @@ describe('v2 outline — nested navigation', () => {
   });
 
   it('folding a container hides its nested children', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.container.create');
     await settle();
@@ -81,7 +81,7 @@ describe('v2 outline — nested navigation', () => {
   });
 
   it('selecting a nested row drives selection + decorations through the full ref', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.container.create');
     await settle();

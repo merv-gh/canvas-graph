@@ -27,6 +27,7 @@ declare module '../types' {
     /** Authoring actions inside the assert modal. */
     'debug.assert.pick': { code: string; matcher: string; expected: string };
     'debug.assert.search': { query: string };
+    'debug.assert.edit': { code: string };
     'debug.assert.clear-asserts': void;
     'debug.assert.copy': void;
     'debug.assert.download': void;
@@ -39,7 +40,7 @@ declare module '../types' {
   }
 }
 
-/** Devtools/test surface exposed via window.v2.debug. Lets a Playwright test
+/** Devtools/test surface exposed via window.app.debug. Lets a Playwright test
  *  (or a browser-console session) drive the recorder + snapshot directly,
  *  without going through the UI. */
 export type DebugApi = {
@@ -54,7 +55,7 @@ export type DebugApi = {
   generate(assertions?: Assertion[], title?: string): string;
 };
 
-const STORAGE_KEY = 'v2.debug.enabled';
+const STORAGE_KEY = 'frontend.debug.enabled';
 
 export function registerDebug(system: Registry) {
   system('debug', (ctx) => {
@@ -163,6 +164,14 @@ export function registerDebug(system: Registry) {
         hidden: true,
         input: { on: 'input', selector: '.debug-assert .debug-search' },
         payload: ({ target }) => ({ query: (target as HTMLInputElement).value }),
+      },
+      {
+        id: 'debug.assert.edit',
+        label: 'Edit generated test',
+        group: 'debug',
+        hidden: true,
+        input: { on: 'input', selector: '.debug-assert .debug-code' },
+        payload: ({ target }) => ({ code: (target as HTMLTextAreaElement).value }),
       },
       {
         id: 'debug.assert.clear-asserts',
@@ -326,9 +335,6 @@ export function registerDebug(system: Registry) {
       code.className = 'debug-code';
       code.spellcheck = false;
       code.value = manualOverride ?? traceToTest({ trace, assertions });
-      // Listen for edits → store the override so Copy/Download write the
-      // user's version, not the auto-regenerated one.
-      code.addEventListener('input', () => { manualOverride = code.value; });
       right.append(code);
 
       const actions = document.createElement('div');
@@ -385,6 +391,10 @@ export function registerDebug(system: Registry) {
       modalBody.querySelector('.debug-tree')?.remove();
       modalBody.querySelector('.debug-tree-empty')?.remove();
       modalBody.append(buildTree(tree, query));
+    });
+
+    on('debug.assert.edit', ({ code }) => {
+      manualOverride = code;
     });
 
     on('debug.assert.clear-asserts', () => {

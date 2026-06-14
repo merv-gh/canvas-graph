@@ -1,4 +1,4 @@
-# walker tasks
+# dx tasks
 
 Format: `## <id>` then `- key: value` bullets, then free-text prompt (this is what
 the model sees — keep it under ~120 words). Keys: `kind` (bug | feature | walk |
@@ -14,7 +14,7 @@ Browser/layout tasks should wait for the layout oracle path.
 - kind: layout
 - disabled: true
 - delegate: blocked:layout-oracle-churn
-- files: v2/systems/command-modal.ts, v2/abilities/configurable.ts
+- files: frontend/systems/command-modal.ts, frontend/abilities/configurable.ts
 - title: Properties modal opens but keyboard focus stays on the node
 
 Opening item properties leaves focus on the node article instead of the modal's
@@ -24,13 +24,13 @@ modal is open and visible, but document.activeElement is still the node and
 ui.modal.focusedField is null. Use app_probe to see it, then gen_layout_test with
 desired (red) asserts {"focus":".modal input"} and
 {"path":"ui.modal.focusedField","op":"truthy"} — both fail today. GREEN: when the
-properties modal opens, move focus to its first field (edit v2/ only).
+properties modal opens, move focus to its first field (edit frontend/ only).
 
 ## edge-inline-edit
 - kind: feature
 - disabled: true
 - delegate: blocked:test-constructor-needed
-- files: v2/model/entities.ts, v2/abilities/editable.ts
+- files: frontend/model/entities.ts, frontend/abilities/editable.ts
 - title: Edge labels cannot be edited inline
 
 Node titles edit inline (Enter or double-click on `[data-editable-title]`), but
@@ -51,7 +51,7 @@ You are exploring a live graph app. Use `app command <id>` to drive it
 (editing.node.create, editing.edge.create, view.zen, choose.all, layout.apply.tidy,
 palette.open …), `app snapshot ui` / `app snapshot graph` to observe state,
 `app screenshot` for layout numbers, `app eval` for anything else
-(window.v2 = the app context). After each command check: did ui.rendered counts,
+(window.app = the app context). After each command check: did ui.rendered counts,
 selection, or places sizes change the way the command promises? Save every
 suspected bug with `note` (symptom + the exact commands to reproduce). Call
 `done` with a summary when you have walked at least 10 distinct commands.
@@ -60,7 +60,7 @@ suspected bug with `note` (symptom + the exact commands to reproduce). Call
 - kind: feature
 - disabled: true
 - delegate: blocked:setup-constructor-needed
-- files: v2/features.ts, v2/systems/graph.ts
+- files: frontend/features.ts, frontend/systems/graph.ts
 - title: Duplicate the selected node
 - command: editing.node.duplicate
 
@@ -68,7 +68,7 @@ Add command `editing.node.duplicate` (group `editing`, shortcut `D`, available
 when a node is selected): creates a new node copying the selected node's Label
 text and Size, positioned slightly offset (e.g. +24,+24), and the new node
 becomes the selection. Reuse the existing `editing.node.create` →
-`graph.node.create` flow (see nodeLifecycle in v2/features.ts) — a duplicate is
+`graph.node.create` flow (see nodeLifecycle in frontend/features.ts) — a duplicate is
 a create with a prefilled draft. Red test: create a node, rename intent not
 needed — duplicate it, assert `graph.nodes` length 2 and both share the same
 `Label.text`, and `selection.count` is 1.
@@ -77,7 +77,7 @@ needed — duplicate it, assert `graph.nodes` length 2 and both share the same
 - kind: feature
 - disabled: true
 - delegate: blocked:constructor-needed
-- files: v2/systems/graph.ts, v2/features.ts
+- files: frontend/systems/graph.ts, frontend/features.ts
 - title: Insert a node in the middle of the selected edge
 - command: editing.edge.split
 
@@ -93,7 +93,7 @@ run the command, assert `graph.nodes` length 3 and `graph.edges` length 2.
 - kind: bug
 - disabled: true
 - delegate: blocked:collapse-model-split
-- files: v2/model/entities.ts, v2/index.html, v2/styles.css
+- files: frontend/model/entities.ts, frontend/index.html, frontend/styles.css
 - title: Simple nodes should render only a centered title
 
 Simple graph nodes show body/meta text like `e1` and expose a collapse icon even
@@ -106,7 +106,7 @@ node" from future rich/markdown nodes or define when collapse is meaningful.
 - kind: layout
 - disabled: true
 - delegate: blocked:browser-focus-oracle
-- files: v2/abilities/editable.ts, v2/model/entities.ts
+- files: frontend/abilities/editable.ts, frontend/model/entities.ts
 - title: Inline node title editing should keep focus and commit full titles
 
 Node title editing from the canvas should accept multi-character edits without
@@ -119,15 +119,15 @@ string after commit.
 - kind: bug
 - disabled: true
 - delegate: blocked:browser-focus-oracle
-- files: v2/abilities/configurable.ts
+- files: frontend/abilities/configurable.ts
 - title: Editing a node's Title in the properties modal loses focus after one char
 
-NOTE: disabled for the walker (jsdom) queue — focus loss is a BROWSER behavior a
+NOTE: disabled for the dx (jsdom) queue — focus loss is a BROWSER behavior a
 jsdom scenario can't drive. The observability seam is laid: `ui.modal.focusedField`
 (which field has focus) and `ui.modal.fields` (current values). This task is ready
 for the Playwright layout-oracle (README roadmap), not the local loop yet.
 Symptom: the node properties modal (⚙ / item.properties.open) Title field
-(property id `title`, v2/model/entities.ts) commits per keystroke
+(property id `title`, frontend/model/entities.ts) commits per keystroke
 (properties.item.input → item.update → redraw) and the redraw rebuilds the modal
 body, blurring the input — you can't type a full title. RED (browser): focus the
 Title input, dispatch two input events, assert document.activeElement stays it
@@ -139,7 +139,7 @@ refocus after search).
 - kind: feature
 - disabled: true
 - delegate: blocked:tool-panel-registry
-- files: v2/systems/tool-panel.ts, v2/systems/outline.ts, v2/types.ts
+- files: frontend/systems/tool-panel.ts, frontend/systems/outline.ts, frontend/types.ts
 - title: Left panel should be render-place configurable tool panel
 
 Refactor the outline/left panel into a tool panel whose render place is
@@ -152,7 +152,7 @@ seam and assert both render places.
 - kind: feature
 - disabled: true
 - delegate: blocked:tool-panel-registry
-- files: v2/systems/debug.ts, v2/systems/tool-panel.ts
+- files: frontend/systems/debug.ts, frontend/systems/tool-panel.ts
 - title: Debug/event log should be a top-right tool panel when enabled
 
 Extract debug/log UI into a separate tool panel anchored top right. It should
@@ -164,7 +164,7 @@ field like `ui.toolPanels.debug.mounted`.
 - kind: feature
 - disabled: true
 - delegate: blocked:tool-panel-registry
-- files: v2/systems/view-zoom.ts, v2/systems/tool-panel.ts
+- files: frontend/systems/view-zoom.ts, frontend/systems/tool-panel.ts
 - title: Zoom and fit buttons should live in a bottom-right tool panel
 
 Move `view.zoom.*`, `view.fit.all`, and `view.fit.selected` affordances out of
@@ -176,7 +176,7 @@ named tool panels rather than only `surface:'top'`.
 - kind: feature
 - disabled: true
 - delegate: blocked:picker-or-popover-seam
-- files: v2/systems/layout.ts, v2/systems/tool-panel.ts
+- files: frontend/systems/layout.ts, frontend/systems/tool-panel.ts
 - title: Layout buttons should collapse into one layout picker
 
 Replace separate Tidy/Radial/Grid toolbar buttons with one Layout button. Clicking
@@ -188,7 +188,7 @@ palette/keyboard. Needs a deterministic popover/picker seam before delegation.
 - kind: feature
 - disabled: true
 - delegate: blocked:tool-panel-registry
-- files: v2/systems/log.ts, v2/styles.css, v2/core/snapshot.ts
+- files: frontend/systems/log.ts, frontend/styles.css, frontend/core/snapshot.ts
 - title: Event log panel needs collapse shortcut and UI affordance
 - command: view.log.toggle
 
@@ -201,7 +201,7 @@ a stable shell/snapshot seam.
 ## container-collapse-icon
 - kind: bug
 - disabled: true
-- files: v2/systems/outline.ts, v2/systems/containers.ts
+- files: frontend/systems/outline.ts, frontend/systems/containers.ts
 - title: Container collapse icon is dead
 
 T3 localization task. The outline/container collapse affordance renders but
@@ -213,7 +213,7 @@ before delegating the fix.
 ## panel-click-focus-fit
 - kind: feature
 - disabled: true
-- files: v2/systems/outline.ts, v2/systems/view-zoom.ts
+- files: frontend/systems/outline.ts, frontend/systems/view-zoom.ts
 - title: Clicking a panel item should focus and fit the item
 
 T3 design call. `view.fit.item` already exists. Decide whether this behavior is
@@ -224,7 +224,7 @@ through the browser/layout oracle.
 ## graph-properties-name
 - kind: feature
 - disabled: true
-- files: v2/systems/graph.ts, v2/model/entities.ts
+- files: frontend/systems/graph.ts, frontend/model/entities.ts
 - title: Graph should have editable Name properties
 
 T3 seam task. The properties modal is data-shape driven, but graph itself has no
@@ -235,7 +235,7 @@ handle the UI.
 ## feature-generator-wizard
 - kind: feature
 - disabled: true
-- files: walker/gen.mjs, walker/dx.mjs
+- files: dx/gen.mjs, dx/dx.mjs
 - title: Feature/system generator wizard for future delegation
 
 Tooling/meta-lever. Build a DX wizard that asks for system/feature/ability name,
@@ -247,11 +247,11 @@ then smaller models fill the generated blanks.
 - kind: feature
 - disabled: true
 - delegate: blocked:big-model-seam
-- files: v2/systems/item-toolbar.ts, v2/types.ts
+- files: frontend/systems/item-toolbar.ts, frontend/types.ts
 - title: Floating movable tool panels
 
 T4 foundation. The top toolbar is now a movable/collapsible stage tool panel in
-`v2/systems/tool-panel.ts`. Remaining work is the general registry/API for other
+`frontend/systems/tool-panel.ts`. Remaining work is the general registry/API for other
 panels plus persisted positions. `item-toolbar.ts` remains a partial precedent
 for entity-local handles.
 
@@ -259,7 +259,7 @@ for entity-local handles.
 - kind: feature
 - disabled: true
 - delegate: blocked:mutation-journal-seam
-- files: v2/core, v2/systems/graph.ts, v2/systems/containers.ts
+- files: frontend/core, frontend/systems/graph.ts, frontend/systems/containers.ts
 - title: Implement history, undo, and redo
 
 Add a command/event history seam that records reversible graph/container/item
@@ -271,7 +271,7 @@ strategy. Start with graph node/edge create/update/delete, then containers.
 - kind: feature
 - disabled: true
 - delegate: blocked:io-seam
-- files: v2/systems/graph.ts, v2/core/io.ts
+- files: frontend/systems/graph.ts, frontend/core/io.ts
 - title: Persist graphs to localStorage or IndexedDB
 
 T4 Principle 9 debt. Add an IO system with `io.read`, `io.write`, and
@@ -282,7 +282,7 @@ Only delegate after the persistence seam and serialization contract are clear.
 - kind: feature
 - disabled: true
 - delegate: blocked:serializer-contract
-- files: v2/systems/graph.ts, v2/core/io.ts
+- files: frontend/systems/graph.ts, frontend/core/io.ts
 - title: Import graph JSON matching the export format
 - command: graph.import.json
 
@@ -295,7 +295,7 @@ selected/fitted. Needs malformed JSON tests before delegation.
 - kind: feature
 - disabled: true
 - delegate: blocked:url-state-seam
-- files: v2/systems/scenario.ts, v2/systems/view-zoom.ts
+- files: frontend/systems/scenario.ts, frontend/systems/view-zoom.ts
 - title: Deep links for graph, selection, zoom, and pan
 
 T4. `?scenario=` keystroke macros exist, but state links are new. Define URL
@@ -306,7 +306,7 @@ on boot, and update URL after stable changes without noisy history spam.
 - kind: feature
 - disabled: true
 - delegate: blocked:model-schema-design
-- files: v2/model/entities.ts, v2/model/graph.ts
+- files: frontend/model/entities.ts, frontend/model/graph.ts
 - title: Add image, video, and link node types
 
 Introduce typed node variants for image, video, and link content. This needs a
@@ -318,7 +318,7 @@ cards per type.
 - kind: feature
 - disabled: true
 - delegate: blocked:description-schema-and-renderer
-- files: v2/model/entities.ts, v2/abilities/configurable.ts
+- files: frontend/model/entities.ts, frontend/abilities/configurable.ts
 - title: Markdown descriptions for all node types
 
 Add a markdown description field to node types and render it safely. Needs a
@@ -330,7 +330,7 @@ path has a red test and deterministic renderer seam.
 - kind: bug
 - disabled: true
 - delegate: blocked:layout-measurement-seam
-- files: v2/systems/layout.ts, v2/systems/containers.ts, v2/core/view.ts
+- files: frontend/systems/layout.ts, frontend/systems/containers.ts, frontend/core/view.ts
 - title: Layout should use actual node sizes when containers are collapsed
 
 Layout currently reasons from model sizes, but collapsed containers and rendered
@@ -341,7 +341,7 @@ container extents. Needs browser/layout assertions before delegation.
 ## universal-search
 - kind: feature
 - disabled: true
-- files: v2/systems/command-modal.ts, v2/systems/jump.ts
+- files: frontend/systems/command-modal.ts, frontend/systems/jump.ts
 - title: Universal search in the palette
 
 T4. Palette currently searches commands only. Add a `searchSources` registry for
@@ -351,7 +351,7 @@ from `jump.ts`, then rank with a small fuzzy scorer.
 ## split-app-framework
 - kind: feature
 - disabled: true
-- files: v2/core.ts, v2/systems/index.ts, v2/model
+- files: frontend/core.ts, frontend/systems/index.ts, frontend/model
 - title: Split graph app from reusable framework
 
 T4 architecture. Separate framework (`core/`, generic systems) from graph app

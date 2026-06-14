@@ -2,20 +2,20 @@ const fs = require('fs');
 const path = require('path');
 const { test, expect } = require('@playwright/test');
 
-test('v2 routes DOM events through input adapter only', async () => {
-  const v2Dir = path.join(__dirname, '..', 'v2');
+test('frontend routes DOM events through input adapter only', async () => {
+  const frontendDir = path.join(__dirname, '..', 'frontend');
   const files = [];
   const walk = dir => fs.readdirSync(dir, { withFileTypes: true }).forEach(entry => {
     const abs = path.join(dir, entry.name);
     if (entry.isDirectory()) walk(abs);
     else if (entry.name.endsWith('.ts')) files.push(abs);
   });
-  walk(v2Dir);
+  walk(frontendDir);
   const listeners = files.flatMap(file => fs
     .readFileSync(file, 'utf8')
     .split('\n')
     .filter(line => line.includes('addEventListener') && !line.trim().startsWith('*'))
-    .map(line => `${path.relative(v2Dir, file)}: ${line.trim()}`));
+    .map(line => `${path.relative(frontendDir, file)}: ${line.trim()}`));
 
   expect(listeners).toHaveLength(4);
   expect(listeners).toContain("app.ts: window.addEventListener('DOMContentLoaded', () => {");
@@ -24,7 +24,7 @@ test('v2 routes DOM events through input adapter only', async () => {
   expect(listeners.some(line => line.includes('core/keyboard.ts:') && line.includes("input.addEventListener('input'"))).toBe(true);
 });
 
-test('v2 help rejects duplicate shortcuts without saving', async ({ page }) => {
+test('frontend help rejects duplicate shortcuts without saving', async ({ page }) => {
   await page.goto('/');
   await page.locator('[data-command="help.open"]').click();
 
@@ -38,16 +38,16 @@ test('v2 help rejects duplicate shortcuts without saving', async ({ page }) => {
   await expect(helpRow).toHaveClass(/has-conflict/);
   await helpShortcut.evaluate(input => input.blur());
 
-  await expect.poll(() => page.evaluate(() => window.v2.contexts.commands.get('help.open').shortcut)).toBe('?');
+  await expect.poll(() => page.evaluate(() => window.app.contexts.commands.get('help.open').shortcut)).toBe('?');
 
   await helpShortcut.fill('H');
   await expect(helpShortcut).not.toHaveClass(/is-conflict/);
   await helpShortcut.evaluate(input => input.blur());
 
-  await expect.poll(() => page.evaluate(() => window.v2.contexts.commands.get('help.open').shortcut)).toBe('H');
+  await expect.poll(() => page.evaluate(() => window.app.contexts.commands.get('help.open').shortcut)).toBe('H');
 });
 
-test('v2 configurable ability opens node properties', async ({ page }) => {
+test('frontend configurable ability opens node properties', async ({ page }) => {
   await page.goto('/');
   const nodeTemplate = await page.locator('#tpl-node').evaluate(template => template.innerHTML);
   expect(nodeTemplate).not.toContain('node.collapse.toggle');
@@ -70,6 +70,8 @@ test('v2 configurable ability opens node properties', async ({ page }) => {
   await page.locator('.properties [data-field="width"]').fill('220');
   await expect.poll(() => node.evaluate(el => getComputedStyle(el).width)).toBe('220px');
 
-  await page.locator('.properties [data-field="collapsed"]').check();
+  await expect(page.locator('.properties [data-field="collapsed"]')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Close' }).click();
+  await toolbar.locator('[data-command="item.collapse.toggle"]').click();
   await expect(node).toHaveClass(/collapsed/);
 });

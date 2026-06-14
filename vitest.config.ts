@@ -8,13 +8,13 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       all: true,
-      include: ['v2/**/*.ts'],
+      include: ['frontend/**/*.ts'],
       exclude: [
-        'v2/app.ts',
-        'v2/types.ts',
+        'frontend/app.ts',
+        'frontend/types.ts',
       ],
       reporter: ['text', 'json-summary', 'html'],
-      reportsDirectory: 'coverage/v2',
+      reportsDirectory: 'coverage/frontend',
       thresholds: {
         functions: 80,
         lines: 80,

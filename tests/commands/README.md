@@ -1,15 +1,15 @@
 # Command Tests
 
-Fast v2 tests live here. They boot the real v2 registries in jsdom with in-memory IO,
+Fast frontend tests live here. They boot the real frontend registries in jsdom with in-memory IO,
 then drive the app through commands and events.
 
 Pattern:
 
 ```ts
-import { bootV2, runCommand, settle } from './v2-testkit';
+import { bootApp, runCommand, settle } from './testkit';
 
 it('does the thing', async () => {
-  const ctx = bootV2();
+  const ctx = bootApp();
   runCommand(ctx, 'editing.node.create');
   await settle();
   expect(ctx.graphs.current.nodes()).toHaveLength(1);
@@ -26,6 +26,6 @@ Scripts:
 - `npm run test:commands:coverage`
 - `npm test` runs command coverage first, then Playwright.
 
-Coverage is v2-only and enforced at 80% global thresholds for statements,
+Coverage is frontend-only and enforced at 80% global thresholds for statements,
 functions, and lines. Branch coverage is reported too; keep raising it as branchy
 fallback paths become clearer to test.

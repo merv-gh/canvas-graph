@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bootV2, settle } from '../v2-testkit';
+import { bootApp, settle } from '../testkit';
 
 const trace = [
   { name: "editing.node.create", data: {"Label":{"text":"Node 1"}}, at: 0 },
@@ -12,7 +12,7 @@ const trace = [
 
 describe('recorded case', () => {
   it('replays and asserts', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
 
     ctx.sim.replay(trace);

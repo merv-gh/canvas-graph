@@ -1,6 +1,6 @@
 // Tool implementations with TDD phase guards. Every tool returns a short string
 // (pre-trimmed by the loop). Guards are mechanical: RED writes only under
-// tests/commands/walker/, GREEN writes only under v2/. No shell tool exists.
+// tests/commands/dx/, GREEN writes only under frontend/. No shell tool exists.
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
@@ -94,8 +94,8 @@ export class Tools {
   }
 
   writeAllowed(rel) {
-    if (this.phase === 'red') return rel.startsWith('tests/commands/walker/');
-    if (this.phase === 'green') return rel.startsWith('v2/');
+    if (this.phase === 'red') return rel.startsWith('tests/commands/dx/');
+    if (this.phase === 'green') return rel.startsWith('frontend/');
     return false;
   }
 
@@ -138,7 +138,7 @@ export class Tools {
 
   /** Anchor finder: grep + verbatim numbered context, ready for patch/edit.
    *  Closes the "model paraphrases text it never saw" failure mode. */
-  tool_locate({ anchor, dir = 'v2' }) {
+  tool_locate({ anchor, dir = 'frontend' }) {
     const { rel } = this.safePath(dir);
     const res = this.ws.run('git', ['grep', '-nF', '-I', anchor, '--', rel], 20000);
     if (!res.output.trim()) return `no matches for: ${anchor}`;
@@ -157,13 +157,13 @@ export class Tools {
   }
 
   tool_projection({ name = 'commands', filter = '' }) {
-    const script = join(this.ws.repoRoot, 'walker/projections.mjs');
+    const script = join(this.ws.repoRoot, 'dx/projections/projections.mjs');
     try {
       const output = execFileSync(process.execPath, [script, 'show', name, filter].filter(Boolean), {
         cwd: this.ws.dir,
         encoding: 'utf8',
         timeout: 20000,
-        env: { ...process.env, WALKER_PROJECTION_ROOT: this.ws.dir },
+        env: { ...process.env, DX_PROJECTION_ROOT: this.ws.dir },
         maxBuffer: 1024 * 1024,
       });
       const lines = output.trimEnd().split('\n');
@@ -187,7 +187,7 @@ export class Tools {
    *  this codebase, so the literal is greppable and the injection is mechanical —
    *  the model supplies intent, not file surgery. */
   tool_set_command({ id, props }) {
-    if (this.phase !== 'green') return 'set_command is GREEN-phase only (it edits v2/)';
+    if (this.phase !== 'green') return 'set_command is GREEN-phase only (it edits frontend/)';
     const parsed = this.parseSpec(props);
     if (!parsed || typeof parsed !== 'object') return 'set_command: props must be JSON, e.g. {"shortcut":"I","input":{"on":"keydown","key":"i","prevent":true}}';
     const ALLOWED = new Set(['shortcut', 'input', 'group', 'hidden', 'event']);
@@ -196,13 +196,13 @@ export class Tools {
       const taskText = `${this.task?.id ?? ''}\n${this.task?.title ?? ''}\n${this.task?.prompt ?? ''}`;
       const zenEscape = id === 'app.cancel.escape' || /zen|escape|cancel/i.test(taskText);
       const hint = zenEscape
-        ? " For Escape exits zen/fold tasks, do not edit app.cancel.escape; use add_fold_cancellable {\"system\":\"v2/systems/main.ts\",\"foldId\":\"shell.zen\"}."
+        ? " For Escape exits zen/fold tasks, do not edit app.cancel.escape; use add_fold_cancellable {\"system\":\"frontend/systems/main.ts\",\"foldId\":\"shell.zen\"}."
         : '';
       return `set_command: unsupported props ${bad.join(', ')} (allowed: shortcut, input, group, hidden, event). Functions (available/payload) need edit/patch.${hint}`;
     }
-    const res = this.ws.run('git', ['grep', '-n', `id: '${id}'`, '--', 'v2'], 20000);
+    const res = this.ws.run('git', ['grep', '-n', `id: '${id}'`, '--', 'frontend'], 20000);
     const hit = res.output.split('\n').filter(Boolean)[0];
-    if (!hit) return `set_command: no command literal with id '${id}' found under v2/`;
+    if (!hit) return `set_command: no command literal with id '${id}' found under frontend/`;
     const m = hit.match(/^([^:]+):(\d+):/);
     const file = m[1], lineNo = Number(m[2]);
     const abs = join(this.ws.dir, file);
@@ -264,7 +264,7 @@ export class Tools {
    *  if given, an `on(event, handler)` right after it. Mechanical placement; the
    *  model supplies the handler logic (or omits it and patches separately). */
   tool_add_command({ system, spec, handler }) {
-    if (this.phase !== 'green') return 'add_command is GREEN-phase only (it edits v2/)';
+    if (this.phase !== 'green') return 'add_command is GREEN-phase only (it edits frontend/)';
     const parsedSpec = this.parseSpec(spec);
     if (!parsedSpec || !parsedSpec.id) return 'add_command: spec must include at least {id, label}, e.g. {"id":"graph.edge.reverse","label":"Reverse edge","group":"edge"}';
     const { abs, rel } = this.safePath(system);
@@ -272,11 +272,11 @@ export class Tools {
     if (!existsSync(abs)) return `no such file: ${system}`;
     const src = readFileSync(abs, 'utf8');
     const idPattern = `\\bid\\s*:\\s*['"]${parsedSpec.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"]`;
-    const existing = this.ws.run('git', ['grep', '-nE', idPattern, '--', 'v2'], 20000);
+    const existing = this.ws.run('git', ['grep', '-nE', idPattern, '--', 'frontend'], 20000);
     if (existing.ok && existing.output.trim()) {
       const taskText = `${this.task?.id ?? ''}\n${this.task?.title ?? ''}\n${this.task?.prompt ?? ''}`;
       const hint = parsedSpec.id === 'app.cancel.escape' || /zen|escape|cancel/i.test(taskText)
-        ? ' For Escape exits zen/fold tasks, keep app.cancel.escape as-is and call add_fold_cancellable {"system":"v2/systems/main.ts","foldId":"shell.zen"}.'
+        ? ' For Escape exits zen/fold tasks, keep app.cancel.escape as-is and call add_fold_cancellable {"system":"frontend/systems/main.ts","foldId":"shell.zen"}.'
         : '';
       const first = existing.output.trim().split('\n')[0];
       return `add_command: '${parsedSpec.id}' already exists at ${first} — use set_command to modify data props.${hint}`;
@@ -333,9 +333,9 @@ export class Tools {
    *  failure where a model creates a brand-new event (`foo.cmd`) instead of
    *  aliasing the real behavior (`foo`). */
   tool_add_command_alias({ system, id, event, key, shortcut, group = 'alias', ctrl = false, shift = false, alt = false, meta = false }) {
-    if (this.phase !== 'green') return 'add_command_alias is GREEN-phase only (it edits v2/)';
+    if (this.phase !== 'green') return 'add_command_alias is GREEN-phase only (it edits frontend/)';
     if (!system || !id || !event || !key) {
-      return 'add_command_alias: send {system,id,event,key,shortcut,ctrl?,shift?,alt?,meta?}; example {"system":"v2/systems/choose.ts","id":"choose.all.cmd","event":"choose.all","key":"a","shortcut":"Cmd+A","meta":true}';
+      return 'add_command_alias: send {system,id,event,key,shortcut,ctrl?,shift?,alt?,meta?}; example {"system":"frontend/systems/choose.ts","id":"choose.all.cmd","event":"choose.all","key":"a","shortcut":"Cmd+A","meta":true}';
     }
     return this.tool_add_command({
       system,
@@ -372,7 +372,7 @@ export class Tools {
    *  '../types'` block after the imports if the file has none. Covers the
    *  "emit a new fact" half of feature tasks (export, etc.). */
   tool_declare_event({ system, event, type = 'void' }) {
-    if (this.phase !== 'green') return 'declare_event is GREEN-phase only (it edits v2/)';
+    if (this.phase !== 'green') return 'declare_event is GREEN-phase only (it edits frontend/)';
     if (!event) return 'declare_event needs {system, event, type?}';
     const { abs, rel } = this.safePath(system);
     if (!this.writeAllowed(rel)) return this.phaseDenied(rel);
@@ -394,9 +394,9 @@ export class Tools {
    *  add_command's boot-proven register-array placement, then optionally
    *  contributes a toolbar button when the target system exposes `contribute`. */
   tool_add_fold_toggle({ system, id, foldId, key, shortcut, label, group, surface, glyph, order }) {
-    if (this.phase !== 'green') return 'add_fold_toggle is GREEN-phase only (it edits v2/)';
+    if (this.phase !== 'green') return 'add_fold_toggle is GREEN-phase only (it edits frontend/)';
     if (!system || !id || !foldId || !key) {
-      return 'add_fold_toggle needs {system, id, foldId, key, shortcut?, surface?, glyph?}, e.g. {"system":"v2/systems/main.ts","id":"view.left.toggle","foldId":"outline.panel","key":"b","shortcut":"B"}. The fold.toggle event + payload are wired for you.';
+      return 'add_fold_toggle needs {system, id, foldId, key, shortcut?, surface?, glyph?}, e.g. {"system":"frontend/systems/main.ts","id":"view.left.toggle","foldId":"outline.panel","key":"b","shortcut":"B"}. The fold.toggle event + payload are wired for you.';
     }
     const spec = {
       id,
@@ -446,8 +446,8 @@ export class Tools {
    *  are destructured, so the model supplies only {system, foldId}. Composes with
    *  add_fold_toggle: toggle creates the fold, this makes Escape close it. */
   tool_add_fold_cancellable({ system, foldId }) {
-    if (this.phase !== 'green') return 'add_fold_cancellable is GREEN-phase only (it edits v2/)';
-    if (!system || !foldId) return 'add_fold_cancellable needs {system, foldId}, e.g. {"system":"v2/systems/main.ts","foldId":"shell.zen"} — makes Escape exit that folded region.';
+    if (this.phase !== 'green') return 'add_fold_cancellable is GREEN-phase only (it edits frontend/)';
+    if (!system || !foldId) return 'add_fold_cancellable needs {system, foldId}, e.g. {"system":"frontend/systems/main.ts","foldId":"shell.zen"} — makes Escape exit that folded region.';
     const { abs, rel } = this.safePath(system);
     if (!this.writeAllowed(rel)) return this.phaseDenied(rel);
     if (!existsSync(abs)) return `no such file: ${system}`;
@@ -482,8 +482,8 @@ export class Tools {
     return `added Escape-to-exit cancellable for fold '${foldId}' in ${rel}${missing.length ? ` (added ${missing.join(', ')} to the ctx destructure)` : ''}.\nrun_test to confirm.`;
   }
 
-  tool_add_css_rule({ path = 'v2/styles.css', selector, declarations, after }) {
-    if (this.phase !== 'green') return 'add_css_rule is GREEN-phase only (it edits v2/)';
+  tool_add_css_rule({ path = 'frontend/styles.css', selector, declarations, after }) {
+    if (this.phase !== 'green') return 'add_css_rule is GREEN-phase only (it edits frontend/)';
     if (!selector || !declarations) return 'add_css_rule needs {selector, declarations, after?}';
     const { abs, rel } = this.safePath(path);
     if (!this.writeAllowed(rel)) return this.phaseDenied(rel);
@@ -531,10 +531,10 @@ export class Tools {
   }
 
   tool_add_edge_reverse() {
-    if (this.phase !== 'green') return 'add_edge_reverse is GREEN-phase only (it edits v2/)';
+    if (this.phase !== 'green') return 'add_edge_reverse is GREEN-phase only (it edits frontend/)';
 
-    const graphModel = this.safePath('v2/model/graph.ts');
-    const graphSystem = this.safePath('v2/systems/graph.ts');
+    const graphModel = this.safePath('frontend/model/graph.ts');
+    const graphSystem = this.safePath('frontend/systems/graph.ts');
     let modelSrc = readFileSync(graphModel.abs, 'utf8');
     if (modelSrc.includes("export type EdgePatch = Partial<Pick<EdgeEntity, 'Label'>>;")) {
       modelSrc = modelSrc.replace(
@@ -549,7 +549,7 @@ export class Tools {
     const src = () => lines.join('\n');
     if (!/id:\s*['"]graph\.edge\.reverse['"]/.test(src())) {
       const regIdx = lines.findIndex(l => /contexts\.commands\.register\(\[/.test(l));
-      if (regIdx < 0) return 'add_edge_reverse: no contexts.commands.register([ found in v2/systems/graph.ts';
+      if (regIdx < 0) return 'add_edge_reverse: no contexts.commands.register([ found in frontend/systems/graph.ts';
       lines.splice(regIdx + 1, 0,
         "      { id: 'graph.edge.reverse', label: 'Reverse edge', group: 'edge', shortcut: 'Shift+E', available: () => !!selectedEdgeId(), payload: () => ({ id: selectedEdgeId() }) },",
       );
@@ -572,15 +572,15 @@ export class Tools {
     this.log('[tool] add_edge_reverse');
     return [
       'added graph.edge.reverse command, handler, and EdgePatch From/To typing.',
-      'Files: v2/systems/graph.ts, v2/model/graph.ts.',
+      'Files: frontend/systems/graph.ts, frontend/model/graph.ts.',
       'Now run_test to confirm.',
     ].join('\n');
   }
 
   tool_add_graph_export_json() {
-    if (this.phase !== 'green') return 'add_graph_export_json is GREEN-phase only (it edits v2/)';
+    if (this.phase !== 'green') return 'add_graph_export_json is GREEN-phase only (it edits frontend/)';
 
-    const graphSystem = this.safePath('v2/systems/graph.ts');
+    const graphSystem = this.safePath('frontend/systems/graph.ts');
     if (!this.writeAllowed(graphSystem.rel)) return this.phaseDenied(graphSystem.rel);
     let lines = readFileSync(graphSystem.abs, 'utf8').split('\n');
     const src = () => lines.join('\n');
@@ -590,7 +590,7 @@ export class Tools {
 
     if (!/id:\s*['"]graph\.export\.json['"]/.test(src())) {
       const regIdx = lines.findIndex(l => /contexts\.commands\.register\(\[/.test(l));
-      if (regIdx < 0) return 'add_graph_export_json: no contexts.commands.register([ found in v2/systems/graph.ts';
+      if (regIdx < 0) return 'add_graph_export_json: no contexts.commands.register([ found in frontend/systems/graph.ts';
       lines.splice(regIdx + 1, 0,
         "      { id: 'graph.export.json', label: 'Export graph JSON', group: 'graph' },",
       );
@@ -617,19 +617,19 @@ export class Tools {
     this.log('[tool] add_graph_export_json');
     return [
       'added graph.export.json command, graph.exported event, serializer, and guarded clipboard write.',
-      'File: v2/systems/graph.ts.',
+      'File: frontend/systems/graph.ts.',
       'Now run_test to confirm.',
     ].join('\n');
   }
 
   tool_add_container_delete_cascade() {
-    if (this.phase !== 'green') return 'add_container_delete_cascade is GREEN-phase only (it edits v2/)';
+    if (this.phase !== 'green') return 'add_container_delete_cascade is GREEN-phase only (it edits frontend/)';
 
-    const containersSystem = this.safePath('v2/systems/containers.ts');
+    const containersSystem = this.safePath('frontend/systems/containers.ts');
     if (!this.writeAllowed(containersSystem.rel)) return this.phaseDenied(containersSystem.rel);
     const source = readFileSync(containersSystem.abs, 'utf8');
     if (/emit\('graph\.node\.delete', \{ id: childRef\.id \}\)/.test(source)) {
-      return 'add_container_delete_cascade: v2/systems/containers.ts already cascades child node deletes';
+      return 'add_container_delete_cascade: frontend/systems/containers.ts already cascades child node deletes';
     }
     const oldText = [
       '      // Release children (they keep position; lose parent link).',
@@ -647,19 +647,19 @@ export class Tools {
       '      });',
       '      // If this container was nested, detach from its own parent.',
     ].join('\n');
-    if (!source.includes(oldText)) return 'add_container_delete_cascade: expected child-release block not found in v2/systems/containers.ts';
+    if (!source.includes(oldText)) return 'add_container_delete_cascade: expected child-release block not found in frontend/systems/containers.ts';
     writeFileSync(containersSystem.abs, source.replace(oldText, nextText));
     this.log('[tool] add_container_delete_cascade');
     return [
-      'added recursive container child deletion in v2/systems/containers.ts.',
+      'added recursive container child deletion in frontend/systems/containers.ts.',
       'Child containers emit graph.container.delete; child nodes emit graph.node.delete.',
       'Now run_test to confirm.',
     ].join('\n');
   }
 
   phaseDenied(rel) {
-    if (this.phase === 'red') return `phase red: writing ${rel} not allowed — RED only writes tests/commands/walker/. If your red test already FAILS, just run_test it; the harness advances you to GREEN automatically.`;
-    return `phase ${this.phase}: writing ${rel} is not allowed (green→v2/ only)`;
+    if (this.phase === 'red') return `phase red: writing ${rel} not allowed — RED only writes tests/commands/dx/. If your red test already FAILS, just run_test it; the harness advances you to GREEN automatically.`;
+    return `phase ${this.phase}: writing ${rel} is not allowed (green→frontend/ only)`;
   }
 
   tool_edit({ path, old, new: next }) {
@@ -790,7 +790,7 @@ export class Tools {
 
   /** RED-phase: write the failing layout spec after the oracle confirms it fails now. */
   async tool_gen_layout_test({ title, spec }) {
-    if (this.phase !== 'red') return 'gen_layout_test is RED-phase only. GREEN edits v2/ and re-runs run_test.';
+    if (this.phase !== 'red') return 'gen_layout_test is RED-phase only. GREEN edits frontend/ and re-runs run_test.';
     if (!this.browser) return 'gen_layout_test: layout oracle unavailable (no browser session)';
     const parsed = this.parseSpec(spec);
     if (!parsed || !Array.isArray(parsed.asserts) || !parsed.asserts.length) {
@@ -800,12 +800,12 @@ export class Tools {
     const { pass, results } = await this.browser.probe(parsed);
     const lines = results.map(r => `${r.ok ? 'PASS' : 'FAIL'}: ${r.label}${r.ok ? '' : ` — actual: ${JSON.stringify(r.actual)}`}`);
     if (pass) return `These asserts already PASS on current code — not a red test. Choose asserts for the currently-broken behavior.\n${lines.join('\n')}`;
-    const rel = `tests/commands/walker/${this.task.id}.layout.json`;
+    const rel = `tests/commands/dx/${this.task.id}.layout.json`;
     if (!this.writeAllowed(rel)) return this.phaseDenied(rel);
     const { abs } = this.safePath(rel);
     mkdirSync(dirname(abs), { recursive: true });
     writeFileSync(abs, `${JSON.stringify({ title: title ?? this.task.id, steps: parsed.steps ?? [], asserts: parsed.asserts }, null, 2)}\n`);
-    return `wrote ${rel} — layout oracle is RED (${results.filter(r => !r.ok).length}/${results.length} asserts fail):\n${lines.join('\n')}\nNow run_test it to advance to GREEN, then edit v2/.`;
+    return `wrote ${rel} — layout oracle is RED (${results.filter(r => !r.ok).length}/${results.length} asserts fail):\n${lines.join('\n')}\nNow run_test it to advance to GREEN, then edit frontend/.`;
   }
 
   async tool_app({ action, arg = '' }) {
@@ -871,8 +871,8 @@ export class Tools {
     if (this.phase !== 'red') {
       return [
         'gen_test is RED-phase only. GREEN keeps the existing failing test; do not rewrite it.',
-        `Current test: ${this.taskTestPath ?? this.defaultTestPath ?? 'tests/commands/walker/<task>.test.ts'}.`,
-        'Use projection/inspect/scenario to identify the remaining failed assertion, then edit v2/ with the constructor tool (set_command/add_command/etc.) and run_test again.',
+        `Current test: ${this.taskTestPath ?? this.defaultTestPath ?? 'tests/commands/dx/<task>.test.ts'}.`,
+        'Use projection/inspect/scenario to identify the remaining failed assertion, then edit frontend/ with the constructor tool (set_command/add_command/etc.) and run_test again.',
       ].join('\n');
     }
     const parsed = normalizeScenarioSpec(this.parseSpec(spec));
@@ -893,7 +893,7 @@ export class Tools {
       if (missing.length) return `gen_test: this task requires scenario token(s): ${missing.join(', ')}. Include them in steps/asserts.`;
     }
     const badCss = (parsed.asserts ?? []).find(a => a.css && a.op && !['count', 'exists', 'textContains'].includes(a.op));
-    if (badCss) return `gen_test: css asserts support op=count|exists|textContains only. To assert CSS source text (rules like dashed border), use {"file":"v2/styles.css","matches":"..."} with no steps.`;
+    if (badCss) return `gen_test: css asserts support op=count|exists|textContains only. To assert CSS source text (rules like dashed border), use {"file":"frontend/styles.css","matches":"..."} with no steps.`;
     const validation = runProbe(this.ws.dir, { mode: 'scenario', steps: parsed.steps ?? [], asserts: [] });
     if (validation.error) return `gen_test: scenario validation failed: ${validation.error}`;
     // UNAVAILABLE = broken preconditions (a spec bug) — block. UNKNOWN commands
@@ -925,7 +925,7 @@ export class Tools {
       ].join('\n');
     }
     const unknownNotes = unknown.map(s => `note: ${s.step} — ${s.detail} (allowed because this new feature command is named in the task card; the generated test asserts it runs)`);
-    const source = genTest({ title: title ?? 'walker case', steps: parsed.steps ?? [], asserts: parsed.asserts ?? [] });
+    const source = genTest({ title: title ?? 'dx case', steps: parsed.steps ?? [], asserts: parsed.asserts ?? [] });
     const target = this.defaultTestPath;
     const { abs, rel } = this.safePath(target);
     mkdirSync(dirname(abs), { recursive: true });

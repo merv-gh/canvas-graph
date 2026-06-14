@@ -1,4 +1,4 @@
-# walker done
+# dx done
 
 Completed tasks live here so `TASKS.md` stays the active local-model queue.
 Keep enough context to understand what landed, but do not keep setup/re-break
@@ -6,7 +6,7 @@ scripts for finished work.
 
 ## zen-canvas
 - kind: bug
-- files: v2/styles.css, v2/systems/main.ts
+- files: frontend/styles.css, frontend/systems/main.ts
 - title: Zen mode makes the canvas disappear
 - done: 2026-06-13
 - recorded: tests/commands/recorded/canvas-disappears-on-zen.test.ts
@@ -17,7 +17,7 @@ keep the canvas mounted and visible.
 
 ## choose-invert-shortcut
 - kind: feature
-- files: v2/systems/choose.ts
+- files: frontend/systems/choose.ts
 - title: choose.invert has no keyboard shortcut
 - done: 2026-06-13
 - recorded: tests/commands/recorded/choose-invert-shortcut.test.ts
@@ -28,43 +28,43 @@ side effects.
 
 ## detail-shortcuts
 - kind: feature
-- files: v2/systems/detail.ts
+- files: frontend/systems/detail.ts
 - title: detail.less / detail.more have no keyboard shortcuts
 - demo: A;A;A;Z;wait;[;wait;]
 
 Commands `detail.less` (fold selection / zoom out) and `detail.more` exist but
 are palette-only — no keyboard binding, breaking the keyboard-first rule. Add
-shortcuts in v2/systems/detail.ts: `[` for detail.less, `]` for detail.more —
+shortcuts in frontend/systems/detail.ts: `[` for detail.less, `]` for detail.more —
 set both `shortcut` label AND `input: { on: 'keydown', key: '[', prevent: true }`
 (read the file; copy the input shape from any bound command via
 inspect commands). Red scenario asserts:
 {"command":"detail.less","has":"input.key","value":"["} and
 {"command":"detail.more","has":"input.key","value":"]"} — both fail today;
-gen_test renders them. GREEN: edit v2/systems/detail.ts only.
+gen_test renders them. GREEN: edit frontend/systems/detail.ts only.
 
 ## properties-title
 - kind: bug
-- files: v2/styles.css
+- files: frontend/styles.css
 - title: Properties modal title field looks uneditable (invisible input)
 
 Properties Title uses `input.editable-inline`, whose global border is transparent
 at rest; users cannot tell it is editable. This is a CSS affordance bug only.
 Do NOT create/select/open modal commands. RED: no steps; use `gen_test` with a
-file assert on `v2/styles.css` requiring a `.properties input.editable-inline`
+file assert on `frontend/styles.css` requiring a `.properties input.editable-inline`
 rule with visible dashed `border-bottom`. GREEN: use `add_css_rule` after
 `.properties input`, selector `.properties input.editable-inline`, declaration
 `border-bottom: 1px dashed var(--line-strong)`; then `run_test`.
 
 ## reverse-edge
 - kind: feature
-- files: v2/systems/graph.ts
+- files: frontend/systems/graph.ts
 - title: Reverse the selected edge
 - command: graph.edge.reverse
 
 There is no way to flip an edge's direction. Add command `graph.edge.reverse`
 (group `edge`, shortcut `Shift+E`, available only when an edge is selected) that
 swaps the selected edge's `From` and `To`, then emits `graph.edge.updated`. Use
-`inspect commands edge` and `graph file v2/systems/graph.ts`; `graph.edge.delete`
+`inspect commands edge` and `graph file frontend/systems/graph.ts`; `graph.edge.delete`
 is the closest sibling (`selectedEdgeId()`, `available`, `payload`). Red scenario
 must use EVENTS for setup, not invented commands:
 `{"event":"graph.node.create","data":{"id":"e1"}}`,
@@ -76,7 +76,7 @@ use `add_edge_reverse {}`; it adds the command, handler, and EdgePatch typing.
 
 ## left-panel-shortcut
 - kind: feature
-- files: v2/systems/main.ts
+- files: frontend/systems/main.ts
 - title: Left panel (outline) has no keyboard shortcut to collapse
 - command: view.left.toggle
 - demo: A;A;wait;b
@@ -84,10 +84,10 @@ use `add_edge_reverse {}`; it adds the command, handler, and EdgePatch typing.
 The left panel can only be collapsed by clicking the ☰ hamburger — no keyboard
 shortcut, breaking the keyboard-first rule (Principle 17). The fold machinery is
 already there: the panel toggles via fold id `outline.panel` (LEFT_PANEL_FOLD_ID
-in v2/systems/main.ts), the shell mirrors it as `ui.shell.leftFolded`, and the
+in frontend/systems/main.ts), the shell mirrors it as `ui.shell.leftFolded`, and the
 hamburger is the existing mouse affordance. Add command `view.left.toggle`
 (group `view`, shortcut `B`) so the keyboard can do it too. GREEN: use
-add_fold_toggle {"system":"v2/systems/main.ts","id":"view.left.toggle",
+add_fold_toggle {"system":"frontend/systems/main.ts","id":"view.left.toggle",
 "foldId":"outline.panel","key":"b","shortcut":"B"} — the fold.toggle event and
 payload are wired for you; no `surface` (the hamburger covers the mouse). RED:
 assert the SPEC, not a side effect — {"command":"view.left.toggle",
@@ -95,7 +95,7 @@ assert the SPEC, not a side effect — {"command":"view.left.toggle",
 
 ## top-panel-collapse
 - kind: feature
-- files: v2/systems/main.ts, v2/styles.css, v2/core/snapshot.ts
+- files: frontend/systems/main.ts, frontend/styles.css, frontend/core/snapshot.ts
 - title: Top panel needs collapse shortcut and UI affordance
 - command: view.top.toggle
 - done: 2026-06-14
@@ -108,24 +108,24 @@ command spec, `ui.shell.topFolded`, and the CSS seam.
 
 ## export-json
 - kind: feature
-- files: v2/systems/graph.ts
+- files: frontend/systems/graph.ts
 - title: Export the current graph as JSON
 - command: graph.export.json
 - event: graph.exported
 - done: 2026-06-14
-- recorded: tests/commands/walker/export-json.test.ts
+- recorded: tests/commands/dx/export-json.test.ts
 
 `graph.export.json` serializes the current graph to JSON, emits
 `graph.exported { json }`, and writes to the clipboard when the browser API is
-available. The jsdom-safe path is covered by the walker regression.
+available. The jsdom-safe path is covered by the dx regression.
 
 ## zen-escape
 - kind: feature
-- files: v2/systems/main.ts, v2/systems/tool-panel.ts
+- files: frontend/systems/main.ts, frontend/systems/tool-panel.ts
 - title: Escape exits zen mode
 - command: app.cancel.escape
 - done: 2026-06-14
-- recorded: tests/commands/v2-tool-panel.test.ts
+- recorded: tests/commands/frontend-tool-panel.test.ts
 
 Zen mode now registers with the shared cancellation stack, so Escape unfolds
 `shell.zen` instead of needing the user to press the zen shortcut again. The
@@ -133,10 +133,10 @@ floating top panel also observes zen as collapsed, keeping the canvas focused.
 
 ## container-delete-children
 - kind: bug
-- files: v2/systems/containers.ts
+- files: frontend/systems/containers.ts
 - title: Deleting a container deletes its children
 - done: 2026-06-14
-- recorded: tests/commands/v2-container-commands.test.ts
+- recorded: tests/commands/frontend-container-commands.test.ts
 
 Container deletion now cascades through direct and nested children by emitting
 the child entity's delete event before deleting the container itself. The old
@@ -145,10 +145,10 @@ cleanup behavior.
 
 ## top-floating-tool-panel
 - kind: feature
-- files: v2/systems/tool-panel.ts, v2/systems/main.ts, v2/styles.css
+- files: frontend/systems/tool-panel.ts, frontend/systems/main.ts, frontend/styles.css
 - title: Top panel is an in-canvas movable/collapsible tool panel
 - done: 2026-06-14
-- recorded: tests/commands/v2-tool-panel.test.ts
+- recorded: tests/commands/frontend-tool-panel.test.ts
 
 The top toolbar moved from a hardcoded shell row into a stage-rendered tool
 panel with drag and collapse handles. `view.top.toggle` and zen both collapse
@@ -156,10 +156,10 @@ the panel, and the debug snapshot exposes `ui.toolPanels.top` for probes.
 
 ## dx-binding-duplicates
 - kind: bug
-- files: v2/systems/dx.ts, v2/systems/graph.ts
+- files: frontend/systems/dx.ts, frontend/systems/graph.ts
 - title: Clear noisy binding.duplicate warnings
 - done: 2026-06-14
-- recorded: tests/commands/v2-branch-commands.test.ts
+- recorded: tests/commands/frontend-branch-commands.test.ts
 
 DX no longer warns for input bindings that are gated by explicit runtime context
 (`input.when`), such as independent pointer drag/resize/panel gestures. Real
@@ -168,11 +168,11 @@ ambiguous `g/G` path to `Alt+G`.
 
 ## item-properties-hotkey
 - kind: feature
-- files: v2/abilities/configurable.ts
+- files: frontend/abilities/configurable.ts
 - title: Pressing . opens item properties
 - command: item.properties.open
 - done: 2026-06-14
-- recorded: tests/commands/v2-node-commands.test.ts
+- recorded: tests/commands/frontend-node-commands.test.ts
 
 `item.properties.open` now has the `.` keyboard binding. Qwen produced and
 verified the same small patch through dx; the final change is covered in the
@@ -180,11 +180,11 @@ node command regression.
 
 ## cmd-a-select-all
 - kind: feature
-- files: v2/systems/choose.ts
+- files: frontend/systems/choose.ts
 - title: Cmd+A selects graph items instead of browser text
 - command: choose.all.cmd
 - done: 2026-06-14
-- recorded: tests/commands/v2-choose.test.ts
+- recorded: tests/commands/frontend-choose.test.ts
 
 Added hidden alias command `choose.all.cmd` that forwards to the existing
 `choose.all` event with `Cmd+A`. The alias preserves Ctrl+A and avoids creating a

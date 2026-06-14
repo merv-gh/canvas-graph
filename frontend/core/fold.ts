@@ -35,14 +35,14 @@ export type FoldStore = {
 declare module './io' {
   // Augmenting the readonly STORAGE_KEYS const isn't possible in TS, so we
   // declare the key at the call site instead. Kept here as a marker that the
-  // 'v2.fold' key lives in the io adapter's keyspace.
+  // 'frontend.fold' key lives in the io adapter's keyspace.
 }
 
 /** Generic fold/collapse state, shared between UI surfaces (outline sections,
  *  left panel, future inspector pane, …). Lives next to selection / view as a
  *  presentation-layer store — not graph data. */
 export function foldContext(bus: Bus, io: IoApi): FoldStore {
-  const KEY = 'v2.fold';
+  const KEY = 'frontend.fold';
   const state: Record<string, boolean> = io.get<Record<string, boolean>>(KEY, {});
   const isOpen = (id: string, defaultOpen = true) =>
     Object.prototype.hasOwnProperty.call(state, id) ? state[id] : defaultOpen;

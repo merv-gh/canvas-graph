@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { bootV2, runCommand, settle } from '../v2-testkit';
+import { bootApp, runCommand, settle } from '../testkit';
 
 describe("detail-shortcuts", () => {
   it('replays the sequence and asserts', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     expect(runCommand(ctx, "detail.less"), "command detail.less should run").toBe(true);
     await settle();

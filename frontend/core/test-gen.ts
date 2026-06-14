@@ -85,7 +85,7 @@ const renderValue = (value: unknown): string => {
 
 /** Convert a recorded trace + chosen assertions into a complete vitest file
  *  string. The output is self-contained and runnable from `tests/commands/`
- *  using the existing `bootV2` testkit. */
+ *  using the existing `bootApp` testkit. */
 export function traceToTest(opts: TestGenOptions): string {
   const title = opts.title ?? 'recorded case';
   const testName = opts.testName ?? 'replays and asserts';
@@ -104,7 +104,7 @@ export function traceToTest(opts: TestGenOptions): string {
     : '    // TODO: click leaves in the snapshot tree to add assertions';
 
   return `import { describe, expect, it } from 'vitest';
-import { bootV2, settle } from './v2-testkit';
+import { bootApp, settle } from './testkit';
 
 const trace = [
 ${indent(traceLines, 0)}
@@ -112,7 +112,7 @@ ${indent(traceLines, 0)}
 
 describe('${title}', () => {
   it('${testName}', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
 
     ctx.sim.replay(trace);

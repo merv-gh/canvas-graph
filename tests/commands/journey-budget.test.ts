@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bootV2, runCommand, settle } from './v2-testkit';
+import { bootApp, runCommand, settle } from './testkit';
 
 /** Each test simulates the *exact* keystrokes a user would press and asserts
  *  the resulting graph state. The keystroke count matches Principle 17's
@@ -16,7 +16,7 @@ const pressLetter = (letter: string) => {
 
 describe('Principle 17 — canonical journey keystroke budgets', () => {
   it('Create floating node: 1 keystroke (A)', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.node.create');
     await settle();
@@ -26,7 +26,7 @@ describe('Principle 17 — canonical journey keystroke budgets', () => {
   });
 
   it('Create child of selected (selection moves): 1 keystroke (A)', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.node.create'); // seed parent
     await settle();
@@ -41,7 +41,7 @@ describe('Principle 17 — canonical journey keystroke budgets', () => {
   });
 
   it('Create child of selected (selection stays): 1 keystroke (Shift+A)', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.node.create');
     await settle();
@@ -54,7 +54,7 @@ describe('Principle 17 — canonical journey keystroke budgets', () => {
   });
 
   it('Chain of 3 nodes: 3 keystrokes (A A A)', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     for (let i = 0; i < 3; i++) {
       runCommand(ctx, 'editing.node.create');
@@ -71,7 +71,7 @@ describe('Principle 17 — canonical journey keystroke budgets', () => {
   });
 
   it('3 siblings off one anchor: 3 keystrokes (Shift+A × 3)', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.node.create');
     await settle();
@@ -88,7 +88,7 @@ describe('Principle 17 — canonical journey keystroke budgets', () => {
   });
 
   it('Edge from selected to picked: 2 keystrokes (E + letter)', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.node.create');
     runCommand(ctx, 'editing.node.create.keep');
@@ -112,7 +112,7 @@ describe('Principle 17 — canonical journey keystroke budgets', () => {
   });
 
   it('Edge with both endpoints picked: 3 keystrokes (E + letter + letter)', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.node.create');
     runCommand(ctx, 'editing.node.create.keep');
@@ -132,7 +132,7 @@ describe('Principle 17 — canonical journey keystroke budgets', () => {
   });
 
   it('Jump to any item: 2 keystrokes (G + letter)', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.node.create');
     runCommand(ctx, 'editing.node.create.keep');
@@ -148,7 +148,7 @@ describe('Principle 17 — canonical journey keystroke budgets', () => {
   });
 
   it('Delete selected: 1 keystroke (X)', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.node.create');
     await settle();
@@ -159,7 +159,7 @@ describe('Principle 17 — canonical journey keystroke budgets', () => {
   });
 
   it('Cycle selection: 1 keystroke (Tab)', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.node.create');
     runCommand(ctx, 'editing.node.create.keep');

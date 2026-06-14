@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { bootV2, commandButton, modalText, runCommand, settle } from './v2-testkit';
-import type { GraphNode } from '../../v2/model';
+import { bootApp, commandButton, modalText, runCommand, settle } from './testkit';
+import type { GraphNode } from '../../frontend/model';
 
 /** Edge creation is driven by `commandPicker` now — keyboard letter overlays
  *  for source/target, not a modal form. These tests exercise the picker path. */
 
-const createNode = (ctx: ReturnType<typeof bootV2>, text: string): GraphNode =>
+const createNode = (ctx: ReturnType<typeof bootApp>, text: string): GraphNode =>
   ctx.graphs.current.createNode({ Label: { text } });
 
 const captureInput = () =>
@@ -14,9 +14,9 @@ const captureInput = () =>
 const pressLetter = (letter: string) =>
   captureInput()!.dispatchEvent(new KeyboardEvent('keydown', { key: letter, bubbles: true, cancelable: true }));
 
-describe('v2 edge commands (picker-driven)', () => {
+describe('frontend edge commands (picker-driven)', () => {
   it('emits a notice when nothing is pickable for a step', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     createNode(ctx, 'lonely');
     ctx.bus.emit('selection.item.clear');
     await settle();
@@ -31,7 +31,7 @@ describe('v2 edge commands (picker-driven)', () => {
   });
 
   it('seeds From from selection and picks To via letter — 2 keystrokes', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     const source = createNode(ctx, 'A');
     const target = createNode(ctx, 'B');
     ctx.bus.emit('selection.node.select', { id: source.id });
@@ -49,7 +49,7 @@ describe('v2 edge commands (picker-driven)', () => {
   });
 
   it('picks both endpoints when no selection — 3 keystrokes', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     const a = createNode(ctx, 'A');
     const b = createNode(ctx, 'B');
     ctx.bus.emit('selection.item.clear');
@@ -71,7 +71,7 @@ describe('v2 edge commands (picker-driven)', () => {
   });
 
   it('filter excludes the From node from the To step', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     createNode(ctx, 'A');
     createNode(ctx, 'B');
     createNode(ctx, 'C');
@@ -86,7 +86,7 @@ describe('v2 edge commands (picker-driven)', () => {
   });
 
   it('Escape cancels picker without creating an edge', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     createNode(ctx, 'A');
     createNode(ctx, 'B');
     ctx.bus.emit('selection.item.clear');
@@ -101,7 +101,7 @@ describe('v2 edge commands (picker-driven)', () => {
   });
 
   it('keeps a form open when form payload cannot be built (form path still supported)', () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     ctx.contexts.commands.register([{
       id: 'test.null-form',
       label: 'Null form command',
@@ -122,7 +122,7 @@ describe('v2 edge commands (picker-driven)', () => {
   });
 
   it('updates, opens properties for, and deletes an edge', () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     const source = createNode(ctx, 'A');
     const target = createNode(ctx, 'B');
     ctx.bus.emit('graph.edge.create', { From: source.id, To: target.id });
@@ -146,7 +146,7 @@ describe('v2 edge commands (picker-driven)', () => {
   });
 
   it('deletes a selected edge from command or X shortcut', async () => {
-    const ctx = bootV2();
+    const ctx = bootApp();
     const source = createNode(ctx, 'A');
     const target = createNode(ctx, 'B');
     ctx.bus.emit('graph.edge.create', { From: source.id, To: target.id });
