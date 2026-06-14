@@ -296,6 +296,32 @@ function parseCommandArray(text) {
   return blocks;
 }
 
+function parseCommandUiArray(text) {
+  const decl = text.search(/export\s+const\s+commandUi\b/);
+  if (decl < 0) throw new Error('command-ui projection: no `export const commandUi` declaration found');
+  const eq = text.indexOf('=', decl);
+  const open = eq < 0 ? -1 : text.indexOf('[', eq);
+  if (open < 0) throw new Error('command-ui projection: no `= [` array literal found');
+  const close = findMatching(text, open, '[', ']');
+  if (close < 0) throw new Error('command-ui projection: unterminated commandUi array');
+  const blocks = [];
+  let i = open + 1;
+  while (i < close) {
+    if (text[i] !== '{') {
+      i++;
+      continue;
+    }
+    const endBrace = findMatching(text, i, '{', '}');
+    if (endBrace < 0 || endBrace > close) throw new Error('command-ui projection: unterminated object literal');
+    const body = text.slice(i, endBrace + 1);
+    const id = body.match(/\bcommand\s*:\s*(['"`])([^'"`]+)\1/)?.[2];
+    if (!id) throw new Error(`command-ui projection: array element has no command:\n${body.slice(0, 80)}`);
+    blocks.push({ id, body });
+    i = endBrace + 1;
+  }
+  return blocks;
+}
+
 function assertBlockStillTargetsId(block) {
   const idProperty = new RegExp(`\\bid\\s*:\\s*(['"\`])${escapeRe(block.id)}\\1`);
   if (!idProperty.test(block.body)) {
@@ -525,11 +551,11 @@ function syncEvents({ quiet = false } = {}) {
 
 function collectEventUsages() {
   const usages = [];
-  const callRe = /\b(on|emit)\s*\(\s*(['"`])([^'"`]+)\2/g;
+  const callRe = /\b(on|emit|bus\.emit)\s*\(\s*(['"`])([^'"`]+)\2/g;
   for (const file of listSourceFiles()) {
     const source = readFileSync(file, 'utf8');
     for (let m; (m = callRe.exec(source));) {
-      usages.push({ kind: m[1], event: m[3], file, rel: rel(file), line: lineNumber(source, m.index) });
+      usages.push({ kind: m[1] === 'bus.emit' ? 'emit' : m[1], event: m[3], file, rel: rel(file), line: lineNumber(source, m.index) });
     }
   }
   for (const command of collectCommands()) {
@@ -547,31 +573,135 @@ function collectEventUsages() {
   return usages;
 }
 
-function renderFlows() {
+function unique(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function extractEmits(text) {
+  const emits = [];
+  const re = /\b(?:emit|bus\.emit)\s*\(\s*(['"`])([^'"`]+)\1/g;
+  for (let m; (m = re.exec(text));) emits.push(m[2]);
+  // The fold context owns the actual fact emit in v2/core/fold.ts. Most systems
+  // call the context, not `emit('fold.changed')`, so bridge that known seam.
+  if (/\bcontexts\.fold\.(?:toggle|set)\s*\(/.test(text)) emits.push('fold.changed');
+  return unique(emits);
+}
+
+function collectEventHandlers() {
+  const handlers = [];
+  const re = /\bon\s*\(\s*(['"`])([^'"`]+)\1/g;
+  for (const file of listSourceFiles()) {
+    const source = readFileSync(file, 'utf8');
+    for (let m; (m = re.exec(source));) {
+      const open = source.indexOf('(', m.index);
+      const close = findMatching(source, open, '(', ')');
+      if (close < 0) continue;
+      const text = source.slice(m.index, close + 1);
+      handlers.push({
+        event: m[2],
+        file,
+        rel: rel(file),
+        line: lineNumber(source, m.index),
+        emits: extractEmits(text),
+      });
+      re.lastIndex = close + 1;
+    }
+  }
+  handlers.sort((a, b) => a.rel.localeCompare(b.rel) || a.line - b.line || a.event.localeCompare(b.event));
+  return handlers;
+}
+
+function eventFlowData() {
   const declsByEvent = new Map();
   for (const decl of collectEventDecls()) {
     if (!declsByEvent.has(decl.id)) declsByEvent.set(decl.id, []);
     declsByEvent.get(decl.id).push(decl);
   }
+  const commandsByEvent = new Map();
+  for (const command of collectCommands()) {
+    const event = command.text.match(/\bevent\s*:\s*(['"`])([^'"`]+)\1/)?.[2] ?? command.id;
+    if (!commandsByEvent.has(event)) commandsByEvent.set(event, []);
+    commandsByEvent.get(event).push(command);
+  }
   const usagesByEvent = new Map();
+  const emittedEvents = new Set();
   for (const usage of collectEventUsages()) {
     if (!usagesByEvent.has(usage.event)) usagesByEvent.set(usage.event, []);
     usagesByEvent.get(usage.event).push(usage);
+    if (usage.kind === 'emit') emittedEvents.add(usage.event);
   }
-  const events = [...new Set([...declsByEvent.keys(), ...usagesByEvent.keys()])].sort();
+  const handlersByEvent = new Map();
+  for (const handler of collectEventHandlers()) {
+    if (!handlersByEvent.has(handler.event)) handlersByEvent.set(handler.event, []);
+    handlersByEvent.get(handler.event).push(handler);
+  }
+  const events = [...new Set([
+    ...declsByEvent.keys(),
+    ...commandsByEvent.keys(),
+    ...usagesByEvent.keys(),
+    ...handlersByEvent.keys(),
+  ])].sort();
+  return { declsByEvent, commandsByEvent, usagesByEvent, handlersByEvent, emittedEvents, events };
+}
+
+function formatLoc(item) {
+  return `${item.rel}:${item.line}`;
+}
+
+function renderFlowEvent(lines, data, event, depth, seen) {
+  const pad = '  '.repeat(depth);
+  const handlers = data.handlersByEvent.get(event) ?? [];
+  if (!handlers.length) {
+    lines.push(`${pad}- ${event} -> no static handlers`);
+    return;
+  }
+  lines.push(`${pad}- ${event}`);
+  for (const handler of handlers) {
+    const emits = handler.emits.length ? handler.emits.join(', ') : '-';
+    lines.push(`${pad}  handler ${formatLoc(handler)} emits ${emits}`);
+    for (const next of handler.emits.slice(0, 8)) {
+      if (seen.has(next)) {
+        lines.push(`${pad}    -> ${next} (cycle)`);
+      } else if (depth >= 5) {
+        lines.push(`${pad}    -> ${next} (depth limit)`);
+      } else {
+        renderFlowEvent(lines, data, next, depth + 2, new Set([...seen, event]));
+      }
+    }
+    if (handler.emits.length > 8) lines.push(`${pad}    …${handler.emits.length - 8} more emitted events`);
+  }
+}
+
+function renderFlows() {
+  const data = eventFlowData();
+  const starts = data.events.filter(event =>
+    data.commandsByEvent.has(event) ||
+    event === 'app.start' ||
+    (data.handlersByEvent.has(event) && !data.emittedEvents.has(event))
+  );
   const lines = [
-    '# @walker-projection flows v1',
+    '# @walker-projection flows v2',
     '',
-    'Generated map of command-triggered events, emitters, and handlers. Read-only.',
+    'Read-only static streams: origin event -> listeners in source order -> emitted downstream events.',
+    'Use this to see cross-system behavior without opening every handler.',
     '',
   ];
-  for (const event of events) {
-    const decls = declsByEvent.get(event) ?? [];
-    const usages = usagesByEvent.get(event) ?? [];
+  for (const event of starts) {
+    lines.push(`## stream ${event}`);
+    const commands = data.commandsByEvent.get(event) ?? [];
+    if (commands.length) lines.push(`origin commands: ${commands.map(command => `${command.id} (${formatLoc(command)})`).join(', ')}`);
+    renderFlowEvent(lines, data, event, 0, new Set());
+    lines.push('');
+  }
+
+  lines.push('## event index', '');
+  for (const event of data.events) {
+    const decls = data.declsByEvent.get(event) ?? [];
+    const usages = data.usagesByEvent.get(event) ?? [];
     const commands = usages.filter(u => u.kind === 'command');
     const emitters = usages.filter(u => u.kind === 'emit');
     const handlers = usages.filter(u => u.kind === 'on');
-    lines.push(`## ${event}`);
+    lines.push(`### ${event}`);
     if (decls.length) lines.push(`declared: ${decls.map(d => `${d.rel}:${d.line}`).join(', ')}`);
     if (commands.length) lines.push(`commands: ${commands.map(u => `${u.command} (${u.rel}:${u.line})`).join(', ')}`);
     if (emitters.length) lines.push(`emitters: ${emitters.map(u => `${u.rel}:${u.line}`).join(', ')}`);
@@ -600,6 +730,8 @@ function collectCommandUi() {
       let firstArg = open + 1;
       while (/\s/.test(source[firstArg] ?? '')) firstArg++;
       if (source[firstArg] !== '{') continue;
+      const objectEnd = findMatching(source, firstArg, '{', '}');
+      if (objectEnd < 0 || objectEnd > close) continue;
       let end = close + 1;
       while (/\s/.test(source[end] ?? '')) end++;
       if (source[end] === ';') end++;
@@ -614,6 +746,9 @@ function collectCommandUi() {
         end,
         line: lineNumber(source, m.index),
         text,
+        body: source.slice(firstArg, objectEnd + 1),
+        prefix: source.slice(m.index, firstArg),
+        suffix: source.slice(objectEnd + 1, end),
       });
       re.lastIndex = end;
     }
@@ -627,18 +762,22 @@ function commandUiSourceFiles() {
 }
 
 function renderCommandUi(items) {
-  const blocks = items.map(item => [
-    `// BEGIN command-ui ${encodeURIComponent(item.id)} ${item.rel}:${item.line}`,
-    item.text.trimEnd(),
-    `// END command-ui ${encodeURIComponent(item.id)}`,
-    '',
-  ].join('\n'));
+  let lastRel = null;
+  const blocks = items.map(item => {
+    const header = item.rel !== lastRel ? `  // ── ${item.rel} ──\n` : '';
+    lastRel = item.rel;
+    return `${header}  ${item.body.trimEnd()},`;
+  });
   return [
-    '// @walker-projection command-ui v1',
-    '// Editable view over contribute({ surface, command, ... }) affordance calls.',
-    '// Sync edits back: node walker/projections.mjs sync command-ui',
+    '// @ts-nocheck — @walker-projection command-ui v2.',
+    '// Editable view over contribute({ surface, command, ... }) affordance objects.',
+    '// Edit an object, then: node walker/projections.mjs sync command-ui  (routes by command).',
+    "import type { SystemAffordance } from '../../v2/types';",
     '',
+    'export const commandUi: SystemAffordance[] = [',
     ...blocks,
+    '];',
+    '',
   ].join('\n');
 }
 
@@ -649,24 +788,23 @@ function generateCommandUi({ quiet = false } = {}) {
 
 function syncCommandUi({ quiet = false } = {}) {
   if (!existsSync(COMMAND_UI_VIEW)) throw new Error(`${rel(COMMAND_UI_VIEW)} does not exist; run generate first`);
-  const blocks = parseMarkedBlocks(readFileSync(COMMAND_UI_VIEW, 'utf8'), 'command-ui');
+  const viewText = readFileSync(COMMAND_UI_VIEW, 'utf8');
+  const blocks = /export\s+const\s+commandUi\b/.test(viewText)
+    ? parseCommandUiArray(viewText)
+    : parseMarkedBlocks(viewText, 'command-ui');
   const byFile = new Map();
   for (const block of blocks) {
-    if (!byFile.has(block.file)) byFile.set(block.file, []);
-    byFile.get(block.file).push(block);
+    const found = collectCommandUi().find(item => item.id === block.id);
+    if (!found) throw new Error(`could not find command UI contribution ${block.id} in source`);
+    if (!byFile.has(found.file)) byFile.set(found.file, []);
+    byFile.get(found.file).push({ ...found, next: `${found.prefix}${block.body.trimEnd()}${found.suffix}` });
   }
   let changedFiles = 0;
   let changedBlocks = 0;
-  for (const [file, fileBlocks] of byFile) {
+  for (const [file, replacements] of byFile) {
     let source = readFileSync(file, 'utf8');
-    const items = collectCommandUi().filter(item => item.file === file);
-    const replacements = fileBlocks.map(block => {
-      const found = items.find(item => item.id === block.id);
-      if (!found) throw new Error(`could not find command UI contribution ${block.id} in ${rel(file)}`);
-      return { ...found, next: block.body.trimEnd() };
-    }).sort((a, b) => b.start - a.start);
     let nextSource = source;
-    for (const replacement of replacements) {
+    for (const replacement of replacements.sort((a, b) => b.start - a.start)) {
       if (nextSource.slice(replacement.start, replacement.end) !== replacement.next) changedBlocks++;
       nextSource = `${nextSource.slice(0, replacement.start)}${replacement.next}${nextSource.slice(replacement.end)}`;
     }

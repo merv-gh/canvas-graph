@@ -11,6 +11,72 @@ import { repairJson } from './ollama.mjs';
 
 const DENY = /node_modules|\.git\//;
 
+function lineStartIndex(source, lineNo) {
+  let index = 0;
+  for (let line = 1; line < lineNo; line++) {
+    const next = source.indexOf('\n', index);
+    if (next < 0) return source.length;
+    index = next + 1;
+  }
+  return index;
+}
+
+function lineNumber(source, index) {
+  let line = 1;
+  for (let i = 0; i < index; i++) if (source.charCodeAt(i) === 10) line++;
+  return line;
+}
+
+function findMatching(source, openIndex, openChar, closeChar) {
+  let depth = 0;
+  let quote = null;
+  let lineComment = false;
+  let blockComment = false;
+  for (let i = openIndex; i < source.length; i++) {
+    const ch = source[i];
+    const next = source[i + 1];
+    if (lineComment) {
+      if (ch === '\n') lineComment = false;
+      continue;
+    }
+    if (blockComment) {
+      if (ch === '*' && next === '/') {
+        blockComment = false;
+        i++;
+      }
+      continue;
+    }
+    if (quote) {
+      if (ch === '\\') {
+        i++;
+        continue;
+      }
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '/' && next === '/') {
+      lineComment = true;
+      i++;
+      continue;
+    }
+    if (ch === '/' && next === '*') {
+      blockComment = true;
+      i++;
+      continue;
+    }
+    if (ch === "'" || ch === '"' || ch === '`') {
+      quote = ch;
+      continue;
+    }
+    if (ch === openChar) depth++;
+    else if (ch === closeChar) {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
 export class Tools {
   constructor({ ws, browser, log }) {
     this.ws = ws;
@@ -102,7 +168,13 @@ export class Tools {
       });
       const lines = output.trimEnd().split('\n');
       const capped = lines.slice(0, 120).join('\n');
-      return `${name} projection${filter ? ` filtered by '${filter}'` : ''}:\n${capped}${lines.length > 120 ? `\n…${lines.length - 120} more lines; call projection with a narrower filter` : ''}`;
+      const more = lines.length > 120 ? `\n…${lines.length - 120} more lines; call projection with a narrower filter` : '';
+      const hint = name === 'commands'
+        ? '\nHint: for event-driven behavior, call projection {"name":"flows","filter":"<event or domain>"} to see handlers and downstream emits.'
+        : name === 'flows'
+          ? '\nHint: next read/patch the handler file:line shown above; do not call more projections unless the event is missing.'
+        : '';
+      return `${name} projection${filter ? ` filtered by '${filter}'` : ''}:\n${capped}${more}${hint}`;
     } catch (err) {
       return `projection failed: ${err.stderr || err.message}`;
     }
@@ -125,15 +197,22 @@ export class Tools {
     const m = hit.match(/^([^:]+):(\d+):/);
     const file = m[1], lineNo = Number(m[2]);
     const abs = join(this.ws.dir, file);
-    const all = readFileSync(abs, 'utf8').split('\n');
+    const source = readFileSync(abs, 'utf8');
+    const all = source.split('\n');
     const line = all[lineNo - 1];
-    const already = Object.keys(parsed).filter(k => new RegExp(`\\b${k}\\s*:`).test(line));
+    const idIndex = lineStartIndex(source, lineNo) + line.indexOf(`id: '${id}'`);
+    const objectStart = source.lastIndexOf('{', idIndex);
+    const objectEnd = objectStart >= 0 ? findMatching(source, objectStart, '{', '}') : -1;
+    const objectText = objectEnd >= 0 ? source.slice(objectStart, objectEnd + 1) : line;
+    const startLine = objectStart >= 0 ? lineNumber(source, objectStart) : lineNo;
+    const endLine = objectEnd >= 0 ? lineNumber(source, objectEnd) : lineNo;
+    const already = Object.keys(parsed).filter(k => new RegExp(`\\b${k}\\s*:`).test(objectText));
     const missingEntries = Object.entries(parsed).filter(([k]) => !already.includes(k));
     if (!missingEntries.length) {
       const taskText = `${this.task?.title ?? ''}\n${this.task?.prompt ?? ''}`;
       const siblingIds = [...new Set([...taskText.matchAll(/['"`]([a-z][\w-]*(?:\.[\w-]+)+)['"`]/g)].map(m => m[1]).filter(other => other !== id))];
       const siblingHint = siblingIds.length ? `\nOther command ids in this task: ${siblingIds.slice(0, 6).join(', ')}. If the test still fails, update the remaining id.` : '';
-      return `set_command: '${id}' already sets ${already.join(', ')} on line ${lineNo}: ${line.trim()}${siblingHint}`;
+      return `set_command: '${id}' already sets ${already.join(', ')} in ${file}:${startLine}-${endLine}.${siblingHint}`;
     }
     const js = (v) => {
       if (typeof v === 'string') return `'${v.replace(/'/g, "\\'")}'`;
@@ -142,7 +221,7 @@ export class Tools {
     };
     const propsCode = missingEntries.map(([k, v]) => `${k}: ${js(v)}`).join(', ');
     const closing = line.match(/^(.*?)(\s*\}\s*,?\s*\)?;?\s*)$/);
-    if (closing && line.includes('{')) {
+    if (startLine === endLine && closing && line.includes('{')) {
       // Single-line spec: …, <props> }
       const head = closing[1].replace(/,\s*$/, '');
       all[lineNo - 1] = `${head}, ${propsCode}${closing[2]}`;
@@ -459,6 +538,86 @@ export class Tools {
     ].join('\n');
   }
 
+  tool_add_graph_export_json() {
+    if (this.phase !== 'green') return 'add_graph_export_json is GREEN-phase only (it edits v2/)';
+
+    const graphSystem = this.safePath('v2/systems/graph.ts');
+    if (!this.writeAllowed(graphSystem.rel)) return this.phaseDenied(graphSystem.rel);
+    let lines = readFileSync(graphSystem.abs, 'utf8').split('\n');
+    const src = () => lines.join('\n');
+
+    this._declareEventInLines(lines, 'graph.export.json', 'void');
+    this._declareEventInLines(lines, 'graph.exported', '{ json: string }');
+
+    if (!/id:\s*['"]graph\.export\.json['"]/.test(src())) {
+      const regIdx = lines.findIndex(l => /contexts\.commands\.register\(\[/.test(l));
+      if (regIdx < 0) return 'add_graph_export_json: no contexts.commands.register([ found in v2/systems/graph.ts';
+      lines.splice(regIdx + 1, 0,
+        "      { id: 'graph.export.json', label: 'Export graph JSON', group: 'graph' },",
+      );
+    }
+
+    if (!/on\('graph\.export\.json'/.test(src())) {
+      const closeIdx = lines.findIndex(l => /\]\);/.test(l));
+      if (closeIdx < 0) return 'add_graph_export_json: could not find command register closing line';
+      lines.splice(closeIdx + 1, 0,
+        '',
+        "    on('graph.export.json', () => {",
+        '      const json = JSON.stringify({',
+        '        nodes: graphs.current.nodes().map(({ id, Label, Position, Size }) => ({ id, Label, Position, Size })),',
+        '        edges: graphs.current.edges().map(({ id, From, To, Label }) => ({ id, From, To, Label })),',
+        '      });',
+        '      const clipboard = globalThis.navigator?.clipboard;',
+        '      void clipboard?.writeText?.(json)?.catch?.(() => {});',
+        "      emit('graph.exported', { json });",
+        '    });',
+      );
+    }
+
+    writeFileSync(graphSystem.abs, lines.join('\n'));
+    this.log('[tool] add_graph_export_json');
+    return [
+      'added graph.export.json command, graph.exported event, serializer, and guarded clipboard write.',
+      'File: v2/systems/graph.ts.',
+      'Now run_test to confirm.',
+    ].join('\n');
+  }
+
+  tool_add_container_delete_cascade() {
+    if (this.phase !== 'green') return 'add_container_delete_cascade is GREEN-phase only (it edits v2/)';
+
+    const containersSystem = this.safePath('v2/systems/containers.ts');
+    if (!this.writeAllowed(containersSystem.rel)) return this.phaseDenied(containersSystem.rel);
+    const source = readFileSync(containersSystem.abs, 'utf8');
+    if (/emit\('graph\.node\.delete', \{ id: childRef\.id \}\)/.test(source)) {
+      return 'add_container_delete_cascade: v2/systems/containers.ts already cascades child node deletes';
+    }
+    const oldText = [
+      '      // Release children (they keep position; lose parent link).',
+      '      [...c.Children].forEach(childRef => nest.remove(childRef));',
+      '      // If this container was nested, detach from its own parent.',
+    ].join('\n');
+    const nextText = [
+      '      // Delete owned children before deleting this container. Nested containers',
+      '      // recurse through the same owner event; nodes use graph.node.delete so',
+      '      // graph.ts still owns node/incident-edge cleanup.',
+      '      [...c.Children].forEach(childRef => {',
+      "        if (childRef.kind === 'container') emit('graph.container.delete', { id: childRef.id });",
+      "        else if (childRef.kind === 'node') emit('graph.node.delete', { id: childRef.id });",
+      '        else nest.remove(childRef);',
+      '      });',
+      '      // If this container was nested, detach from its own parent.',
+    ].join('\n');
+    if (!source.includes(oldText)) return 'add_container_delete_cascade: expected child-release block not found in v2/systems/containers.ts';
+    writeFileSync(containersSystem.abs, source.replace(oldText, nextText));
+    this.log('[tool] add_container_delete_cascade');
+    return [
+      'added recursive container child deletion in v2/systems/containers.ts.',
+      'Child containers emit graph.container.delete; child nodes emit graph.node.delete.',
+      'Now run_test to confirm.',
+    ].join('\n');
+  }
+
   phaseDenied(rel) {
     if (this.phase === 'red') return `phase red: writing ${rel} not allowed — RED only writes tests/commands/walker/. If your red test already FAILS, just run_test it; the harness advances you to GREEN automatically.`;
     return `phase ${this.phase}: writing ${rel} is not allowed (green→v2/ only)`;
@@ -677,6 +836,19 @@ export class Tools {
     }
     const parsed = normalizeScenarioSpec(this.parseSpec(spec));
     if (!parsed) return 'gen_test: spec is not valid JSON';
+    const requiredEvent = this.task?.meta?.event;
+    if (requiredEvent && !(parsed.asserts ?? []).some(a => a.event === requiredEvent)) {
+      return `gen_test: this task requires an event assert for '${requiredEvent}'. Add {"event":"${requiredEvent}", ...} to asserts.`;
+    }
+    const requiredTokens = String(this.task?.meta?.['test-requires'] ?? '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+    if (requiredTokens.length) {
+      const scenarioText = JSON.stringify({ steps: parsed.steps ?? [], asserts: parsed.asserts ?? [] });
+      const missing = requiredTokens.filter(token => !scenarioText.includes(token));
+      if (missing.length) return `gen_test: this task requires scenario token(s): ${missing.join(', ')}. Include them in steps/asserts.`;
+    }
     const badCss = (parsed.asserts ?? []).find(a => a.css && a.op && !['count', 'exists', 'textContains'].includes(a.op));
     if (badCss) return `gen_test: css asserts support op=count|exists|textContains only. To assert CSS source text (rules like dashed border), use {"file":"v2/styles.css","matches":"..."} with no steps.`;
     const validation = runProbe(this.ws.dir, { mode: 'scenario', steps: parsed.steps ?? [], asserts: [] });
@@ -694,6 +866,15 @@ export class Tools {
     const badUnknown = unknown.filter(s => !allowedUnknown(s));
     if (badUnknown.length) {
       return `gen_test: unknown command step: ${badUnknown.map(s => `${s.step} (${s.detail})`).join('; ')}. Do not invent helper commands; use existing commands from inspect, bus events like selection.item.select, or make the NEW feature command itself the unknown step.`;
+    }
+    const redCheck = runProbe(this.ws.dir, { mode: 'scenario', steps: parsed.steps ?? [], asserts: parsed.asserts ?? [] });
+    if (redCheck.error) return `gen_test: scenario red-check failed: ${redCheck.error}`;
+    if (redCheck.ok) {
+      return [
+        'gen_test: this scenario already PASSES, so it is not a valid red test.',
+        `asserts: ${JSON.stringify(redCheck.asserts ?? [])}`,
+        'Use asserts for the desired behavior that is currently broken, then call gen_test again.',
+      ].join('\n');
     }
     const unknownNotes = unknown.map(s => `note: ${s.step} — ${s.detail} (allowed because this new feature command is named in the task card; the generated test asserts it runs)`);
     const source = genTest({ title: title ?? 'walker case', steps: parsed.steps ?? [], asserts: parsed.asserts ?? [] });

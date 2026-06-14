@@ -21,10 +21,11 @@ npm run dx -- project generate command-ui
   `contexts.commands.register(...)` as one compilable `CommandSpec[]` array.
 - `events` -> `walker/views/events.proj.ts`: editable event declaration lines
   from `CustomEvents` / `BuiltinEvents`.
-- `flows` -> `walker/views/flows.proj.md`: read-only map of commands, emitters,
-  and handlers per event.
+- `flows` -> `walker/views/flows.proj.md`: read-only event streams from origin
+  command/event through handlers and downstream emits, plus an event index.
 - `command-ui` -> `walker/views/command-ui.proj.ts`: editable
-  `contribute({ surface, command, ... })` affordance calls.
+  `contribute({ surface, command, ... })` affordance objects as one
+  `SystemAffordance[]` array.
 
 ### commands: a compilable array (no markers)
 
@@ -73,11 +74,46 @@ interface CustomEvents {
 Routing is **by event name** (globally unique). Edit a type, then `sync`. New
 events are declared where the owning system augments `CustomEvents`, not here.
 
-### command-ui: marked slices
+### flows: event streams (read-only)
 
-`command-ui` still uses `// BEGIN command-ui … / // END` markers, because a
-`contribute({ … })` call isn't a single clean array element. Edit between the
-markers, then `sync`.
+The `flows` projection is read-only. It shows event-driven behavior as paths:
+origin command/event -> listeners in source order -> downstream emitted events.
+This is the first projection to inspect for bugs where the logic is hidden
+between systems:
+
+```md
+## stream graph.container.delete
+origin commands: graph.container.delete (v2/systems/containers.ts:260)
+- graph.container.delete
+  handler v2/systems/containers.ts:295 emits container.deleted
+    - container.deleted -> no static handlers
+```
+
+It also ends with an event index that lists declarations, commands, emitters, and
+handlers per event. Static analysis is intentionally conservative: explicit
+`emit(...)` / `bus.emit(...)` calls are traced, and known context seams like
+`contexts.fold.toggle(...)` are bridged to their fact event (`fold.changed`).
+
+### command-ui: a compilable array (no markers)
+
+The `command-ui` projection is one valid TypeScript file — a single
+`export const commandUi: SystemAffordance[]` array. It slices only the object
+inside each `contribute({ ... })` call; sync re-wraps it with the original call,
+indentation, and semicolon.
+
+```ts
+// @ts-nocheck — @walker-projection command-ui v2.
+import type { SystemAffordance } from '../../v2/types';
+
+export const commandUi: SystemAffordance[] = [
+  // ── v2/systems/main.ts ──
+  { surface: 'top', command: 'view.zen', kind: 'button', text: '⛶', order: 80 },
+];
+```
+
+Routing is **by `command`**. Edit affordance data, then `sync`. Add new
+affordances in the owning system (or via a constructor), not by adding anonymous
+projection-only array elements.
 
 When `watch` is running, edits to a projection sync back automatically; edits to
 source regenerate the projection.
@@ -85,10 +121,9 @@ source regenerate the projection.
 ## Contract
 
 - A projection file is disposable and ignored by git.
-- `commands` routes by `id` and `events` by event name; both must stay unique, and
-  each slice must keep its identifying `id:`/`'name':` (sync asserts it).
-  `command-ui` routes by its marker lines — don't edit a marker unless you mean to
-  move the slice.
+- `commands` routes by `id`, `events` by event name, and `command-ui` by
+  `command`; these identifiers must stay unique, and each slice must keep its
+  identifying field.
 - A no-op sync (generate, then sync with no edits) must leave source byte-for-byte
   unchanged; the watcher relies on this. Guarded by `node walker/selftest.mjs`.
 - Projection sync is intentionally narrow: it replaces known slices, not whole
@@ -139,8 +174,8 @@ projections.set('name', {
 The useful shape is:
 
 1. collect source slices with file, line, id, start, end, and text
-2. render them with `// BEGIN <kind> <id> <file>:<line>` markers
-3. parse the projection blocks
+2. render them as a small valid file (an array/interface/markdown stream)
+3. parse the projection blocks or array/interface elements
 4. rescan source files and replace only matching slices
 
 Good projections are boring and mechanical. If a task needs a long prose prompt,

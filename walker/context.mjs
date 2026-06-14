@@ -6,25 +6,18 @@ import { toolDocsText } from './ollama.mjs';
 
 export const estTokens = (s) => Math.ceil((s ?? '').length / 3.6);
 
-const SYSTEM_BASE = `You fix bugs in a TypeScript app using tools, strict TDD. ONE tool call per reply, nothing else.
+const SYSTEM_BASE = `Fix a TypeScript graph app with tools and strict TDD. ONE tool call per reply.
 
-RED → make ONE failing test: scenario {steps,asserts} with asserts stating DESIRED behavior (fail now) → gen_test writes it → run_test shows FAIL → the harness moves you to GREEN automatically. Write only under tests/commands/walker/. The suite being green proves nothing; the card's bug is real — don't give up.
-GREEN → change ONLY v2/ until the test passes. Pick the edit tool by intent:
-  • command-spec task → projection {name:"commands",filter:id} first
-  • add shortcut/binding/group to an EXISTING command → set_command {id, props}; redundant existing props are OK
-  • add a NEW command/verb → add_command {system, spec, handler?}
-  • add a CSS selector rule → add_css_rule {selector, declarations, after?}
-  • collapse/fold a panel or region (left panel, top bar, event log, zen) → add_fold_toggle {system, id, foldId, key, shortcut?, surface?}
-  • make Escape exit a folded region (zen/overlay) → add_fold_cancellable {system, foldId}
-  • reverse selected edge feature → add_edge_reverse {}
-  • other CSS/code → patch {path, op:"replace"|"insert_after", line, count, text}  (line numbers from read/locate; never retype old text)
-Re-check with scenario, confirm with run_test, then done.
-DISCOVER first with projection (compressed source-owned views), inspect (commands/events/flows), and graph/locate (file:line) — not blind reads.
+RED → make ONE failing test: scenario desired behavior → gen_test → run_test FAIL. Write only tests/commands/walker/. The bug is real; don't give up.
+GREEN → edit ONLY v2/. Pick by intent:
+  • command spec → projection commands; event flow → projection flows; UI affordance → command-ui; event type → events
+  • existing command props → set_command {id,props}; new command → add_command {system,spec,handler?}; CSS → add_css_rule
+  • fold panel → add_fold_toggle; Escape exits fold → add_fold_cancellable
+  • known mechanical tasks → add_edge_reverse / add_graph_export_json / add_container_delete_cascade
+  • other code → patch with line numbers from read/locate
+Re-check with scenario, confirm with run_test, then done. Discover with projection/inspect/graph/locate, not blind reads.
 
-App facts:
-- Typed event bus. Imperative = request (graph.node.create); past-tense = fact emitted by the owner after the change (graph.node.created); facts auto-redraw. Cross-system reactions live in v2/features.ts.
-- Mutate items via emit('item.update',{ref,patch}). Commands are DATA: {id,label,group,shortcut,input:{on:'keydown',key,prevent:true},available,payload}. No document.querySelector in systems — use contexts.places.el(place).
-- scenario asserts: graph.{nodes,edges,containers}, selection.count, ui.shell.{leftFolded,zen}, ui.rendered.{nodes,edges}, ui.modal.{open,focusedField}; command-spec; event-fired.
+Facts: imperative events=requests, past-tense=owner facts, facts auto-redraw; cross-system reactions live in v2/features.ts. Commands are DATA. Mutate items via item.update. No document.querySelector in systems. Scenario asserts snapshot paths, command-spec, event-fired.
 
 TOOLS (args in schema):
 {TOOL_DOCS}
@@ -38,6 +31,8 @@ export function buildSystemPrompt() {
 export function buildTaskCard(task, phase, extra = '') {
   const lines = [
     `TASK ${task.id} [phase: ${phase}] — ${task.title}`,
+    task.meta?.command ? `New command id: ${task.meta.command}` : '',
+    task.meta?.event ? `Required event assert: ${task.meta.event}` : '',
     task.prompt.trim(),
     task.files ? `Likely files: ${task.files}` : '',
     task.kind === 'layout'

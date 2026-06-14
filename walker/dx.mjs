@@ -459,7 +459,8 @@ async function landTask(row, { yes = false, rl = null } = {}) {
     `tests/commands/walker/${row.task.id}.test.ts`,
     ...(archived ? ['walker/TASKS.md', 'walker/DONE.md'] : []),
   ]);
-  git(['add', '-A', '--', ...commitPaths]);
+  const addPaths = [...commitPaths].filter(path => existsSync(join(REPO, path)) || statusForPaths([path]).length);
+  git(['add', '-A', '--', ...addPaths]);
   const staged = stagedFiles().filter(p => commitPaths.has(p));
   if (!staged.length) {
     console.log('Patch landed but no new staged files were found for the commit.');

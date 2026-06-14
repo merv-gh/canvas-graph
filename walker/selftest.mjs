@@ -38,7 +38,8 @@ ok('commands: lists 60+ with shortcuts', () => {
 ok('commands: filter narrows', () => {
   const detail = runProbe(REPO, { mode: 'commands', filter: 'detail' });
   assert.equal(detail.count, 2);
-  assert.equal(detail.commands[0].shortcut, null); // the known gap (detail-shortcuts task)
+  assert.equal(detail.commands.find(c => c.id === 'detail.less')?.shortcut, '[');
+  assert.equal(detail.commands.find(c => c.id === 'detail.more')?.shortcut, ']');
 });
 
 // --- inspect: events + flows ---
@@ -80,7 +81,8 @@ ok('scenario: failing assert reports actual', () => {
 ok('scenario: unknown command surfaces as failed step with suggestions', () => {
   const answer = runProbe(REPO, { mode: 'scenario', steps: [{ command: 'graph.node.create' }], asserts: [] });
   assert.equal(answer.ok, false);
-  assert(answer.steps[0].detail.includes('editing.node.create'), answer.steps[0].detail);
+  assert(answer.steps[0].detail.includes('bus event, not a command'), answer.steps[0].detail);
+  assert(answer.steps[0].detail.includes('"event":"graph.node.create"'), answer.steps[0].detail);
 });
 
 ok('scenario: command-spec assert (shortcut red) reports actual', () => {
@@ -88,7 +90,7 @@ ok('scenario: command-spec assert (shortcut red) reports actual', () => {
     mode: 'scenario',
     steps: [],
     asserts: [
-      { command: 'detail.less', has: 'input.key', value: '[' },   // missing today -> red
+      { command: 'graph.switch', has: 'input.key', value: 'g' },   // intentionally unbound -> red
       { command: 'editing.node.create', has: 'input.key', value: 'a' }, // bound → green
     ],
   });
@@ -474,8 +476,9 @@ await okAsync('set_command + add_command take effect in a booted copy', async ()
     const tools = new Tools({ ws, browser: null, log: () => {} });
     tools.phase = 'green';
 
-    // set_command: bind a currently-unbound detail command.
-    const sc = tools.tool_set_command({ id: 'detail.less', props: { group: 'view', shortcut: '[', input: { on: 'keydown', key: '[', prevent: true } } });
+    // set_command: bind a currently-unbound command while keeping redundant
+    // existing props harmless.
+    const sc = tools.tool_set_command({ id: 'demo.render-self', props: { group: 'demo', shortcut: 'S', input: { on: 'keydown', key: 's', prevent: true } } });
     assert(/updated/.test(sc), `set_command: ${sc}`);
     assert(/already had group/.test(sc), `set_command should ignore redundant existing props: ${sc}`);
 
@@ -484,13 +487,13 @@ await okAsync('set_command + add_command take effect in a booted copy', async ()
     // of the command's own request event (else the on(...) wouldn't typecheck).
     const ac = tools.tool_add_command({
       system: 'v2/systems/graph.ts',
-      spec: { id: 'graph.edge.reverse', label: 'Reverse edge', group: 'edge' },
+      spec: { id: 'graph.selftest.ping', label: 'Selftest ping', group: 'graph' },
       handler: 'void data;',
     });
-    assert(/registered 'graph\.edge\.reverse'/.test(ac), `add_command: ${ac}`);
+    assert(/registered 'graph\.selftest\.ping'/.test(ac), `add_command: ${ac}`);
     const graphSrc = readFileSync(join(ws.dir, 'v2/systems/graph.ts'), 'utf8');
-    assert(/on\('graph\.edge\.reverse'/.test(graphSrc), 'handler not spliced');
-    assert(/'graph\.edge\.reverse':\s*void;/.test(graphSrc), 'add_command did not auto-declare its event');
+    assert(/on\('graph\.selftest\.ping'/.test(graphSrc), 'handler not spliced');
+    assert(/'graph\.selftest\.ping':\s*void;/.test(graphSrc), 'add_command did not auto-declare its event');
 
     // declare_event (standalone): a new typed fact.
     const de = tools.tool_declare_event({ system: 'v2/systems/graph.ts', event: 'graph.exported', type: '{ json: string }' });
@@ -501,10 +504,10 @@ await okAsync('set_command + add_command take effect in a booted copy', async ()
     // (compact first element on the same line). This is the exact shape the live
     // 14b run tripped: the spliced element must stay a sibling, not merge into
     // the existing object literal. The final ws.typecheck() below is the guard.
-    const ft = tools.tool_add_fold_toggle({ system: 'v2/systems/main.ts', id: 'view.left.toggle', foldId: 'outline.panel', key: 'b', shortcut: 'B' });
-    assert(/added fold toggle 'view\.left\.toggle'/.test(ft), `add_fold_toggle: ${ft}`);
-    const left = runProbe(ws.dir, { mode: 'commands', filter: 'view.left.toggle' });
-    assert.equal(left.commands.find(c => c.id === 'view.left.toggle')?.key, 'keydown:b', JSON.stringify(left.commands));
+    const ft = tools.tool_add_fold_toggle({ system: 'v2/systems/main.ts', id: 'view.selftest.toggle', foldId: 'selftest.panel', key: 'v', shortcut: 'V' });
+    assert(/added fold toggle 'view\.selftest\.toggle'/.test(ft), `add_fold_toggle: ${ft}`);
+    const toggle = runProbe(ws.dir, { mode: 'commands', filter: 'view.selftest.toggle' });
+    assert.equal(toggle.commands.find(c => c.id === 'view.selftest.toggle')?.key, 'keydown:v', JSON.stringify(toggle.commands));
 
     // add_fold_cancellable on the SAME real main.ts: widens its ({…}) destructure
     // with `origin` and splices the Escape-to-exit cancellable. The final
@@ -516,8 +519,45 @@ await okAsync('set_command + add_command take effect in a booted copy', async ()
     // event + declaration typecheck (run_test full = suite + tsc).
     const detail = runProbe(ws.dir, { mode: 'commands', filter: 'detail.less' });
     assert.equal(detail.commands.find(c => c.id === 'detail.less')?.key, 'keydown:[', JSON.stringify(detail.commands[0]));
-    const rev = runProbe(ws.dir, { mode: 'commands', filter: 'graph.edge.reverse' });
-    assert(rev.commands.some(c => c.id === 'graph.edge.reverse'), JSON.stringify(rev));
+    const demo = runProbe(ws.dir, { mode: 'commands', filter: 'demo.render-self' });
+    assert.equal(demo.commands.find(c => c.id === 'demo.render-self')?.key, 'keydown:s', JSON.stringify(demo.commands));
+    const ping = runProbe(ws.dir, { mode: 'commands', filter: 'graph.selftest.ping' });
+    assert(ping.commands.some(c => c.id === 'graph.selftest.ping'), JSON.stringify(ping));
+
+    const gx = tools.tool_add_graph_export_json({});
+    assert(/added graph\.export\.json/.test(gx), `add_graph_export_json: ${gx}`);
+    const exported = runProbe(ws.dir, {
+      mode: 'scenario',
+      steps: [
+        { command: 'editing.node.create' },
+        { command: 'editing.node.create' },
+        { command: 'graph.export.json' },
+      ],
+      asserts: [
+        { event: 'graph.exported', path: 'json', op: 'contains', value: 'e1' },
+        { event: 'graph.exported', path: 'json', op: 'contains', value: 'e2' },
+      ],
+    });
+    assert.equal(exported.ok, true, JSON.stringify(exported, null, 2));
+
+    const cc = tools.tool_add_container_delete_cascade({});
+    assert(/added recursive container child deletion/.test(cc), `add_container_delete_cascade: ${cc}`);
+    const cascaded = runProbe(ws.dir, {
+      mode: 'scenario',
+      steps: [
+        { command: 'editing.container.create' },
+        { command: 'editing.node.create' },
+        { command: 'editing.node.create' },
+        { event: 'container.add-child', data: { containerId: 'c1', childRef: { kind: 'node', id: 'e1' } } },
+        { event: 'container.add-child', data: { containerId: 'c1', childRef: { kind: 'node', id: 'e2' } } },
+        { event: 'graph.container.delete', data: { id: 'c1' } },
+      ],
+      asserts: [
+        { path: 'graph.nodes.length', value: 0 },
+        { path: 'graph.containers.length', value: 0 },
+      ],
+    });
+    assert.equal(cascaded.ok, true, JSON.stringify(cascaded, null, 2));
     const types = ws.typecheck();
     assert(types.ok, `constructor output must typecheck:\n${types.output.slice(0, 600)}`);
   } finally {

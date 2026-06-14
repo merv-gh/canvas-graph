@@ -132,6 +132,8 @@ async function scenarioAnswer(ctx: AppCtx, steps: Step[], asserts: Assert[]) {
         const spec = ctx.contexts.commands.get(step.command);
         hint = spec
           ? `command exists but is UNAVAILABLE right now — its available() guard needs preconditions (e.g. create nodes with editing.node.create, or select something) earlier in steps`
+          : subscribed.has(step.command)
+            ? `"${step.command}" is a bus event, not a command — use {"event":"${step.command}","data":{...}} or run the user command that fires it`
           : `unknown command. Closest: ${closest(step.command, ctx.contexts.commands.all().map(c => c.id)).join(', ') || 'none'}`;
       }
       stepResults.push({ step: `command ${step.command}`, ok: ran, detail: hint });

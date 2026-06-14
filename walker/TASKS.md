@@ -7,8 +7,8 @@ layout), `files` (≤3 hints), `title`, `command` (new feature command id),
 RED writes a `.layout.json` via gen_layout_test (focus/rect/style/path asserts),
 not a vitest file.
 
-Suggested next local-model queue: `detail-shortcuts`, `properties-title`,
-`reverse-edge`, then `duplicate-node`.
+Suggested next local-model queue: `zen-escape`, `container-delete-children`,
+then `export-json` or `insert-node-on-edge` if the machine is still free.
 
 ## modal-focus
 - kind: layout
@@ -72,15 +72,16 @@ needed — duplicate it, assert `graph.nodes` length 2 and both share the same
 - files: v2/core/io.ts, v2/systems/graph.ts
 - title: Export the current graph as JSON
 - command: graph.export.json
+- event: graph.exported
 
-Sharing is impossible: no export at all. Add command `graph.export.json`
-(group `graph`, palette-visible) that serializes the current graph —
-`{ nodes: [{id, Label, Position, Size}], edges: [{id, From, To, Label}] }` —
-and emits a new fact `graph.exported { json }` (declare it via CustomEvents next
-to the handler), plus writes it to `navigator.clipboard` when available (guard
-it — jsdom has no clipboard). Red test: create two nodes via scenario, run the
-command through a test that subscribes to `graph.exported`, parse the payload,
-assert it contains both node ids. Keep it one system: storage stays untouched.
+Add command `graph.export.json` (group `graph`, palette-visible). It serializes
+`{nodes:[{id,Label,Position,Size}], edges:[{id,From,To,Label}]}`, emits
+`graph.exported { json }` (declare beside the handler), and writes clipboard when
+available (guard jsdom). RED steps: `editing.node.create`, `editing.node.create`,
+`graph.export.json` (unknown in RED is ok: new feature command). Assert event
+`graph.exported` fired and `json` contains `e1` and `e2`. Do not use
+`graph.create`; it opens the graph-create modal. GREEN: use add_graph_export_json
+{}, then run_test. Keep storage untouched.
 
 ## insert-node-on-edge
 - kind: feature
@@ -101,6 +102,7 @@ run the command, assert `graph.nodes` length 3 and `graph.edges` length 2.
 - files: v2/systems/main.ts
 - title: Escape does not exit zen mode (no way back once panels are hidden)
 - demo: A;A;wait;\
+- test-requires: fold.toggle,shell.zen,app.cancel
 
 Zen mode (`\`) hides the top + left panels, leaving only the canvas (fold id
 `shell.zen` in v2/systems/main.ts, mirrored as `ui.shell.zen`). Once in zen the
@@ -108,11 +110,10 @@ only exit is `\` again — Escape does nothing, which is surprising. Cancellatio
 is a generic stack (core/cancellation.ts): a system registers {origin, active,
 cancel} and Escape (which fires `app.cancel`) peels the topmost active one. Make
 zen cancellable. GREEN: use add_fold_cancellable
-{"system":"v2/systems/main.ts","foldId":"shell.zen"} — it widens main's ctx
-destructure with `origin` and registers the cancellable. RED (scenario): step
-{"event":"fold.toggle","data":{"id":"shell.zen"}} to enter zen, then
-{"event":"app.cancel"}; assert {"path":"ui.shell.zen","op":"eq","value":false} —
-fails today (Escape ignored), passes once cancellable.
+{"system":"v2/systems/main.ts","foldId":"shell.zen"}. RED is invalid unless it
+has BOTH steps: first event `fold.toggle` data `{id:'shell.zen'}` to enter zen,
+then event `app.cancel`; assert `ui.shell.zen == false`. Do not assert false
+after only `fold.toggle` — entering zen should make it true.
 
 ## properties-name-editable
 - kind: bug
@@ -132,3 +133,147 @@ Title input, dispatch two input events, assert document.activeElement stays it
 (ui.modal.focusedField === 'title'). GREEN: don't rebuild the modal on item.update
 for the open item, or restore focus+caret after (see outline.ts's queueMicrotask
 refocus after search).
+
+## container-delete-children
+- kind: bug
+- files: v2/systems/containers.ts
+- title: Deleting a container leaves its child nodes behind
+
+Deleting a container currently releases its children, then deletes only the
+container. Desired behavior: deleting container C also deletes direct and nested
+children. RED setup: run commands `editing.container.create`,
+`editing.node.create`, `editing.node.create`; then use bus events
+`container.add-child` for `{containerId:'c1', childRef:{kind:'node', id:'e1'}}`
+and `{containerId:'c1', childRef:{kind:'node', id:'e2'}}`; then event
+`graph.container.delete` with `{id:'c1'}`. Assert `graph.nodes.length == 0` and
+`graph.containers.length == 0`. GREEN: use add_container_delete_cascade {}, then
+run_test.
+
+## top-panel-collapse
+- kind: feature
+- disabled: true
+- files: v2/systems/main.ts, v2/styles.css, v2/core/snapshot.ts
+- title: Top panel needs collapse shortcut and UI affordance
+- command: view.top.toggle
+
+T2 after fold tooling: add `view.top.toggle` (`T`) using `add_fold_toggle` with
+fold id `shell.top`, contribute a top affordance, mirror it as
+`ui.shell.topFolded`, and hide the top slot in CSS when folded. RED should assert
+the command spec and `ui.shell.topFolded`; browser/layout asserts can prove the
+top slot is hidden.
+
+## event-log-collapse
+- kind: feature
+- disabled: true
+- files: v2/systems/log.ts, v2/styles.css, v2/core/snapshot.ts
+- title: Event log panel needs collapse shortcut and UI affordance
+- command: view.log.toggle
+
+T2 after fold tooling: make the event log collapsible with fold id `log.panel`
+and command `view.log.toggle`. Add a visible affordance near the log panel,
+mirror state in the debug snapshot, and hide the log body while folded. This
+should follow the same constructor path as the top panel once the log panel has
+a stable shell/snapshot seam.
+
+## container-collapse-icon
+- kind: bug
+- disabled: true
+- files: v2/systems/outline.ts, v2/systems/containers.ts
+- title: Container collapse icon is dead
+
+T3 localization task. The outline/container collapse affordance renders but
+clicking it does not toggle the expected nested view. Repro should assert a
+visible nested child under `ui.outline` before/after the click. Likely root is
+click routing or row precedence in the outline; localize with the browser oracle
+before delegating the fix.
+
+## panel-click-focus-fit
+- kind: feature
+- disabled: true
+- files: v2/systems/outline.ts, v2/systems/view-zoom.ts
+- title: Clicking a panel item should focus and fit the item
+
+T3 design call. `view.fit.item` already exists. Decide whether this behavior is
+outline-panel-only or a universal selection side effect. Once decided, add a
+small task that clicks/selects an outline row and asserts focus plus viewport fit
+through the browser/layout oracle.
+
+## graph-properties-name
+- kind: feature
+- disabled: true
+- files: v2/systems/graph.ts, v2/model/entities.ts
+- title: Graph should have editable Name properties
+
+T3 seam task. The properties modal is data-shape driven, but graph itself has no
+item-store seam for renaming. Add storage support for `kind: graph`, graph
+properties, and a Name field; then the existing configurable ability/modal can
+handle the UI.
+
+## feature-generator-wizard
+- kind: feature
+- disabled: true
+- files: walker/gen.mjs, walker/dx.mjs
+- title: Feature/system generator wizard for future delegation
+
+Tooling/meta-lever. Build a DX wizard that asks for system/feature/ability name,
+events, commands, surfaces, tests, and projection slices, then writes a small
+scaffold with TODOs and a red test. This is for the big model/human to build,
+then smaller models fill the generated blanks.
+
+## floating-tool-panels
+- kind: feature
+- disabled: true
+- files: v2/systems/item-toolbar.ts, v2/types.ts
+- title: Floating movable tool panels
+
+T4 foundation. Needs a new place type, dragging/persisted panel positions, and
+probably a panel registry. `item-toolbar.ts` is only a partial precedent.
+
+## graph-persistence
+- kind: feature
+- disabled: true
+- files: v2/systems/graph.ts, v2/core/io.ts
+- title: Persist graphs to localStorage or IndexedDB
+
+T4 Principle 9 debt. Add an IO system with `io.read`, `io.write`, and
+`io.changed` events, start with localStorage, then make IndexedDB an adapter.
+Only delegate after the persistence seam and serialization contract are clear.
+
+## deep-links
+- kind: feature
+- disabled: true
+- files: v2/systems/scenario.ts, v2/systems/view-zoom.ts
+- title: Deep links for graph, camera, coordinates, and focus
+
+T4. `?scenario=` keystroke macros exist, but state links are new. Define URL
+serialization for `{ graphId, camera, selection/focus }`, parse on boot, and
+update URL after stable changes without noisy history spam.
+
+## universal-search
+- kind: feature
+- disabled: true
+- files: v2/systems/command-modal.ts, v2/systems/jump.ts
+- title: Universal search in the palette
+
+T4. Palette currently searches commands only. Add a `searchSources` registry for
+commands, items, settings, and future tools. Reuse the item enumeration patterns
+from `jump.ts`, then rank with a small fuzzy scorer.
+
+## split-app-framework
+- kind: feature
+- disabled: true
+- files: v2/core.ts, v2/systems/index.ts, v2/model
+- title: Split graph app from reusable framework
+
+T4 architecture. Separate framework (`core/`, generic systems) from graph app
+(`model/`, graph/containers/demo). Needs a package boundary and migration plan,
+not a small model card.
+
+## production-release
+- kind: feature
+- disabled: true
+- files: package.json, README.md, .github
+- title: Production and GitHub release readiness
+
+T4 release work. Gates exist, but CI, license, contributing guide, deploy target,
+and release workflow still need a coherent pass.
