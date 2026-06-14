@@ -240,6 +240,22 @@ button.icon:hover { color: var(--ink); }
   scrollbar-width: none;
 }
 .tool-panel .toolbar::-webkit-scrollbar { display: none; }
+.node-type-panel {
+  gap: 3px;
+  max-width: none;
+}
+.node-type-button {
+  min-width: 44px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 5px;
+  font-size: 12px;
+}
+.node-type-button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
 .keyboard-capture {
   position: fixed;
   width: 1px;
@@ -322,6 +338,19 @@ button.icon:hover { color: var(--ink); }
   justify-content: center;
   transition: box-shadow .15s, border-color .15s, min-height .12s;
 }
+.node-type-square {
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--panel) 88%, #e0f2fe);
+}
+.node-type-circle {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 86%, #dcfce7);
+}
+.node-type-circle .node-title,
+.node-type-circle .node-body {
+  padding-left: 18px;
+  padding-right: 18px;
+}
 
 /* Containers paint behind nodes (EntityDef.order = -10). Dashed border + label
    in the corner so the grouping reads at a glance without competing with nodes. */
@@ -376,6 +405,29 @@ button.icon:hover { color: var(--ink); }
   background: var(--panel);
   color: var(--ink);
   border-radius: 2px;
+}
+.container-sections {
+  position: absolute;
+  inset: 16px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+}
+.container-section {
+  position: relative;
+  flex: 1 1 0;
+  border-top: 1px dashed color-mix(in srgb, var(--line-strong) 70%, transparent);
+}
+.container-section:first-child { border-top: 0; }
+.container-section span {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  color: var(--text-muted);
+  font: 600 10px/1.2 ui-monospace, monospace;
 }
 /* Resize handle — bottom-right corner. Visible only on hover/selected/focused. */
 .container-resize {
@@ -452,11 +504,29 @@ button.icon:hover { color: var(--ink); }
   background: var(--panel);
   cursor: text;
 }
-.node-body { padding: 4px 12px 10px; color: var(--text-muted); font-size: 12px; }
-.node-meta { color: var(--text-muted); font-size: 11px; }
-/* Body (meta line) only appears on selection — affordances live in the
-   floating toolbar above, so the resting state is a calm title-only card. */
-.node:not(.selected) .node-body { display: none; }
+.node-body { padding: 0 12px 10px; color: var(--text-muted); font-size: 12px; }
+.node-description {
+  display: grid;
+  gap: 3px;
+  max-height: 92px;
+  overflow: hidden;
+  line-height: 1.25;
+  text-align: left;
+}
+.node-description p,
+.node-description h4,
+.node-description ul { margin: 0; }
+.node-description h4 { font-size: 11px; color: var(--ink); }
+.node-description ul { padding-left: 16px; }
+.node-description code {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--panel-2);
+  color: var(--ink);
+}
+.node-description a { color: var(--accent); }
+/* Nodes without descriptions stay title-only; ids are data attrs, not visual noise. */
+.node:not(.has-description) .node-body { display: none; }
 .node.collapsed .node-body { display: none; }
 
 /* Side panel typography */
@@ -701,7 +771,9 @@ button.icon:hover { color: var(--ink); }
   text-transform: uppercase;
   letter-spacing: .05em;
 }
-.properties input {
+.properties input,
+.properties textarea,
+.properties select {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -712,11 +784,18 @@ button.icon:hover { color: var(--ink); }
   text-transform: none;
   letter-spacing: normal;
 }
+.properties textarea {
+  resize: vertical;
+  min-height: 78px;
+  line-height: 1.4;
+}
 
 .properties input.editable-inline {
   border-bottom: 1px dashed var(--line-strong);
 }
-.properties input:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+.properties input:focus,
+.properties textarea:focus,
+.properties select:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
 .properties .check-row {
   display: flex; align-items: center; gap: 8px;
   color: var(--ink);

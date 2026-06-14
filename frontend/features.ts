@@ -114,7 +114,18 @@ export function registerFeatures(feature: Registry) {
       emit('graph.edge.create', { From, To, Label: draft.Label });
     });
   }, { requires: ['graph'] });
-  // NOTE: layout is *explicit only*. Collapsing/grouping never repositions items
-  // (that surprised users — a chain laid out as a row would jump to a column on
-  // collapse). Run tidy/grid/radial deliberately from the toolbar or palette.
+  feature('autoLayout', ({ on, emit }) => {
+    let pending = false;
+    const scheduleTidy = () => {
+      if (pending) return;
+      pending = true;
+      queueMicrotask(() => {
+        pending = false;
+        emit('layout.apply.tidy');
+      });
+    };
+    on('graph.node.created', scheduleTidy);
+    on('graph.node.deleted', scheduleTidy);
+    on('container.children.changed', scheduleTidy);
+  }, { requires: ['graph', 'layout'] });
 }

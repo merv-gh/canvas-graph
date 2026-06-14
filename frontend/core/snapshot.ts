@@ -28,7 +28,7 @@ export function snapshot(ctx: AppCtx) {
   const ui = captureUi(ctx);
   const graph = ctx.graphs.current;
   const containers = graph.itemsOfKind('container') as Array<{
-    id: string; Label?: { text: string }; Collapsed?: boolean; Position?: unknown; Size?: unknown; Children?: unknown;
+    id: string; Label?: { text: string }; Collapsed?: boolean; Position?: unknown; Size?: unknown; Children?: unknown; Sections?: unknown;
   }>;
   const dxIssues = ctx.contexts.dx.run();
   return {
@@ -39,6 +39,8 @@ export function snapshot(ctx: AppCtx) {
         Label: n.Label,
         Position: n.Position,
         Size: n.Size,
+        NodeType: n.NodeType,
+        Description: n.Description,
         Collapsed: ctx.contexts.fold.folded(itemFoldId({ kind: 'node', id: n.id }, graph.id)),
       })),
       edges: graph.edges().map(e => ({
@@ -53,6 +55,7 @@ export function snapshot(ctx: AppCtx) {
         Collapsed: ctx.contexts.fold.folded(itemFoldId({ kind: 'container', id: c.id }, graph.id)),
         Position: c.Position,
         Size: c.Size,
+        Sections: c.Sections,
         Children: c.Children,
       })),
     },
@@ -132,8 +135,13 @@ function captureUi(ctx: AppCtx) {
     },
     rendered: {
       nodes: count('.node[data-item-kind="node"]'),
+      textNodes: count('.node-type-text[data-item-kind="node"]'),
+      squareNodes: count('.node-type-square[data-item-kind="node"]'),
+      circleNodes: count('.node-type-circle[data-item-kind="node"]'),
+      describedNodes: count('.node.has-description[data-item-kind="node"]'),
       edges: count('[data-item-kind="edge"]'),
       containers: count('.container[data-item-kind="container"]'),
+      sectionedContainers: count('.container.has-sections[data-item-kind="container"]'),
       overlays: count('.item-overlay'),
     },
     stage: {
@@ -142,6 +150,7 @@ function captureUi(ctx: AppCtx) {
     },
     toolPanels: {
       top: toolPanelInfo('top'),
+      nodeTypes: toolPanelInfo('node-types'),
     },
     // Outline shape — how nesting actually renders in the left pane. `nested`
     // counts rows that live inside a parent's children block, so a recorded
@@ -190,8 +199,13 @@ const SHELL_CODE: Record<string, string> = {
 };
 const RENDERED_CODE: Record<string, string> = {
   nodes: "ctx.contexts.places.el('stage')?.querySelectorAll('.node[data-item-kind=\"node\"]').length",
+  textNodes: "ctx.contexts.places.el('stage')?.querySelectorAll('.node-type-text[data-item-kind=\"node\"]').length",
+  squareNodes: "ctx.contexts.places.el('stage')?.querySelectorAll('.node-type-square[data-item-kind=\"node\"]').length",
+  circleNodes: "ctx.contexts.places.el('stage')?.querySelectorAll('.node-type-circle[data-item-kind=\"node\"]').length",
+  describedNodes: "ctx.contexts.places.el('stage')?.querySelectorAll('.node.has-description[data-item-kind=\"node\"]').length",
   edges: "ctx.contexts.places.el('stage')?.querySelectorAll('[data-item-kind=\"edge\"]').length",
   containers: "ctx.contexts.places.el('stage')?.querySelectorAll('.container[data-item-kind=\"container\"]').length",
+  sectionedContainers: "ctx.contexts.places.el('stage')?.querySelectorAll('.container.has-sections[data-item-kind=\"container\"]').length",
   overlays: "ctx.contexts.places.el('stage')?.querySelectorAll('.item-overlay').length",
 };
 const STAGE_CODE: Record<string, string> = {
@@ -206,6 +220,10 @@ const OUTLINE_CODE: Record<string, string> = {
   sections: "ctx.contexts.places.el('left')?.querySelectorAll('.outline-section').length",
   rows: "ctx.contexts.places.el('left')?.querySelectorAll('.outline-row').length",
   nested: "ctx.contexts.places.el('left')?.querySelectorAll('.outline-children .outline-row').length",
+};
+const TOOL_PANEL_CODE: Record<string, string> = {
+  top: "ctx.contexts.places.el('stage')?.querySelector('.tool-panel[data-panel-id=\"top\"]')",
+  nodeTypes: "ctx.contexts.places.el('stage')?.querySelector('.tool-panel[data-panel-id=\"node-types\"]')",
 };
 
 /** Selection has method-shaped readers (`selected()`, `focused()`) instead of
@@ -246,7 +264,7 @@ export function snapshotTree(snap: Snapshot): SnapshotNode {
 type Segment =
   | 'root'
   | 'graph' | 'selection' | 'flags' | 'dx'
-  | 'ui' | 'ui.places' | 'ui.shell' | 'ui.rendered' | 'ui.stage' | 'ui.modal' | 'ui.outline'
+  | 'ui' | 'ui.places' | 'ui.shell' | 'ui.rendered' | 'ui.stage' | 'ui.modal' | 'ui.outline' | 'ui.toolPanels'
   | 'plain';
 
 function pickCode(parentCode: string, key: string, segment: Segment, optional: boolean): string {
@@ -261,6 +279,7 @@ function pickCode(parentCode: string, key: string, segment: Segment, optional: b
   if (segment === 'ui.stage' && STAGE_CODE[key]) return STAGE_CODE[key];
   if (segment === 'ui.modal' && MODAL_CODE[key]) return MODAL_CODE[key];
   if (segment === 'ui.outline' && OUTLINE_CODE[key]) return OUTLINE_CODE[key];
+  if (segment === 'ui.toolPanels' && TOOL_PANEL_CODE[key]) return TOOL_PANEL_CODE[key];
   return `${parentCode}${optional ? '?.' : '.'}${key}`;
 }
 
@@ -280,6 +299,7 @@ function nextSegment(parent: Segment, key: string): Segment {
     if (key === 'stage') return 'ui.stage';
     if (key === 'modal') return 'ui.modal';
     if (key === 'outline') return 'ui.outline';
+    if (key === 'toolPanels') return 'ui.toolPanels';
   }
   return 'plain';
 }

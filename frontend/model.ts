@@ -13,4 +13,5 @@ export type {
   NodeDraft,
   NodeEntity,
   NodePatch,
+  NodeType,
 } from './model/graph';

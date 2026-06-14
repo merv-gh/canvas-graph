@@ -114,7 +114,9 @@ export function registerGraph(system: Registry) {
 
     on('graph.export.json', () => {
       const json = JSON.stringify({
-        nodes: graphs.current.nodes().map(({ id, Label, Position, Size }) => ({ id, Label, Position, Size })),
+        nodes: graphs.current.nodes().map(({ id, Label, Position, Size, NodeType, Description }) => ({
+          id, Label, Position, Size, NodeType, Description,
+        })),
         edges: graphs.current.edges().map(({ id, From, To, Label }) => ({ id, From, To, Label })),
       });
       const clipboard = globalThis.navigator?.clipboard;

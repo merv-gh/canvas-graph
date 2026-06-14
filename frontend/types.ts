@@ -359,6 +359,8 @@ export type PropertyDef<T = unknown, Patch = unknown> = {
   patch: (item: T, value: PropertyValue) => Patch | undefined;
   min?: number;
   step?: number;
+  rows?: number;
+  options?: { value: string; label: string }[];
   /** Section the property is rendered under in the modal. Default 'default'. */
   group?: string;
 };

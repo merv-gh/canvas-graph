@@ -47,15 +47,22 @@ type Container = {
   Size: Size;
   /** Default true: visual rect is auto-fit from children. Manual resize flips this. */
   AutoFit?: boolean;
+  Sections?: { id: Id; title: string }[];
   Children: ItemRef[];
 };
-type ContainerPatch = Partial<Pick<Container, 'Label' | 'Position' | 'Size' | 'AutoFit'>>;
+type ContainerPatch = Partial<Pick<Container, 'Label' | 'Position' | 'Size' | 'AutoFit' | 'Sections'>>;
 
 const DEFAULT_SIZE: Size = { w: 320, h: 200 };
 /** Compact size used when collapsed — just enough room for the label badge. */
 const COLLAPSED_SIZE: Size = { w: 140, h: 36 };
 const PADDING = 24;
 const LABEL_BAND = 18;
+const parseSections = (value: unknown) =>
+  String(value)
+    .split(/\r?\n/)
+    .map(title => title.trim())
+    .filter(Boolean)
+    .map((title, index) => ({ id: `s${index + 1}`, title }));
 
 // ---------- The system ----------
 
@@ -155,6 +162,20 @@ export function registerContainers(system: Registry) {
         const ref = r.refOf(c.id);
         r.tagItem(el, ref);
         r.applyItemModes(el, ref);
+        if (!folded(c) && c.Sections?.length) {
+          el.classList.add('has-sections');
+          const sections = document.createElement('div');
+          sections.className = 'container-sections';
+          c.Sections.forEach(section => {
+            const band = document.createElement('div');
+            band.className = 'container-section';
+            const title = document.createElement('span');
+            title.textContent = section.title;
+            band.append(title);
+            sections.append(band);
+          });
+          el.append(sections);
+        }
         // Editable label (data-editable-title triggers the generic edit flow).
         const label = document.createElement('div');
         label.className = 'container-label';
@@ -180,6 +201,9 @@ export function registerContainers(system: Registry) {
       { id: 'height', label: 'Height', input: 'number', min: 80, step: 8,
         value: c => c.Size.h,
         patch: (c, v) => Number.isFinite(Number(v)) ? { Size: { ...c.Size, h: Math.max(80, Number(v)) } } : undefined },
+      { id: 'sections', label: 'Sections', input: 'textarea', rows: 4, group: 'Structure',
+        value: c => c.Sections?.map(s => s.title).join('\n') ?? '',
+        patch: (_c, v) => ({ Sections: parseSections(v) }) },
     ];
 
     const entity: EntityDef<Container, ContainerPatch> = {
@@ -287,6 +311,7 @@ export function registerContainers(system: Registry) {
         Label: draft.Label ?? { text: id },
         Position: draft.at ?? { x: 0, y: 0 },
         Size: { ...DEFAULT_SIZE },
+        Sections: [],
         Children: [],
       });
       emit('container.created', { id });

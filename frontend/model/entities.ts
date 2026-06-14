@@ -1,6 +1,7 @@
 import { clamp } from '../core';
+import { renderMarkdown } from '../core/markdown';
 import { collapsible, configurable, draggable, editable, nudgeable, selectable } from '../abilities';
-import type { Graph, GraphEdge, GraphNode, NodeEntity, EdgePatch, NodePatch } from './graph';
+import type { Graph, GraphEdge, GraphNode, NodeEntity, EdgePatch, NodePatch, NodeType } from './graph';
 import type { EntityDef, EntityRenderer, ItemRef, PropertyDef, Rect } from '../types';
 
 /** Built-in entity declarations — what a graph / node / edge *is*: its label,
@@ -19,6 +20,13 @@ const svg = <K extends keyof SVGElementTagNameMap>(name: K, attrs: Record<string
 
 const property = <T, Patch>(def: PropertyDef<T, Patch>) => def;
 const entityDef = <T, Patch = unknown>(kind: string, def: Omit<EntityDef<T, Patch>, 'kind'>): EntityDef<T, Patch> => ({ kind, ...def });
+const NODE_TYPES: { value: NodeType; label: string }[] = [
+  { value: 'text', label: 'Text' },
+  { value: 'square', label: 'Square' },
+  { value: 'circle', label: 'Circle' },
+];
+const isNodeType = (value: unknown): value is NodeType =>
+  value === 'text' || value === 'square' || value === 'circle';
 
 export const graphEntity: EntityDef<Graph> = entityDef<Graph>('graph', {
   label: 'Graph',
@@ -127,16 +135,21 @@ const nodeRenderer: EntityRenderer<GraphNode> = {
     const el = ctx.cloneTemplate<HTMLElement>('node');
     const pos = node.Position ?? { x: 0, y: 0 };
     const ref = ctx.refOf(node.id);
+    const nodeType = node.NodeType ?? 'text';
+    const description = node.Description?.trim() ?? '';
     ctx.tagItem(el, ref);
     el.tabIndex = -1;
     ctx.applyItemModes(el, ref);
     el.classList.toggle('collapsed', ctx.isFolded(ref));
+    el.classList.add(`node-type-${nodeType}`);
+    el.classList.toggle('has-description', !!description);
+    el.dataset.nodeType = nodeType;
     el.style.left = `${pos.x}px`;
     el.style.top = `${pos.y}px`;
     el.style.width = `${node.Size.w}px`;
     el.style.height = `${node.Size.h}px`;
     ctx.templateText(el, 'title', node.Label.text);
-    ctx.templateText(el, 'meta', node.id);
+    ctx.templateSlot(el, 'description').replaceChildren(renderMarkdown(description));
     ctx.wireAffordances(el);
     return el;
   },
@@ -159,6 +172,16 @@ export const nodeEntity: EntityDef<GraphNode, NodePatch> = entityDef<GraphNode, 
       id: 'title', label: 'Title', input: 'text',
       value: node => node.Label.text,
       patch: (_node, value) => ({ Label: { text: String(value) } }),
+    }),
+    property<GraphNode, NodePatch>({
+      id: 'nodeType', label: 'Shape', input: 'select', options: NODE_TYPES,
+      value: node => node.NodeType ?? 'text',
+      patch: (_node, value) => isNodeType(value) ? { NodeType: value } : undefined,
+    }),
+    property<GraphNode, NodePatch>({
+      id: 'description', label: 'Markdown description', input: 'textarea', rows: 6, group: 'Content',
+      value: node => node.Description ?? '',
+      patch: (_node, value) => ({ Description: String(value) }),
     }),
     property<GraphNode, NodePatch>({
       id: 'width', label: 'Width', input: 'number', min: 96, step: 8,

@@ -20,6 +20,7 @@ import { registerLog } from './log';
 import { registerMain } from './main';
 import { registerModal } from './modal';
 import { registerItemToolbar } from './item-toolbar';
+import { registerNodeVisuals } from './node-visuals';
 import { registerOutline } from './outline';
 import { registerRender } from './render';
 import { registerRenderStage } from './render-stage';
@@ -53,6 +54,7 @@ export function registerSystems(system: Registry) {
   registerFocus(system);
   registerLayout(system);
   registerItemToolbar(system);
+  registerNodeVisuals(system);
   registerContainers(system);
   registerChoose(system);
   registerDetail(system);

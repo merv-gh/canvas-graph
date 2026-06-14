@@ -129,13 +129,14 @@ describe('frontend choose — multi-item set + bulk actions', () => {
     const child = ctx.graphs.current.createNode({ Label: { text: 'child' }, Position: { x: 50, y: 50 } });
     ctx.bus.emit('container.add-child', { containerId: cid, childRef: { kind: 'node', id: child.id } });
     await settle();
+    const before = ctx.graphs.current.getNode(child.id)!.Position!.x;
     // Choose BOTH the container and its child, then nudge.
     ctx.bus.emit('selection.choose', { refs: [{ kind: 'container', id: cid }, { kind: 'node', id: child.id }], mode: 'replace' });
     await settle();
     runCommand(ctx, 'item.nudge.right');
     await settle();
     // Child moved by exactly one delta (container cascade), not two.
-    expect(ctx.graphs.current.getNode(child.id)!.Position!.x).toBe(74);
+    expect(ctx.graphs.current.getNode(child.id)!.Position!.x).toBe(before + 24);
   });
 
   it('group folds the chosen items into a new container that nests them', async () => {

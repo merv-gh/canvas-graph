@@ -89,11 +89,24 @@ export function registerConfigurable(system: Registry) {
         label: 'Edit item property',
         group: 'properties',
         hidden: true,
-        input: { on: 'input', selector: '.properties input[data-field]:not([type="checkbox"])' },
+        input: { on: 'input', selector: '.properties input[data-field]:not([type="checkbox"]), .properties textarea[data-field]' },
         payload: ({ target }) => ({
           ref: formRef(target),
           field: target?.getAttribute('data-field') ?? '',
-          value: (target as HTMLInputElement).value,
+          value: (target as HTMLInputElement | HTMLTextAreaElement).value,
+        }),
+      },
+      {
+        id: 'properties.item.select',
+        label: 'Select item property',
+        event: 'properties.item.input',
+        group: 'properties',
+        hidden: true,
+        input: { on: 'change', selector: '.properties select[data-field]' },
+        payload: ({ target }) => ({
+          ref: formRef(target),
+          field: target?.getAttribute('data-field') ?? '',
+          value: (target as HTMLSelectElement).value,
         }),
       },
       {

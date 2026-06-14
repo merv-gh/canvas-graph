@@ -34,6 +34,23 @@ exports[`combinatorial action graph > length-1: every auto-runnable command boot
 }
 `;
 
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [demo.render-java] 1`] = `
+{
+  "sequence": [
+    "demo.render-java",
+  ],
+  "snap": {
+    "containers": 3,
+    "dxErrors": 0,
+    "edges": 9,
+    "focused": "node:e9",
+    "nodes": 9,
+    "scale": 0.6,
+    "selected": "node:e9",
+  },
+}
+`;
+
 exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [demo.render-self] 1`] = `
 {
   "sequence": [
@@ -42,11 +59,11 @@ exports[`combinatorial action graph > length-1: every auto-runnable command boot
   "snap": {
     "containers": 5,
     "dxErrors": 0,
-    "edges": 65,
-    "focused": "node:e45",
-    "nodes": 45,
+    "edges": 70,
+    "focused": "node:e47",
+    "nodes": 47,
     "scale": 0.18,
-    "selected": "node:e45",
+    "selected": "node:e47",
   },
 }
 `;

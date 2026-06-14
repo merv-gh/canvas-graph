@@ -5,9 +5,10 @@ import type { Id, ItemRef, Label, Position, Size } from '../types';
 // (node, edge, future container) belongs in the model layer, not in types.ts.
 export type Entity = { id: Id; kind: string; Label: Label; Size: Size; Position?: Position };
 
-export type NodeEntity = Entity & { kind: 'node';  };
-export type NodeDraft = { Label?: Label; Position?: Position; Size?: Size };
-export type NodePatch = Partial<Pick<NodeEntity, 'Label' | 'Size' | 'Position'>>;
+export type NodeType = 'text' | 'square' | 'circle';
+export type NodeEntity = Entity & { kind: 'node'; NodeType: NodeType; Description?: string };
+export type NodeDraft = { Label?: Label; Position?: Position; Size?: Size; NodeType?: NodeType; Description?: string };
+export type NodePatch = Partial<Pick<NodeEntity, 'Label' | 'Size' | 'Position' | 'NodeType' | 'Description'>>;
 export type NodeCreateOptions = { at?: Position; near?: Id | null };
 
 /** Operation-time hints attached to create events. They control the lifecycle around the
@@ -36,11 +37,15 @@ export class GraphNode implements NodeEntity {
   Label: Label;
   Size: Size;
   Position?: Position;
+  NodeType: NodeType;
+  Description?: string;
 
   constructor(readonly graph: Graph, readonly id: Id, draft: NodeDraft = {}) {
     this.Label = draft.Label ?? { text: id };
     this.Size = draft.Size ?? { w: 150, h: 64 };
     this.Position = draft.Position;
+    this.NodeType = draft.NodeType ?? 'text';
+    this.Description = draft.Description ?? '';
   }
 }
 

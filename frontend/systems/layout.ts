@@ -50,10 +50,18 @@ export function partitionByScope(ctx: AppCtx): LayoutScope[] {
     group.nodes.push(node);
     groups.set(key, group);
   }
+  const rootOrigin = (nodes: GraphNode[]): Position => {
+    const positioned = nodes.map(node => node.Position).filter((p): p is Position => !!p);
+    if (!positioned.length) return { x: 0, y: 0 };
+    return {
+      x: positioned.reduce((sum, p) => sum + p.x, 0) / positioned.length,
+      y: positioned.reduce((sum, p) => sum + p.y, 0) / positioned.length,
+    };
+  };
   return [...groups.values()].map(({ parent, nodes }) => {
     const origin = parent
       ? (graph.getItem(parent) as { Position?: Position } | undefined)?.Position ?? { x: 0, y: 0 }
-      : { x: 0, y: 0 };
+      : rootOrigin(nodes);
     const nodeIds = new Set(nodes.map(n => n.id));
     const edges = graph.edges().filter(e => nodeIds.has(e.From) && nodeIds.has(e.To));
     return { origin, parent, nodes, edges };

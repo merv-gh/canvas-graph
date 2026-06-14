@@ -4,6 +4,7 @@ import type { Id, ItemRef } from '../types';
 declare module '../types' {
   interface CustomEvents {
     'demo.run-self': void;
+    'demo.run-java': void;
   }
 }
 
@@ -15,12 +16,21 @@ export function registerDemo(system: Registry) {
   system('demo', (ctx) => {
     const { on, emit, graphs, contribute } = ctx;
     contribute({ surface: 'top', command: 'demo.render-self', kind: 'button', text: '★ Self', order: 60 });
-    ctx.contexts.commands.register([{
-      id: 'demo.render-self',
-      label: 'Render self-graph',
-      event: 'demo.run-self',
-      group: 'demo',
-    }]);
+    contribute({ surface: 'top', command: 'demo.render-java', kind: 'button', text: 'Java Map', order: 61 });
+    ctx.contexts.commands.register([
+      {
+        id: 'demo.render-self',
+        label: 'Render self-graph',
+        event: 'demo.run-self',
+        group: 'demo',
+      },
+      {
+        id: 'demo.render-java',
+        label: 'Render Java memory model map',
+        event: 'demo.run-java',
+        group: 'demo',
+      },
+    ]);
 
     const NODE_KINDS: IntrospectKind[] = ['system', 'ability', 'feature', 'entity', 'collection'];
     const EDGE_RELATIONS = new Set(['requires', 'declares', 'lists']);
@@ -95,6 +105,66 @@ export function registerDemo(system: Registry) {
         containers: containerOfKind.size,
         edges: snapshot.edges.filter(e => EDGE_RELATIONS.has(e.relation)).length,
       });
+    });
+
+    on('demo.run-java', () => {
+      const graph = graphs.current;
+      graph.nodes().slice().forEach(node => emit('graph.node.delete', { id: node.id }));
+      containerIds().forEach(id => emit('graph.container.delete', { id }));
+
+      const makeContainer = (title: string, at: { x: number; y: number }, sections: string[]) => {
+        const before = new Set(containerIds());
+        emit('editing.container.create', { Label: { text: title }, at });
+        const id = containerIds().find(candidate => !before.has(candidate));
+        if (id) {
+          emit('item.update', {
+            ref: { kind: 'container', id },
+            patch: { Sections: sections.map((name, index) => ({ id: `s${index + 1}`, title: name })) },
+          });
+        }
+        return id;
+      };
+
+      const runtime = makeContainer('Runtime Data Areas', { x: -520, y: 0 }, ['Heap', 'Thread stacks', 'Metaspace']);
+      const execution = makeContainer('Execution + JMM', { x: 0, y: 0 }, ['Threads', 'Synchronization', 'Happens-before']);
+      const toolchain = makeContainer('Toolchain', { x: 520, y: 0 }, ['Source', 'Bytecode', 'JIT']);
+
+      const makeNode = (label: string, nodeType: 'text' | 'square' | 'circle', description: string, containerId?: string) => {
+        const node = graph.createNode({
+          Label: { text: label },
+          NodeType: nodeType,
+          Description: description,
+          Size: nodeType === 'text' ? { w: 190, h: 108 } : { w: 118, h: 118 },
+        });
+        if (containerId) emit('container.add-child', { containerId, childRef: { kind: 'node', id: node.id } as ItemRef });
+        emit('graph.node.created', { graphId: graph.id, id: node.id });
+        return node.id;
+      };
+
+      const source = makeNode('Java source', 'text', 'Classes, methods, fields, and generic source-level intent.', toolchain);
+      const bytecode = makeNode('Bytecode', 'square', '`javac` emits class files with symbolic refs and stack-machine ops.', toolchain);
+      const jit = makeNode('JIT compiler', 'circle', 'Hot methods become optimized machine code; deopt keeps the story reversible.', toolchain);
+      const heap = makeNode('Heap objects', 'square', 'Shared object graph: headers, fields, arrays, and references.', runtime);
+      const stacks = makeNode('Thread stacks', 'text', 'Frames hold locals, operand stacks, return points, and monitor records.', runtime);
+      const gc = makeNode('GC roots', 'circle', 'Stacks, statics, JNI refs, and VM roots seed reachability.', runtime);
+      const threads = makeNode('Threads', 'circle', 'Each thread executes frames while sharing heap state.', execution);
+      const sync = makeNode('Monitors + volatile', 'square', 'Synchronization creates ordering edges and visibility guarantees.', execution);
+      const hb = makeNode('Happens-before', 'text', '- program order\n- monitor unlock -> lock\n- volatile write -> read', execution);
+
+      [
+        [source, bytecode, 'compile'],
+        [bytecode, jit, 'hot path'],
+        [threads, stacks, 'executes'],
+        [stacks, heap, 'references'],
+        [gc, heap, 'traces'],
+        [threads, sync, 'coordinates'],
+        [sync, hb, 'orders'],
+        [hb, heap, 'visibility'],
+        [jit, threads, 'runs code'],
+      ].forEach(([From, To, label]) => emit('graph.edge.create', { From, To, Label: { text: label } }));
+
+      emit('layout.apply.tidy');
+      emit('view.fit.all');
     });
   }, { requires: ['graph', 'render', 'containers'] });
 }
