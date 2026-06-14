@@ -3,6 +3,11 @@ test-results/
 playwright-report/
 coverage/
 
+# secrets — .env holds SSH creds for the ollama box; never commit
+.env
+.env.*
+!.env.example
+
 walker/journal/
 walker/workspace/
 walker/preview-ws/

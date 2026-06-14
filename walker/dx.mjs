@@ -284,6 +284,7 @@ function runWalker(target, opts = {}) {
   const args = ['walker/loop.mjs', '--cycles', String(opts.cycles ?? 1)];
   if (target && target !== 'all' && target !== 'pending') args.push('--task', target);
   if (opts.mock) args.push('--mock');
+  if (opts.human) args.push('--human');
   if (opts.model) args.push('--model', opts.model);
   if (opts.maxTurns) args.push('--max-turns', String(opts.maxTurns));
   return runNode(args[0], args.slice(1));
@@ -291,6 +292,10 @@ function runWalker(target, opts = {}) {
 
 async function runModel(rl, targetArg = null, opts = {}) {
   let target = targetArg;
+  if (opts.human && (!target || target === 'pending' || target === 'all')) {
+    console.log('Human mode drives one task by hand: node walker/dx.mjs <task-id> --human');
+    return 1;
+  }
   if (!target) {
     console.log('\nRun target: task id/number, pending, or all.');
     const answer = await rl.question('Target [pending]: ');
@@ -647,10 +652,11 @@ async function main() {
   if (!argv.cmd) return menu();
   if (argv.cmd === 'status') return printStatus();
   if (argv.cmd === 'help' || argv.cmd === '--help' || argv.cmd === '-h') return printHelp();
-  if (argv.cmd === 'run') {
+  if (argv.cmd === 'run' || argv.cmd === 'watch' || argv.cmd === 'human') {
     const target = argv.args[0] ?? 'pending';
     return runModel(null, target, {
       mock: Boolean(argv.opts.mock),
+      human: argv.cmd === 'human' || Boolean(argv.opts.human),
       model: argv.opts.model,
       maxTurns: argv.opts['max-turns'],
       cycles: argv.opts.cycles ?? 1,
@@ -679,6 +685,16 @@ async function main() {
   if (argv.cmd === 'clean') return cleanJournal({ keep: argv.opts.keep ?? 3, yes: Boolean(argv.opts.yes) });
   if (['project', 'projection', 'projections', 'view', 'views'].includes(argv.cmd)) {
     return runNode('walker/projections.mjs', argv.args.length ? argv.args : ['status']);
+  }
+  // Bare task id: `dx <task-id> [--human]` is shorthand for `dx run <task-id>`.
+  if (argv.cmd && resolveTask(argv.cmd)) {
+    return runModel(null, argv.cmd, {
+      human: Boolean(argv.opts.human),
+      mock: Boolean(argv.opts.mock),
+      model: argv.opts.model,
+      maxTurns: argv.opts['max-turns'],
+      cycles: argv.opts.cycles ?? 1,
+    });
   }
   printHelp();
   process.exitCode = 2;

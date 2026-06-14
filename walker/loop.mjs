@@ -14,6 +14,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fencedBlocks, OllamaChat } from './ollama.mjs';
 import { MockChat } from './mock.mjs';
+import { HumanChat } from './human.mjs';
 import { buildMessages, buildSystemPrompt, buildTaskCard, estTokens, trimResult } from './context.mjs';
 import { Tools } from './tools.mjs';
 import { Workspace } from './workspace.mjs';
@@ -34,6 +35,7 @@ const HOURS = Number(opt('hours', 0));
 const CYCLES = Number(opt('cycles', 0));
 const ONLY_TASK = opt('task', null);
 const MOCK = flag('mock');
+const HUMAN = flag('human'); // you drive the attempt by hand — eval the context/views
 const MODEL_OVERRIDE = opt('model', null);
 const MAX_TURNS = Number(opt('max-turns', 0));
 
@@ -88,7 +90,9 @@ async function attempt(task, { cycle, n, model, temperature, seed }) {
   };
 
   const ws = new Workspace(REPO, join(HERE, 'workspace'), jlog);
-  const chat = MOCK ? new MockChat(task.id, jlog) : new OllamaChat({ ...CONFIG.ollama, temperature }, jlog);
+  const chat = HUMAN ? new HumanChat({ wsDir: ws.dir, log: jlog })
+    : MOCK ? new MockChat(task.id, jlog)
+    : new OllamaChat({ ...CONFIG.ollama, temperature }, jlog);
   let browser = null;
   const startedAt = Date.now();
   const deadline = startedAt + CONFIG.budgets.attemptMinutes * 60000;
@@ -321,6 +325,7 @@ async function attempt(task, { cycle, n, model, temperature, seed }) {
     jlog(`outcome=${outcome} turns=${turns} ${minutes}min`);
     return outcome;
   } finally {
+    chat.close?.();
     await browser?.close();
     await ws.destroy();
   }
@@ -409,6 +414,7 @@ for (;;) {
     else failCounts[task.id] = fails + 1;
   }
   if (CYCLES && cycle >= CYCLES) { log('cycle budget reached'); break; }
+  if (HUMAN) { log('human: single pass'); break; } // you drive once; no auto-retry/escalation
   if (!CYCLES && !endAt && MOCK) break; // mock: single pass
 }
 log('walker finished');

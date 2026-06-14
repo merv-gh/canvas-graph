@@ -648,11 +648,19 @@ function formatLoc(item) {
   return `${item.rel}:${item.line}`;
 }
 
+// Past-tense facts auto-redraw (Principle: facts emitted by the data owner trigger
+// render). So a leaf that is a fact is where the cascade reaches the UI — the spot
+// to check for a *render* bug vs. a *logic* bug upstream.
+const FACT_RE = /\.(created|updated|deleted|removed|changed|focused|selected|moved|added|committed|toggled|opened|closed|started|done|cancelled|cleared|set|applied|fit)$/;
+const leafNote = (event) => FACT_RE.test(event)
+  ? '  ⟳ fact → auto-redraw (UI leaf — render reads data here)'
+  : '  ▪ terminal (no further handler)';
+
 function renderFlowEvent(lines, data, event, depth, seen) {
   const pad = '  '.repeat(depth);
   const handlers = data.handlersByEvent.get(event) ?? [];
   if (!handlers.length) {
-    lines.push(`${pad}- ${event} -> no static handlers`);
+    lines.push(`${pad}- ${event}${leafNote(event)}`);
     return;
   }
   lines.push(`${pad}- ${event}`);
@@ -682,8 +690,11 @@ function renderFlows() {
   const lines = [
     '# @walker-projection flows v2',
     '',
-    'Read-only static streams: origin event -> listeners in source order -> emitted downstream events.',
-    'Use this to see cross-system behavior without opening every handler.',
+    'Read-only causal streams: origin event -> listeners in source order -> the events',
+    'each listener emits, recursively, across files. See cross-system behaviour without',
+    'opening every handler. Trace one origin: `project show flows <event|command-id>`.',
+    'Leaf markers: `⟳ fact` = cascade reaches the UI (render reads data — a render bug',
+    'lives here, logic bugs upstream); `▪ terminal` = dead-ends with no handler.',
     '',
   ];
   for (const event of starts) {
