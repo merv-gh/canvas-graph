@@ -150,27 +150,34 @@ seam and assert both render places.
 
 ## debug-tool-panel
 - kind: feature
-- disabled: true
-- delegate: blocked:tool-panel-registry
-- files: frontend/systems/debug.ts, frontend/systems/tool-panel.ts
+- delegate: ready
+- files: frontend/systems/debug.ts
 - title: Debug/event log should be a top-right tool panel when enabled
 
-Extract debug/log UI into a separate tool panel anchored top right. It should
-mount only when debug/log is enabled, stay hidden in normal mode, and reuse the
-same movable/collapsible panel registry as top/left panels. RED needs a snapshot
-field like `ui.toolPanels.debug.mounted`.
+The tool-panel registry is live. In frontend/systems/debug.ts, declare a panel
+that only mounts while debug is enabled:
+declarePanel({ id: 'debug', anchor: 'top-right', movable: true, foldId: 'debug.panel', layout: 'stack', mountWhen: () => <debug enabled> }).
+Route the existing debug.* buttons to it with `panel: 'debug'`. The registry
+clears the panel automatically when mountWhen returns false. RED: boot (debug
+off) → `.tool-panel[data-panel-id="debug"]` is absent; enable debug → it appears
+with its buttons. Idiom: tests/commands/tool-panel-registry.test.ts.
 
 ## zoom-fit-tool-panel
 - kind: feature
-- disabled: true
-- delegate: blocked:tool-panel-registry
-- files: frontend/systems/view-zoom.ts, frontend/systems/tool-panel.ts
+- delegate: ready
+- files: frontend/systems/view-zoom.ts
 - title: Zoom and fit buttons should live in a bottom-right tool panel
 
-Move `view.zoom.*`, `view.fit.all`, and `view.fit.selected` affordances out of
-the top toolbar into a bottom-right stage tool panel. Keep existing keyboard
-shortcuts. Needs the panel registry plus a way for command affordances to target
-named tool panels rather than only `surface:'top'`.
+The tool-panel registry is live. GREEN is ONE call — add_panel does the whole edit
+(declares the panel, widens the ctx, AND routes the buttons):
+add_panel {"system":"frontend/systems/view-zoom.ts","id":"zoom","anchor":"bottom-right","movable":true,"layout":"stack","order":20,"buttons":["view.zoom.out","view.zoom.reset","view.zoom.in","view.fit.all"]}
+The four buttons then render in the bottom-right panel instead of the top bar.
+RED — call gen_test with this css/count scenario (do NOT
+hand-write a test file): asserts =
+[{"css":".tool-panel[data-panel-id=\"zoom\"] [data-command=\"view.zoom.in\"]","op":"count","value":1},
+{"css":".tool-panel[data-panel-id=\"top\"] [data-command=\"view.zoom.in\"]","op":"count","value":0}].
+It fails now (zoom panel absent → count 0) and passes once the buttons move.
+Idiom: tests/commands/tool-panel-registry.test.ts.
 
 ## layout-picker-button
 - kind: feature
@@ -186,17 +193,18 @@ palette/keyboard. Needs a deterministic popover/picker seam before delegation.
 
 ## event-log-collapse
 - kind: feature
-- disabled: true
-- delegate: blocked:tool-panel-registry
-- files: frontend/systems/log.ts, frontend/styles.css, frontend/core/snapshot.ts
+- delegate: ready
+- files: frontend/systems/log.ts
 - title: Event log panel needs collapse shortcut and UI affordance
 - command: view.log.toggle
 
-T2 after fold tooling: make the event log collapsible with fold id `log.panel`
-and command `view.log.toggle`. Add a visible affordance near the log panel,
-mirror state in the debug snapshot, and hide the log body while folded. This
-should follow the same constructor path as the top panel once the log panel has
-a stable shell/snapshot seam.
+Make the event log collapsible with fold id `log.panel` and command
+`view.log.toggle` (shortcut L). The tool-panel registry's collapse chrome is the
+model: a `[data-fold-id="log.panel"]` chevron toggles `fold.toggle` and the body
+hides while folded (see collapseToggle + isCollapsed in tool-panel.ts). Add the
+command + a visible affordance near the log, and hide the log body when
+`contexts.fold.folded('log.panel')`. RED: run view.log.toggle, assert the log
+body is hidden and a fold affordance exists.
 
 ## container-collapse-icon
 - kind: bug

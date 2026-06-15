@@ -416,7 +416,10 @@ function verify(ws, jlog) {
 
 // ---------- main ----------
 const tasks = parseTasks(readFileSync(join(DX_ROOT, 'tasks', 'TASKS.md'), 'utf8'))
-  .filter(t => !ONLY_TASK || t.id === ONLY_TASK);
+  // Honour the delegate gate: in the normal queue only `delegate: ready` (or
+  // untagged cards like walk) run, so un-disabling a not-ready card never hands
+  // it to a weak model. --task overrides for manual / debug runs.
+  .filter(t => ONLY_TASK ? t.id === ONLY_TASK : (!t.meta.delegate || t.meta.delegate === 'ready'));
 if (!tasks.length) { console.error('no tasks matched'); process.exit(1); }
 
 const endAt = HOURS ? Date.now() + HOURS * 3600000 : null;

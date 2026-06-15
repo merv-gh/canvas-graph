@@ -240,6 +240,17 @@ button.icon:hover { color: var(--ink); }
   scrollbar-width: none;
 }
 .tool-panel .toolbar::-webkit-scrollbar { display: none; }
+/* Resting position for panels the user has not dragged (drag sets inline left/top). */
+.tool-panel[data-anchor="top-left"] { left: 12px; top: 12px; }
+.tool-panel[data-anchor="top-right"] { right: 12px; top: 12px; }
+.tool-panel[data-anchor="bottom-left"] { left: 12px; bottom: 12px; }
+.tool-panel[data-anchor="bottom-right"] { right: 12px; bottom: 12px; }
+/* Stack panels lay their buttons in a column under the drag/collapse head. */
+.tool-panel-stack { flex-direction: column; align-items: stretch; }
+.tool-panel-stack .tool-panel-head { border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 4px; justify-content: flex-end; }
+.tool-panel-stack[data-collapsed="true"] .tool-panel-head { border-bottom: 0; padding: 0; }
+.tool-panel-body { display: flex; gap: 4px; }
+.tool-panel-stack .tool-panel-body { flex-direction: column; }
 .node-type-panel {
   gap: 3px;
   max-width: none;

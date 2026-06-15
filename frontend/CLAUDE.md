@@ -61,9 +61,9 @@ jsdom with memory IO; `runCommand(ctx, id)`, `await settle()`, then assert on
 `ctx.graphs.current` / `ctx.debug.snapshot()` / DOM. A UI bug repro = replay a trace:
 `ctx.sim.replay([{ name, data, at: 0 }])` — see `tests/commands/recorded/*` for the idiom.
 
-Debug surfaces (browser console or tests): `window.app` = AppCtx; `frontend.debug.snapshot()`
-(structured user-visible state, each leaf maps to a TS assertion); `frontend.dx.run()`
-(contract issues); `frontend.sim.record()/replay()`; `frontend.flags` + Help modal toggles any
+Debug surfaces (browser console or tests): `window.app` = AppCtx; `app.debug.snapshot()`
+(structured user-visible state, each leaf maps to a TS assertion); `app.dx.run()`
+(contract issues); `app.sim.record()/replay()`; `app.flags` + Help modal toggles any
 system/ability/feature live. Automated dev/debug/fix loop + DX roadmap: `../README.md`; harness: `dx/README.md`.
 
 App-aware queries — prefer these over grep for discovery (each boots the real app):

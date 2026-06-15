@@ -197,7 +197,7 @@ ok('projection: commands and flows expose focused architecture views', () => {
   const flowsView = execFileSync(process.execPath, ['dx/projections/projections.mjs', 'show', 'flows', 'graph.edge.create'], { cwd: REPO, encoding: 'utf8' });
   assert(flowsView.includes('handlers: frontend/systems/graph.ts'), flowsView);
   const appStartFlow = execFileSync(process.execPath, ['dx/projections/projections.mjs', 'show', 'flows', 'app.start'], { cwd: REPO, encoding: 'utf8' });
-  assert(appStartFlow.includes("render.view.set {place: Places.Stage, key: 'tool-panel:top'} via drawTopPanel()"), appStartFlow);
+  assert(appStartFlow.includes('frontend/systems/tool-panel.ts') && appStartFlow.includes('via drawPanels()'), appStartFlow);
   const concept = execFileSync(process.execPath, ['dx/projections/projections.mjs', 'concept', 'top panel collapse'], { cwd: REPO, encoding: 'utf8' });
   assert(concept.includes('view.top.toggle'), concept);
   assert(concept.includes('topFolded: shell.top'), concept);
@@ -502,6 +502,26 @@ ok('add_css_rule: inserts a selector outside an existing block', () => {
   assert(/added CSS rule/.test(out), out);
   assert(css.includes('.properties input.editable-inline {\n  border-bottom: 1px dashed var(--line-strong);\n}'), css);
   assert(css.indexOf('.properties input.editable-inline') > css.indexOf('.properties input {'), css);
+  rmSync(dir, { recursive: true, force: true });
+});
+ok('add_panel: inserts declarePanel + widens the ctx destructure (idempotent, anchor-checked)', () => {
+  const dir = join(REPO, 'dx/.selftest-panel');
+  mkdirSync(join(dir, 'frontend/systems'), { recursive: true });
+  const file = join(dir, 'frontend/systems/view-zoom.ts');
+  writeFileSync(file, "export function registerViewZoom(system) {\n  system('view.zoom', ({ on, emit, contexts, contribute }) => {\n    contribute({ surface: 'top', command: 'view.fit.all', kind: 'button', text: 'Fit' });\n  });\n}\n");
+  const tools = new Tools({ ws: stubWs(dir), browser: null, log: () => {} });
+  tools.phase = 'green';
+  const out = tools.tool_add_panel({ system: 'frontend/systems/view-zoom.ts', id: 'zoom', anchor: 'bottom-right', movable: true, layout: 'stack', order: 20, buttons: ['view.fit.all'] });
+  const src = readFileSync(file, 'utf8');
+  assert(/declared panel 'zoom'/.test(out), out);
+  assert(src.includes("declarePanel({ id: 'zoom', anchor: 'bottom-right', movable: true, layout: 'stack', order: 20 });"), src);
+  assert(/\(\{ on, emit, contexts, contribute, declarePanel \}\)/.test(src), src);
+  // the requested button is routed into the panel
+  assert(/contribute\(\{ panel: 'zoom', surface: 'top', command: 'view\.fit\.all'/.test(src), `button not routed: ${src}`);
+  assert(/Routed 1\/1 buttons/.test(out), out);
+  // second call is a no-op refusal; bad anchor is rejected
+  assert(/already declares panel 'zoom'/.test(tools.tool_add_panel({ system: 'frontend/systems/view-zoom.ts', id: 'zoom', anchor: 'top-left' })), 'should refuse duplicate');
+  assert(/anchor must be one of/.test(tools.tool_add_panel({ system: 'frontend/systems/view-zoom.ts', id: 'q', anchor: 'middle' })), 'should reject bad anchor');
   rmSync(dir, { recursive: true, force: true });
 });
 ok('add_edge_reverse: edits graph type and system fixtures', () => {

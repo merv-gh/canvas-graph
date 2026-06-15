@@ -22,6 +22,7 @@
 - `focus.ts` — focus store writes.
 - `selection`-related: see `abilities/selectable.ts` (commands live with the ability).
 - `cancellation.ts` — Escape/background-click → topmost active Cancellable.
+- `tool-panel.ts` — stage tool-panel **registry**: systems `declarePanel({id,anchor,foldId?,movable?,layout?,mountWhen?})` and route a top button to it via `SystemAffordance.panel`. Owns top toolbar + drag/collapse for every panel. *The* seam for new floating panels (zoom/debug/log).
 - `item-toolbar.ts` — floating toolbar above selected item, built from entity affordances.
 - `log.ts` — event log panel.
 - `demo.ts` — renders the app's own plugin graph as a demo doc.

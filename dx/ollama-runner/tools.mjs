@@ -482,6 +482,72 @@ export class Tools {
     return `added Escape-to-exit cancellable for fold '${foldId}' in ${rel}${missing.length ? ` (added ${missing.join(', ')} to the ctx destructure)` : ''}.\nrun_test to confirm.`;
   }
 
+  /** Constructor for "give this system a stage tool panel". The tool-panel
+   *  registry (systems/tool-panel.ts) renders any panel declared via
+   *  declarePanel({id, anchor, …}); buttons reach it by adding `panel:'<id>'` to
+   *  their contribute(...) call. This encodes the one edit a weak model fumbles —
+   *  inserting the declarePanel statement AND widening the system's ctx
+   *  destructure to include `declarePanel` — so the model supplies only
+   *  {system, id, anchor}. Then route buttons with set_command/patch. */
+  tool_add_panel({ system, id, anchor, foldId, movable, layout, order, mountWhen, buttons }) {
+    if (this.phase !== 'green') return 'add_panel is GREEN-phase only (it edits frontend/)';
+    if (!system || !id || !anchor) {
+      return 'add_panel needs {system, id, anchor}, e.g. {"system":"frontend/systems/view-zoom.ts","id":"zoom","anchor":"bottom-right","movable":true,"layout":"stack","buttons":["view.zoom.in","view.fit.all"]}. buttons routes those existing top affordances into the panel.';
+    }
+    const anchors = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
+    if (!anchors.includes(anchor)) return `add_panel: anchor must be one of ${anchors.join(', ')}`;
+    const { abs, rel } = this.safePath(system);
+    if (!this.writeAllowed(rel)) return this.phaseDenied(rel);
+    if (!existsSync(abs)) return `no such file: ${system}`;
+    const lines = readFileSync(abs, 'utf8').split('\n');
+    if (new RegExp(`declarePanel\\(\\s*\\{[^}]*id:\\s*['"]${id}['"]`).test(lines.join('\n'))) {
+      return `add_panel: ${rel} already declares panel '${id}'`;
+    }
+    const sysIdx = lines.findIndex(l => /\bsystem\(\s*['"][^'"]+['"]/.test(l));
+    if (sysIdx < 0) return `add_panel: no system('…', …) registration in ${rel}`;
+    const sysLine = lines[sysIdx];
+    const m = sysLine.match(/\(\s*\{([^}]*)\}\s*\)\s*=>/);
+    if (!m) {
+      return `add_panel: the system in ${rel} doesn't use a single-line ({ … }) => ctx destructure, so I can't safely add declarePanel. Add it by hand near the top of the system body: declarePanel({ id: '${id}', anchor: '${anchor}' });`;
+    }
+    const current = m[1].split(',').map(s => s.trim()).filter(Boolean);
+    const missing = ['declarePanel'].filter(n => !current.includes(n));
+    if (missing.length) {
+      lines[sysIdx] = sysLine.replace(/\(\s*\{[^}]*\}\s*\)\s*=>/, `({ ${[...current, ...missing].join(', ')} }) =>`);
+    }
+    const props = [`id: '${id}'`, `anchor: '${anchor}'`];
+    if (foldId) props.push(`foldId: '${foldId}'`);
+    if (movable) props.push('movable: true');
+    if (layout) props.push(`layout: '${layout}'`);
+    if (Number.isFinite(Number(order))) props.push(`order: ${Number(order)}`);
+    if (mountWhen) props.push(`mountWhen: ${mountWhen}`); // raw arrow expression, e.g. () => debugOn()
+    const indent = (sysLine.match(/^\s*/) ?? [''])[0] + '  ';
+    lines.splice(sysIdx + 1, 0,
+      `${indent}// Stage tool panel — buttons reach it via panel: '${id}' on their contribute(...).`,
+      `${indent}declarePanel({ ${props.join(', ')} });`,
+    );
+    // Route requested buttons into the panel: inject panel:'id' into each
+    // matching contribute({ … command: 'X' … }) that doesn't already have one.
+    // (Done after the splice so indices already reflect the inserted lines.)
+    const wanted = Array.isArray(buttons) ? buttons
+      : typeof buttons === 'string' ? buttons.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const routed = [];
+    const unrouted = [];
+    for (const cmd of wanted) {
+      const i = lines.findIndex(l => /contribute\(\s*\{/.test(l) && l.includes(`command: '${cmd}'`));
+      if (i < 0) { unrouted.push(cmd); continue; }
+      if (/\bpanel:/.test(lines[i])) { routed.push(cmd); continue; }
+      lines[i] = lines[i].replace(/contribute\(\s*\{/, `contribute({ panel: '${id}',`);
+      routed.push(cmd);
+    }
+    writeFileSync(abs, lines.join('\n'));
+    this.log(`[tool] add_panel ${id} (${anchor}) → ${rel}${missing.length ? ' (+declarePanel)' : ''}${routed.length ? ` +${routed.length} buttons` : ''}`);
+    const routeNote = wanted.length
+      ? ` Routed ${routed.length}/${wanted.length} buttons${unrouted.length ? ` (not found: ${unrouted.join(', ')} — route by hand with patch)` : ''}.`
+      : ` Now route buttons: add panel: '${id}' to each contribute({ surface: 'top', … }) for this panel (or re-call add_panel with buttons:[…]).`;
+    return `declared panel '${id}' (${anchor}) in ${rel}${missing.length ? ' (added declarePanel to the ctx destructure)' : ''}.${routeNote} run_test to confirm.`;
+  }
+
   tool_add_css_rule({ path = 'frontend/styles.css', selector, declarations, after }) {
     if (this.phase !== 'green') return 'add_css_rule is GREEN-phase only (it edits frontend/)';
     if (!selector || !declarations) return 'add_css_rule needs {selector, declarations, after?}';

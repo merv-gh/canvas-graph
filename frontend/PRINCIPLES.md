@@ -350,6 +350,31 @@ proof the rest of the stack is robust.
 > into a container that nests them; nudging {container + child} moves the child
 > once, not twice (`frontend-choose.test.ts`).
 
+## 23. A new feature is a views edit plus at most one new file
+
+Building a *seam* — a new context, a registry, a render adapter — is foundation
+work and may touch several core files. That is the big-model / human job, and it
+is explicitly exempt from this rule. But once the seam exists, adding a *feature*
+on top of it must cost almost nothing:
+
+- route behaviour through existing data surfaces — commands, affordances, panels,
+  entity declarations — edited in `views/*.proj.*` and synced back to source;
+- add **at most one** new source file (the system / ability that owns the
+  feature), scaffolded by `gen <kind> <name>`.
+
+If a feature needs edits scattered across many source files, the seam it should
+have ridden does not exist yet: stop, build the seam, then this principle holds
+for the next feature of its kind (e.g. the tool-panel registry turned "move a
+button to a new panel" into a one-field `panel:` edit in `command-ui.proj.ts`).
+Like Principle 6, this is progressively enforced — today some features still
+touch 2–3 files; each projection / generator we add pulls another feature-shape
+under the rule.
+
+> **Test:** `npm run dx -- project sync <name> --dry-run` reports the change as a
+> clean source diff from `views/` edits alone (the views-only dogfood guard), and
+> any new file is the `gen` scaffold. A feature whose dry-run hits a routing error
+> names the next projection to build — see `GAPS.md`.
+
 ---
 
 ## Anti-principles (things we explicitly do NOT believe)
@@ -373,69 +398,3 @@ proof the rest of the stack is robust.
 3. If the codebase passes today, it's a principle. If it doesn't, it's a TODO.
 
 If you can't write the test, the principle is too vague.
-
----
-
-## Future audit — container system as a single-file add
-
-We want to add containers (nodes that hold child nodes) soon. The single-file
-test is whether `systems/container.ts` + a model declaration are *all* a
-contributor has to write. We checked the current architecture against that
-goal before building anything.
-
-### Already covered
-
-- `ItemRef.parent: Id[]` exists and is honoured by `selection`, `focus`,
-  `itemTargets`, `itemKey` deep-equality, and the DOM `data-item-parent`
-  roundtrip. Nested addressing works end-to-end today.
-- `Graph.registerItemStore(kind, () => Item[])` lets a system plug in a new
-  item kind without editing `Graph`. `Graph.itemsOfKind(kind)` and
-  `Graph.getItem(ref)` resolve those stores generically.
-- Render iterates `model.entities()` through `EntityDef.render`. A new entity
-  kind (`'container'`) can declare its own renderer with zero render edits.
-  Z-order falls out of declaration order — put `container` before `node` in
-  the model and children paint on top.
-- `affordances.entity(entityDef, slot)` is kind-agnostic. A container's
-  abilities (resize, collapse children, lock layout) project through the same
-  affordance pipeline as nodes.
-- `factScope` reads suffix conventions, so `container.created` /
-  `container.children.changed` register as redraw triggers without scheduler
-  edits.
-- `keyboard.capture({onKey})` + `commandPicker` give a container picker
-  ("Move selection into container ⟨P⟩") for free.
-
-### Must land before containers ship (still single-file friendly)
-
-1. **`graph.node.updated` cascade.**
-   Dragging a container has to move its children. The container system listens
-   to `graph.node.updated`, computes the delta, and emits
-   `graph.node.update` for each child. This already works today —
-   `nodeLifecycle` is the proof. So: zero core change, just a feature-style
-   listener in `container.ts`.
-
-2. **`itemTargets` from a side-source.**
-   Containers need to be jump targets and picker candidates. The targets API
-   already accepts a `register(source, provider)` from any system —
-   `container.ts` calls it the same way `graph.ts` does today.
-
-3. **Selection precedence.**
-   Clicking a child should not bubble to the container. Today
-   `selection.item.select` matches `[data-item-kind][data-item-id]` via
-   `closest()`, so the *innermost* tagged element wins — already correct.
-   Containers just need to be rendered *behind* children (rule #1 above).
-
-4. **Layout-awareness (acceptable gap for v1).**
-   `tidy` / `radial` / `grid` walk the flat node list and ignore parenting.
-   We accept the v1 container does not participate in tidy; if a parent has
-   children, layout runs on the parent only and the user lays out children
-   manually (or with a `tidy` invoked while a container is selected).
-   Promote later by adding `layout.scope` plumbing — that's *its own*
-   single-file addition then.
-
-### Bottom line
-
-Containers should now be one file plus a model declaration. The remaining gaps
-are behavior policy, not missing core machinery.
-
-If we end up needing more than that to ship containers, we got the abstraction
-wrong somewhere. Stop, fix the abstraction, then come back.

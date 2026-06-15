@@ -4,6 +4,7 @@ import type {
   AffordanceSurface,
   Bus,
   EntityDef,
+  PanelDef,
   SystemAffordance,
 } from '../types';
 
@@ -18,12 +19,24 @@ import type {
  *  future plugin can swap either side without touching the other. */
 export function affordancesContext(bus: Bus) {
   const surfaceAffordances = new Map<AffordanceSurface, SystemAffordance[]>();
+  let panels: PanelDef[] = [];
   return {
     contribute(aff: SystemAffordance) {
       const list = surfaceAffordances.get(aff.surface) ?? [];
       list.push(aff);
       surfaceAffordances.set(aff.surface, list);
       bus.emit('affordance.contributed', { surface: aff.surface });
+    },
+    /** Declare a stage tool panel. Buttons reach it via `SystemAffordance.panel`.
+     *  Re-uses the `top` affordance-contributed signal so the tool-panel renderer
+     *  redraws on declare/teardown without a dedicated event. */
+    declarePanel(panel: PanelDef) {
+      panels.push(panel);
+      bus.emit('affordance.contributed', { surface: 'top' });
+    },
+    /** Declared tool panels, lowest `order` first. */
+    panels() {
+      return [...panels].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     },
     /** Context-free affordances contributed for the given surface (toolbar, list, …). */
     system(surface: AffordanceSurface) {
@@ -43,6 +56,11 @@ export function affordancesContext(bus: Bus) {
         const next = list.filter(a => a.origin !== origin);
         surfaceAffordances.set(surface, next);
         if (next.length !== list.length) bus.emit('affordance.contributed', { surface });
+      }
+      const keptPanels = panels.filter(p => p.origin !== origin);
+      if (keptPanels.length !== panels.length) {
+        panels = keptPanels;
+        bus.emit('affordance.contributed', { surface: 'top' });
       }
     },
   };

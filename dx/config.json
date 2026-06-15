@@ -2,7 +2,7 @@
   "ollama": {
     "url": "http://192.168.1.148:11434",
     "model": "qwen3:8b",
-    "escalateModel": "qwen3.5:14b",
+    "escalateModel": "qwen2.5-coder:14b",
     "temperature": 0.2,
     "escalateTemperature": 0.4,
     "think": false,
@@ -11,7 +11,7 @@
     "seedBase": 7
   },
   "budgets": {
-    "staticContextTokens": 1000,
+    "staticContextTokens": 1500,
     "toolResultChars": 1200,
     "readResultChars": 2600,
     "historyMessages": 8,

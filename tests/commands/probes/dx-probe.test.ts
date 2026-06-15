@@ -125,6 +125,10 @@ async function scenarioAnswer(ctx: AppCtx, steps: Step[], asserts: Assert[]) {
   const recorder = ctx.sim.record();
   recorder.start();
   for (const step of steps) {
+    // A handler that assumes a real DOM source (e.g. a drag payload reading
+    // target.dataset) must FAIL the step cleanly, not crash the whole probe —
+    // a red test should fail, not throw.
+    try {
     if (step.command) {
       const ran = runCommand(ctx, step.command);
       let hint: string | undefined;
@@ -148,6 +152,9 @@ async function scenarioAnswer(ctx: AppCtx, steps: Step[], asserts: Assert[]) {
           : domish ? `"${step.event}" is DOM input, not a bus event — run the COMMAND instead: {"command":"<id>"}`
           : `no listener for this event. Closest events: ${closest(step.event, [...subscribed]).join(', ') || 'none'}`,
       });
+    }
+    } catch (err) {
+      stepResults.push({ step: step.command ? `command ${step.command}` : `event ${step.event}`, ok: false, detail: `threw: ${(err as Error).message}` });
     }
     await settle();
   }
@@ -201,7 +208,10 @@ async function scenarioAnswer(ctx: AppCtx, steps: Step[], asserts: Assert[]) {
       : false;
     return { desc: `${a.path} ${op} ${JSON.stringify(a.value)}`, pass, actual };
   };
-  const assertResults = asserts.map(check);
+  const assertResults = asserts.map(a => {
+    try { return check(a); }
+    catch (err) { return { desc: `assert ${JSON.stringify(a).slice(0, 60)}`, pass: false, actual: `threw: ${(err as Error).message}` }; }
+  });
   const firedNames = [...new Set(fired.map(e => String(e.name)))].filter(n => !TRACE_NOISE.test(n));
   return {
     ok: stepResults.every(s => s.ok) && assertResults.every(a => a.pass),

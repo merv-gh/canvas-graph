@@ -19,6 +19,7 @@ THEN GREEN edit ONLY frontend/, by intent:
   • existing command props → set_command {id,props}; new command → add_command {system,spec,handler?}; shortcut alias to existing event → add_command_alias
   • CSS → add_css_rule
   • fold panel → add_fold_toggle; Escape exits fold → add_fold_cancellable
+  • stage tool panel (zoom/debug/log) → add_panel {system,id,anchor}, then route buttons with panel:'<id>'
   • known mechanical tasks → add_edge_reverse / add_graph_export_json / add_container_delete_cascade
   • other code → patch with line numbers from read/locate
 Re-check with scenario, confirm with run_test, then done.

@@ -78,6 +78,8 @@ export type SystemCtx = AppCtx & Pick<Bus, 'on' | 'emit' | 'forward'> & {
   origin: string;
   /** Shorthand: contribute an affordance tagged with this system's origin. */
   contribute(aff: import('./types').SystemAffordance): void;
+  /** Shorthand: declare a stage tool panel tagged with this system's origin. */
+  declarePanel(panel: import('./types').PanelDef): void;
   /** Publish a typed devtools/test surface on window.app without app.ts knowing the system. */
   expose<K extends keyof AppCtx>(key: K, value: AppCtx[K]): void;
 };
@@ -328,6 +330,7 @@ export function registry(defaultKind: FlagKind = 'system'): Registry {
         forward: trackedForward,
         origin,
         contribute: (aff) => ctx.contexts.affordances.contribute({ ...aff, origin: aff.origin ?? origin }),
+        declarePanel: (panel) => ctx.contexts.affordances.declarePanel({ ...panel, origin: panel.origin ?? origin }),
         expose: <K extends keyof AppCtx>(key: K, value: AppCtx[K]) => { ctx[key] = value; },
       };
       // Adapt register so commands without `origin` get tagged with the current system name.

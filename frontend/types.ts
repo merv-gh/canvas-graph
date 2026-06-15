@@ -392,10 +392,38 @@ export type AffordanceDef<T = unknown> = {
   order?: number;
 };
 
-/** System-scoped affordance contribution (no per-item context). */
+/** System-scoped affordance contribution (no per-item context). `panel` routes a
+ *  `top`-surface button to a declared tool panel by id; omit it for the default
+ *  top toolbar. Routing here (not a bespoke render) is what lets the `command-ui`
+ *  projection move a button between panels as a one-field views edit. */
 export type SystemAffordance = Omit<AffordanceDef<void>, 'text' | 'label'> & {
   text?: string;
   label?: string;
+  panel?: string;
+  origin?: string;
+};
+
+/** Where a tool panel anchors on the stage when it has not been dragged. */
+export type PanelAnchor = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
+/** A movable/collapsible tool panel on the stage. Declared as data via
+ *  `contexts.affordances.declarePanel(...)` from the owning system's file, so
+ *  adding a panel is one declaration + routing buttons to it (no bespoke render).
+ *  Origin-scoped: the panel disappears when its declaring system is disabled. */
+export type PanelDef = {
+  id: string;
+  anchor: PanelAnchor;
+  /** Bind a collapse chevron to this fold id (and hide the body while folded). */
+  foldId?: string;
+  /** Render a drag handle so the user can reposition the panel. */
+  movable?: boolean;
+  /** Buttons in a row (`toolbar`) or a column (`stack`). Default `stack`. */
+  layout?: 'toolbar' | 'stack';
+  /** Re-evaluated on each redraw; when it returns false the panel is unmounted. */
+  mountWhen?: () => boolean;
+  /** Lower renders/iterates earlier. */
+  order?: number;
+  /** Owning system — set automatically when declared through `SystemCtx`. */
   origin?: string;
 };
 
