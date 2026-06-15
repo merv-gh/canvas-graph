@@ -43,6 +43,10 @@ describe('frontend node commands', () => {
     await settle();
     expect(document.querySelector('.modal-head')?.textContent).toContain('Node Properties');
     const title = document.querySelector<HTMLInputElement>('.properties [data-field="title"]')!;
+    title.focus();
+    title.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await settle();
+    expect(document.activeElement).toBe(title);
     title.value = 'Configured';
     expect(runCommand(ctx, 'properties.item.input', { target: title })).toBe(true);
     expect(node.Label.text).toBe('Configured');

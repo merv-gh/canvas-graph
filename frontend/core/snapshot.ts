@@ -28,7 +28,7 @@ export function snapshot(ctx: AppCtx) {
   const ui = captureUi(ctx);
   const graph = ctx.graphs.current;
   const containers = graph.itemsOfKind('container') as Array<{
-    id: string; Label?: { text: string }; Collapsed?: boolean; Position?: unknown; Size?: unknown; Children?: unknown; Sections?: unknown;
+    id: string; Label?: { text: string }; Collapsed?: boolean; Position?: unknown; Size?: unknown; Children?: unknown; Sections?: unknown; SectionAxis?: unknown; ChildSections?: unknown;
   }>;
   const dxIssues = ctx.contexts.dx.run();
   return {
@@ -56,6 +56,8 @@ export function snapshot(ctx: AppCtx) {
         Position: c.Position,
         Size: c.Size,
         Sections: c.Sections,
+        SectionAxis: c.SectionAxis,
+        ChildSections: c.ChildSections,
         Children: c.Children,
       })),
     },

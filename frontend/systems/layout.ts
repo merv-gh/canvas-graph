@@ -24,6 +24,10 @@ export type LayoutScope = {
   parent: ItemRef | null;
   nodes: GraphNode[];
   edges: GraphEdge[];
+  bounds?: { x: number; y: number; w: number; h: number };
+  sections?: { id: string; title: string; weight: number }[];
+  sectionAxis?: 'rows' | 'columns';
+  childSections?: Record<string, string>;
 };
 
 /** Partition the current graph's nodes by hierarchy. Returns one scope per
@@ -59,20 +63,91 @@ export function partitionByScope(ctx: AppCtx): LayoutScope[] {
     };
   };
   return [...groups.values()].map(({ parent, nodes }) => {
+    const parentItem = parent ? graph.getItem(parent) as {
+      Position?: Position;
+      Sections?: { id: string; title: string; weight?: number }[];
+      SectionAxis?: 'rows' | 'columns';
+      ChildSections?: Record<string, string>;
+    } | undefined : undefined;
+    const parentEntity = parent ? ctx.model.entity(parent.kind) : undefined;
+    const parentBounds = parent && parentItem ? parentEntity?.render?.bounds?.(parentItem) ?? undefined : undefined;
     const origin = parent
-      ? (graph.getItem(parent) as { Position?: Position } | undefined)?.Position ?? { x: 0, y: 0 }
+      ? parentItem?.Position ?? { x: 0, y: 0 }
       : rootOrigin(nodes);
     const nodeIds = new Set(nodes.map(n => n.id));
     const edges = graph.edges().filter(e => nodeIds.has(e.From) && nodeIds.has(e.To));
-    return { origin, parent, nodes, edges };
+    return {
+      origin,
+      parent,
+      nodes,
+      edges,
+      bounds: parentBounds,
+      sections: parentItem?.Sections?.map((section, index) => ({
+        id: section.id || `s${index + 1}`,
+        title: section.title,
+        weight: Math.max(0.15, Number(section.weight) || 1),
+      })),
+      sectionAxis: parentItem?.SectionAxis ?? 'rows',
+      childSections: parentItem?.ChildSections,
+    };
   });
 }
 
 type PatchEmit = (id: string, position: Position) => void;
+const nodeKey = (id: string) => `node:${id}`;
+
+function sectionRects(scope: LayoutScope) {
+  if (!scope.bounds || !scope.sections?.length) return [];
+  const inset = 32;
+  const rect = {
+    x: scope.bounds.x + inset,
+    y: scope.bounds.y + LABEL_SECTION_TOP,
+    w: Math.max(80, scope.bounds.w - inset * 2),
+    h: Math.max(60, scope.bounds.h - LABEL_SECTION_TOP - inset),
+  };
+  const total = scope.sections.reduce((sum, section) => sum + section.weight, 0) || 1;
+  let cursor = scope.sectionAxis === 'columns' ? rect.x : rect.y;
+  return scope.sections.map(section => {
+    const ratio = section.weight / total;
+    if (scope.sectionAxis === 'columns') {
+      const w = rect.w * ratio;
+      const out = { section, rect: { x: cursor, y: rect.y, w, h: rect.h } };
+      cursor += w;
+      return out;
+    }
+    const h = rect.h * ratio;
+    const out = { section, rect: { x: rect.x, y: cursor, w: rect.w, h } };
+    cursor += h;
+    return out;
+  });
+}
+
+const LABEL_SECTION_TOP = 36;
+
+function sectionedScope(scope: LayoutScope, set: PatchEmit) {
+  const bands = sectionRects(scope);
+  if (!bands.length) return false;
+  const fallback = bands[0].section.id;
+  bands.forEach(({ section, rect }) => {
+    const nodes = scope.nodes.filter(node => (scope.childSections?.[nodeKey(node.id)] ?? fallback) === section.id);
+    if (!nodes.length) return;
+    const cols = Math.max(1, Math.ceil(Math.sqrt(nodes.length)));
+    const rows = Math.max(1, Math.ceil(nodes.length / cols));
+    nodes.forEach((node, index) => {
+      const col = index % cols;
+      const row = Math.floor(index / cols);
+      const x = rect.x + ((col + 1) / (cols + 1)) * rect.w;
+      const y = rect.y + ((row + 1) / (rows + 1)) * rect.h;
+      set(node.id, { x, y });
+    });
+  });
+  return true;
+}
 
 /** Tidy tree per scope: BFS levels from in-degree-zero roots, columns spread
  *  around scope.origin.x, rows step down from scope.origin.y. */
 function tidyScope(scope: LayoutScope, set: PatchEmit) {
+  if (sectionedScope(scope, set)) return;
   const inDeg = new Map<string, number>(scope.nodes.map(n => [n.id, 0]));
   scope.edges.forEach(e => inDeg.set(e.To, (inDeg.get(e.To) ?? 0) + 1));
   const roots = scope.nodes.filter(n => (inDeg.get(n.id) ?? 0) === 0);

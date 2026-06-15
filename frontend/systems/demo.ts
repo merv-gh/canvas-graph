@@ -5,6 +5,8 @@ declare module '../types' {
   interface CustomEvents {
     'demo.run-self': void;
     'demo.run-java': void;
+    'demo.run-concurrency': void;
+    'demo.run-jira': void;
   }
 }
 
@@ -30,6 +32,18 @@ export function registerDemo(system: Registry) {
         event: 'demo.run-java',
         group: 'demo',
       },
+      {
+        id: 'demo.render-concurrency',
+        label: 'Render concurrency/process map',
+        event: 'demo.run-concurrency',
+        group: 'demo',
+      },
+      {
+        id: 'demo.render-jira',
+        label: 'Render JIRA workflow map',
+        event: 'demo.run-jira',
+        group: 'demo',
+      },
     ]);
 
     const NODE_KINDS: IntrospectKind[] = ['system', 'ability', 'feature', 'entity', 'collection'];
@@ -47,12 +61,41 @@ export function registerDemo(system: Registry) {
     const refKey = (ref: IntrospectRef) => `${ref.kind}:${ref.id}`;
     const containerIds = () =>
       (graphs.current.itemsOfKind('container') as { id: Id }[]).map(c => c.id);
+    const clearGraph = () => {
+      graphs.current.nodes().slice().forEach(node => emit('graph.node.delete', { id: node.id }));
+      containerIds().forEach(id => emit('graph.container.delete', { id }));
+    };
+    const makeContainer = (title: string, at: { x: number; y: number }, sections: string[], axis: 'rows' | 'columns' = 'rows') => {
+      const before = new Set(containerIds());
+      emit('editing.container.create', { Label: { text: title }, at });
+      const id = containerIds().find(candidate => !before.has(candidate));
+      if (id) {
+        emit('item.update', {
+          ref: { kind: 'container', id },
+          patch: {
+            SectionAxis: axis,
+            Sections: sections.map((name, index) => ({ id: `s${index + 1}`, title: name, weight: 1 })),
+          },
+        });
+      }
+      return id;
+    };
+    const makeNode = (label: string, nodeType: 'text' | 'square' | 'circle', description: string, containerId?: string, sectionId?: string) => {
+      const node = graphs.current.createNode({
+        Label: { text: label },
+        NodeType: nodeType,
+        Description: description,
+        Size: nodeType === 'text' ? { w: 190, h: 108 } : { w: 118, h: 118 },
+      });
+      if (containerId) emit('container.add-child', { containerId, childRef: { kind: 'node', id: node.id } as ItemRef, sectionId });
+      emit('graph.node.created', { graphId: graphs.current.id, id: node.id });
+      return node.id;
+    };
 
     on('demo.run-self', () => {
       const graph = graphs.current;
       // Clear previous self-graph: nodes (with their incident edges) and containers.
-      graph.nodes().slice().forEach(node => emit('graph.node.delete', { id: node.id }));
-      containerIds().forEach(id => emit('graph.container.delete', { id }));
+      clearGraph();
 
       const snapshot = introspect(ctx);
       const wantedNodes = snapshot.nodes.filter(n => NODE_KINDS.includes(n.kind));
@@ -108,38 +151,11 @@ export function registerDemo(system: Registry) {
     });
 
     on('demo.run-java', () => {
-      const graph = graphs.current;
-      graph.nodes().slice().forEach(node => emit('graph.node.delete', { id: node.id }));
-      containerIds().forEach(id => emit('graph.container.delete', { id }));
-
-      const makeContainer = (title: string, at: { x: number; y: number }, sections: string[]) => {
-        const before = new Set(containerIds());
-        emit('editing.container.create', { Label: { text: title }, at });
-        const id = containerIds().find(candidate => !before.has(candidate));
-        if (id) {
-          emit('item.update', {
-            ref: { kind: 'container', id },
-            patch: { Sections: sections.map((name, index) => ({ id: `s${index + 1}`, title: name })) },
-          });
-        }
-        return id;
-      };
+      clearGraph();
 
       const runtime = makeContainer('Runtime Data Areas', { x: -520, y: 0 }, ['Heap', 'Thread stacks', 'Metaspace']);
       const execution = makeContainer('Execution + JMM', { x: 0, y: 0 }, ['Threads', 'Synchronization', 'Happens-before']);
       const toolchain = makeContainer('Toolchain', { x: 520, y: 0 }, ['Source', 'Bytecode', 'JIT']);
-
-      const makeNode = (label: string, nodeType: 'text' | 'square' | 'circle', description: string, containerId?: string) => {
-        const node = graph.createNode({
-          Label: { text: label },
-          NodeType: nodeType,
-          Description: description,
-          Size: nodeType === 'text' ? { w: 190, h: 108 } : { w: 118, h: 118 },
-        });
-        if (containerId) emit('container.add-child', { containerId, childRef: { kind: 'node', id: node.id } as ItemRef });
-        emit('graph.node.created', { graphId: graph.id, id: node.id });
-        return node.id;
-      };
 
       const source = makeNode('Java source', 'text', 'Classes, methods, fields, and generic source-level intent.', toolchain);
       const bytecode = makeNode('Bytecode', 'square', '`javac` emits class files with symbolic refs and stack-machine ops.', toolchain);
@@ -163,6 +179,51 @@ export function registerDemo(system: Registry) {
         [jit, threads, 'runs code'],
       ].forEach(([From, To, label]) => emit('graph.edge.create', { From, To, Label: { text: label } }));
 
+      emit('layout.apply.tidy');
+      emit('view.fit.all');
+    });
+
+    on('demo.run-concurrency', () => {
+      clearGraph();
+      const shared = makeContainer('Shared Memory', { x: -420, y: 0 }, ['ordinary field', 'volatile flag', 'mutex-protected'], 'rows');
+      const threads = makeContainer('Process Threads', { x: 260, y: 0 }, ['Thread A', 'Thread B', 'Scheduler'], 'columns');
+
+      const write = makeNode('write x = 1', 'square', 'Ordinary write can be reordered unless a happens-before edge constrains it.', threads, 's1');
+      const volatileWrite = makeNode('volatile ready = true', 'circle', 'Volatile write publishes prior writes to later volatile readers.', threads, 's1');
+      const readFlag = makeNode('read ready', 'circle', 'Volatile read observes the publication edge.', threads, 's2');
+      const readX = makeNode('read x', 'square', 'If ready is observed, `x` is visible through happens-before.', threads, 's2');
+      const mutex = makeNode('mutex lock', 'circle', 'Mutual exclusion serializes the critical section.', shared, 's3');
+      const counter = makeNode('counter++', 'square', 'Read-modify-write needs atomicity: lock, CAS, or atomic classes.', shared, 's3');
+      const cache = makeNode('CPU cache / store buffer', 'text', 'Local execution can temporarily diverge from shared visibility.', shared, 's1');
+      const scheduler = makeNode('time slice', 'text', 'Interleavings create many legal traces; synchronization prunes them.', threads, 's3');
+
+      [
+        [write, volatileWrite, 'program order'],
+        [volatileWrite, readFlag, 'synchronizes-with'],
+        [readFlag, readX, 'visibility'],
+        [mutex, counter, 'guards'],
+        [scheduler, write, 'runs A'],
+        [scheduler, readFlag, 'runs B'],
+        [cache, write, 'buffers'],
+        [counter, readX, 'shared state'],
+      ].forEach(([From, To, label]) => emit('graph.edge.create', { From, To, Label: { text: label } }));
+
+      emit('layout.apply.tidy');
+      emit('view.fit.all');
+    });
+
+    on('demo.run-jira', () => {
+      clearGraph();
+      const board = makeContainer('JIRA Workflow', { x: 0, y: 0 }, ['Backlog', 'In progress', 'Review', 'Done'], 'columns');
+      const idea = makeNode('Clarify request', 'text', 'Question, acceptance criteria, and rough slices.', board, 's1');
+      const build = makeNode('Implement slice', 'square', 'Code + local verification.', board, 's2');
+      const review = makeNode('Review / QA', 'circle', 'Check behavior, edge cases, and regressions.', board, 's3');
+      const done = makeNode('Release note', 'text', 'Merge once quality gates and story are clear.', board, 's4');
+      [
+        [idea, build, 'ready'],
+        [build, review, 'PR'],
+        [review, done, 'approved'],
+      ].forEach(([From, To, label]) => emit('graph.edge.create', { From, To, Label: { text: label } }));
       emit('layout.apply.tidy');
       emit('view.fit.all');
     });

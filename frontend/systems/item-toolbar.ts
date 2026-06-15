@@ -72,6 +72,15 @@ export function registerItemToolbar(system: Registry) {
       append(Slots.Drag, 'handler', '⋮⋮', 'node-drag-handle');
       append(Slots.HeaderStart, 'button');
       append(Slots.HeaderEnd, 'button');
+      if (ref.kind === 'node') {
+        const context = document.createElement('button');
+        context.type = 'button';
+        context.className = 'node-action node-context-actions';
+        context.dataset.command = 'item.context.open';
+        context.setAttribute('aria-label', 'Context actions');
+        context.textContent = '⋯';
+        wrapper.append(context);
+      }
       return wrapper;
     };
 

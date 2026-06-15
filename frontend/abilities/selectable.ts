@@ -61,7 +61,7 @@ export function registerSelectable(system: Registry) {
         input: {
           on: 'pointerdown',
           selector: '[data-item-kind][data-item-id]',
-          when: event => !(event.target as Element).closest('[data-command], [data-drag-handle], [data-resize-handle]'),
+          when: event => !(event.target as Element).closest('[data-command], [data-drag-handle], [data-resize-handle], [data-container-section-title], [data-container-section-resize]'),
           prevent: true,
           stop: true,
         },
@@ -79,7 +79,7 @@ export function registerSelectable(system: Registry) {
           on: 'pointerdown',
           selector: '[data-item-kind][data-item-id]',
           shift: true,
-          when: event => !(event.target as Element).closest('[data-command], [data-drag-handle], [data-resize-handle]'),
+          when: event => !(event.target as Element).closest('[data-command], [data-drag-handle], [data-resize-handle], [data-container-section-title], [data-container-section-resize]'),
           prevent: true,
           stop: true,
         },

@@ -46,6 +46,32 @@ describe('frontend containers', () => {
     expect(after.y - before.y).toBe(30);
   });
 
+  it('resizes from the bottom-right while keeping top-left fixed', async () => {
+    const ctx = bootApp();
+    await settle();
+    runCommand(ctx, 'editing.container.create');
+    await settle();
+    const container = containers(ctx)[0];
+    const topLeft = {
+      x: container.Position.x - 320 / 2,
+      y: container.Position.y - 200 / 2,
+    };
+
+    ctx.bus.emit('resize.item.start', {
+      ref: { kind: 'container', id: container.id },
+      x: container.Position.x + 160,
+      y: container.Position.y + 100,
+    });
+    ctx.bus.emit('resize.item.move', { x: container.Position.x + 260, y: container.Position.y + 160 });
+    ctx.bus.emit('resize.item.end');
+    await settle();
+
+    expect(container.Size).toEqual({ w: 420, h: 260 });
+    expect(Math.round(container.Position.x - container.Size.w / 2)).toBe(Math.round(topLeft.x));
+    expect(Math.round(container.Position.y - container.Size.h / 2)).toBe(Math.round(topLeft.y));
+    expect(container.AutoFit).toBe(false);
+  });
+
   it('cycle guard rejects nesting a container into its own descendant', async () => {
     const ctx = bootApp();
     await settle();

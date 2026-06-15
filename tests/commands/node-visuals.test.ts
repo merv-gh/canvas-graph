@@ -7,6 +7,7 @@ type SectionedContainer = {
   id: string;
   Children: ItemRef[];
   Sections?: { id: string; title: string }[];
+  SectionAxis?: 'rows' | 'columns';
 };
 
 const containers = (ctx: ReturnType<typeof bootApp>) =>
@@ -92,5 +93,24 @@ describe('node visuals and explanation maps', () => {
     expect(snap.ui.rendered.circleNodes).toBeGreaterThan(0);
     expect(snap.ui.rendered.describedNodes).toBeGreaterThan(0);
     expect(snap.ui.rendered.sectionedContainers).toBeGreaterThan(0);
+  });
+
+  it('renders concurrency and workflow examples with sectioned containers', async () => {
+    const ctx = bootApp();
+    expect(runCommand(ctx, 'demo.render-concurrency')).toBe(true);
+    await settle();
+    expect(ctx.graphs.current.nodes().some(node => node.Label.text.includes('volatile'))).toBe(true);
+    expect(ctx.graphs.current.edges().some(edge => edge.Label?.text === 'synchronizes-with')).toBe(true);
+    expect(containers(ctx).some(container => container.SectionAxis === 'columns')).toBe(true);
+
+    expect(runCommand(ctx, 'demo.render-jira')).toBe(true);
+    await settle();
+    expect(ctx.graphs.current.nodes().map(node => node.Label.text)).toEqual([
+      'Clarify request',
+      'Implement slice',
+      'Review / QA',
+      'Release note',
+    ]);
+    expect(containers(ctx)[0].Sections?.map(section => section.title)).toEqual(['Backlog', 'In progress', 'Review', 'Done']);
   });
 });

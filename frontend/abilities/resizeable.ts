@@ -1,6 +1,6 @@
 import { itemRefFrom, type Registry } from '../core';
 import { Places, Slots } from '../types';
-import type { ItemRef, Position, Size } from '../types';
+import type { EntityDef, ItemRef, Position, Rect, Size } from '../types';
 import { ability, action } from './shared';
 import type { Sized } from './shapes';
 
@@ -32,8 +32,20 @@ export const resizeable = <T extends Sized>() => ability<T>('resizeable', [actio
 })]);
 
 export function registerResizeable(system: Registry) {
-  system('ability.resizeable', ({ on, emit, contexts, graphs }) => {
-    let resize: { ref: ItemRef; pointer: Position; start: Size; centre: Position } | null = null;
+  system('ability.resizeable', ({ on, emit, contexts, graphs, model }) => {
+    let resize: { ref: ItemRef; pointer: Position; topLeft: Position } | null = null;
+    const itemRect = (ref: ItemRef, item: Sized & { Position?: Position }): Rect | null => {
+      const entity = model.entity(ref.kind) as EntityDef<unknown> | undefined;
+      const rendered = entity?.render?.bounds?.(item);
+      if (rendered) return rendered;
+      if (!item.Position) return null;
+      return {
+        x: item.Position.x - item.Size.w / 2,
+        y: item.Position.y - item.Size.h / 2,
+        w: item.Size.w,
+        h: item.Size.h,
+      };
+    };
 
     contexts.commands.register([
       {
@@ -66,23 +78,24 @@ export function registerResizeable(system: Registry) {
 
     on('resize.item.start', ({ ref, x, y }) => {
       const item = graphs.current.getItem(ref) as Sized & { Position?: Position } | undefined;
-      if (!item?.Size || !item.Position) return;
+      if (!item?.Size) return;
+      const rect = itemRect(ref, item);
+      if (!rect) return;
       resize = {
         ref,
         pointer: contexts.view.clientToSpace(Places.Stage, { x, y }),
-        start: { ...item.Size },
-        centre: { ...item.Position },
+        topLeft: { x: rect.x, y: rect.y },
       };
     });
     on('resize.item.move', ({ x, y }) => {
       if (!resize) return;
       const pointer = contexts.view.clientToSpace(Places.Stage, { x, y });
-      // Corner handle is at (centre + Size/2). New size = 2 * (pointer - centre).
-      const w = Math.max(40, (pointer.x - resize.centre.x) * 2);
-      const h = Math.max(40, (pointer.y - resize.centre.y) * 2);
+      const w = Math.max(40, pointer.x - resize.topLeft.x);
+      const h = Math.max(40, pointer.y - resize.topLeft.y);
+      const Position = { x: resize.topLeft.x + w / 2, y: resize.topLeft.y + h / 2 };
       // Setting Size also flips AutoFit off — storage systems that don't track
       // AutoFit just ignore the field.
-      emit('item.update', { ref: resize.ref, patch: { Size: { w, h }, AutoFit: false } });
+      emit('item.update', { ref: resize.ref, patch: { Size: { w, h }, Position, AutoFit: false } });
       emit('resize.item.changed', { ref: resize.ref });
     });
     on('resize.item.end', () => { resize = null; });

@@ -34,6 +34,23 @@ exports[`combinatorial action graph > length-1: every auto-runnable command boot
 }
 `;
 
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [demo.render-concurrency] 1`] = `
+{
+  "sequence": [
+    "demo.render-concurrency",
+  ],
+  "snap": {
+    "containers": 2,
+    "dxErrors": 0,
+    "edges": 8,
+    "focused": "node:e8",
+    "nodes": 8,
+    "scale": 0.8,
+    "selected": "node:e8",
+  },
+}
+`;
+
 exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [demo.render-java] 1`] = `
 {
   "sequence": [
@@ -51,6 +68,23 @@ exports[`combinatorial action graph > length-1: every auto-runnable command boot
 }
 `;
 
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [demo.render-jira] 1`] = `
+{
+  "sequence": [
+    "demo.render-jira",
+  ],
+  "snap": {
+    "containers": 1,
+    "dxErrors": 0,
+    "edges": 3,
+    "focused": "node:e4",
+    "nodes": 4,
+    "scale": 2,
+    "selected": "node:e4",
+  },
+}
+`;
+
 exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [demo.render-self] 1`] = `
 {
   "sequence": [
@@ -59,11 +93,11 @@ exports[`combinatorial action graph > length-1: every auto-runnable command boot
   "snap": {
     "containers": 5,
     "dxErrors": 0,
-    "edges": 70,
-    "focused": "node:e47",
-    "nodes": 47,
-    "scale": 0.18,
-    "selected": "node:e47",
+    "edges": 72,
+    "focused": "node:e49",
+    "nodes": 49,
+    "scale": 0.17,
+    "selected": "node:e49",
   },
 }
 `;

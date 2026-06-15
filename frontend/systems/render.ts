@@ -18,6 +18,7 @@ export function registerRender(system: Registry) {
       return `[data-item-kind="${attr(ref.kind)}"][data-item-id="${attr(ref.id)}"]${parent ? `[data-item-parent="${attr(parent)}"]` : ':not([data-item-parent])'}`;
     };
     const activeElement = () => document.activeElement as (Element & { blur?: () => void }) | null;
+    const modalOpen = () => (contexts.places.el(Places.Modal)?.children.length ?? 0) > 0;
     const blurActiveItem = () => {
       const active = activeElement();
       if (active?.closest('[data-item-kind][data-item-id]') && typeof active.blur === 'function') active.blur();
@@ -52,6 +53,10 @@ export function registerRender(system: Registry) {
         blurActiveItem();
       }
       if (!pendingFocusRef) return;
+      if (modalOpen()) {
+        pendingFocusRef = null;
+        return;
+      }
       const item = contexts.places.el(Places.Stage)?.querySelector(itemSelector(pendingFocusRef));
       pendingFocusRef = null;
       const focusable = item as (Element & { focus?: (options?: FocusOptions) => void }) | null;

@@ -413,12 +413,22 @@ button.icon:hover { color: var(--ink); }
   flex-direction: column;
   pointer-events: none;
 }
+.container-sections[data-axis="columns"] {
+  flex-direction: row;
+}
 .container-section {
   position: relative;
   flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
   border-top: 1px dashed color-mix(in srgb, var(--line-strong) 70%, transparent);
 }
 .container-section:first-child { border-top: 0; }
+.container-sections[data-axis="columns"] .container-section {
+  border-top: 0;
+  border-left: 1px dashed color-mix(in srgb, var(--line-strong) 70%, transparent);
+}
+.container-sections[data-axis="columns"] .container-section:first-child { border-left: 0; }
 .container-section span {
   position: absolute;
   top: 4px;
@@ -428,6 +438,37 @@ button.icon:hover { color: var(--ink); }
   background: color-mix(in srgb, var(--bg) 88%, transparent);
   color: var(--text-muted);
   font: 600 10px/1.2 ui-monospace, monospace;
+  pointer-events: auto;
+  cursor: text;
+}
+.container-section span.editing {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  background: var(--panel);
+  color: var(--ink);
+}
+.container-section-divider {
+  flex: 0 0 8px;
+  align-self: stretch;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: row-resize;
+  pointer-events: auto;
+  position: relative;
+}
+.container-sections[data-axis="columns"] .container-section-divider { cursor: col-resize; }
+.container-section-divider::before {
+  content: "";
+  position: absolute;
+  inset: 3px 0;
+  border-radius: 999px;
+  background: transparent;
+}
+.container-sections[data-axis="columns"] .container-section-divider::before { inset: 0 3px; }
+.container-section-divider:hover::before,
+.container-section-divider:focus-visible::before {
+  background: var(--accent-soft);
 }
 /* Resize handle — bottom-right corner. Visible only on hover/selected/focused. */
 .container-resize {
@@ -485,6 +526,7 @@ button.icon:hover { color: var(--ink); }
   line-height: 1;
 }
 .node-action:hover, .node-toggle:hover, .node-config:hover { background: var(--panel-2); color: var(--ink); }
+.node-context-actions { font-weight: 700; }
 .node-title {
   flex: 1; font-weight: 600;
   font-size: 13px;
@@ -814,6 +856,30 @@ button.icon:hover { color: var(--ink); }
   padding-top: 6px;
   margin-top: 4px;
   border-top: 1px solid var(--line);
+}
+.context-actions {
+  display: grid;
+  gap: 8px;
+}
+.context-action-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.context-action {
+  width: 100%;
+  justify-content: flex-start;
+}
+.context-action-row .context-action {
+  width: auto;
+}
+.context-action-heading {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .05em;
 }
 
 /* --- Scenario player HUD (presentation / fix-demo overlay) --- */
