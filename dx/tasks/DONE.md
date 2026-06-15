@@ -189,3 +189,20 @@ node command regression.
 Added hidden alias command `choose.all.cmd` that forwards to the existing
 `choose.all` event with `Cmd+A`. The alias preserves Ctrl+A and avoids creating a
 new behavior event.
+
+## zoom-fit-tool-panel
+- kind: feature
+- delegate: ready
+- files: frontend/systems/view-zoom.ts
+- title: Zoom and fit buttons should live in a bottom-right tool panel
+
+The tool-panel registry is live. GREEN is ONE call — add_panel does the whole edit
+(declares the panel, widens the ctx, AND routes the buttons):
+add_panel {"system":"frontend/systems/view-zoom.ts","id":"zoom","anchor":"bottom-right","movable":true,"layout":"stack","order":20,"buttons":["view.zoom.out","view.zoom.reset","view.zoom.in","view.fit.all"]}
+The four buttons then render in the bottom-right panel instead of the top bar.
+RED — call gen_test with this css/count scenario (do NOT
+hand-write a test file): asserts =
+[{"css":".tool-panel[data-panel-id=\"zoom\"] [data-command=\"view.zoom.in\"]","op":"count","value":1},
+{"css":".tool-panel[data-panel-id=\"top\"] [data-command=\"view.zoom.in\"]","op":"count","value":0}].
+It fails now (zoom panel absent → count 0) and passes once the buttons move.
+Idiom: tests/commands/tool-panel-registry.test.ts.

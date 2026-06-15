@@ -19,11 +19,13 @@ declare module '../types' {
 type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
 
 export function registerViewZoom(system: Registry) {
-  system('view.zoom', ({ on, emit, contexts, graphs, selection, contribute, model }) => {
-    contribute({ surface: 'top', command: 'view.zoom.out', kind: 'button', text: '−', slot: Slots.End, order: 10 });
-    contribute({ surface: 'top', command: 'view.zoom.reset', kind: 'button', text: '100%', slot: Slots.End, order: 20 });
-    contribute({ surface: 'top', command: 'view.zoom.in', kind: 'button', text: '+', slot: Slots.End, order: 30 });
-    contribute({ surface: 'top', command: 'view.fit.all', kind: 'button', text: 'Fit', slot: Slots.End, order: 5 });
+  system('view.zoom', ({ on, emit, contexts, graphs, selection, contribute, model, declarePanel }) => {
+    // Stage tool panel — buttons reach it via panel: 'zoom' on their contribute(...).
+    declarePanel({ id: 'zoom', anchor: 'bottom-right', movable: true, layout: 'stack', order: 20 });
+    contribute({ panel: 'zoom', surface: 'top', command: 'view.zoom.out', kind: 'button', text: '−', slot: Slots.End, order: 10 });
+    contribute({ panel: 'zoom', surface: 'top', command: 'view.zoom.reset', kind: 'button', text: '100%', slot: Slots.End, order: 20 });
+    contribute({ panel: 'zoom', surface: 'top', command: 'view.zoom.in', kind: 'button', text: '+', slot: Slots.End, order: 30 });
+    contribute({ panel: 'zoom', surface: 'top', command: 'view.fit.all', kind: 'button', text: 'Fit', slot: Slots.End, order: 5 });
     const stageSelector = `[data-place="${Places.Stage}"]`;
     const commit = () => emit('view.changed', contexts.view.get());
     const centerZoom = (factor: number) => {
