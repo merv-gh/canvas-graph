@@ -35,7 +35,15 @@ export function registerModal(system: Registry) {
           return modal;
         },
       });
-      queueMicrotask(() => (contexts.places.el(Places.Modal)?.querySelector('[autofocus]') as HTMLElement | null)?.focus());
+      // Focus the first field on open so every modal is keyboard-ready without
+      // a mouse click. Prefer an explicit [autofocus], else the first focusable
+      // control (any modal with fields is safe; a button-only modal stays put).
+      queueMicrotask(() => {
+        const root = contexts.places.el(Places.Modal);
+        const target = root?.querySelector('[autofocus]')
+          ?? root?.querySelector('input:not([type="hidden"]):not([disabled]), textarea, select');
+        (target as HTMLElement | null)?.focus();
+      });
     });
   }, { requires: ['render'] });
 }
