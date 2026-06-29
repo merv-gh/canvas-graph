@@ -1,0 +1,9 @@
+
+ RUN  v4.1.8 /private/tmp/claude-501/-Users-user-Documents-AI-ecs-canvas-graph/e1fcc255-22d9-470f-9d93-85ca4e4750c1/scratchpad/wt-04-grid-cull
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  15:51:53
+   Duration  13.06s (transform 849ms, setup 53ms, import 960ms, tests 10.79s, environment 988ms)
+

@@ -110,6 +110,17 @@ export function registerRenderStage(system: Registry) {
     };
     const targetLayer = (renderer: NonNullable<EntityDef<unknown>['render']>) =>
       renderer.layer === 'svg' ? svgLayer! : layer!;
+    // Stable z-layering. The viewport reconcile appends entering nodes in
+    // arbitrary (grid) order, so DOM order can't carry stacking. Instead each
+    // node gets a z-index keyed by its creation sequence (the numeric id suffix):
+    // a node leaving and re-entering the viewport always restacks identically —
+    // no flicker — without reordering the DOM. Edges sit in the svg sublayer
+    // beneath all nodes structurally.
+    const stableZ = (ref: ItemRef, el: HTMLElement) => {
+      if (ref.kind !== 'node') return;
+      const seq = parseInt(ref.id.replace(/^\D+/, ''), 10);
+      if (Number.isFinite(seq)) el.style.zIndex = String(seq);
+    };
 
     // ----- Viewport culling (spatial grid) -----
     // Only build DOM for what's near the viewport. The model's grid answers
@@ -174,10 +185,10 @@ export function registerRenderStage(system: Registry) {
       layer!.style.transform = layerTransform(contexts.view.get());
       const desired = collectDesired(visibleNodeIds());
       [...els.keys()].forEach(k => { if (!desired.has(k)) { els.get(k)?.remove(); els.delete(k); } });
-      desired.forEach(({ def, item }, k) => {
+      desired.forEach(({ ref, def, item }, k) => {
         if (els.has(k)) return; // already on stage — leave it (cheap camera moves)
         const el = def.render!.draw(item, renderCtxFor(def, item)) as HTMLElement | null;
-        if (el) { targetLayer(def.render!).append(el); els.set(k, el); }
+        if (el) { stableZ(ref, el); targetLayer(def.render!).append(el); els.set(k, el); }
       });
       if (fresh) emit('render.view.set', { place: Places.Stage, key: 'nodes', view: layer! });
     };
@@ -197,6 +208,7 @@ export function registerRenderStage(system: Registry) {
         ? renderer.draw(item, renderCtxFor(entityDef!, item)) as HTMLElement | null
         : null;
       if (!fresh) { existing?.remove(); els.delete(k); return; }
+      stableZ(ref, fresh);
       if (existing) existing.replaceWith(fresh);
       else targetLayer(renderer!).append(fresh);
       els.set(k, fresh);
