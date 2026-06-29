@@ -1,0 +1,9 @@
+
+ RUN  v4.1.8 /private/tmp/claude-501/-Users-user-Documents-AI-ecs-canvas-graph/e1fcc255-22d9-470f-9d93-85ca4e4750c1/scratchpad/wt-03-patch-renderer
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  15:44:16
+   Duration  39.10s (transform 753ms, setup 52ms, import 904ms, tests 36.39s, environment 1.38s)
+

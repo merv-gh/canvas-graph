@@ -1,4 +1,4 @@
-import type { Id, ItemRef, Label, Position, Size } from '../types';
+import type { Id, ItemRef, Label, Position, Rect, Size } from '../types';
 
 // ----- Domain types -----
 // Live here, next to the classes implementing them. Anything kind-specific
@@ -74,6 +74,45 @@ export class Graph {
   // Adjacency index nodeId → incident edge ids. Turns edgesOf / delete-cascade
   // from O(E) scans into O(degree).
   private adjacency = new Map<Id, Set<Id>>();
+
+  // ----- Spatial index (uniform grid) -----
+  // Buckets node ids by their position cell so the renderer can ask "which
+  // nodes fall in this viewport rect" in O(cells + hits) instead of scanning
+  // every node each pan/zoom frame. Maintained on create/move/delete.
+  private static readonly CELL = 256;
+  private grid = new Map<string, Set<Id>>();
+  private nodeCell = new Map<Id, string>();
+  private cellKey(x: number, y: number) {
+    return `${Math.floor(x / Graph.CELL)},${Math.floor(y / Graph.CELL)}`;
+  }
+  private indexNode(node: GraphNode) {
+    const p = node.Position;
+    if (!p) return;
+    const key = this.cellKey(p.x, p.y);
+    const prev = this.nodeCell.get(node.id);
+    if (prev === key) return;
+    if (prev) this.grid.get(prev)?.delete(node.id);
+    (this.grid.get(key) ?? this.grid.set(key, new Set()).get(key)!).add(node.id);
+    this.nodeCell.set(node.id, key);
+  }
+  private unindexNode(id: Id) {
+    const prev = this.nodeCell.get(id);
+    if (prev) { this.grid.get(prev)?.delete(id); this.nodeCell.delete(id); }
+  }
+  /** Node ids whose cell overlaps `rect`. A node spans at most one extra cell
+   *  beyond its center, and callers pass a margin-expanded rect, so cell-level
+   *  granularity is sufficient (the renderer still has exact bounds to refine). */
+  nodeIdsInRect(rect: Rect): Id[] {
+    const x0 = Math.floor(rect.x / Graph.CELL), x1 = Math.floor((rect.x + rect.w) / Graph.CELL);
+    const y0 = Math.floor(rect.y / Graph.CELL), y1 = Math.floor((rect.y + rect.h) / Graph.CELL);
+    const out: Id[] = [];
+    for (let cx = x0; cx <= x1; cx++) {
+      for (let cy = y0; cy <= y1; cy++) {
+        this.grid.get(`${cx},${cy}`)?.forEach(id => out.push(id));
+      }
+    }
+    return out;
+  }
 
   private addAdj(edge: GraphEdge) {
     (this.adjacency.get(edge.From) ?? this.adjacency.set(edge.From, new Set()).get(edge.From)!).add(edge.id);
@@ -165,6 +204,7 @@ export class Graph {
     const id = `e${this.nextNode++}`;
     const node = new GraphNode(this, id, this.withDefaults(draft, options));
     this.items.set(id, node);
+    this.indexNode(node);
     this.nodeArr = null;
     return node;
   }
@@ -183,6 +223,7 @@ export class Graph {
     // In-place mutation keeps the same object identity, so the cached nodes()
     // array stays valid — no invalidation needed.
     Object.assign(node, patch);
+    if ('Position' in patch) this.indexNode(node); // moved → re-bucket
     return true;
   }
   deleteNode(id: Id) {
@@ -199,7 +240,7 @@ export class Graph {
       this.edgeArr = null;
     }
     const removed = this.items.delete(id);
-    if (removed) this.nodeArr = null;
+    if (removed) { this.unindexNode(id); this.nodeArr = null; }
     return removed;
   }
 

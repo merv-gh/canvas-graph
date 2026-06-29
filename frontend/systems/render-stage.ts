@@ -111,39 +111,88 @@ export function registerRenderStage(system: Registry) {
     const targetLayer = (renderer: NonNullable<EntityDef<unknown>['render']>) =>
       renderer.layer === 'svg' ? svgLayer! : layer!;
 
-    /** Full rebuild — first paint, graph switch, or any change we can't localize. */
-    const drawAll = () => {
-      syncStageView();
-      layer = contexts.templates.clone('nodes') as HTMLElement;
-      layer.style.transform = layerTransform(contexts.view.get());
-      svgLayer = contexts.templates.slot(layer, 'edges') as HTMLElement;
-      els.clear();
-      model.entities().forEach(entityDef => {
-        const renderer = entityDef.render;
-        if (!renderer) return;
-        const target = targetLayer(renderer);
-        graphs.current.itemsOfKind(entityDef.kind).forEach(item => {
-          const ref = refOf(entityDef.kind, item);
-          // Suppress descendants of collapsed ancestors. Edges decide their own
-          // visibility (one endpoint inside a collapsed subtree is fine — the
-          // renderer substitutes the collapsed ancestor as the endpoint).
-          if (ref && entityDef.kind !== 'edge' && hiddenByCollapsedAncestor(ref)) return;
-          const el = renderer.draw(item, renderCtxFor(entityDef, item)) as HTMLElement | null;
-          if (el) { target.append(el); if (ref) els.set(keyOf(ref), el); }
-        });
-      });
-      // Hand the scheduler the element itself, not a rebuilding thunk.
-      emit('render.view.set', { place: Places.Stage, key: 'nodes', view: layer });
+    // ----- Viewport culling (spatial grid) -----
+    // Only build DOM for what's near the viewport. The model's grid answers
+    // "nodes in this rect" in O(cells+hits) — no per-frame O(N) scan. Edges
+    // shown when incident to a visible node; other kinds (containers) aren't
+    // gridded yet, so they render unconditionally. `null` = no viewport
+    // (headless/tests with no stage rect) → render everything.
+    const CULL_MARGIN = 200;
+    const visibleNodeIds = (): Set<string> | null => {
+      const rect = contexts.view.visibleRect(Places.Stage, CULL_MARGIN);
+      return rect ? new Set(graphs.current.nodeIdsInRect(rect)) : null;
     };
 
-    /** Patch one item: insert / replace / remove its element in place. */
-    const patchOne = (ref: ItemRef) => {
+    type Desired = { ref: ItemRef; def: EntityDef<unknown>; item: unknown };
+    /** Everything that should currently be on the stage, keyed by element key. */
+    const collectDesired = (visible: Set<string> | null): Map<string, Desired> => {
+      const desired = new Map<string, Desired>();
+      const nodeIds = new Set<string>();
+      const nodeDef = model.entity('node') as EntityDef<unknown> | undefined;
+      if (nodeDef?.render) {
+        const nodes = visible
+          ? [...visible].map(id => graphs.current.getNode(id)).filter((n): n is NonNullable<typeof n> => !!n)
+          : graphs.current.nodes();
+        nodes.forEach(node => {
+          const ref = refOf('node', node);
+          if (!ref || hiddenByCollapsedAncestor(ref)) return;
+          desired.set(keyOf(ref), { ref, def: nodeDef, item: node });
+          nodeIds.add(ref.id);
+        });
+      }
+      const edgeDef = model.entity('edge') as EntityDef<unknown> | undefined;
+      if (edgeDef?.render) {
+        const edges = visible ? [...nodeIds].flatMap(id => graphs.current.edgesOf(id)) : graphs.current.edges();
+        edges.forEach(edge => {
+          const ref = edgeRef(edge.id);
+          desired.set(keyOf(ref), { ref, def: edgeDef, item: edge });
+        });
+      }
+      model.entities().forEach(def => {
+        if (def.kind === 'node' || def.kind === 'edge' || !def.render) return;
+        graphs.current.itemsOfKind(def.kind).forEach(item => {
+          const ref = refOf(def.kind, item);
+          if (!ref || hiddenByCollapsedAncestor(ref)) return;
+          desired.set(keyOf(ref), { ref, def, item });
+        });
+      });
+      return desired;
+    };
+
+    /** Reconcile the DOM to the desired set. `rebuild` makes a fresh layer (first
+     *  paint / graph switch); otherwise it diffs against the live layer — pan/zoom
+     *  only insert nodes entering the viewport and remove those leaving, never
+     *  touching the elements that stay (so camera moves are O(delta)). */
+    const reconcile = (rebuild: boolean) => {
+      syncStageView();
+      const fresh = rebuild || !layer;
+      if (fresh) {
+        layer = contexts.templates.clone('nodes') as HTMLElement;
+        svgLayer = contexts.templates.slot(layer, 'edges') as HTMLElement;
+        els.clear();
+      }
+      layer!.style.transform = layerTransform(contexts.view.get());
+      const desired = collectDesired(visibleNodeIds());
+      [...els.keys()].forEach(k => { if (!desired.has(k)) { els.get(k)?.remove(); els.delete(k); } });
+      desired.forEach(({ def, item }, k) => {
+        if (els.has(k)) return; // already on stage — leave it (cheap camera moves)
+        const el = def.render!.draw(item, renderCtxFor(def, item)) as HTMLElement | null;
+        if (el) { targetLayer(def.render!).append(el); els.set(k, el); }
+      });
+      if (fresh) emit('render.view.set', { place: Places.Stage, key: 'nodes', view: layer! });
+    };
+    const drawAll = () => reconcile(true);
+
+    /** Patch one item in place: insert / replace / remove. `visible` gates node
+     *  membership so a patched node that moved out of the viewport is dropped. */
+    const patchOne = (ref: ItemRef, visible: Set<string> | null) => {
       const k = keyOf(ref);
       const existing = els.get(k);
       const entityDef = model.entity(ref.kind) as EntityDef<unknown> | undefined;
       const renderer = entityDef?.render;
       const item = renderer ? graphs.current.getItem(ref) : undefined;
-      const hidden = ref.kind !== 'edge' && hiddenByCollapsedAncestor(ref);
+      const culled = ref.kind === 'node' && !!visible && !visible.has(ref.id);
+      const hidden = (ref.kind !== 'edge' && hiddenByCollapsedAncestor(ref)) || culled;
       const fresh = (renderer && item && !hidden)
         ? renderer.draw(item, renderCtxFor(entityDef!, item)) as HTMLElement | null
         : null;
@@ -174,7 +223,8 @@ export function registerRenderStage(system: Registry) {
           const er = norm(edgeRef(e.id)); todo.set(keyOf(er), er);
         });
       });
-      todo.forEach(ref => patchOne(ref));
+      const visible = visibleNodeIds();
+      todo.forEach(ref => patchOne(ref, visible));
     };
 
     const drawStageOverlays = () => emit('render.view.set', {
@@ -227,8 +277,11 @@ export function registerRenderStage(system: Registry) {
      *  the persistent layer's transform + grid in place — O(1), no rebuild.
      *  Overlays are screen-positioned, so refresh those too (usually none). */
     const applyCamera = () => {
-      syncStageView();
-      if (layer) layer.style.transform = layerTransform(contexts.view.get());
+      // Pan/zoom: move the transform AND reconcile the viewport so nodes scrolling
+      // into view appear and those leaving are dropped (incremental — only the
+      // delta is touched, existing elements stay put).
+      if (layer) reconcile(false);
+      else { syncStageView(); }
       drawStageOverlays();
     };
 
