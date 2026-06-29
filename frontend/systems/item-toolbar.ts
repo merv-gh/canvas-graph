@@ -102,5 +102,8 @@ export function registerItemToolbar(system: Registry) {
     };
 
     on('render.stage.draw', draw);
+    // The toolbar is screen-positioned over the selected item, so it must follow
+    // the camera on the transform-only pan/zoom path too.
+    on('render.stage.camera', draw);
   }, { requires: ['render.stage', 'graph'] });
 }

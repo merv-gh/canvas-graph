@@ -41,7 +41,7 @@ export function registerRender(system: Registry) {
     });
     on('render.view.clear', ({ place, key }) => { key ? views.get(place)?.delete(key) : views.delete(place); flush(place); });
 
-    type RenderScope = 'nodes' | 'outline';
+    type RenderScope = 'nodes' | 'outline' | 'camera';
     const dirty = new Set<RenderScope>();
     let scheduled = false;
     let flushes = 0;
@@ -65,7 +65,10 @@ export function registerRender(system: Registry) {
     const flushDirty = () => {
       scheduled = false;
       flushes++;
+      // A full stage draw already re-applies the camera, so only emit the
+      // camera-only path when the nodes scope isn't also dirty this frame.
       if (dirty.has('nodes')) emit('render.stage.draw');
+      else if (dirty.has('camera')) emit('render.stage.camera');
       if (dirty.has('outline')) emit('outline.draw');
       dirty.clear();
       queueMicrotask(focusPendingItem);

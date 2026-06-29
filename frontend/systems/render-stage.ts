@@ -86,6 +86,19 @@ export function registerRenderStage(system: Registry) {
       stage.style.setProperty('--grid-y', `${-view.y * view.scale}px`);
       stage.dataset.zoom = `${Math.round(view.scale * 100)}%`;
     };
+    const layerTransform = (view: import('../types').ViewState) =>
+      `translate(${-view.x * view.scale}px, ${-view.y * view.scale}px) scale(${view.scale})`;
+    /** Camera-only redraw: pan/zoom moved the view but no entity changed. Update
+     *  the existing layer's transform + grid in place — no element rebuild. The
+     *  whole stage is one CSS-transformed layer, so this is O(1). Overlays are
+     *  screen-positioned, so refresh those too (cheap — usually none active). */
+    const applyCamera = () => {
+      syncStageView();
+      const stage = contexts.places.el(Places.Stage);
+      const layer = stage?.querySelector('.nodes') as HTMLElement | null;
+      if (layer) layer.style.transform = layerTransform(contexts.view.get());
+      drawStageOverlays();
+    };
 
     const drawItems = () => emit('render.view.set', {
       place: Places.Stage,
@@ -94,7 +107,7 @@ export function registerRenderStage(system: Registry) {
         syncStageView();
         const view = contexts.view.get();
         const layer = contexts.templates.clone('nodes');
-        layer.style.transform = `translate(${-view.x * view.scale}px, ${-view.y * view.scale}px) scale(${view.scale})`;
+        layer.style.transform = layerTransform(view);
         const svgLayer = contexts.templates.slot(layer, 'edges');
         model.entities().forEach(entityDef => {
           const renderer = entityDef.render;
@@ -111,8 +124,10 @@ export function registerRenderStage(system: Registry) {
               if (parent) ref.parent = parent;
               if (hiddenByCollapsedAncestor(ref)) return;
             }
-            const b = renderer.bounds?.(item);
-            if (b && !contexts.view.isVisible(Places.Stage, b, 160)) return;
+            // Viewport culling was removed here in favour of a transform-only
+            // camera path (pan/zoom no longer rebuild): rendering all items keeps
+            // the layer correct under any transform. Spatial-index culling for
+            // very large graphs is reintroduced in a later phase.
             const el = renderer.draw(item, renderCtxFor(entityDef, item));
             if (el) target.append(el);
           });
@@ -168,5 +183,6 @@ export function registerRenderStage(system: Registry) {
     };
 
     on('render.stage.draw', () => { drawItems(); drawStageOverlays(); drawEmptyState(); });
+    on('render.stage.camera', applyCamera);
   }, { requires: ['render', 'graph'] });
 }

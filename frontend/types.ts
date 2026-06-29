@@ -192,6 +192,9 @@ interface BuiltinEvents {
   /** Stage redraw trigger. The render scheduler emits this once per RAF when
    *  the nodes scope is dirty. Stage renderers (HTML, canvas, …) subscribe. */
   'render.stage.draw': void;
+  /** Camera-only redraw: pan/zoom changed the view but no entity did. Stage
+   *  renderers update the layer transform / grid in place — no DOM rebuild. */
+  'render.stage.camera': void;
   /** Modal layer contract. Multiple systems open modals (commandForm,
    *  commandModal, configurable); they all go through these two events. */
   'modal.open': { title?: string; body?: Renderable; visual?: ModalVisual };
@@ -242,7 +245,7 @@ export type DxIssue = { level: 'error' | 'warn'; rule: string; message: string }
  *  facts as redraw triggers via `factScope`. */
 export const FACT_SUFFIXES = ['.created', '.updated', '.deleted', '.switched', '.selected', '.focused', '.changed'] as const;
 export type FactSuffix = typeof FACT_SUFFIXES[number];
-export type RedrawScope = 'nodes' | 'outline' | 'both';
+export type RedrawScope = 'nodes' | 'outline' | 'both' | 'camera';
 
 // ---------------------------------------------------------------------------
 // Command framework
