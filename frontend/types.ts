@@ -496,6 +496,17 @@ export type EntityRenderer<T = unknown> = {
   /** Optional culling bounds in graph-space. When provided, render skips items
    *  whose bounds don't intersect the visible rect. */
   bounds?(item: T): Rect | null;
+  /** Fast in-place position update. When the only thing that changed is where the
+   *  item sits (drag / arrow-nudge — the common interactive case), the renderer
+   *  moves the EXISTING element instead of being torn down and rebuilt. Keeping
+   *  the same DOM node is what lets CSS transitions ease the move (and it's far
+   *  cheaper). The stage only takes this path when `signature` is unchanged. */
+  reposition?(el: Element, item: T): void;
+  /** Cheap hash of everything that affects the rendered output *except* position.
+   *  When it's unchanged between two updates of the same item, the stage uses
+   *  `reposition` instead of a full redraw. Omit (or omit `reposition`) to always
+   *  full-redraw — the safe default for kinds that don't move in place. */
+  signature?(item: T): string;
 };
 
 export type EntityDef<T, Patch = unknown> = {

@@ -546,9 +546,14 @@ button.icon:hover { color: var(--ink); }
   justify-content: center;
   transition: box-shadow var(--duration-normal) var(--ease-default),
               border-color var(--duration-normal) var(--ease-default),
-              min-height var(--duration-fast) var(--ease-default);
-  animation: node-enter var(--duration-normal) var(--ease-default);
+              min-height var(--duration-fast) var(--ease-default),
+              left var(--duration-fast) var(--ease-default),
+              top var(--duration-fast) var(--ease-default);
+  /* animation: node-enter var(--duration-normal) var(--ease-default); */
 }
+/* Keyboard nudge eases via the left/top transition above. A pointer-drag must
+   track the cursor 1:1, so the stage drops the easing while dragging. */
+.stage.dragging .node { transition: box-shadow var(--duration-normal) var(--ease-default), border-color var(--duration-normal) var(--ease-default); }
 .node-type-square {
   border-radius: 6px;
   background: color-mix(in srgb, var(--panel) 88%, #e0f2fe);
@@ -1119,7 +1124,7 @@ button.icon:hover { color: var(--ink); }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  animation: scenario-pop .18s ease;
+  /* animation: scenario-pop .18s ease; */
 }
 .scenario-hud.done { background: var(--ok, #1a7f4b); }
 @keyframes scenario-pop { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translateX(-50%); } }

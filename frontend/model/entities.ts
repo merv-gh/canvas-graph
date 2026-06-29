@@ -153,6 +153,18 @@ const nodeRenderer: EntityRenderer<GraphNode> = {
     ctx.wireAffordances(el);
     return el;
   },
+  /** Drag / nudge only changes where the node sits — move the existing element
+   *  (keeps its identity so CSS can ease the move; no rebuild). */
+  reposition(el, node) {
+    const pos = node.Position ?? { x: 0, y: 0 };
+    (el as HTMLElement).style.left = `${pos.x}px`;
+    (el as HTMLElement).style.top = `${pos.y}px`;
+  },
+  /** Everything the drawn node depends on *except* position. Unchanged ⇒ the
+   *  stage takes the cheap `reposition` path instead of a full redraw. */
+  signature(node) {
+    return `${node.NodeType ?? 'text'}|${node.Size.w}x${node.Size.h}|${node.Label.text}|${node.Description ?? ''}`;
+  },
 };
 
 export const nodeEntity: EntityDef<GraphNode, NodePatch> = entityDef<GraphNode, NodePatch>('node', {

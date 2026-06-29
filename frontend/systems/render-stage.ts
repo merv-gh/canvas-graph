@@ -99,6 +99,13 @@ export function registerRenderStage(system: Registry) {
     let layer: HTMLElement | null = null;
     let svgLayer: HTMLElement | null = null;
     const els = new Map<string, HTMLElement>();
+    // Last-drawn signature per element (everything but position). Lets a patch
+    // take the in-place `reposition` fast path when only the position moved.
+    const sigCache = new Map<string, string>();
+    const cacheSig = (k: string, def: EntityDef<unknown>, item: unknown) => {
+      const sig = def.render?.signature?.(item);
+      if (sig === undefined) sigCache.delete(k); else sigCache.set(k, sig);
+    };
     const keyOf = (ref: ItemRef) => `${ref.kind}:${ref.id}:${(ref.parent ?? []).join('/')}`;
     const refOf = (kind: string, item: unknown): ItemRef | null => {
       const id = (item as { id?: string }).id;
@@ -181,14 +188,15 @@ export function registerRenderStage(system: Registry) {
         layer = contexts.templates.clone('nodes') as HTMLElement;
         svgLayer = contexts.templates.slot(layer, 'edges') as HTMLElement;
         els.clear();
+        sigCache.clear();
       }
       layer!.style.transform = layerTransform(contexts.view.get());
       const desired = collectDesired(visibleNodeIds());
-      [...els.keys()].forEach(k => { if (!desired.has(k)) { els.get(k)?.remove(); els.delete(k); } });
+      [...els.keys()].forEach(k => { if (!desired.has(k)) { els.get(k)?.remove(); els.delete(k); sigCache.delete(k); } });
       desired.forEach(({ ref, def, item }, k) => {
         if (els.has(k)) return; // already on stage — leave it (cheap camera moves)
         const el = def.render!.draw(item, renderCtxFor(def, item)) as HTMLElement | null;
-        if (el) { stableZ(ref, el); targetLayer(def.render!).append(el); els.set(k, el); }
+        if (el) { stableZ(ref, el); targetLayer(def.render!).append(el); els.set(k, el); cacheSig(k, def, item); }
       });
       if (fresh) emit('render.view.set', { place: Places.Stage, key: 'nodes', view: layer! });
     };
@@ -204,14 +212,20 @@ export function registerRenderStage(system: Registry) {
       const item = renderer ? graphs.current.getItem(ref) : undefined;
       const culled = ref.kind === 'node' && !!visible && !visible.has(ref.id);
       const hidden = (ref.kind !== 'edge' && hiddenByCollapsedAncestor(ref)) || culled;
-      const fresh = (renderer && item && !hidden)
-        ? renderer.draw(item, renderCtxFor(entityDef!, item)) as HTMLElement | null
-        : null;
-      if (!fresh) { existing?.remove(); els.delete(k); return; }
+      if (!renderer || !item || hidden) { existing?.remove(); els.delete(k); sigCache.delete(k); return; }
+      // Fast path: the element exists and nothing but its position changed →
+      // move it in place (no rebuild, keeps identity so CSS can ease the move).
+      if (existing && renderer.reposition && renderer.signature && renderer.signature(item) === sigCache.get(k)) {
+        renderer.reposition(existing, item);
+        return;
+      }
+      const fresh = renderer.draw(item, renderCtxFor(entityDef!, item)) as HTMLElement | null;
+      if (!fresh) { existing?.remove(); els.delete(k); sigCache.delete(k); return; }
       stableZ(ref, fresh);
       if (existing) existing.replaceWith(fresh);
-      else targetLayer(renderer!).append(fresh);
+      else targetLayer(renderer).append(fresh);
       els.set(k, fresh);
+      cacheSig(k, entityDef!, item);
     };
 
     /** Patch the changed refs (+ edges incident to any moved node, whose paths
@@ -304,5 +318,9 @@ export function registerRenderStage(system: Registry) {
       drawEmptyState();
     });
     on('render.stage.camera', applyCamera);
+    // While a pointer-drag is active, suppress the node move-easing so the dragged
+    // node tracks the cursor 1:1 (easing is for discrete keyboard nudges only).
+    on('drag.item.start', () => contexts.places.el(Places.Stage)?.classList.add('dragging'));
+    on('drag.item.end', () => contexts.places.el(Places.Stage)?.classList.remove('dragging'));
   }, { requires: ['render', 'graph'] });
 }
