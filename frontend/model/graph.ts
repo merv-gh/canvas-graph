@@ -65,6 +65,24 @@ export class Graph {
   private items = new Map<Id, GraphNode>();
   private edgeMap = new Map<Id, GraphEdge>();
   private itemStores = new Map<string, ItemStore>();
+  // Snapshot caches: nodes()/edges() handed out a fresh `[...spread]` on every
+  // call (hot — the renderer iterates per redraw). Cache the array and null it
+  // only on *structural* change (create/delete); in-place updates keep the same
+  // objects, so the cached array stays valid.
+  private nodeArr: GraphNode[] | null = null;
+  private edgeArr: GraphEdge[] | null = null;
+  // Adjacency index nodeId → incident edge ids. Turns edgesOf / delete-cascade
+  // from O(E) scans into O(degree).
+  private adjacency = new Map<Id, Set<Id>>();
+
+  private addAdj(edge: GraphEdge) {
+    (this.adjacency.get(edge.From) ?? this.adjacency.set(edge.From, new Set()).get(edge.From)!).add(edge.id);
+    (this.adjacency.get(edge.To) ?? this.adjacency.set(edge.To, new Set()).get(edge.To)!).add(edge.id);
+  }
+  private removeAdj(edge: GraphEdge) {
+    this.adjacency.get(edge.From)?.delete(edge.id);
+    this.adjacency.get(edge.To)?.delete(edge.id);
+  }
 
   private constructor(readonly id: Id) {
     this.registerItemStore('node', () => this.nodes());
@@ -79,10 +97,18 @@ export class Graph {
   }
 
   itemsOfKind<T = unknown>(kind: string): T[] {
-    return [...(this.itemStores.get(kind)?.() ?? [])] as T[];
+    const provider = this.itemStores.get(kind);
+    if (!provider) return [];
+    // node/edge providers return our cached arrays — hand them out directly.
+    // Other kinds keep the defensive copy (their stores are externally owned).
+    return (kind === 'node' || kind === 'edge') ? provider() as T[] : [...provider()] as T[];
   }
 
   getItem<T = unknown>(ref: ItemRef): T | undefined {
+    // node/edge are id-keyed Maps with no embedded parent, so an id hit is the
+    // match — O(1) instead of the former linear scan (the #1 bench hot path).
+    if (ref.kind === 'node') return this.items.get(ref.id) as T | undefined;
+    if (ref.kind === 'edge') return this.edgeMap.get(ref.id) as T | undefined;
     return this.itemsOfKind<T & StoredItem>(ref.kind).find(item => {
       if (!item || typeof item !== 'object') return false;
       const candidate = item as StoredItem;
@@ -102,17 +128,36 @@ export class Graph {
     const id = `r${this.nextEdge++}`;             // 'r' = relation, to keep ids distinct from nodes (e1, e2, ...).
     const edge = new GraphEdge(this, id, draft.From, draft.To, draft.Label);
     this.edgeMap.set(id, edge);
+    this.addAdj(edge);
+    this.edgeArr = null;
     return edge;
   }
   getEdge(id: Id) { return this.edgeMap.get(id); }
-  edges() { return [...this.edgeMap.values()]; }
-  edgesOf(nodeId: Id) { return this.edges().filter(e => e.From === nodeId || e.To === nodeId); }
+  edges() { return this.edgeArr ??= [...this.edgeMap.values()]; }
+  edgesOf(nodeId: Id) {
+    const ids = this.adjacency.get(nodeId);
+    if (!ids) return [];
+    const out: GraphEdge[] = [];
+    ids.forEach(eid => { const e = this.edgeMap.get(eid); if (e) out.push(e); });
+    return out;
+  }
   updateEdge(id: Id, patch: EdgePatch) {
     const edge = this.edgeMap.get(id); if (!edge) return false;
+    // From/To re-points the edge → its adjacency entries must move with it.
+    const reindex = 'From' in patch || 'To' in patch;
+    if (reindex) this.removeAdj(edge);
     Object.assign(edge, patch);
+    if (reindex) this.addAdj(edge);
     return true;
   }
-  deleteEdge(id: Id) { return this.edgeMap.delete(id); }
+  deleteEdge(id: Id) {
+    const edge = this.edgeMap.get(id);
+    if (!edge) return false;
+    this.removeAdj(edge);
+    this.edgeMap.delete(id);
+    this.edgeArr = null;
+    return true;
+  }
 
   getNode(id: Id) { return this.items.get(id); }
   /** Create-or-place-near. `nearPosition` is the caller's job — Graph stays unaware of selection. */
@@ -120,6 +165,7 @@ export class Graph {
     const id = `e${this.nextNode++}`;
     const node = new GraphNode(this, id, this.withDefaults(draft, options));
     this.items.set(id, node);
+    this.nodeArr = null;
     return node;
   }
   /** Backwards-compatible overload: `node(id)` reads, `node(draft, opts)` creates.
@@ -130,18 +176,31 @@ export class Graph {
     if (typeof value === 'string') return this.items.get(value);
     return this.createNode(value, options);
   }
-  nodes() { return [...this.items.values()]; }
+  nodes() { return this.nodeArr ??= [...this.items.values()]; }
   updateNode(id: Id, patch: NodePatch) {
     const node = this.items.get(id);
     if (!node) return false;
+    // In-place mutation keeps the same object identity, so the cached nodes()
+    // array stays valid — no invalidation needed.
     Object.assign(node, patch);
     return true;
   }
   deleteNode(id: Id) {
     // Cascade: any edge touching this node is dead too. Callers that need to react to
     // edge removal should subscribe to graph.edge.deleted, which the graph system emits.
-    [...this.edgeMap.values()].forEach(e => { if (e.From === id || e.To === id) this.edgeMap.delete(e.id); });
-    return this.items.delete(id);
+    // O(degree) via the adjacency index instead of scanning every edge.
+    const incident = this.adjacency.get(id);
+    if (incident) {
+      [...incident].forEach(eid => {
+        const e = this.edgeMap.get(eid);
+        if (e) { this.removeAdj(e); this.edgeMap.delete(eid); }
+      });
+      this.adjacency.delete(id);
+      this.edgeArr = null;
+    }
+    const removed = this.items.delete(id);
+    if (removed) this.nodeArr = null;
+    return removed;
   }
 
   private withDefaults(draft: NodeDraft, options: NodeCreateOptions & { nearPosition?: Position }): NodeDraft {

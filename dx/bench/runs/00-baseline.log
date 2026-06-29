@@ -1,0 +1,9 @@
+
+ RUN  v4.1.8 /private/tmp/claude-501/-Users-user-Documents-AI-ecs-canvas-graph/e1fcc255-22d9-470f-9d93-85ca4e4750c1/scratchpad/wt-00-baseline
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  15:15:26
+   Duration  163.94s (transform 741ms, setup 57ms, import 842ms, tests 160.98s, environment 1.74s)
+

@@ -22,5 +22,9 @@ rm -rf "$WT"; git worktree prune
 git worktree add -q --detach "$WT" HEAD
 ln -s "$MAIN/node_modules" "$WT/node_modules"
 
-nohup bash -c "cd '$WT' && BENCH=1 BENCH_MAX=1000 BENCH_OUT='$RUNS/$LABEL.md' BENCH_LABEL='$LABEL @ $SHA' npx vitest run --config vitest.bench.config.ts > '$RUNS/$LABEL.log' 2>&1; git -C '$MAIN' worktree remove --force '$WT' 2>/dev/null; git -C '$MAIN' worktree prune" >/dev/null 2>&1 &
-echo "snapshot '$LABEL' @ $SHA ready; bench running in background (pid $!) → dx/bench/runs/$LABEL.md"
+# Serialize benches via an atomic mkdir lock so concurrent runs don't contend
+# for CPU and skew the ms. The snapshot/worktree above is already frozen, so
+# queued runs measure exactly this commit regardless of when they start.
+LOCK="$SCRATCH/.benchlock"
+nohup bash -c "until mkdir '$LOCK' 2>/dev/null; do sleep 2; done; trap \"rmdir '$LOCK' 2>/dev/null\" EXIT; cd '$WT' && BENCH=1 BENCH_MAX=1000 BENCH_OUT='$RUNS/$LABEL.md' BENCH_LABEL='$LABEL @ $SHA' npx vitest run --config vitest.bench.config.ts > '$RUNS/$LABEL.log' 2>&1; git -C '$MAIN' worktree remove --force '$WT' 2>/dev/null; git -C '$MAIN' worktree prune" >/dev/null 2>&1 &
+echo "snapshot '$LABEL' @ $SHA ready; bench queued in background (pid $!) → dx/bench/runs/$LABEL.md"
