@@ -43,6 +43,20 @@ export function registerRender(system: Registry) {
 
     type RenderScope = 'nodes' | 'outline' | 'camera';
     const dirty = new Set<RenderScope>();
+    // Patch-render bookkeeping: refs changed this frame, and a flag for any
+    // change we can't localize to specific node/edge ids (→ full rebuild).
+    const dirtyItems = new Map<string, ItemRef>();
+    let fullNodes = false;
+    /** Extract the single node/edge a fact is about, for targeted patching.
+     *  Anything else (containers, graph switch, selection sets, layout) returns
+     *  null → the frame falls back to a full rebuild. */
+    const factItemRef = (name: string, data: unknown): ItemRef | null => {
+      const id = (data as { id?: string } | undefined)?.id;
+      if (!id) return null;
+      if (name.startsWith('graph.node.')) return { kind: 'node', id };
+      if (name.startsWith('graph.edge.')) return { kind: 'edge', id };
+      return null;
+    };
     let scheduled = false;
     let flushes = 0;
     let pendingFocusRef: ItemRef | null = null;
@@ -67,10 +81,12 @@ export function registerRender(system: Registry) {
       flushes++;
       // A full stage draw already re-applies the camera, so only emit the
       // camera-only path when the nodes scope isn't also dirty this frame.
-      if (dirty.has('nodes')) emit('render.stage.draw');
+      if (dirty.has('nodes')) emit('render.stage.draw', { full: fullNodes, refs: [...dirtyItems.values()] });
       else if (dirty.has('camera')) emit('render.stage.camera');
       if (dirty.has('outline')) emit('outline.draw');
       dirty.clear();
+      dirtyItems.clear();
+      fullNodes = false;
       queueMicrotask(focusPendingItem);
     };
     const mark = (...scopes: RenderScope[]) => {
@@ -87,9 +103,15 @@ export function registerRender(system: Registry) {
       pendingFocusRef = ref;
       if (!ref) pendingBlur = true;
     });
-    bus.onAny(({ name }) => {
+    bus.onAny(({ name, data }) => {
       const scope = factScope(name);
-      if (scope) applyScope(scope);
+      if (!scope) return;
+      applyScope(scope);
+      if (scope === 'nodes' || scope === 'both') {
+        const ref = factItemRef(name, data);
+        if (ref) dirtyItems.set(`${ref.kind}:${ref.id}`, ref);
+        else fullNodes = true; // change we can't localize → rebuild all
+      }
     });
   }, { requires: ['input'] });
 }

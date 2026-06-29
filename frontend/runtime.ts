@@ -19,7 +19,7 @@ declare module './types' {
  *  `registry.stop` / `registry.start` directly. */
 export function installRuntimeFeatureManager(ctx: AppCtx, registry: Registry) {
   const redraw = () => {
-    ctx.bus.emit('render.stage.draw');
+    ctx.bus.emit('render.stage.draw', { full: true });
     ctx.bus.emit('outline.draw');
   };
   const manager: RuntimeFeatureManager = {

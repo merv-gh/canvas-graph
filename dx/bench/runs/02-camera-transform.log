@@ -1,0 +1,9 @@
+
+ RUN  v4.1.8 /private/tmp/claude-501/-Users-user-Documents-AI-ecs-canvas-graph/e1fcc255-22d9-470f-9d93-85ca4e4750c1/scratchpad/wt-02-camera-transform
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  15:31:17
+   Duration  202.16s (transform 733ms, setup 49ms, import 844ms, tests 199.92s, environment 1.05s)
+

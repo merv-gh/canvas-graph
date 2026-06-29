@@ -191,7 +191,9 @@ interface BuiltinEvents {
   'render.view.clear': { place: Place; key?: string };
   /** Stage redraw trigger. The render scheduler emits this once per RAF when
    *  the nodes scope is dirty. Stage renderers (HTML, canvas, …) subscribe. */
-  'render.stage.draw': void;
+  /** Stage redraw. `full` forces a rebuild; otherwise `refs` are the changed
+   *  node/edge items to patch in place. Empty/absent refs ⇒ full rebuild. */
+  'render.stage.draw': { full?: boolean; refs?: ItemRef[] };
   /** Camera-only redraw: pan/zoom changed the view but no entity did. Stage
    *  renderers update the layer transform / grid in place — no DOM rebuild. */
   'render.stage.camera': void;

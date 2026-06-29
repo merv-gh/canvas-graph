@@ -1,4 +1,4 @@
-import { commandShortcut, emptyState, foldHidden, itemFoldId, kbdHint, tagItem, type Registry } from '../core';
+import { commandShortcut, edgeRef, emptyState, foldHidden, itemFoldId, kbdHint, tagItem, type Registry } from '../core';
 import { Places, Slots } from '../types';
 import type { ActionDef, AffordanceDef, EntityDef, EntityRenderCtx, ItemRef } from '../types';
 import { uiValue } from '../core';
@@ -88,53 +88,94 @@ export function registerRenderStage(system: Registry) {
     };
     const layerTransform = (view: import('../types').ViewState) =>
       `translate(${-view.x * view.scale}px, ${-view.y * view.scale}px) scale(${view.scale})`;
-    /** Camera-only redraw: pan/zoom moved the view but no entity changed. Update
-     *  the existing layer's transform + grid in place — no element rebuild. The
-     *  whole stage is one CSS-transformed layer, so this is O(1). Overlays are
-     *  screen-positioned, so refresh those too (cheap — usually none active). */
-    const applyCamera = () => {
+
+    // ----- Persistent layer + element index (patch-driven render) -----
+    // The nodes layer is built once and kept; subsequent entity changes patch
+    // only the affected elements instead of rebuilding all N. `els` maps an item
+    // key → its live DOM node. The layer element itself is handed to the render
+    // scheduler (not a rebuilding thunk), so flushes from other Stage keys
+    // (overlays, toolbar) just re-append the same element — they no longer
+    // trigger a full node rebuild.
+    let layer: HTMLElement | null = null;
+    let svgLayer: HTMLElement | null = null;
+    const els = new Map<string, HTMLElement>();
+    const keyOf = (ref: ItemRef) => `${ref.kind}:${ref.id}:${(ref.parent ?? []).join('/')}`;
+    const refOf = (kind: string, item: unknown): ItemRef | null => {
+      const id = (item as { id?: string }).id;
+      if (!id) return null;
+      const ref: ItemRef = { kind: kind as ItemRef['kind'], id };
+      const parent = contexts.hierarchy.parentIds(ref);
+      if (parent) ref.parent = parent;
+      return ref;
+    };
+    const targetLayer = (renderer: NonNullable<EntityDef<unknown>['render']>) =>
+      renderer.layer === 'svg' ? svgLayer! : layer!;
+
+    /** Full rebuild — first paint, graph switch, or any change we can't localize. */
+    const drawAll = () => {
       syncStageView();
-      const stage = contexts.places.el(Places.Stage);
-      const layer = stage?.querySelector('.nodes') as HTMLElement | null;
-      if (layer) layer.style.transform = layerTransform(contexts.view.get());
-      drawStageOverlays();
+      layer = contexts.templates.clone('nodes') as HTMLElement;
+      layer.style.transform = layerTransform(contexts.view.get());
+      svgLayer = contexts.templates.slot(layer, 'edges') as HTMLElement;
+      els.clear();
+      model.entities().forEach(entityDef => {
+        const renderer = entityDef.render;
+        if (!renderer) return;
+        const target = targetLayer(renderer);
+        graphs.current.itemsOfKind(entityDef.kind).forEach(item => {
+          const ref = refOf(entityDef.kind, item);
+          // Suppress descendants of collapsed ancestors. Edges decide their own
+          // visibility (one endpoint inside a collapsed subtree is fine — the
+          // renderer substitutes the collapsed ancestor as the endpoint).
+          if (ref && entityDef.kind !== 'edge' && hiddenByCollapsedAncestor(ref)) return;
+          const el = renderer.draw(item, renderCtxFor(entityDef, item)) as HTMLElement | null;
+          if (el) { target.append(el); if (ref) els.set(keyOf(ref), el); }
+        });
+      });
+      // Hand the scheduler the element itself, not a rebuilding thunk.
+      emit('render.view.set', { place: Places.Stage, key: 'nodes', view: layer });
     };
 
-    const drawItems = () => emit('render.view.set', {
-      place: Places.Stage,
-      key: 'nodes',
-      view: () => {
-        syncStageView();
-        const view = contexts.view.get();
-        const layer = contexts.templates.clone('nodes');
-        layer.style.transform = layerTransform(view);
-        const svgLayer = contexts.templates.slot(layer, 'edges');
-        model.entities().forEach(entityDef => {
-          const renderer = entityDef.render;
-          if (!renderer) return;
-          const target = renderer.layer === 'svg' ? svgLayer : layer;
-          graphs.current.itemsOfKind(entityDef.kind).forEach(item => {
-            const id = (item as { id?: string }).id;
-            // Suppress descendants of collapsed ancestors. Edges decide their
-            // own visibility (one endpoint inside a collapsed subtree is fine —
-            // the renderer substitutes the collapsed ancestor as the endpoint).
-            if (id && entityDef.kind !== 'edge') {
-              const ref: ItemRef = { kind: entityDef.kind as ItemRef['kind'], id };
-              const parent = contexts.hierarchy.parentIds(ref);
-              if (parent) ref.parent = parent;
-              if (hiddenByCollapsedAncestor(ref)) return;
-            }
-            // Viewport culling was removed here in favour of a transform-only
-            // camera path (pan/zoom no longer rebuild): rendering all items keeps
-            // the layer correct under any transform. Spatial-index culling for
-            // very large graphs is reintroduced in a later phase.
-            const el = renderer.draw(item, renderCtxFor(entityDef, item));
-            if (el) target.append(el);
-          });
+    /** Patch one item: insert / replace / remove its element in place. */
+    const patchOne = (ref: ItemRef) => {
+      const k = keyOf(ref);
+      const existing = els.get(k);
+      const entityDef = model.entity(ref.kind) as EntityDef<unknown> | undefined;
+      const renderer = entityDef?.render;
+      const item = renderer ? graphs.current.getItem(ref) : undefined;
+      const hidden = ref.kind !== 'edge' && hiddenByCollapsedAncestor(ref);
+      const fresh = (renderer && item && !hidden)
+        ? renderer.draw(item, renderCtxFor(entityDef!, item)) as HTMLElement | null
+        : null;
+      if (!fresh) { existing?.remove(); els.delete(k); return; }
+      if (existing) existing.replaceWith(fresh);
+      else targetLayer(renderer!).append(fresh);
+      els.set(k, fresh);
+    };
+
+    /** Patch the changed refs (+ edges incident to any moved node, whose paths
+     *  depend on endpoint positions). Falls back to a full rebuild if the layer
+     *  isn't built yet. */
+    const patchItems = (refs: ItemRef[]) => {
+      if (!layer) { drawAll(); return; }
+      syncStageView();
+      layer.style.transform = layerTransform(contexts.view.get());
+      // Normalize parents so keys match what drawAll stored (container children
+      // carry a parent chain; the scheduler's bare {kind,id} does not).
+      const norm = (ref: ItemRef): ItemRef => {
+        const parent = contexts.hierarchy.parentIds(ref);
+        return parent ? { ...ref, parent } : ref;
+      };
+      const todo = new Map<string, ItemRef>();
+      refs.forEach(r0 => {
+        const ref = norm(r0);
+        todo.set(keyOf(ref), ref);
+        if (ref.kind === 'node') graphs.current.edgesOf(ref.id).forEach(e => {
+          const er = norm(edgeRef(e.id)); todo.set(keyOf(er), er);
         });
-        return layer;
-      },
-    });
+      });
+      todo.forEach(ref => patchOne(ref));
+    };
 
     const drawStageOverlays = () => emit('render.view.set', {
       place: Places.Stage,
@@ -182,7 +223,21 @@ export function registerRenderStage(system: Registry) {
       });
     };
 
-    on('render.stage.draw', () => { drawItems(); drawStageOverlays(); drawEmptyState(); });
+    /** Camera-only redraw: pan/zoom moved the view but no entity changed. Move
+     *  the persistent layer's transform + grid in place — O(1), no rebuild.
+     *  Overlays are screen-positioned, so refresh those too (usually none). */
+    const applyCamera = () => {
+      syncStageView();
+      if (layer) layer.style.transform = layerTransform(contexts.view.get());
+      drawStageOverlays();
+    };
+
+    on('render.stage.draw', ({ full, refs }) => {
+      if (full || !refs?.length || !layer) drawAll();
+      else patchItems(refs);
+      drawStageOverlays();
+      drawEmptyState();
+    });
     on('render.stage.camera', applyCamera);
   }, { requires: ['render', 'graph'] });
 }
