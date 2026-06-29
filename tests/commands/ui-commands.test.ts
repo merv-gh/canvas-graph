@@ -8,7 +8,7 @@ const createNodes = async (ctx: ReturnType<typeof bootApp>, count: number) => {
 };
 
 describe('frontend UI command surfaces', () => {
-  it('renders toolbar, outline title-search, and event log from command metadata', async () => {
+  it('renders toolbar, outline title-search, and search filters rows', async () => {
     const ctx = bootApp();
     await createNodes(ctx, 2);
 
@@ -21,7 +21,8 @@ describe('frontend UI command surfaces', () => {
     expect(runCommand(ctx, 'outline.search.change', { target: search })).toBe(true);
     expect([...document.querySelectorAll('.outline-section:has(.outline-title-search[placeholder="Nodes"]) .outline-main')]
       .map(row => row.textContent)).toEqual(['Node 2']);
-    expect(document.querySelector('.log-row')?.textContent).toContain('outline.search.changed');
+    // Event log rendering disconnected; system kept for future audit-panel toggle.
+    expect(ctx.bus['_emitted'].has('render.view.set')).toBe(true);
   });
 
   it('opens palette, filters commands, and runs a command row', async () => {

@@ -11,7 +11,7 @@ import {
   type HierarchyNode,
   type Registry,
 } from '../core';
-import { Places } from '../types';
+import { Places, Slots } from '../types';
 import type { Id, ItemRef } from '../types';
 
 declare module '../types' {
@@ -167,7 +167,21 @@ export function registerOutline(system: Registry) {
     // out of a standalone section (section:false) and appear nested in that tree.
     const FLAT_KINDS = new Set(['graph', 'edge']);
 
+    const PANEL_FOLD_ID = 'outline.panel';
+
     const renderOutline = () => {
+      const wrapper = el('div', 'tool-panel outline-panel');
+      wrapper.dataset.outlineFolded = contexts.fold.folded(PANEL_FOLD_ID) ? 'true' : 'false';
+
+      const head = el('div', 'outline-panel-head');
+      const foldBtn = el('button', 'icon-button outline-fold', contexts.fold.folded(PANEL_FOLD_ID) ? '▸' : '▾');
+      foldBtn.dataset.foldId = PANEL_FOLD_ID;
+      foldBtn.setAttribute('aria-label', 'Toggle outline');
+      const title = el('span', 'panel-title', 'Outline');
+      head.append(foldBtn, title);
+      wrapper.append(head);
+
+      const body = el('div', 'outline-panel-body');
       const panel = el('section', 'outline');
       const forest = hierarchy.tree();
       const itemKinds = new Set<string>(hierarchy.items().map(item => item.ref.kind));
@@ -192,7 +206,9 @@ export function registerOutline(system: Registry) {
           panel.append(renderSection(collectionDef, roots, contentTotal, byKind));
         }
       });
-      return panel;
+      body.append(panel);
+      wrapper.append(body);
+      return wrapper;
     };
 
     const draw = () => emit('render.view.set', { place: Places.Left, key: 'outline', view: renderOutline });
@@ -210,8 +226,7 @@ export function registerOutline(system: Registry) {
     }]);
     on('app.start', draw);
     on('outline.draw', draw);
-    // Any outline fold (section OR item) re-renders. Unrelated fold ids (e.g.
-    // the left-panel collapse) are ignored so we don't repaint on every toggle.
+    // Any outline fold (section OR item, including the panel itself) re-renders.
     on('fold.changed', ({ id }) => { if (id.startsWith('outline.')) draw(); });
     on('outline.search.changed', ({ collectionId, query }) => {
       searches.set(collectionId, query);

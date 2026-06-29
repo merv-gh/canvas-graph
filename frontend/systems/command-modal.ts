@@ -169,7 +169,7 @@ export function registerCommandModal(system: Registry) {
         const subtitle = document.createElement('small');
         subtitle.textContent = g.label;
         meta.append(title, subtitle);
-        row.append(checkbox, meta);
+        row.append(meta, checkbox);
         rows.append(row);
       }));
       return section;

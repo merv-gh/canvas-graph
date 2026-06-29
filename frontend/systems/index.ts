@@ -7,6 +7,7 @@ import { registerCommandForm } from './command-form';
 import { registerCommandPicker } from './command-picker';
 import { registerContainers } from './containers';
 import { registerContextActions } from './context-actions';
+import { registerDarkTheme } from './dark-theme';
 import { registerDebug } from './debug';
 import { registerDetail } from './detail';
 import { registerDemo } from './demo';
@@ -33,6 +34,7 @@ import { registerViewZoom } from './view-zoom';
 
 export function registerSystems(system: Registry) {
   registerRender(system);
+  registerDarkTheme(system);
   registerRenderStage(system);
   registerTextLayout(system);
   registerInput(system);

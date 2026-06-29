@@ -93,11 +93,11 @@ exports[`combinatorial action graph > length-1: every auto-runnable command boot
   "snap": {
     "containers": 5,
     "dxErrors": 0,
-    "edges": 72,
-    "focused": "node:e49",
-    "nodes": 49,
+    "edges": 73,
+    "focused": "node:e50",
+    "nodes": 50,
     "scale": 0.17,
-    "selected": "node:e49",
+    "selected": "node:e50",
   },
 }
 `;
@@ -310,6 +310,23 @@ exports[`combinatorial action graph > length-1: every auto-runnable command boot
 {
   "sequence": [
     "palette.open",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": null,
+    "nodes": 0,
+    "scale": 1,
+    "selected": null,
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [theme.toggle] 1`] = `
+{
+  "sequence": [
+    "theme.toggle",
   ],
   "snap": {
     "containers": 0,

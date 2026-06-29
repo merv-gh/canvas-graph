@@ -131,10 +131,10 @@ function captureUi(ctx: AppCtx) {
       modal: sizeOf(modalEl),
     },
     shell: {
-      leftFolded: shellEl?.dataset.leftFolded === 'true',
       topFolded: shellEl?.dataset.topFolded === 'true',
       zen: shellEl?.dataset.zen === 'true',
     },
+    colorscheme: shellEl?.dataset.colorscheme ?? shellEl?.getAttribute('data-theme') ?? 'light',
     rendered: {
       nodes: count('.node[data-item-kind="node"]'),
       textNodes: count('.node-type-text[data-item-kind="node"]'),
@@ -195,9 +195,11 @@ const PLACES_CODE: Record<string, string> = {
   modal: "ctx.contexts.places.el('modal')?.getBoundingClientRect()",
 };
 const SHELL_CODE: Record<string, string> = {
-  leftFolded: "ctx.contexts.places.el('top')?.parentElement?.dataset.leftFolded === 'true'",
   topFolded: "ctx.contexts.places.el('top')?.parentElement?.dataset.topFolded === 'true'",
   zen: "ctx.contexts.places.el('top')?.parentElement?.dataset.zen === 'true'",
+};
+const COLORSCHEME_CODE: Record<string, string> = {
+  colorscheme: "(ctx.contexts.places.el('top')?.parentElement?.dataset.colorscheme ?? ctx.contexts.places.el('top')?.parentElement?.getAttribute('data-theme') ?? 'light')",
 };
 const RENDERED_CODE: Record<string, string> = {
   nodes: "ctx.contexts.places.el('stage')?.querySelectorAll('.node[data-item-kind=\"node\"]').length",
@@ -266,7 +268,7 @@ export function snapshotTree(snap: Snapshot): SnapshotNode {
 type Segment =
   | 'root'
   | 'graph' | 'selection' | 'flags' | 'dx'
-  | 'ui' | 'ui.places' | 'ui.shell' | 'ui.rendered' | 'ui.stage' | 'ui.modal' | 'ui.outline' | 'ui.toolPanels'
+  | 'ui' | 'ui.places' | 'ui.shell' | 'ui.colorscheme' | 'ui.rendered' | 'ui.stage' | 'ui.modal' | 'ui.outline' | 'ui.toolPanels'
   | 'plain';
 
 function pickCode(parentCode: string, key: string, segment: Segment, optional: boolean): string {
@@ -277,6 +279,7 @@ function pickCode(parentCode: string, key: string, segment: Segment, optional: b
   if (segment === 'dx' && DX_CODE[key]) return DX_CODE[key];
   if (segment === 'ui.places' && PLACES_CODE[key]) return PLACES_CODE[key];
   if (segment === 'ui.shell' && SHELL_CODE[key]) return SHELL_CODE[key];
+  if (segment === 'ui.colorscheme' && COLORSCHEME_CODE[key]) return COLORSCHEME_CODE[key];
   if (segment === 'ui.rendered' && RENDERED_CODE[key]) return RENDERED_CODE[key];
   if (segment === 'ui.stage' && STAGE_CODE[key]) return STAGE_CODE[key];
   if (segment === 'ui.modal' && MODAL_CODE[key]) return MODAL_CODE[key];
@@ -297,6 +300,7 @@ function nextSegment(parent: Segment, key: string): Segment {
   if (parent === 'ui') {
     if (key === 'places') return 'ui.places';
     if (key === 'shell') return 'ui.shell';
+    if (key === 'colorscheme') return 'ui.colorscheme';
     if (key === 'rendered') return 'ui.rendered';
     if (key === 'stage') return 'ui.stage';
     if (key === 'modal') return 'ui.modal';

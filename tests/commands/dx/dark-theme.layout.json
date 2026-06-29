@@ -1,0 +1,13 @@
+{
+  "title": "shell mounts and applies a color scheme to design tokens",
+  "steps": [
+    { "event": "app.start" }
+  ],
+  "asserts": [
+    { "rect": ".shell", "op": "visible" },
+    { "cssvar": ".shell", "prop": "--bg", "op": "contains", "value": "rgb" },
+    { "cssvar": ".shell", "prop": "--accent", "op": "contains", "value": "rgb" },
+    { "path": "ui.colorscheme", "op": "truthy" },
+    { "path": "ui.shell.zen", "op": "eq", "value": false }
+  ]
+}

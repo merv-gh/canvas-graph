@@ -17,10 +17,142 @@
   --shadow-md: 0 6px 18px rgba(0,0,0,.06);
   --radius: 6px;
   --radius-lg: 10px;
+
+  /* Spacing scale — 8px rhythm */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* Animation tokens */
+  --duration-fast: .12s;
+  --duration-normal: .18s;
+  --duration-slow: .25s;
+  --ease-default: ease-out;
+
+  /* Semantic aliases */
+  --border: var(--line);
+
+  color-scheme: light dark;
+}
+
+/* Auto dark from OS preference (no explicit theme choice yet) */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg: #111110;
+    --panel: #1c1c1b;
+    --panel-2: #282826;
+    --ink: #eeedec;
+    --text-muted: #8b919a;
+    --line: #333331;
+    --line-strong: #444442;
+    --accent: #6094f8;
+    --accent-soft: rgba(96,148,248,.12);
+    --edge: #8b919a;
+    --danger: #f87171;
+    --danger-soft: rgba(248,113,113,.10);
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.25);
+    --shadow-md: 0 6px 18px rgba(0,0,0,.35);
+  }
+}
+
+/* Explicit dark (JS toggle wins over media query via specificity on .shell) */
+.shell[data-theme="dark"] {
+  --bg: #111110;
+  --panel: #1c1c1b;
+  --panel-2: #282826;
+  --ink: #eeedec;
+  --text-muted: #8b919a;
+  --line: #333331;
+  --line-strong: #444442;
+  --accent: #6094f8;
+  --accent-soft: rgba(96,148,248,.12);
+  --edge: #8b919a;
+  --danger: #f87171;
+  --danger-soft: rgba(248,113,113,.10);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.25);
+  --shadow-md: 0 6px 18px rgba(0,0,0,.35);
+}
+
+/* Explicit light (when OS is dark but user chose light) */
+.shell[data-theme="light"] {
+  --bg: #fafaf9;
+  --panel: #ffffff;
+  --panel-2: #f5f5f4;
+  --ink: #1c1c1c;
+  --text-muted: #6b7280;
+  --line: #e5e5e3;
+  --line-strong: #d4d4d2;
+  --accent: #2563eb;
+  --accent-soft: rgba(37,99,235,.08);
+  --edge: #4b5563;
+  --danger: #dc2626;
+  --danger-soft: rgba(220,38,38,.06);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.04);
+  --shadow-md: 0 6px 18px rgba(0,0,0,.06);
+}
+
+/* Dark-mode overrides for hardcoded light color-mix() values */
+.shell[data-theme="dark"] .node-type-square {
+  background: color-mix(in srgb, var(--panel) 88%, #1e3a5f);
+}
+.shell[data-theme="dark"] .node-type-circle {
+  background: color-mix(in srgb, var(--panel) 86%, #1a3a2a);
+}
+.shell[data-theme="dark"] .tool-panel {
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+}
+.shell[data-theme="dark"] .backdrop {
+  background: rgba(0,0,0,.45);
+}
+.shell[data-theme="dark"] .container {
+  background: rgba(255,255,255,.02);
+}
+.shell[data-theme="dark"] .container:hover {
+  background: rgba(96,148,248,.06);
+}
+.shell[data-theme="dark"] .container.selected {
+  background: rgba(96,148,248,.08);
+}
+.shell[data-theme="dark"] .container.manual {
+  background: rgba(96,148,248,.06);
+}
+.shell[data-theme="dark"] .scenario-hud {
+  background: var(--ink);
+  color: var(--bg);
 }
 
 * { box-sizing: border-box; }
+
+/* Consistent focus ring across all interactive elements.
+   Keep :focus on inputs that auto-focus on modal open (palette, form fields). */
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Reduced motion — respect OS preference */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, sans-serif; }
+
+/* --- Keyframes --- */
+@keyframes node-enter {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.85); }
+}
+@keyframes modal-enter {
+  from { opacity: 0; }
+}
+@keyframes modal-slide {
+  from { opacity: 0; transform: translateX(-50%) translateY(-6px); }
+}
 
 /* Buttons: ghost by default. Visible only on hover/focus. Borders disappear; weight comes from text.
    Add .primary for accent treatment; .icon for square icon-only buttons. */
@@ -33,10 +165,9 @@ button {
   font: inherit;
   cursor: pointer;
   line-height: 1.2;
-  transition: background-color .12s, border-color .12s, color .12s;
+  transition: background-color var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);
 }
 button:hover { background: var(--panel-2); }
-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 button.primary { color: var(--accent); }
 button.primary:hover { background: var(--accent-soft); }
 button.danger { color: var(--danger); }
@@ -44,16 +175,13 @@ button.danger:hover { background: var(--danger-soft); }
 button.icon { padding: 4px 7px; min-width: 26px; color: var(--text-muted); }
 button.icon:hover { color: var(--ink); }
 
-.shell { display: grid; grid-template: 0 1fr / 260px 1fr; height: 100vh; transition: grid-template-columns .14s ease; }
-.shell[data-left-folded="true"] { grid-template-columns: 0 1fr; }
-.shell[data-left-folded="true"] .left { display: none; }
+.shell { display: grid; grid-template: 0 1fr / 1fr; height: 100vh; transition: grid-template-rows var(--duration-fast) var(--ease-default); }
 .shell[data-top-folded="true"] { grid-template-rows: 0 1fr; }
 .shell[data-top-folded="true"] .top { display: none; }
 /* Zen mode — fold the whole shell to canvas only (distraction-free, clean
  * screenshots). Exit with the same `\` toggle. */
-.shell[data-zen="true"] { grid-template: 0 1fr / 0 1fr; }
-.shell[data-zen="true"] .top,
-.shell[data-zen="true"] .left { display: none; }
+.shell[data-zen="true"] { grid-template: 0 1fr / 1fr; }
+.shell[data-zen="true"] .top { display: none; }
 .hamburger { font-size: 16px; line-height: 1; padding: 2px 8px; margin-right: 4px; }
 
 /* --- Debug toolbar group --- */
@@ -78,7 +206,7 @@ button.icon:hover { color: var(--ink); }
   background: var(--panel);
   font: 12px ui-monospace, monospace;
 }
-.debug-search:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+.debug-search:focus-visible { outline: 2px solid var(--accent); border-color: var(--accent); }
 .debug-tree {
   flex: 1;
   overflow: auto;
@@ -139,8 +267,7 @@ button.icon:hover { color: var(--ink); }
   overflow: auto;
   color: var(--ink);
 }
-.debug-code:focus { border-color: var(--accent); }
-.debug-code:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.debug-code:focus-visible { border-color: var(--accent); outline: 2px solid var(--accent); }
 .debug-actions { display: flex; gap: 6px; }
 .debug-actions button { border: 1px solid var(--line); padding: 5px 12px; }
 .debug-actions button.primary { border-color: var(--accent); color: var(--accent); }
@@ -166,24 +293,55 @@ button.icon:hover { color: var(--ink); }
 .toolbar button { white-space: nowrap; font-size: 13px; }
 .toolbar-spacer { flex: 1; }
 .toolbar-start, .toolbar-end { display: flex; align-items: center; gap: 2px; }
-.brand { font-weight: 600; color: var(--ink); padding-right: 8px; margin-right: 4px; border-right: 1px solid var(--line); font-size: 13px; }
 
+
+/* Left panel — floating tool-panel positioned over the stage with screen-edge
+   margins. Not a grid column, so flushing it doesn't destroy stage content. */
 .left {
-  grid-column: 1;
-  grid-row: 2;
-  border-right: 1px solid var(--line);
-  background: var(--panel-2);
-  overflow: auto;
-  padding: 14px 10px;
+  position: absolute;
+  left: var(--space-3);
+  top: var(--space-3);
+  bottom: var(--space-3);
+  width: 260px;
+  max-height: calc(100vh - var(--space-6));
+  z-index: 10;
+  overflow: hidden;
+  pointer-events: auto;
 }
+.left[data-outline-folded="true"] {
+  width: auto;
+  min-width: 42px;
+}
+/* The outline-panel wrapper lives inside .left — the place slot is the raw
+   .left element; the tool-panel chrome (header, body, fold button) is the
+   outline's own renderable. */
+.outline-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.outline-panel-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+.outline-panel-body {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: var(--space-2);
+}
+.outline-panel[data-outline-folded="true"] .outline-panel-body { display: none; }
+.outline-panel[data-outline-folded="true"] .outline-panel-head { border-bottom: 0; }
 
 .stage {
-  /* Pin the stage to column 2 AND row 2 explicitly. Without the column pin,
-     hiding `.left` via `display: none` removes it from grid auto-flow and the
-     stage drops into column 1 (which collapses to 0px when the panel folds).
-     Without the row pin, zen mode (`display: none` on .top + .left) auto-flows
-     the stage into row 1 — which zen collapses to 0px height. */
-  grid-column: 2;
+  grid-column: 1;
   grid-row: 2;
   --grid-size: 32px;
   --grid-x: 0px;
@@ -245,6 +403,45 @@ button.icon:hover { color: var(--ink); }
 .tool-panel[data-anchor="top-right"] { right: 12px; top: 12px; }
 .tool-panel[data-anchor="bottom-left"] { left: 12px; bottom: 12px; }
 .tool-panel[data-anchor="bottom-right"] { right: 12px; bottom: 12px; }
+
+/* Outline panel — sits on the left side like the old aside, but as a floating
+   tool-panel with screen-edge margins. Scrolls internally; collapses via its
+   own fold button in the header. */
+.outline-panel {
+  position: absolute;
+  left: var(--space-3);
+  top: var(--space-3);
+  bottom: var(--space-3);
+  width: 260px;
+  max-height: calc(100vh - var(--space-6));
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  z-index: 10;
+  overflow: hidden;
+}
+.outline-panel-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+.outline-panel-body {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: var(--space-2);
+}
+.outline-panel[data-outline-folded="true"] {
+  width: auto;
+  min-width: 42px;
+}
+.outline-panel[data-outline-folded="true"] .outline-panel-body { display: none; }
+.outline-panel[data-outline-folded="true"] .outline-panel-head { border-bottom: 0; }
 /* Stack panels lay their buttons in a column under the drag/collapse head. */
 .tool-panel-stack { flex-direction: column; align-items: stretch; }
 .tool-panel-stack .tool-panel-head { border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 4px; justify-content: flex-end; }
@@ -347,7 +544,10 @@ button.icon:hover { color: var(--ink); }
   display: flex;
   flex-direction: column;
   justify-content: center;
-  transition: box-shadow .15s, border-color .15s, min-height .12s;
+  transition: box-shadow var(--duration-normal) var(--ease-default),
+              border-color var(--duration-normal) var(--ease-default),
+              min-height var(--duration-fast) var(--ease-default);
+  animation: node-enter var(--duration-normal) var(--ease-default);
 }
 .node-type-square {
   border-radius: 6px;
@@ -374,6 +574,11 @@ button.icon:hover { color: var(--ink); }
   box-shadow: none;
   user-select: none;
   pointer-events: auto;
+  transition: width var(--duration-normal) var(--ease-default),
+              height var(--duration-normal) var(--ease-default),
+              border-radius var(--duration-normal) var(--ease-default),
+              background var(--duration-normal) var(--ease-default),
+              border-color var(--duration-fast) var(--ease-default);
 }
 .container:hover { border-color: var(--accent); background: rgba(37, 99, 235, .03); }
 .container.selected { border-color: var(--accent); background: rgba(37, 99, 235, .05); }
@@ -542,7 +747,7 @@ button.icon:hover { color: var(--ink); }
   flex: 1; font-weight: 600;
   font-size: 13px;
   min-width: 0;
-  padding: 8px 12px 8px;
+  padding: var(--space-2) var(--space-3);
   white-space: pre-line;
   line-height: 1.3;
   color: var(--ink);
@@ -557,7 +762,7 @@ button.icon:hover { color: var(--ink); }
   background: var(--panel);
   cursor: text;
 }
-.node-body { padding: 0 12px 10px; color: var(--text-muted); font-size: 12px; }
+.node-body { padding: 0 var(--space-3) var(--space-2); color: var(--text-muted); font-size: 12px; }
 .node-description {
   display: grid;
   gap: 3px;
@@ -606,7 +811,7 @@ button.icon:hover { color: var(--ink); }
 .log-row:first-of-type { color: var(--ink); border-left-color: var(--accent); }
 
 /* Outline: each collection is a section. Rows are text; affordances appear on hover. */
-.outline { display: grid; gap: 16px; margin-bottom: 14px; }
+.outline { display: grid; gap: var(--space-4); margin-bottom: 14px; }
 .outline-section { display: grid; gap: 6px; }
 .outline-section.folded { gap: 0; }
 .outline-fold {
@@ -642,7 +847,6 @@ button.icon:hover { color: var(--ink); }
   background: var(--panel);
   border-color: var(--line);
   color: var(--ink);
-  outline: none;
   text-transform: none;
   letter-spacing: 0;
 }
@@ -717,7 +921,7 @@ button.icon:hover { color: var(--ink); }
 
 /* Modal — keeps weight on purpose: it's a focal surface. */
 .modal-slot { position: fixed; inset: 0; z-index: 50; pointer-events: none; }
-.modal-layer { position: absolute; inset: 0; pointer-events: auto; }
+.modal-layer { position: absolute; inset: 0; pointer-events: auto; animation: modal-enter var(--duration-fast) var(--ease-default); }
 .backdrop { position: absolute; inset: 0; background: rgba(28,28,28,.18); }
 .modal {
   position: absolute;
@@ -730,14 +934,15 @@ button.icon:hover { color: var(--ink); }
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
   overflow: hidden;
+  animation: modal-slide var(--duration-normal) var(--ease-default);
 }
 .modal-head {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 10px 14px;
+  padding: var(--space-2) var(--space-4);
   border-bottom: 1px solid var(--line);
   font-weight: 600;
 }
-.modal-body { padding: 12px; display: grid; gap: 8px; }
+.modal-body { padding: var(--space-3); display: grid; gap: var(--space-2); }
 .modal-layer[data-visual="command"] .modal { width: min(520px, calc(100vw - 32px)); }
 .modal-layer[data-visual="properties"] .modal { width: min(360px, calc(100vw - 32px)); }
 
@@ -748,7 +953,7 @@ button.icon:hover { color: var(--ink); }
   padding: 7px 10px;
   font: inherit;
 }
-.palette-search:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+.palette-search:focus { outline: 2px solid var(--accent); outline-offset: 2px; border-color: transparent; }
 .palette { display: grid; gap: 10px; }
 .command-list, .help-list {
   display: grid; gap: 14px;
@@ -811,7 +1016,7 @@ button.icon:hover { color: var(--ink); }
 .shortcut-edit.is-conflict { border-color: var(--danger) !important; color: var(--danger); }
 .editable-inline { border: 1px solid transparent !important; background: transparent !important; }
 .editable-inline:hover { background: var(--panel-2) !important; }
-.editable-inline:focus { background: var(--panel) !important; outline: 2px solid var(--accent); outline-offset: 1px; }
+.editable-inline:focus { background: var(--panel) !important; outline: 2px solid var(--accent); }
 .shortcut-edit.is-conflict:focus { outline-color: var(--danger); }
 
 /* Property modal */
@@ -848,7 +1053,7 @@ button.icon:hover { color: var(--ink); }
 }
 .properties input:focus,
 .properties textarea:focus,
-.properties select:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+.properties select:focus { outline: 2px solid var(--accent); outline-offset: 2px; border-color: transparent; }
 .properties .check-row {
   display: flex; align-items: center; gap: 8px;
   color: var(--ink);

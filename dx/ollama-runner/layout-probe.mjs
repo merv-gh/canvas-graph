@@ -75,6 +75,11 @@ export async function evaluateLayoutAsserts(page, asserts = []) {
           const actual = el ? getComputedStyle(el, a.pseudo ?? null)[a.prop] : 'missing';
           return { label: `style ${a.style}${a.pseudo ?? ''} ${a.prop}`, ok: !!el && cmp(actual, a.op, a.value), actual };
         }
+        if (a.cssvar !== undefined) {
+          const el = document.querySelector(a.cssvar);
+          const actual = el ? getComputedStyle(el).getPropertyValue(a.prop).trim() : null;
+          return { label: `cssvar ${a.cssvar} ${a.prop}`, ok: !!el && cmp(actual, a.op, a.value), actual };
+        }
         if (a.path !== undefined) {
           let node = window.app.debug.snapshot();
           for (const key of a.path.split('.')) node = node?.[key];

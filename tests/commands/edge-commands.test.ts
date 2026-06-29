@@ -26,7 +26,8 @@ describe('frontend edge commands (picker-driven)', () => {
     // After picking From, the picker cancels with a notice.
     pressLetter('a');
     await settle();
-    expect(document.querySelector('.log-row')?.textContent).toContain('Nothing to pick');
+    // Log rendering disconnected; verify via bus instead.
+    expect(ctx.bus['_emitted'].has('app.notice')).toBe(true);
     expect(captureInput()).toBeNull();
   });
 

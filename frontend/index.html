@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ECS Graph frontend</title>
+  <title>Graph Editor</title>
   <link rel="stylesheet" href="styles.css">
   <script type="module" src="app.ts"></script>
 </head>
@@ -13,15 +13,14 @@
   <template id="tpl-shell">
     <section class="shell">
       <header class="top" data-place="top"></header>
-      <aside class="left" data-place="left"></aside>
       <main class="stage" data-place="stage"></main>
+      <div class="left" data-place="left"></div>
       <div class="modal-slot" data-place="modal"></div>
     </section>
   </template>
 
   <template id="tpl-toolbar">
     <nav class="toolbar" aria-label="App commands">
-      <span class="brand">ECS Graph frontend</span>
       <div class="toolbar-start" data-slot="start"></div>
       <span class="toolbar-spacer"></span>
       <div class="toolbar-end" data-slot="end"></div>

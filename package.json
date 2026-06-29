@@ -10,6 +10,8 @@
     "test:browser": "playwright test",
     "test:commands": "vitest run",
     "test:commands:coverage": "vitest run --coverage",
+    "bench": "vitest run --config vitest.bench.config.ts",
+    "bench:burn": "BURN=1 vitest run --config vitest.bench.config.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
