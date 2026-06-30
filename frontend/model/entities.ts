@@ -1,7 +1,7 @@
 import { clamp } from '../core';
 import { renderMarkdown } from '../core/markdown';
 import { collapsible, configurable, draggable, editable, nudgeable, selectable } from '../abilities';
-import type { Graph, GraphEdge, GraphNode, NodeEntity, EdgePatch, NodePatch, NodeType } from './graph';
+import type { EdgeKind, Graph, GraphEdge, GraphNode, NodeEntity, EdgePatch, NodePatch, NodeType } from './graph';
 import type { EntityDef, EntityRenderer, ItemRef, PropertyDef, Rect } from '../types';
 
 /** Built-in entity declarations — what a graph / node / edge *is*: its label,
@@ -24,9 +24,28 @@ const NODE_TYPES: { value: NodeType; label: string }[] = [
   { value: 'text', label: 'Text' },
   { value: 'square', label: 'Square' },
   { value: 'circle', label: 'Circle' },
+  { value: 'user-input', label: 'User input' },
+  { value: 'gateway', label: 'Gateway' },
+  { value: 'service', label: 'Service' },
+  { value: 'database', label: 'Database' },
+  { value: 'kafka', label: 'Kafka' },
+  { value: 'index', label: 'Index' },
 ];
 const isNodeType = (value: unknown): value is NodeType =>
-  value === 'text' || value === 'square' || value === 'circle';
+  NODE_TYPES.some(option => option.value === value);
+const EDGE_KINDS: { value: EdgeKind; label: string }[] = [
+  { value: 'sync', label: 'Sync request' },
+  { value: 'async', label: 'Async request' },
+  { value: 'read', label: 'Read' },
+  { value: 'write', label: 'Write' },
+];
+const isEdgeKind = (value: unknown): value is EdgeKind =>
+  EDGE_KINDS.some(option => option.value === value);
+const typeLabel = (type: NodeType) => NODE_TYPES.find(option => option.value === type)?.label ?? type;
+const numberPatch = <T, K extends string>(key: K, value: unknown) => {
+  const n = Number(value);
+  return value === '' || !Number.isFinite(n) ? { [key]: undefined } as T : { [key]: n } as T;
+};
 
 export const graphEntity: EntityDef<Graph> = entityDef<Graph>('graph', {
   label: 'Graph',
@@ -86,26 +105,31 @@ const edgeRenderer: EntityRenderer<GraphEdge> = {
     const tipAtTarget = intersectRectBoundary(from.center, to.center, to.half);
     const tipAtSource = intersectRectBoundary(to.center, from.center, from.half);
     const g = svg('g', {});
-    g.setAttribute('class', 'edge');
+    const edgeKind = edge.EdgeKind ?? 'sync';
+    g.setAttribute('class', `edge edge-kind-${edgeKind}`);
     const line = (className: string, x1: number, y1: number, x2: number, y2: number, extra: Record<string, string | number> = {}) => {
-      const el = svg('line', { x1, y1, x2, y2, class: className, ...extra });
+      const el = svg('line', { x1, y1, x2, y2, class: `${className} edge-kind-${edgeKind}`, ...extra });
       ctx.tagItem(el, ref);
       ctx.applyItemModes(el, ref);
       return el;
     };
     g.append(line('edge-hit', from.center.x, from.center.y, to.center.x, to.center.y, { tabindex: -1 }));
     g.append(line('edge-line', tipAtSource.x, tipAtSource.y, tipAtTarget.x, tipAtTarget.y, { 'marker-end': 'url(#edge-arrow)' }));
-    if (edge.Label?.text) {
+    const label = edge.Label?.text || edgeKind;
+    if (label) {
       const text = svg('text', {
-        class: 'edge-label',
+        class: `edge-label edge-kind-${edgeKind}`,
         x: (from.center.x + to.center.x) / 2,
         y: (from.center.y + to.center.y) / 2 - 4,
         'text-anchor': 'middle',
       });
-      text.textContent = edge.Label.text;
+      text.textContent = label;
       g.append(text);
     }
     return g;
+  },
+  signature(edge) {
+    return `${edge.From}->${edge.To}|${edge.Label?.text ?? ''}|${edge.EdgeKind ?? ''}|${edge.LatencyMs ?? ''}|${edge.ThroughputRps ?? ''}|${edge.PayloadKb ?? ''}`;
   },
 };
 
@@ -119,6 +143,26 @@ export const edgeEntity: EntityDef<GraphEdge, EdgePatch> = entityDef<GraphEdge, 
       id: 'label', label: 'Label', input: 'text',
       value: edge => edge.Label?.text ?? '',
       patch: (_edge, value) => ({ Label: { text: String(value) } }),
+    }),
+    property<GraphEdge, EdgePatch>({
+      id: 'edgeKind', label: 'Type', input: 'select', options: EDGE_KINDS,
+      value: edge => edge.EdgeKind ?? 'sync',
+      patch: (_edge, value) => isEdgeKind(value) ? { EdgeKind: value } : undefined,
+    }),
+    property<GraphEdge, EdgePatch>({
+      id: 'latencyMs', label: 'Latency ms', input: 'number', min: 0, step: 1, group: 'Performance',
+      value: edge => edge.LatencyMs ?? '',
+      patch: (_edge, value) => numberPatch<EdgePatch, 'LatencyMs'>('LatencyMs', value),
+    }),
+    property<GraphEdge, EdgePatch>({
+      id: 'throughputRps', label: 'Throughput rps', input: 'number', min: 0, step: 10, group: 'Performance',
+      value: edge => edge.ThroughputRps ?? '',
+      patch: (_edge, value) => numberPatch<EdgePatch, 'ThroughputRps'>('ThroughputRps', value),
+    }),
+    property<GraphEdge, EdgePatch>({
+      id: 'payloadKb', label: 'Payload KB', input: 'number', min: 0, step: 1, group: 'Performance',
+      value: edge => edge.PayloadKb ?? '',
+      patch: (_edge, value) => numberPatch<EdgePatch, 'PayloadKb'>('PayloadKb', value),
     }),
   ],
 });
@@ -137,6 +181,11 @@ const nodeRenderer: EntityRenderer<GraphNode> = {
     const ref = ctx.refOf(node.id);
     const nodeType = node.NodeType ?? 'text';
     const description = node.Description?.trim() ?? '';
+    const meta = [
+      node.ExpectedRps != null ? `${node.ExpectedRps}/s` : '',
+      node.LatencyMs != null ? `${node.LatencyMs}ms` : '',
+      node.ComputeMs != null ? `${node.ComputeMs}ms cpu` : '',
+    ].filter(Boolean).join(' · ');
     ctx.tagItem(el, ref);
     el.tabIndex = -1;
     ctx.applyItemModes(el, ref);
@@ -148,6 +197,8 @@ const nodeRenderer: EntityRenderer<GraphNode> = {
     el.style.top = `${pos.y}px`;
     el.style.width = `${node.Size.w}px`;
     el.style.height = `${node.Size.h}px`;
+    ctx.templateText(el, 'type', typeLabel(nodeType));
+    ctx.templateText(el, 'metrics', meta);
     ctx.templateText(el, 'title', node.Label.text);
     ctx.templateSlot(el, 'description').replaceChildren(renderMarkdown(description));
     ctx.wireAffordances(el);
@@ -163,7 +214,7 @@ const nodeRenderer: EntityRenderer<GraphNode> = {
   /** Everything the drawn node depends on *except* position. Unchanged ⇒ the
    *  stage takes the cheap `reposition` path instead of a full redraw. */
   signature(node) {
-    return `${node.NodeType ?? 'text'}|${node.Size.w}x${node.Size.h}|${node.Label.text}|${node.Description ?? ''}`;
+    return `${node.NodeType ?? 'text'}|${node.Size.w}x${node.Size.h}|${node.Label.text}|${node.Description ?? ''}|${node.ComputeMs ?? ''}|${node.ExpectedRps ?? ''}|${node.LatencyMs ?? ''}`;
   },
 };
 
@@ -186,9 +237,24 @@ export const nodeEntity: EntityDef<GraphNode, NodePatch> = entityDef<GraphNode, 
       patch: (_node, value) => ({ Label: { text: String(value) } }),
     }),
     property<GraphNode, NodePatch>({
-      id: 'nodeType', label: 'Shape', input: 'select', options: NODE_TYPES,
+      id: 'nodeType', label: 'Type', input: 'select', options: NODE_TYPES,
       value: node => node.NodeType ?? 'text',
       patch: (_node, value) => isNodeType(value) ? { NodeType: value } : undefined,
+    }),
+    property<GraphNode, NodePatch>({
+      id: 'expectedRps', label: 'Expected rps', input: 'number', min: 0, step: 10, group: 'Performance',
+      value: node => node.ExpectedRps ?? '',
+      patch: (_node, value) => numberPatch<NodePatch, 'ExpectedRps'>('ExpectedRps', value),
+    }),
+    property<GraphNode, NodePatch>({
+      id: 'latencyMs', label: 'Latency budget ms', input: 'number', min: 0, step: 1, group: 'Performance',
+      value: node => node.LatencyMs ?? '',
+      patch: (_node, value) => numberPatch<NodePatch, 'LatencyMs'>('LatencyMs', value),
+    }),
+    property<GraphNode, NodePatch>({
+      id: 'computeMs', label: 'Compute ms', input: 'number', min: 0, step: 1, group: 'Performance',
+      value: node => node.ComputeMs ?? '',
+      patch: (_node, value) => numberPatch<NodePatch, 'ComputeMs'>('ComputeMs', value),
     }),
     property<GraphNode, NodePatch>({
       id: 'description', label: 'Markdown description', input: 'textarea', rows: 6, group: 'Content',

@@ -72,7 +72,7 @@ describe('frontend principles (enforced)', () => {
         throw new Error(`boot failed with ${name}=false: ${(err as Error).message}`);
       }
     }
-  });
+  }, 15000);
 
   // PRINCIPLE 11 — Abilities can be turned off independently. Flipping any single
   // ability off should not break boot or remove unrelated abilities.

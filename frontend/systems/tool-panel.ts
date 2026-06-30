@@ -43,7 +43,9 @@ export function registerToolPanel(system: Registry) {
       const rect = stageRect();
       const margin = 12;
       const x = panel.anchor.endsWith('right') && rect ? Math.max(margin, rect.width - 180 - margin) : margin;
-      const y = panel.anchor.startsWith('bottom') && rect ? Math.max(margin, rect.height - 44 - margin) : margin;
+      const y = panel.anchor === 'middle-right' && rect
+        ? Math.max(margin, rect.height / 2 - 120)
+        : panel.anchor.startsWith('bottom') && rect ? Math.max(margin, rect.height - 44 - margin) : margin;
       return { x, y };
     };
     const panelPosition = (panel: PanelDef) => positions.get(panel.id) ?? anchorPosition(panel);

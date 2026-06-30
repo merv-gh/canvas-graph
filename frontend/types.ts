@@ -409,7 +409,7 @@ export type SystemAffordance = Omit<AffordanceDef<void>, 'text' | 'label'> & {
 };
 
 /** Where a tool panel anchors on the stage when it has not been dragged. */
-export type PanelAnchor = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+export type PanelAnchor = 'top-left' | 'top-right' | 'middle-right' | 'bottom-left' | 'bottom-right';
 
 /** A movable/collapsible tool panel on the stage. Declared as data via
  *  `contexts.affordances.declarePanel(...)` from the owning system's file, so

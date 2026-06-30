@@ -5,10 +5,28 @@ import type { Id, ItemRef, Label, Position, Rect, Size } from '../types';
 // (node, edge, future container) belongs in the model layer, not in types.ts.
 export type Entity = { id: Id; kind: string; Label: Label; Size: Size; Position?: Position };
 
-export type NodeType = 'text' | 'square' | 'circle';
-export type NodeEntity = Entity & { kind: 'node'; NodeType: NodeType; Description?: string };
-export type NodeDraft = { Label?: Label; Position?: Position; Size?: Size; NodeType?: NodeType; Description?: string };
-export type NodePatch = Partial<Pick<NodeEntity, 'Label' | 'Size' | 'Position' | 'NodeType' | 'Description'>>;
+export type SystemNodeType = 'database' | 'kafka' | 'service' | 'index' | 'user-input' | 'gateway';
+export type NodeType = 'text' | 'square' | 'circle' | SystemNodeType;
+export type EdgeKind = 'read' | 'write' | 'sync' | 'async';
+export type NodeEntity = Entity & {
+  kind: 'node';
+  NodeType: NodeType;
+  Description?: string;
+  ComputeMs?: number;
+  ExpectedRps?: number;
+  LatencyMs?: number;
+};
+export type NodeDraft = {
+  Label?: Label;
+  Position?: Position;
+  Size?: Size;
+  NodeType?: NodeType;
+  Description?: string;
+  ComputeMs?: number;
+  ExpectedRps?: number;
+  LatencyMs?: number;
+};
+export type NodePatch = Partial<Pick<NodeEntity, 'Label' | 'Size' | 'Position' | 'NodeType' | 'Description' | 'ComputeMs' | 'ExpectedRps' | 'LatencyMs'>>;
 export type NodeCreateOptions = { at?: Position; near?: Id | null };
 
 /** Operation-time hints attached to create events. They control the lifecycle around the
@@ -20,12 +38,27 @@ export type CreateHints = {
   relativeTo?: Id;
   /** After the node lands, also create an edge from this id to the new node id. */
   connectFrom?: Id;
+  /** Edge kind for the optional created edge. */
+  connectKind?: EdgeKind;
 };
 
-export type EdgeEntity = { id: Id; kind: 'edge'; From: Id; To: Id; Label?: Label };
-export type EdgeDraft = { From: Id; To: Id; Label?: Label };
+export type EdgeEntity = {
+  id: Id;
+  kind: 'edge';
+  From: Id;
+  To: Id;
+  Label?: Label;
+  EdgeKind?: EdgeKind;
+  LatencyMs?: number;
+  ThroughputRps?: number;
+  PayloadKb?: number;
+};
+export type EdgeDraft = { From: Id; To: Id; Label?: Label; EdgeKind?: EdgeKind; LatencyMs?: number; ThroughputRps?: number; PayloadKb?: number };
 export type EdgeCreateDraft = Partial<EdgeDraft>;
-export type EdgePatch = Partial<Pick<EdgeEntity, 'Label' | 'From' | 'To'>>;
+export type EdgePatch = Partial<Pick<EdgeEntity, 'Label' | 'From' | 'To' | 'EdgeKind' | 'LatencyMs' | 'ThroughputRps' | 'PayloadKb'>>;
+export type GraphSnapshot = { nodes: NodeDraftWithId[]; edges: EdgeDraftWithId[] };
+export type NodeDraftWithId = NodeDraft & { id: Id };
+export type EdgeDraftWithId = EdgeDraft & { id: Id };
 
 type StoredItem = { id?: Id; parent?: Id[] };
 type ItemStore<T = unknown> = () => T[];
@@ -39,6 +72,9 @@ export class GraphNode implements NodeEntity {
   Position?: Position;
   NodeType: NodeType;
   Description?: string;
+  ComputeMs?: number;
+  ExpectedRps?: number;
+  LatencyMs?: number;
 
   constructor(readonly graph: Graph, readonly id: Id, draft: NodeDraft = {}) {
     this.Label = draft.Label ?? { text: id };
@@ -46,15 +82,30 @@ export class GraphNode implements NodeEntity {
     this.Position = draft.Position;
     this.NodeType = draft.NodeType ?? 'text';
     this.Description = draft.Description ?? '';
+    this.ComputeMs = draft.ComputeMs;
+    this.ExpectedRps = draft.ExpectedRps;
+    this.LatencyMs = draft.LatencyMs;
   }
 }
 
 export class GraphEdge implements EdgeEntity {
   kind = 'edge' as const;
   Label?: Label;
-  constructor(readonly graph: Graph, readonly id: Id, public From: Id, public To: Id, label?: Label) {
-    this.Label = label;
+  EdgeKind?: EdgeKind;
+  LatencyMs?: number;
+  ThroughputRps?: number;
+  PayloadKb?: number;
+  constructor(readonly graph: Graph, readonly id: Id, draft: EdgeDraft) {
+    this.From = draft.From;
+    this.To = draft.To;
+    this.Label = draft.Label;
+    this.EdgeKind = draft.EdgeKind ?? (draft.Label?.text as EdgeKind | undefined);
+    this.LatencyMs = draft.LatencyMs;
+    this.ThroughputRps = draft.ThroughputRps;
+    this.PayloadKb = draft.PayloadKb;
   }
+  From: Id;
+  To: Id;
 }
 
 export class Graph {
@@ -165,7 +216,7 @@ export class Graph {
   // ----- Edges -----
   createEdge(draft: EdgeDraft) {
     const id = `r${this.nextEdge++}`;             // 'r' = relation, to keep ids distinct from nodes (e1, e2, ...).
-    const edge = new GraphEdge(this, id, draft.From, draft.To, draft.Label);
+    const edge = new GraphEdge(this, id, draft);
     this.edgeMap.set(id, edge);
     this.addAdj(edge);
     this.edgeArr = null;
@@ -255,6 +306,46 @@ export class Graph {
         y: anchor.y + (hasAnchor ? 0 : (this.items.size % 3) * 18),
       },
     };
+  }
+
+  snapshot(): GraphSnapshot {
+    return {
+      nodes: this.nodes().map(({ id, Label, Position, Size, NodeType, Description, ComputeMs, ExpectedRps, LatencyMs }) => ({
+        id, Label, Position, Size, NodeType, Description, ComputeMs, ExpectedRps, LatencyMs,
+      })),
+      edges: this.edges().map(({ id, From, To, Label, EdgeKind, LatencyMs, ThroughputRps, PayloadKb }) => ({
+        id, From, To, Label, EdgeKind, LatencyMs, ThroughputRps, PayloadKb,
+      })),
+    };
+  }
+
+  replace(snapshot: GraphSnapshot) {
+    this.items.clear();
+    this.edgeMap.clear();
+    this.adjacency.clear();
+    this.grid.clear();
+    this.nodeCell.clear();
+    let maxNode = 0;
+    let maxEdge = 0;
+    snapshot.nodes.forEach(draft => {
+      const node = new GraphNode(this, draft.id, draft);
+      this.items.set(node.id, node);
+      this.indexNode(node);
+      const seq = parseInt(node.id.replace(/^\D+/, ''), 10);
+      if (Number.isFinite(seq)) maxNode = Math.max(maxNode, seq);
+    });
+    snapshot.edges.forEach(draft => {
+      if (!this.items.has(draft.From) || !this.items.has(draft.To) || draft.From === draft.To) return;
+      const edge = new GraphEdge(this, draft.id, draft);
+      this.edgeMap.set(edge.id, edge);
+      this.addAdj(edge);
+      const seq = parseInt(edge.id.replace(/^\D+/, ''), 10);
+      if (Number.isFinite(seq)) maxEdge = Math.max(maxEdge, seq);
+    });
+    this.nextNode = maxNode + 1;
+    this.nextEdge = maxEdge + 1;
+    this.nodeArr = null;
+    this.edgeArr = null;
   }
 }
 

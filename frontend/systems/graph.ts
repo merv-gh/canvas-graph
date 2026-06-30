@@ -4,6 +4,7 @@ import {
   type EdgeEntity,
   type EdgePatch,
   type GraphNode,
+  type GraphSnapshot,
   type GraphStore,
   type NodeDraft,
   type NodePatch,
@@ -21,6 +22,8 @@ declare module '../types' {
   interface CustomEvents {
     'graph.exported': { json: string };
     'graph.export.json': void;
+    'graph.import.snapshot': GraphSnapshot;
+    'graph.imported': { graphId: Id };
     'graph.edge.reverse': { id: Id };
     'graph.create': void;
     'graph.created': { id: Id };
@@ -113,15 +116,16 @@ export function registerGraph(system: Registry) {
     ]);
 
     on('graph.export.json', () => {
-      const json = JSON.stringify({
-        nodes: graphs.current.nodes().map(({ id, Label, Position, Size, NodeType, Description }) => ({
-          id, Label, Position, Size, NodeType, Description,
-        })),
-        edges: graphs.current.edges().map(({ id, From, To, Label }) => ({ id, From, To, Label })),
-      });
+      const json = JSON.stringify(graphs.current.snapshot());
       const clipboard = globalThis.navigator?.clipboard;
       void clipboard?.writeText?.(json)?.catch?.(() => {});
       emit('graph.exported', { json });
+    });
+
+    on('graph.import.snapshot', snapshot => {
+      graphs.current.replace(snapshot);
+      emit('graph.imported', { graphId: graphs.current.id });
+      emit('graph.switched', { id: graphs.current.id });
     });
 
     on('graph.edge.reverse', ({ id }) => {
@@ -143,13 +147,13 @@ export function registerGraph(system: Registry) {
       emit('graph.switched', { id: graph.id });
     });
     on('graph.node.create', draft => {
-      const { relativeTo, keepFocus, connectFrom, ...store } = draft as typeof draft & { relativeTo?: string; keepFocus?: boolean; connectFrom?: string };
+      const { relativeTo, keepFocus, connectFrom, connectKind, ...store } = draft as typeof draft & CreateHints;
       const anchorNode = relativeTo ? graphs.current.getNode(relativeTo) : (selection.selectedNode() as GraphNode | undefined);
       const node = graphs.current.createNode(store, {
         at: contexts.view.spaceCenter(Places.Stage),
         nearPosition: anchorNode?.Position,
       });
-      emit('graph.node.created', { graphId: graphs.current.id, id: node.id, hints: { keepFocus, connectFrom, relativeTo } });
+      emit('graph.node.created', { graphId: graphs.current.id, id: node.id, hints: { keepFocus, connectFrom, connectKind, relativeTo } });
     });
     on('graph.node.update', ({ id, patch }) => {
       if (graphs.current.updateNode(id, patch)) emit('graph.node.updated', { graphId: graphs.current.id, id });

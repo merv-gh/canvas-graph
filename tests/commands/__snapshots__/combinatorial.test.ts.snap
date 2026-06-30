@@ -93,11 +93,11 @@ exports[`combinatorial action graph > length-1: every auto-runnable command boot
   "snap": {
     "containers": 5,
     "dxErrors": 0,
-    "edges": 73,
-    "focused": "node:e50",
-    "nodes": 50,
+    "edges": 77,
+    "focused": "node:e51",
+    "nodes": 51,
     "scale": 0.17,
-    "selected": "node:e50",
+    "selected": "node:e51",
   },
 }
 `;
@@ -310,6 +310,210 @@ exports[`combinatorial action graph > length-1: every auto-runnable command boot
 {
   "sequence": [
     "palette.open",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": null,
+    "nodes": 0,
+    "scale": 1,
+    "selected": null,
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [systemDesign.demo.imageSearch] 1`] = `
+{
+  "sequence": [
+    "systemDesign.demo.imageSearch",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 15,
+    "focused": null,
+    "nodes": 15,
+    "scale": 0.43,
+    "selected": null,
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [systemDesign.edge.async] 1`] = `
+{
+  "sequence": [
+    "systemDesign.edge.async",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": null,
+    "nodes": 0,
+    "scale": 1,
+    "selected": null,
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [systemDesign.edge.read] 1`] = `
+{
+  "sequence": [
+    "systemDesign.edge.read",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": null,
+    "nodes": 0,
+    "scale": 1,
+    "selected": null,
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [systemDesign.edge.sync] 1`] = `
+{
+  "sequence": [
+    "systemDesign.edge.sync",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": null,
+    "nodes": 0,
+    "scale": 1,
+    "selected": null,
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [systemDesign.edge.write] 1`] = `
+{
+  "sequence": [
+    "systemDesign.edge.write",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": null,
+    "nodes": 0,
+    "scale": 1,
+    "selected": null,
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [systemDesign.node.database] 1`] = `
+{
+  "sequence": [
+    "systemDesign.node.database",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": "node:e1",
+    "nodes": 1,
+    "scale": 1,
+    "selected": "node:e1",
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [systemDesign.node.gateway] 1`] = `
+{
+  "sequence": [
+    "systemDesign.node.gateway",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": "node:e1",
+    "nodes": 1,
+    "scale": 1,
+    "selected": "node:e1",
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [systemDesign.node.index] 1`] = `
+{
+  "sequence": [
+    "systemDesign.node.index",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": "node:e1",
+    "nodes": 1,
+    "scale": 1,
+    "selected": "node:e1",
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [systemDesign.node.kafka] 1`] = `
+{
+  "sequence": [
+    "systemDesign.node.kafka",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": "node:e1",
+    "nodes": 1,
+    "scale": 1,
+    "selected": "node:e1",
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [systemDesign.node.service] 1`] = `
+{
+  "sequence": [
+    "systemDesign.node.service",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": "node:e1",
+    "nodes": 1,
+    "scale": 1,
+    "selected": "node:e1",
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [systemDesign.node.user-input] 1`] = `
+{
+  "sequence": [
+    "systemDesign.node.user-input",
+  ],
+  "snap": {
+    "containers": 0,
+    "dxErrors": 0,
+    "edges": 0,
+    "focused": "node:e1",
+    "nodes": 1,
+    "scale": 1,
+    "selected": "node:e1",
+  },
+}
+`;
+
+exports[`combinatorial action graph > length-1: every auto-runnable command boots and runs > runs [systemDesign.share.copy] 1`] = `
+{
+  "sequence": [
+    "systemDesign.share.copy",
   ],
   "snap": {
     "containers": 0,

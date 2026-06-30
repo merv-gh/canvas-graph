@@ -1,5 +1,6 @@
 import { nodeRect, type Registry } from './core';
 import type { CreateHints, EdgeCreateDraft, NodeDraft } from './model';
+import { registerSystemDesign } from './systems/system-design';
 import { Places } from './types';
 
 declare module './types' {
@@ -14,6 +15,7 @@ declare module './types' {
    that turns data mutations into coalesced redraws. If a feature is just "X happened → redraw",
    delete the listener; it's already handled. */
 export function registerFeatures(feature: Registry) {
+  registerSystemDesign(feature);
   feature('nodeLifecycle', ({ on, emit, contexts, graphs, selection }) => {
     const rectContains = (outer: { x: number; y: number; w: number; h: number }, inner: { x: number; y: number; w: number; h: number }) =>
       inner.x >= outer.x && inner.y >= outer.y && inner.x + inner.w <= outer.x + outer.w && inner.y + inner.h <= outer.y + outer.h;
@@ -65,7 +67,7 @@ export function registerFeatures(feature: Registry) {
         emit('selection.node.select', { id });
         emit('focus.node.focus', { id });
       }
-      if (hints?.connectFrom) emit('graph.edge.create', { From: hints.connectFrom, To: id });
+      if (hints?.connectFrom) emit('graph.edge.create', { From: hints.connectFrom, To: id, EdgeKind: hints.connectKind });
       if (createdNodeIsOffscreen(id)) emit('view.fit.item', { kind: 'node', id });
     });
   }, { requires: ['graph', 'ability.selectable', 'focus'] });

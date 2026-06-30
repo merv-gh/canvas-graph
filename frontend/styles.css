@@ -401,6 +401,7 @@ button.icon:hover { color: var(--ink); }
 /* Resting position for panels the user has not dragged (drag sets inline left/top). */
 .tool-panel[data-anchor="top-left"] { left: 12px; top: 12px; }
 .tool-panel[data-anchor="top-right"] { right: 12px; top: 12px; }
+.tool-panel[data-anchor="middle-right"] { right: 12px; top: 50%; transform: translateY(-50%); }
 .tool-panel[data-anchor="bottom-left"] { left: 12px; bottom: 12px; }
 .tool-panel[data-anchor="bottom-right"] { right: 12px; bottom: 12px; }
 
@@ -448,6 +449,34 @@ button.icon:hover { color: var(--ink); }
 .tool-panel-stack[data-collapsed="true"] .tool-panel-head { border-bottom: 0; padding: 0; }
 .tool-panel-body { display: flex; gap: 4px; }
 .tool-panel-stack .tool-panel-body { flex-direction: column; }
+.tool-panel[data-panel-id="system-design"] {
+  width: 96px;
+  max-width: 96px;
+}
+.tool-panel[data-panel-id="system-design"] .tool-panel-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+.design-palette-button {
+  min-width: 0;
+  height: 28px;
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.design-palette-button:hover { border-color: var(--accent); }
+.design-node-database { color: #0369a1; }
+.design-node-kafka { color: #7c3aed; }
+.design-node-service { color: #0f766e; }
+.design-node-index { color: #b45309; }
+.design-node-user-input { color: #be123c; }
+.design-node-gateway { color: #4338ca; }
+.design-edge-async { border-style: dashed; }
+.design-edge-read { color: #0369a1; }
+.design-edge-write { color: #b45309; }
 .node-type-panel {
   gap: 3px;
   max-width: none;
@@ -492,8 +521,15 @@ button.icon:hover { color: var(--ink); }
 .edges .edge-line { stroke: var(--edge); stroke-width: 2px; opacity: .9; pointer-events: none; }
 .edges .edge-line.selected { stroke: var(--accent); stroke-width: 2px; }
 .edges .edge-line.focused { stroke: var(--accent); stroke-dasharray: 4 3; }
+.edges .edge-line.edge-kind-read { stroke: #0369a1; }
+.edges .edge-line.edge-kind-write { stroke: #b45309; }
+.edges .edge-line.edge-kind-sync { stroke: #4b5563; }
+.edges .edge-line.edge-kind-async { stroke: #7c3aed; stroke-dasharray: 7 5; }
 .edges #edge-arrow path { fill: var(--edge); }
 .edges .edge-label { fill: var(--text-muted); font: 11px ui-monospace, monospace; }
+.edges .edge-label.edge-kind-read { fill: #0369a1; }
+.edges .edge-label.edge-kind-write { fill: #92400e; }
+.edges .edge-label.edge-kind-async { fill: #6d28d9; }
 .item-overlays { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
 .item-overlay {
   position: absolute;
@@ -567,6 +603,12 @@ button.icon:hover { color: var(--ink); }
   padding-left: 18px;
   padding-right: 18px;
 }
+.node-type-service { border-color: color-mix(in srgb, #0f766e 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 86%, #ccfbf1); }
+.node-type-database { border-color: color-mix(in srgb, #0369a1 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 86%, #e0f2fe); }
+.node-type-kafka { border-color: color-mix(in srgb, #7c3aed 42%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 87%, #ede9fe); }
+.node-type-index { border-color: color-mix(in srgb, #b45309 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 86%, #fef3c7); }
+.node-type-user-input { border-color: color-mix(in srgb, #be123c 42%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 88%, #ffe4e6); }
+.node-type-gateway { border-color: color-mix(in srgb, #4338ca 42%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 88%, #e0e7ff); }
 
 /* Containers paint behind nodes (EntityDef.order = -10). Dashed border + label
    in the corner so the grouping reads at a glance without competing with nodes. */
@@ -758,6 +800,27 @@ button.icon:hover { color: var(--ink); }
   color: var(--ink);
   text-align: center;
 }
+.node-kicker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 20px;
+  padding: 6px 8px 0;
+  font: 10px/1.2 ui-monospace, monospace;
+  color: var(--text-muted);
+}
+.node-type-label {
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.node-metrics {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.node-metrics:empty { display: none; }
 /* Edit mode visual cue — applied only when editable's handler enters the mode.
    Stays out of the default state so a normal click doesn't suggest editability. */
 .node-title.editing {
@@ -791,6 +854,48 @@ button.icon:hover { color: var(--ink); }
 /* Nodes without descriptions stay title-only; ids are data attrs, not visual noise. */
 .node:not(.has-description) .node-body { display: none; }
 .node.collapsed .node-body { display: none; }
+
+.design-hints {
+  position: absolute;
+  right: 116px;
+  bottom: 12px;
+  z-index: 11;
+  width: min(360px, calc(100vw - 392px));
+  max-height: min(42vh, 360px);
+  overflow: auto;
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--panel) 95%, transparent);
+  box-shadow: var(--shadow-sm);
+  pointer-events: auto;
+}
+.design-hints-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.design-observation {
+  display: grid;
+  gap: 2px;
+  padding-left: 8px;
+  border-left: 3px solid var(--line-strong);
+}
+.design-observation strong {
+  font-size: 12px;
+  line-height: 1.25;
+}
+.design-observation span {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+.design-observation.warn { border-left-color: #d97706; }
+.design-observation.error { border-left-color: var(--danger); }
+.design-observation.info { border-left-color: var(--accent); }
 
 /* Side panel typography */
 .panel-title {
@@ -1027,6 +1132,13 @@ button.icon:hover { color: var(--ink); }
 /* Property modal */
 .properties { display: grid; gap: 10px; }
 .properties [data-slot="fields"] { display: grid; gap: 10px; }
+.property-group {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
 .properties label {
   display: grid; gap: 4px;
   color: var(--text-muted);

@@ -10,16 +10,18 @@ declare module '../types' {
 
 const PANEL_ID = 'node-types';
 const PANEL_KEY = 'tool-panel:node-types';
-const SHAPE_SIZE: Record<NodeType, Size> = {
+const SHAPE_SIZE: Partial<Record<NodeType, Size>> = {
   text: { w: 170, h: 76 },
   square: { w: 112, h: 112 },
   circle: { w: 112, h: 112 },
 };
+const TEXT_SIZE = SHAPE_SIZE.text!;
+const SQUARE_SIZE = SHAPE_SIZE.square!;
 
 const isDefaultish = (size: Size) =>
   (size.w === 150 && size.h === 64)
-  || (size.w === SHAPE_SIZE.text.w && size.h === SHAPE_SIZE.text.h)
-  || (size.w === SHAPE_SIZE.square.w && size.h === SHAPE_SIZE.square.h);
+  || (size.w === TEXT_SIZE.w && size.h === TEXT_SIZE.h)
+  || (size.w === SQUARE_SIZE.w && size.h === SQUARE_SIZE.h);
 
 export function registerNodeVisuals(system: Registry) {
   system('node.visuals', ({ on, emit, contexts, graphs, selection }) => {
@@ -92,7 +94,8 @@ export function registerNodeVisuals(system: Registry) {
       const node = graphs.current.getNode(id);
       if (!node) return;
       const patch: NodePatch = { NodeType: nodeType };
-      if (node.NodeType !== nodeType && isDefaultish(node.Size)) patch.Size = SHAPE_SIZE[nodeType];
+      const size = SHAPE_SIZE[nodeType];
+      if (size && node.NodeType !== nodeType && isDefaultish(node.Size)) patch.Size = size;
       emit('item.update', { ref: nodeRef(id), patch });
     });
 
