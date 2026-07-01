@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createAppContext, createFlags, localStorageIo, memoryIo, registry } from '../../frontend/core';
+import { createAppContext, localStorageIo, memoryIo, registry } from '../../frontend/core';
 import { graphStore } from '../../frontend/model';
 import { registerCollections } from '../../frontend/systems/collections';
 import { runDx } from '../../frontend/systems/dx';
@@ -109,7 +109,8 @@ describe('frontend defensive command branches', () => {
         { id: 'bars', label: 'Bars', kind: 'bar', toolbar: false, items: () => [{ id: 'b1' }] },
       ],
     };
-    const ctx = createAppContext(graphStore(), model, createFlags({}, memoryIo()), memoryIo());
+    const ctx = createAppContext(graphStore(), model, {}, memoryIo());
+
     const systems = registry('system');
 
     registerCollections(systems);
@@ -125,7 +126,8 @@ describe('frontend defensive command branches', () => {
       entities: [],
       collections: [{ id: 'things', label: 'Things', items: () => [{}] }],
     };
-    const ctx = createAppContext(graphStore(), model, createFlags({}, memoryIo()), memoryIo());
+    const ctx = createAppContext(graphStore(), model, {}, memoryIo());
+
 
     ctx.bus.forward('graph.widget.create' as never, {});
     const issues = runDx(ctx);

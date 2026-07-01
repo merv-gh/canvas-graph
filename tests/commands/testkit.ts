@@ -3,7 +3,6 @@ import { resolve } from 'node:path';
 import { registerAbilitySystems } from '../../frontend/abilities';
 import {
   createAppContext,
-  createFlags,
   memoryIo,
   registry,
   withKind,
@@ -32,7 +31,7 @@ export function bootApp(flags: FeatureFlags = {}) {
   registerAbilitySystems(withKind(plugins, 'ability'));
   registerFeatures(withKind(plugins, 'feature'));
   const io = memoryIo();
-  const ctx = createAppContext(graphStore(), appModel, createFlags(flags, io), io);
+  const ctx = createAppContext(graphStore(), appModel, flags, io);
   installRuntimeFeatureManager(ctx, plugins);
   plugins.start(ctx);
   ctx.bus.emit('app.start');

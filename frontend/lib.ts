@@ -16,7 +16,7 @@
 import cssText from './styles.css?inline';
 import indexHtml from './index.html?raw';
 import { registerAbilitySystems } from './abilities';
-import { createAppContext, createFlags, memoryIo, registry, withKind, type AppCtx } from './core';
+import { createAppContext, memoryIo, registry, withKind, type AppCtx } from './core';
 import { setMountRoot } from './core/mount';
 import { registerFeatures } from './features';
 import { appModel, graphStore } from './model';
@@ -187,7 +187,7 @@ export function createGraphViewer(opts: GraphViewerOptions): GraphViewer {
   registerSystems(withKind(plugins, 'system'));
   registerAbilitySystems(withKind(plugins, 'ability'));
   registerFeatures(withKind(plugins, 'feature'));
-  const ctx = createAppContext(graphStore(), appModel, createFlags({}, memoryIo()), memoryIo());
+  const ctx = createAppContext(graphStore(), appModel, {}, memoryIo());
   installRuntimeFeatureManager(ctx, plugins);
   plugins.start(ctx);
   ctx.bus.emit('app.start');

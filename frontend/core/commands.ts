@@ -78,14 +78,14 @@ export function commandsContext(bus: Bus, isFlagOn: (origin?: string) => boolean
       if (shortcutConflict(id, next)) return false;
       applyShortcut(command, next);
       shortcutOverrides[id] = next;
-      io.set(STORAGE_KEYS.shortcuts, shortcutOverrides);
+      bus.emit('command.shortcut.changed', { id, shortcut: next });
       return true;
     },
     setEnabled(id: string, enabled: boolean) {
       const command = commandMap.get(id);
       if (!command) return false;
       if (enabled) disabledCommands.delete(id); else disabledCommands.add(id);
-      io.set(STORAGE_KEYS.disabledCommands, [...disabledCommands]);
+      bus.emit('command.enabled.changed', { id, enabled });
       return true;
     },
     run(id: string, source: CommandSource = {}) {

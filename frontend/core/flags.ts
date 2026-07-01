@@ -1,4 +1,4 @@
-import type { FeatureFlags } from '../types';
+import type { Bus, FeatureFlags } from '../types';
 import { localStorageIo, STORAGE_KEYS, type IoApi } from './io';
 
 /** What a flag controls. Set by the registry that declares it.
@@ -16,7 +16,7 @@ export type FlagsApi = {
   requires(name: string): string[];
 };
 
-export function createFlags(initial: FeatureFlags = {}, io: IoApi = localStorageIo()): FlagsApi {
+export function createFlags(bus: Bus, initial: FeatureFlags = {}, io: IoApi = localStorageIo()): FlagsApi {
   const persisted = io.get<FeatureFlags>(STORAGE_KEYS.flags, {});
   const state: FeatureFlags = { ...initial, ...persisted };
   const deps = new Map<string, string[]>();
@@ -29,7 +29,7 @@ export function createFlags(initial: FeatureFlags = {}, io: IoApi = localStorage
       if (requires?.length) deps.set(name, requires);
       if (kind) kinds.set(name, kind);
     },
-    set(name, on) { state[name] = on; io.set(STORAGE_KEYS.flags, state); },
+    set(name, on) { state[name] = on; bus.emit('flag.changed'); },
     declared: (kind) => kind == null ? Object.keys(state) : Object.keys(state).filter(name => kinds.get(name) === kind),
     kind: (name) => kinds.get(name),
     requires: (name) => deps.get(name) ?? [],

@@ -23,6 +23,7 @@ import {
   type CommandSpecInput,
   type EventName,
   type EventOf,
+  type FeatureFlags,
   type ModelDef,
   type Place,
   type ResolvedCollectionDef,
@@ -38,7 +39,7 @@ export { createSelectionStore, type SelectionStore } from './core/selection';
 export { createSim, type SimApi, type Trace, type TraceEvent } from './core/sim';
 export { parseShortcut, shortcutOf, commandShortcut } from './core/shortcuts';
 export { itemIdFrom, itemRefFrom, appendRenderable, itemParentAttr, itemParentFromAttr, tagItem } from './core/dom';
-export { edgeRef, itemKey, nodeRef, sameItemRef } from './core/item-ref';
+export { edgeRef, itemKey, refKey, nodeRef, sameItemRef } from './core/item-ref';
 export { decorationsContext, type DecorationsApi, type ItemMode, type Overlay } from './core/decorations';
 export { hierarchyContext, createNesting, type HierarchyApi, type HierarchyItem, type HierarchySource, type HierarchyParent, type HierarchyNode, type NestApi } from './core/hierarchy';
 export { keyboardCaptureContext, type KeyboardCapture } from './core/keyboard';
@@ -246,8 +247,8 @@ function createContexts(bus: Bus, flags: FlagsApi, io: IoApi) {
   const dx = {
     issues: () => lastDxIssues,
     run: () => runner(),
-    _set(issues: DxIssue[]) { lastDxIssues = issues; },
-    _setRunner(fn: () => DxIssue[]) { runner = fn; },
+    setIssues(issues: DxIssue[]) { lastDxIssues = issues; },
+    setRunner(fn: () => DxIssue[]) { runner = fn; },
   };
   const teardown: OriginScoped[] = [commands, affordances, cancellation, decorations, hierarchy, keyboard, storage];
   return {
@@ -378,10 +379,11 @@ export function withKind(base: Registry, kind: FlagKind): Registry {
 export function createAppContext(
   graphs: GraphStore,
   model: ModelDef<ModelCtx>,
-  flags: FlagsApi = createFlags(),
+  initialFlags: FeatureFlags = {},
   io: IoApi = localStorageIo(),
 ): AppCtx {
   const bus = eventBus();
+  const flags = createFlags(bus, initialFlags, io);
   const selection = createSelectionStore(graphs, bus);
   return {
     bus, graphs, flags, selection, io,

@@ -1,5 +1,5 @@
 import { collapsible, configurable, draggable, editable, nudgeable, resizeable, selectable } from '../abilities';
-import { boundsOf, createNesting, expandRect, itemFoldId, itemIdFrom, rectCenter, unionRect, type NestApi, type Registry } from '../core';
+import { boundsOf, createNesting, expandRect, itemFoldId, itemIdFrom, rectCenter, refKey, sameItemRef, unionRect, type NestApi, type Registry } from '../core';
 import { Places, Slots } from '../types';
 import type {
   EntityDef,
@@ -68,8 +68,7 @@ const DEFAULT_SIZE: Size = { w: 320, h: 200 };
 const COLLAPSED_SIZE: Size = { w: 140, h: 36 };
 const PADDING = 24;
 const LABEL_BAND = 18;
-const childKey = (ref: ItemRef) => `${ref.kind}:${ref.id}`;
-const sameRef = (a: ItemRef, b: ItemRef) => a.kind === b.kind && a.id === b.id;
+
 const parseSections = (value: unknown, existing: ContainerSection[] = []): ContainerSection[] =>
   String(value)
     .split(/\r?\n/)
@@ -86,16 +85,16 @@ const sanitizeSections = (c: Container) => {
   })) ?? [];
   c.SectionAxis = c.SectionAxis ?? 'rows';
   const valid = new Set(c.Sections.map(section => section.id));
-  const childKeys = new Set(c.Children.map(childKey));
+  const refKeys = new Set(c.Children.map(refKey));
   const fallback = firstSectionId(c);
   const next: Record<string, Id> = {};
   Object.entries(c.ChildSections ?? {}).forEach(([key, sectionId]) => {
-    if (!childKeys.has(key)) return;
+    if (!refKeys.has(key)) return;
     if (valid.has(sectionId)) next[key] = sectionId;
     else if (fallback) next[key] = fallback;
   });
   c.Children.forEach(child => {
-    const key = childKey(child);
+    const key = refKey(child);
     if (fallback && !next[key]) next[key] = fallback;
   });
   c.ChildSections = next;
@@ -154,7 +153,7 @@ export function registerContainers(system: Registry) {
       const valid = new Set(c.Sections.map(section => section.id));
       const next = sectionId && valid.has(sectionId) ? sectionId : firstSectionId(c);
       if (!next) return false;
-      const key = childKey(childRef);
+      const key = refKey(childRef);
       const before = c.ChildSections?.[key];
       c.ChildSections = { ...(c.ChildSections ?? {}), [key]: next };
       return before !== next;
@@ -163,7 +162,7 @@ export function registerContainers(system: Registry) {
       const parents = parentId ? [containersHere().get(parentId)] : [...containersHere().values()];
       parents.forEach(c => {
         if (!c?.ChildSections) return;
-        delete c.ChildSections[childKey(childRef)];
+        delete c.ChildSections[refKey(childRef)];
       });
     };
     const sectionTitleTarget = (target?: Element | null) => {
@@ -442,7 +441,7 @@ export function registerContainers(system: Registry) {
           const childRef = selection.selected() ?? undefined;
           const c = childRef ? containerOfChild(childRef) : null;
           if (!childRef || !c?.Sections?.length) return undefined;
-          const current = c.ChildSections?.[childKey(childRef)] ?? firstSectionId(c);
+          const current = c.ChildSections?.[refKey(childRef)] ?? firstSectionId(c);
           const index = Math.max(0, c.Sections.findIndex(section => section.id === current));
           return { containerId: c.id, childRef, sectionId: c.Sections[(index + 1) % c.Sections.length].id };
         },

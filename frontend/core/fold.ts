@@ -48,7 +48,6 @@ export function foldContext(bus: Bus, io: IoApi): FoldStore {
     Object.prototype.hasOwnProperty.call(state, id) ? state[id] : defaultOpen;
   const set = (id: string, open: boolean) => {
     state[id] = open;
-    io.set(KEY, state);
     bus.emit('fold.changed', { id, open });
   };
   const toggle = (id: string, defaultOpen = true) => set(id, !isOpen(id, defaultOpen));

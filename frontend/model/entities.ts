@@ -103,6 +103,21 @@ const resolveEndpoint = (nodeRef: { kind: 'node'; id: string }, ctx: { graph: { 
 
 const edgeRenderer: EntityRenderer<GraphEdge> = {
   layer: 'svg',
+  collect(graph, hiddenByFold, visibleNodeIds) {
+    const g = graph as unknown as Graph;
+    const nodeIds = visibleNodeIds ?? new Set(g.nodes().map(n => n.id));
+    const seen = new Set<string>();
+    const edges: GraphEdge[] = [];
+    for (const nid of nodeIds) {
+      for (const e of g.edgesOf(nid)) {
+        const k = e.id;
+        if (!seen.has(k)) { seen.add(k); edges.push(e); }
+      }
+    }
+    // Edge hidden-by-fold: an edge is visible when at least one endpoint is.
+    // Individual endpoint collapse is handled by resolveEndpoint in draw().
+    return edges;
+  },
   draw(edge, ctx) {
     const from = resolveEndpoint({ kind: 'node', id: edge.From }, ctx);
     const to = resolveEndpoint({ kind: 'node', id: edge.To }, ctx);
@@ -235,6 +250,13 @@ export const nodeBoundsOf = (node: GraphNode): Rect => {
 const nodeRenderer: EntityRenderer<GraphNode> = {
   layer: 'html',
   bounds: nodeBoundsOf,
+  collect(graph, hiddenByFold, visibleNodeIds) {
+    const g = graph as unknown as Graph;
+    const all = visibleNodeIds
+      ? [...visibleNodeIds].map(id => g.node(id)).filter((n): n is GraphNode => !!n)
+      : g.nodes();
+    return all.filter(n => !hiddenByFold({ kind: 'node', id: n.id }));
+  },
   draw(node, ctx) {
     const el = ctx.cloneTemplate<HTMLElement>('node');
     const pos = node.Position ?? { x: 0, y: 0 };

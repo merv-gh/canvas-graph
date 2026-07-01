@@ -16,6 +16,7 @@ import { registerFoldable } from './foldable';
 import { registerFocus } from './focus';
 import { registerGraph } from './graph';
 import { registerInput } from './input';
+import { registerIo } from './io';
 import { registerJump } from './jump';
 import { registerLayout } from './layout';
 import { registerLog } from './log';
@@ -40,6 +41,7 @@ export function registerSystems(system: Registry) {
   registerRenderStage(system);
   registerTextLayout(system);
   registerInput(system);
+  registerIo(system);
   registerFoldable(system);
   registerCancellation(system);
   registerMain(system);

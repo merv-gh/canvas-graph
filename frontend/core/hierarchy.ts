@@ -1,7 +1,6 @@
 import type { Id, ItemKind, ItemRef, Position } from '../types';
 import { sameItemRef } from './item-ref';
-
-const key = (ref: ItemRef) => `${ref.kind}:${ref.id}`;
+import { refKey } from './item-ref';
 
 /** A navigable, orderable item in the app's hierarchy.
  *  - `anchor` — graph-space position; present for on-canvas items (jump / fit).
@@ -50,8 +49,8 @@ export function hierarchyContext() {
     const seen = new Set<string>();
     let current = parentRefOf(ref);
     while (current) {
-      const k = key(current);
-      if (seen.has(k)) break; // cycle guard — providers can be buggy
+      const k = refKey(current);
+      if (seen.has(k)) break;
       seen.add(k);
       chain.unshift(current);
       current = parentRefOf(current);
@@ -78,11 +77,13 @@ export function hierarchyContext() {
     const rootList: HierarchyItem[] = [];
     for (const it of list) {
       const parent = parentRefOf(it.ref);
-      if (parent) (childIndex.get(key(parent)) ?? childIndex.set(key(parent), []).get(key(parent))!).push(it);
-      else rootList.push(it);
+      if (parent) {
+        const pkey = refKey(parent);
+        (childIndex.get(pkey) ?? childIndex.set(pkey, []).get(pkey)!).push(it);
+      } else { rootList.push(it); }
     }
     const build = (it: HierarchyItem, seen: Set<string>): HierarchyNode => {
-      const k = key(it.ref);
+      const k = refKey(it.ref);
       const kids = seen.has(k) ? [] : (childIndex.get(k) ?? []).slice().sort(byOrder);
       const nextSeen = new Set(seen).add(k);
       return { ...it, children: kids.map(child => build(child, nextSeen)) };
@@ -149,34 +150,30 @@ export function createNesting<P extends NestableParent>(opts: {
   onChange?: (parentId: Id) => void;
 }): NestApi {
   const { parents, parentKind, onChange } = opts;
-  const k = (ref: ItemRef) => `${ref.kind}:${ref.id}`;
-  const sameRef = (a: ItemRef, b: ItemRef) => a.kind === b.kind && a.id === b.id;
-  /** Child kind:id → parent id. The single source of truth for hierarchy. */
   const parentOf = new Map<string, Id>();
-
   const parentRefOf = (ref: ItemRef): ItemRef | undefined => {
-    const pid = parentOf.get(k(ref));
+    const pid = parentOf.get(refKey(ref));
     return pid && parents.has(pid) ? { kind: parentKind, id: pid } : undefined;
   };
   const isAncestorOrSelf = (ancestor: ItemRef, descendant: ItemRef): boolean => {
     let cur: ItemRef | undefined = descendant;
     const seen = new Set<string>();
     while (cur) {
-      const ck = k(cur);
+      const ck = refKey(cur);
       if (seen.has(ck)) return false;
       seen.add(ck);
-      if (sameRef(cur, ancestor)) return true;
+      if (sameItemRef(cur, ancestor)) return true;
       const pid = parentOf.get(ck);
       cur = pid ? { kind: parentKind, id: pid } : undefined;
     }
     return false;
   };
   const detach = (childRef: ItemRef): Id | undefined => {
-    const ck = k(childRef);
+    const ck = refKey(childRef);
     const prev = parentOf.get(ck);
     if (!prev) return undefined;
     const p = parents.get(prev);
-    if (p) p.Children = p.Children.filter(r => !sameRef(r, childRef));
+    if (p) p.Children = p.Children.filter(r => !sameItemRef(r, childRef));
     parentOf.delete(ck);
     onChange?.(prev);
     return prev;
@@ -190,11 +187,11 @@ export function createNesting<P extends NestableParent>(opts: {
       const p = parents.get(parentId);
       if (!p) return 'noop';
       if (isAncestorOrSelf(childRef, { kind: parentKind, id: parentId })) return 'cycle';
-      const prev = parentOf.get(k(childRef));
+      const prev = parentOf.get(refKey(childRef));
       if (prev === parentId) return 'noop';
       if (prev) detach(childRef);
-      if (!p.Children.some(r => sameRef(r, childRef))) p.Children.push(childRef);
-      parentOf.set(k(childRef), parentId);
+      if (!p.Children.some(r => sameItemRef(r, childRef))) p.Children.push(childRef);
+      parentOf.set(refKey(childRef), parentId);
       onChange?.(parentId);
       return 'ok';
     },

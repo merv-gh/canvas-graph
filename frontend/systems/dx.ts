@@ -11,11 +11,11 @@ export function registerDx(system: Registry) {
     // Same runner is reachable via `ctx.contexts.dx.run()` — survives the
     // shallow-spread of AppCtx into SystemCtx that earlier-registered systems
     // closed over.
-    ctx.contexts.dx._setRunner(() => runDx(ctx));
+    ctx.contexts.dx.setRunner(() => runDx(ctx));
     ctx.on('app.start', () => {
       queueMicrotask(() => {
         const issues = runDx(ctx);
-        ctx.contexts.dx._set(issues);
+        ctx.contexts.dx.setIssues(issues);
         const errors = issues.filter(i => i.level === 'error');
         const warns = issues.filter(i => i.level === 'warn');
         if (errors.length) {

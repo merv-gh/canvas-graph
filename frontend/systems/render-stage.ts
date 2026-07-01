@@ -145,32 +145,18 @@ export function registerRenderStage(system: Registry) {
     /** Everything that should currently be on the stage, keyed by element key. */
     const collectDesired = (visible: Set<string> | null): Map<string, Desired> => {
       const desired = new Map<string, Desired>();
-      const nodeIds = new Set<string>();
-      const nodeDef = model.entity('node') as EntityDef<unknown> | undefined;
-      if (nodeDef?.render) {
-        const nodes = visible
-          ? [...visible].map(id => graphs.current.getNode(id)).filter((n): n is NonNullable<typeof n> => !!n)
-          : graphs.current.nodes();
-        nodes.forEach(node => {
-          const ref = refOf('node', node);
-          if (!ref || hiddenByCollapsedAncestor(ref)) return;
-          desired.set(keyOf(ref), { ref, def: nodeDef, item: node });
-          nodeIds.add(ref.id);
-        });
-      }
-      const edgeDef = model.entity('edge') as EntityDef<unknown> | undefined;
-      if (edgeDef?.render) {
-        const edges = visible ? [...nodeIds].flatMap(id => graphs.current.edgesOf(id)) : graphs.current.edges();
-        edges.forEach(edge => {
-          const ref = edgeRef(edge.id);
-          desired.set(keyOf(ref), { ref, def: edgeDef, item: edge });
-        });
-      }
+      const hidden = (r: { kind: string; id: string }) =>
+        hiddenByCollapsedAncestor({ kind: r.kind as import('../types').ItemRef['kind'], id: r.id });
       model.entities().forEach(def => {
-        if (def.kind === 'node' || def.kind === 'edge' || !def.render) return;
-        graphs.current.itemsOfKind(def.kind).forEach(item => {
+        const renderer = def.render;
+        if (!renderer) return;
+        const items: unknown[] = renderer.collect
+          ? renderer.collect(graphs.current, hidden, visible) as unknown[]
+          : graphs.current.itemsOfKind(def.kind);
+        items.forEach(item => {
           const ref = refOf(def.kind, item);
-          if (!ref || hiddenByCollapsedAncestor(ref)) return;
+          if (!ref) return;
+          if (def.kind !== 'edge' && hiddenByCollapsedAncestor(ref)) return;
           desired.set(keyOf(ref), { ref, def, item });
         });
       });
