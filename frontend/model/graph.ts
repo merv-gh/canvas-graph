@@ -332,12 +332,25 @@ export class Graph {
   private withDefaults(draft: NodeDraft, options: NodeCreateOptions & { nearPosition?: Position }): NodeDraft {
     const anchor = options.nearPosition ?? options.at ?? { x: 0, y: 0 };
     const hasAnchor = options.nearPosition != null;
-    const spread = this.items.size % 4;
+    const index = this.items.size;
+    if (hasAnchor) {
+      const row = index % 3;
+      return {
+        ...draft,
+        Position: draft.Position ?? {
+          x: anchor.x + 220,
+          y: anchor.y + row * 100,
+        },
+      };
+    }
+    const cols = 3;
+    const col = index % cols;
+    const row = Math.floor(index / cols);
     return {
       ...draft,
       Position: draft.Position ?? {
-        x: anchor.x + (hasAnchor ? 180 : spread * 24),
-        y: anchor.y + (hasAnchor ? 0 : (this.items.size % 3) * 18),
+        x: anchor.x + (col - (cols - 1) / 2) * 240,
+        y: anchor.y + row * 100,
       },
     };
   }

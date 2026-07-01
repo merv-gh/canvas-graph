@@ -19,7 +19,9 @@ export function registerItemToolbar(system: Registry) {
       button.type = 'button';
       button.dataset.command = ui.command;
       button.textContent = uiValue(ui.text, item, action.label);
-      button.setAttribute('aria-label', uiValue(ui.label, item, action.label));
+      const label = uiValue(ui.label, item, action.label);
+      button.setAttribute('aria-label', label);
+      button.title = label;
       if (ui.className) button.classList.add(...ui.className.split(/\s+/).filter(Boolean));
       Object.entries(ui.attrs ?? {}).forEach(([name, value]) => button.setAttribute(name, uiValue(value, item)));
       return button;
@@ -78,6 +80,7 @@ export function registerItemToolbar(system: Registry) {
         context.className = 'node-action node-context-actions';
         context.dataset.command = 'item.context.open';
         context.setAttribute('aria-label', 'Context actions');
+        context.title = 'More actions';
         context.textContent = '⋯';
         wrapper.append(context);
       }

@@ -1,4 +1,4 @@
-import type { Registry } from '../core';
+import { commandShortcut, type Registry } from '../core';
 import { Places, Slots } from '../types';
 import type { PanelDef, Position } from '../types';
 
@@ -123,6 +123,8 @@ export function registerToolPanel(system: Registry) {
       const cmd = contexts.commands.get(aff.command);
       if (cmd?.available && !cmd.available()) return;
       const button = buttonFor(aff.command, aff.text ?? aff.command, aff.label);
+      const shortcut = commandShortcut(contexts.commands, aff.command);
+      if (shortcut) button.title = shortcut;
       if (aff.className) button.classList.add(...aff.className.split(/\s+/).filter(Boolean));
       parent.append(button);
     };

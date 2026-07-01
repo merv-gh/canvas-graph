@@ -150,7 +150,7 @@ const edgeRenderer: EntityRenderer<GraphEdge> = {
     };
     g.append(line('edge-hit', from.center.x, from.center.y, to.center.x, to.center.y, { tabindex: -1 }));
     g.append(line('edge-line', tipAtSource.x, tipAtSource.y, tipAtTarget.x, tipAtTarget.y, { 'marker-end': 'url(#edge-arrow)' }));
-    const label = edge.Label?.text || edgeKind;
+    const label = edge.Label?.text;
     if (label) {
       const midX = (from.center.x + to.center.x) / 2;
       const midY = (from.center.y + to.center.y) / 2;
