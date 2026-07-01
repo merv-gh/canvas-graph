@@ -8,9 +8,12 @@ const ZEN_FOLD_ID = 'shell.zen';
 
 export function registerMain(system: Registry) {
   system('main', ({ on, emit, contexts, contribute, origin }) => {
-    // Escape exits zen mode through the shared cancellation stack.
+    // Escape exits zen mode through the shared cancellation stack. `background:
+    // false` keeps zen active on canvas clicks — it persists until an explicit
+    // exit (`\` or Escape), so the faded panels don't pop back on a stray click.
     contexts.cancellation.register({
       origin,
+      background: false,
       active: () => contexts.fold.folded(ZEN_FOLD_ID),
       cancel: () => contexts.fold.set(ZEN_FOLD_ID, true),
     });
@@ -21,12 +24,9 @@ export function registerMain(system: Registry) {
     const syncShellFold = () => {
       const shell = shellEl();
       if (!shell) return;
-      shell.dataset.topFolded = contexts.fold.folded('shell.top') ? 'true' : 'false';
       shell.dataset.zen = contexts.fold.folded(ZEN_FOLD_ID) ? 'true' : 'false';
     };
     contexts.commands.register([
-      { id: 'view.left.toggle', label: 'Toggle outline panel', group: 'view', event: 'fold.toggle', shortcut: 'B', input: { on: 'keydown', key: 'b', prevent: true }, payload: () => ({ id: 'outline.panel' }) },
-      { id: 'view.top.toggle', label: 'Toggle top panel', group: 'view', event: 'fold.toggle', shortcut: 'Shift+T', input: { on: 'keydown', key: 'T', shift: true, prevent: true }, payload: () => ({ id: 'shell.top' }) },
       {
         id: 'view.zen',
         label: 'Toggle zen mode',
@@ -37,14 +37,8 @@ export function registerMain(system: Registry) {
         payload: () => ({ id: ZEN_FOLD_ID }),
       },
     ]);
-    contribute({ surface: 'top', command: 'view.zen', kind: 'button', text: '⛶', order: 80 });
-    contribute({ surface: 'top', command: 'view.top.toggle', kind: 'button', text: '▴', label: 'Toggle top panel', order: 79 });
+    contribute({ surface: 'top', command: 'view.zen', kind: 'button', text: '☾', label: 'Toggle zen mode', order: 80 });
     on('app.start', () => { emit('render.shell'); syncShellFold(); });
-    // Shell fold syncing for top panel and zen mode only; outline panel is its
-    // own floating tool-panel (toggled via the same fold.store id).
-    on('fold.changed', ({ id }) => {
-      if (id !== 'shell.top' && id !== ZEN_FOLD_ID) return;
-      syncShellFold();
-    });
+    on('fold.changed', ({ id }) => { if (id === ZEN_FOLD_ID) syncShellFold(); });
   }, { requires: ['render'] });
 }

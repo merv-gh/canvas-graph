@@ -1,6 +1,5 @@
 import { nodeRect, type Registry } from './core';
 import type { CreateHints, EdgeCreateDraft, NodeDraft } from './model';
-import { registerSystemDesign } from './systems/system-design';
 import { Places } from './types';
 
 declare module './types' {
@@ -15,7 +14,8 @@ declare module './types' {
    that turns data mutations into coalesced redraws. If a feature is just "X happened → redraw",
    delete the listener; it's already handled. */
 export function registerFeatures(feature: Registry) {
-  registerSystemDesign(feature);
+  // System-design feature disabled for release. Graph share/import (`?g=`, `?in=`,
+  // mermaid paste) now lives in `systems/share.ts`, decoupled from it.
   feature('nodeLifecycle', ({ on, emit, contexts, graphs, selection }) => {
     const rectContains = (outer: { x: number; y: number; w: number; h: number }, inner: { x: number; y: number; w: number; h: number }) =>
       inner.x >= outer.x && inner.y >= outer.y && inner.x + inner.w <= outer.x + outer.w && inner.y + inner.h <= outer.y + outer.h;

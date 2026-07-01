@@ -181,7 +181,7 @@ interface BuiltinEvents {
   'app.notice': { message: string; level?: 'info' | 'warn' | 'error' };
   /** Fired by the cancellation system on Escape or stage background click.
    *  The cancellation context routes it to the topmost active `Cancellable`. */
-  'app.cancel': void;
+  'app.cancel': { source?: 'escape' | 'background' };
   /** Fired by the affordances context when something contributes/withdraws a
    *  contribution on the given surface. The toolbar listens to redraw. */
   'affordance.contributed': { surface: AffordanceSurface };
@@ -405,11 +405,14 @@ export type SystemAffordance = Omit<AffordanceDef<void>, 'text' | 'label'> & {
   text?: string;
   label?: string;
   panel?: string;
+  /** Cluster start-slot toolbar buttons that share this key into one visual
+   *  `.tool-group` (e.g. 'edit', 'layout'). Omit to render loose. */
+  group?: string;
   origin?: string;
 };
 
 /** Where a tool panel anchors on the stage when it has not been dragged. */
-export type PanelAnchor = 'top-left' | 'top-right' | 'middle-right' | 'bottom-left' | 'bottom-right';
+export type PanelAnchor = 'top-left' | 'top-center' | 'top-right' | 'middle-right' | 'bottom-left' | 'bottom-right';
 
 /** A movable/collapsible tool panel on the stage. Declared as data via
  *  `contexts.affordances.declarePanel(...)` from the owning system's file, so

@@ -5,11 +5,9 @@ const CORE_COMMANDS = [
   'editing.node.create',
   'editing.edge.create',
   'palette.open',
-  'help.open',
   'view.zen',
-  'systemDesign.demo.imageSearch',
-  'systemDesign.demo.resilientCheckout',
-  'systemDesign.presentation.start',
+  'graph.share.copy',
+  'graph.import.paste',
 ];
 
 describe('command smoke', () => {
@@ -20,7 +18,7 @@ describe('command smoke', () => {
   });
 
   it('runs representative auto commands without DX errors', async () => {
-    for (const id of ['editing.node.create', 'systemDesign.demo.imageSearch', 'systemDesign.demo.resilientCheckout', 'systemDesign.presentation.start']) {
+    for (const id of ['editing.node.create', 'demo.render-self']) {
       const ctx = bootApp();
       await settle();
       runCommand(ctx, id);

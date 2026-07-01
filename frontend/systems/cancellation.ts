@@ -19,6 +19,7 @@ export function registerCancellation(system: Registry) {
         // keyboard.capture input is focused. prevent: true so picker/jump's
         // captured input doesn't swallow it.
         input: { on: 'keydown', key: 'Escape', global: true, prevent: true },
+        payload: () => ({ source: 'escape' }),
       },
       {
         id: 'app.cancel.background',
@@ -27,6 +28,7 @@ export function registerCancellation(system: Registry) {
         group: 'app',
         hidden: true,
         input: { on: 'pointerdown', selector: `[data-place="${Places.Stage}"]`, when: isStageSurface },
+        payload: () => ({ source: 'background' }),
       },
     ]);
   }, { requires: ['input'] });

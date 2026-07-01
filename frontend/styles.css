@@ -178,10 +178,17 @@ button.icon:hover { color: var(--ink); }
 .shell { display: grid; grid-template: 0 1fr / 1fr; height: 100vh; transition: grid-template-rows var(--duration-fast) var(--ease-default); }
 .shell[data-top-folded="true"] { grid-template-rows: 0 1fr; }
 .shell[data-top-folded="true"] .top { display: none; }
-/* Zen mode — fold the whole shell to canvas only (distraction-free, clean
- * screenshots). Exit with the same `\` toggle. */
+/* Zen mode — distraction-free canvas. Every floating tool panel fades to
+ * semi-transparent (still there, just quiet) and stays that way until an
+ * explicit exit (`\` or Escape); hover a panel to bring it back to full.
+ * Clean screenshots without losing the controls entirely. */
 .shell[data-zen="true"] { grid-template: 0 1fr / 1fr; }
 .shell[data-zen="true"] .top { display: none; }
+.shell[data-zen="true"] .tool-panel {
+  opacity: 0.12;
+  transition: opacity var(--duration-fast) var(--ease-default);
+}
+.shell[data-zen="true"] .tool-panel:hover { opacity: 1; }
 .hamburger { font-size: 16px; line-height: 1; padding: 2px 8px; margin-right: 4px; }
 
 /* --- Debug toolbar group --- */
@@ -293,6 +300,11 @@ button.icon:hover { color: var(--ink); }
 .toolbar button { white-space: nowrap; font-size: 13px; }
 .toolbar-spacer { flex: 1; }
 .toolbar-start, .toolbar-end { display: flex; align-items: center; gap: 2px; }
+/* Related actions cluster into a group with a light divider between clusters,
+   so "graph editing" and "layout" read as distinct units in the top bar. */
+.tool-group { display: flex; align-items: center; gap: 2px; padding-right: 6px; margin-right: 4px; border-right: 1px solid var(--line); }
+.tool-group:last-child { border-right: 0; padding-right: 0; margin-right: 0; }
+.toolbar-end button[data-command="palette.open"] { font-size: 15px; padding: 3px 8px; }
 
 
 /* Left panel — floating tool-panel positioned over the stage with screen-edge
@@ -400,6 +412,7 @@ button.icon:hover { color: var(--ink); }
 .tool-panel .toolbar::-webkit-scrollbar { display: none; }
 /* Resting position for panels the user has not dragged (drag sets inline left/top). */
 .tool-panel[data-anchor="top-left"] { left: 12px; top: 12px; }
+.tool-panel[data-anchor="top-center"] { left: 50%; top: 12px; transform: translateX(-50%); }
 .tool-panel[data-anchor="top-right"] { right: 12px; top: 12px; }
 .tool-panel[data-anchor="middle-right"] { right: 12px; top: 50%; transform: translateY(-50%); }
 .tool-panel[data-anchor="bottom-left"] { left: 12px; bottom: 12px; }
@@ -1186,6 +1199,8 @@ button.icon:hover { color: var(--ink); }
   color: var(--ink);
 }
 .command-row:hover { background: var(--accent-soft); }
+/* Arrow-key highlight — the row Enter will run. */
+.command-row.is-selected { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
 .command-row span, .help-row span { display: grid; gap: 1px; min-width: 0; }
 .command-row small, .help-row small { color: var(--text-muted); font: 11px ui-monospace, monospace; }
 .command-row kbd {

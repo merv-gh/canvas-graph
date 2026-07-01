@@ -18,7 +18,6 @@ export function registerDemo(system: Registry) {
   system('demo', (ctx) => {
     const { on, emit, graphs, contribute } = ctx;
     contribute({ surface: 'top', command: 'demo.render-self', kind: 'button', text: '★ Self', order: 60 });
-    contribute({ surface: 'top', command: 'demo.render-java', kind: 'button', text: 'Java Map', order: 61 });
     ctx.contexts.commands.register([
       {
         id: 'demo.render-self',

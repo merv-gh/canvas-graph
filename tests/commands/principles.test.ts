@@ -41,6 +41,8 @@ describe('frontend principles (enforced)', () => {
       'systems/render.ts',   // owns the boot element
       'systems/dx.ts',       // template existence probe
       'core/templates.ts',   // template adapter itself
+      'core/mount.ts',       // boot: finds the #app root element
+      'lib.ts',              // embeddable build: injects styles + templates into a host page
     ]);
     const offenders: string[] = [];
     for (const file of allFiles(Frontend)) {
@@ -180,9 +182,9 @@ describe('frontend principles (enforced)', () => {
   });
 
   // PRINCIPLE — hierarchy is visible in navigation, not just storage. A node
-  // moved into a container renders nested under it in the outline (full tree
-  // assertions live in outline-tree.test.ts; this is the principle's anchor).
-  it('nesting is visible in the outline, not only in the store', async () => {
+  // moved into a container nests under it in the shared hierarchy tree — the
+  // one seam every navigation surface (palette search, jump) derives from.
+  it('nesting is visible in the hierarchy tree, not only in the store', async () => {
     const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.container.create');
@@ -193,7 +195,7 @@ describe('frontend principles (enforced)', () => {
     const nid = ctx.graphs.current.nodes()[0].id;
     ctx.bus.emit('container.add-child', { containerId: cid, childRef: { kind: 'node', id: nid } });
     await settle();
-    const nested = document.querySelector(`.outline-children .outline-row[data-item-kind="node"][data-item-id="${nid}"]`);
-    expect(nested).not.toBeNull();
+    const children = ctx.contexts.hierarchy.childrenOf({ kind: 'container', id: cid });
+    expect(children.some(child => child.ref.kind === 'node' && child.ref.id === nid)).toBe(true);
   });
 });

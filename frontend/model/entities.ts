@@ -116,7 +116,10 @@ const edgeRenderer: EntityRenderer<GraphEdge> = {
     const tipAtTarget = intersectRectBoundary(from.center, to.center, to.half);
     const tipAtSource = intersectRectBoundary(to.center, from.center, from.half);
     const g = svg('g', {});
-    const edgeKind = edge.EdgeKind ?? 'sync';
+    // The store defaults EdgeKind to the label text (so typing "sync" as a label
+    // sets the kind). For arbitrary labels (mermaid import, free text) that isn't
+    // a real kind — fall back to 'sync' for styling so the class stays valid.
+    const edgeKind = isEdgeKind(edge.EdgeKind) ? edge.EdgeKind : 'sync';
     g.setAttribute('class', `edge edge-kind-${edgeKind}`);
     const titleText = semanticTitle(edge);
     if (titleText) {
@@ -134,13 +137,18 @@ const edgeRenderer: EntityRenderer<GraphEdge> = {
     g.append(line('edge-line', tipAtSource.x, tipAtSource.y, tipAtTarget.x, tipAtTarget.y, { 'marker-end': 'url(#edge-arrow)' }));
     const label = edge.Label?.text || edgeKind;
     if (label) {
-      const text = svg('text', {
-        class: `edge-label edge-kind-${edgeKind}`,
-        x: (from.center.x + to.center.x) / 2,
-        y: (from.center.y + to.center.y) / 2 - 4,
-        'text-anchor': 'middle',
+      const midX = (from.center.x + to.center.x) / 2;
+      const midY = (from.center.y + to.center.y) / 2;
+      const lines = label.split(/\r?\n/);
+      const lineH = 14;
+      // Center the block on the edge midpoint (top line lifted by half the block).
+      const startY = midY - ((lines.length - 1) * lineH) / 2 - 4;
+      const text = svg('text', { class: `edge-label edge-kind-${edgeKind}`, 'text-anchor': 'middle' });
+      lines.forEach((line, i) => {
+        const tspan = svg('tspan', { x: midX, y: startY + i * lineH });
+        tspan.textContent = line;
+        text.append(tspan);
       });
-      text.textContent = label;
       g.append(text);
     }
     return g;
@@ -298,61 +306,61 @@ export const nodeEntity: EntityDef<GraphNode, NodePatch> = entityDef<GraphNode, 
       value: node => node.NodeType ?? 'text',
       patch: (_node, value) => isNodeType(value) ? { NodeType: value } : undefined,
     }),
-    property<GraphNode, NodePatch>({
-      id: 'expectedRps', label: 'Expected rps', input: 'number', min: 0, step: 10, group: 'Performance',
-      value: node => node.ExpectedRps ?? '',
-      patch: (_node, value) => numberPatch<NodePatch, 'ExpectedRps'>('ExpectedRps', value),
-    }),
-    property<GraphNode, NodePatch>({
-      id: 'latencyMs', label: 'Latency budget ms', input: 'number', min: 0, step: 1, group: 'Performance',
-      value: node => node.LatencyMs ?? '',
-      patch: (_node, value) => numberPatch<NodePatch, 'LatencyMs'>('LatencyMs', value),
-    }),
-    property<GraphNode, NodePatch>({
-      id: 'computeMs', label: 'Compute ms', input: 'number', min: 0, step: 1, group: 'Performance',
-      value: node => node.ComputeMs ?? '',
-      patch: (_node, value) => numberPatch<NodePatch, 'ComputeMs'>('ComputeMs', value),
-    }),
-    property<GraphNode, NodePatch>({
-      id: 'dataScale', label: 'Data scale', input: 'select', options: DATA_SCALES, group: 'Semantics',
-      value: node => node.DataScale ?? 'medium',
-      patch: (_node, value) => isDataScale(value) ? { DataScale: value } : undefined,
-    }),
-    property<GraphNode, NodePatch>({
-      id: 'purpose', label: 'Purpose', input: 'textarea', rows: 3, group: 'Semantics',
-      value: node => node.Purpose ?? '',
-      patch: (_node, value) => ({ Purpose: String(value) }),
-    }),
-    property<GraphNode, NodePatch>({
-      id: 'assumptions', label: 'Assumptions', input: 'textarea', rows: 3, group: 'Semantics',
-      value: node => node.Assumptions ?? '',
-      patch: (_node, value) => ({ Assumptions: String(value) }),
-    }),
-    property<GraphNode, NodePatch>({
-      id: 'limits', label: 'Limits', input: 'textarea', rows: 3, group: 'Semantics',
-      value: node => node.Limits ?? '',
-      patch: (_node, value) => ({ Limits: String(value) }),
-    }),
-    property<GraphNode, NodePatch>({
-      id: 'whatThen', label: 'What then', input: 'textarea', rows: 3, group: 'Semantics',
-      value: node => node.WhatThen ?? '',
-      patch: (_node, value) => ({ WhatThen: String(value) }),
-    }),
-    property<GraphNode, NodePatch>({
-      id: 'observability', label: 'Observability', input: 'textarea', rows: 3, group: 'Observability',
-      value: node => node.Observability ?? '',
-      patch: (_node, value) => ({ Observability: String(value) }),
-    }),
-    property<GraphNode, NodePatch>({
-      id: 'failureMode', label: 'What if fails', input: 'textarea', rows: 3, group: 'Observability',
-      value: node => node.FailureMode ?? '',
-      patch: (_node, value) => ({ FailureMode: String(value) }),
-    }),
-    property<GraphNode, NodePatch>({
-      id: 'freshnessMs', label: 'Freshness budget ms', input: 'number', min: 0, step: 100, group: 'Observability',
-      value: node => node.FreshnessMs ?? '',
-      patch: (_node, value) => numberPatch<NodePatch, 'FreshnessMs'>('FreshnessMs', value),
-    }),
+    // property<GraphNode, NodePatch>({
+    //   id: 'expectedRps', label: 'Expected rps', input: 'number', min: 0, step: 10, group: 'Performance',
+    //   value: node => node.ExpectedRps ?? '',
+    //   patch: (_node, value) => numberPatch<NodePatch, 'ExpectedRps'>('ExpectedRps', value),
+    // }),
+    // property<GraphNode, NodePatch>({
+    //   id: 'latencyMs', label: 'Latency budget ms', input: 'number', min: 0, step: 1, group: 'Performance',
+    //   value: node => node.LatencyMs ?? '',
+    //   patch: (_node, value) => numberPatch<NodePatch, 'LatencyMs'>('LatencyMs', value),
+    // }),
+    // property<GraphNode, NodePatch>({
+    //   id: 'computeMs', label: 'Compute ms', input: 'number', min: 0, step: 1, group: 'Performance',
+    //   value: node => node.ComputeMs ?? '',
+    //   patch: (_node, value) => numberPatch<NodePatch, 'ComputeMs'>('ComputeMs', value),
+    // }),
+    // property<GraphNode, NodePatch>({
+    //   id: 'dataScale', label: 'Data scale', input: 'select', options: DATA_SCALES, group: 'Semantics',
+    //   value: node => node.DataScale ?? 'medium',
+    //   patch: (_node, value) => isDataScale(value) ? { DataScale: value } : undefined,
+    // }),
+    // property<GraphNode, NodePatch>({
+    //   id: 'purpose', label: 'Purpose', input: 'textarea', rows: 3, group: 'Semantics',
+    //   value: node => node.Purpose ?? '',
+    //   patch: (_node, value) => ({ Purpose: String(value) }),
+    // }),
+    // property<GraphNode, NodePatch>({
+    //   id: 'assumptions', label: 'Assumptions', input: 'textarea', rows: 3, group: 'Semantics',
+    //   value: node => node.Assumptions ?? '',
+    //   patch: (_node, value) => ({ Assumptions: String(value) }),
+    // }),
+    // property<GraphNode, NodePatch>({
+    //   id: 'limits', label: 'Limits', input: 'textarea', rows: 3, group: 'Semantics',
+    //   value: node => node.Limits ?? '',
+    //   patch: (_node, value) => ({ Limits: String(value) }),
+    // }),
+    // property<GraphNode, NodePatch>({
+    //   id: 'whatThen', label: 'What then', input: 'textarea', rows: 3, group: 'Semantics',
+    //   value: node => node.WhatThen ?? '',
+    //   patch: (_node, value) => ({ WhatThen: String(value) }),
+    // }),
+    // property<GraphNode, NodePatch>({
+    //   id: 'observability', label: 'Observability', input: 'textarea', rows: 3, group: 'Observability',
+    //   value: node => node.Observability ?? '',
+    //   patch: (_node, value) => ({ Observability: String(value) }),
+    // }),
+    // property<GraphNode, NodePatch>({
+    //   id: 'failureMode', label: 'What if fails', input: 'textarea', rows: 3, group: 'Observability',
+    //   value: node => node.FailureMode ?? '',
+    //   patch: (_node, value) => ({ FailureMode: String(value) }),
+    // }),
+    // property<GraphNode, NodePatch>({
+    //   id: 'freshnessMs', label: 'Freshness budget ms', input: 'number', min: 0, step: 100, group: 'Observability',
+    //   value: node => node.FreshnessMs ?? '',
+    //   patch: (_node, value) => numberPatch<NodePatch, 'FreshnessMs'>('FreshnessMs', value),
+    // }),
     property<GraphNode, NodePatch>({
       id: 'description', label: 'Markdown description', input: 'textarea', rows: 6, group: 'Content',
       value: node => node.Description ?? '',

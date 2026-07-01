@@ -12,14 +12,13 @@ declare module '../types' {
 }
 
 const TOP_PANEL_ID = 'top';
-const TOP_PANEL_FOLD_ID = 'shell.top';
-const LEFT_PANEL_FOLD_ID = 'outline.panel';
 const ZEN_FOLD_ID = 'shell.zen';
 
 export function registerToolPanel(system: Registry) {
   system('tool.panel', ({ on, emit, contexts, declarePanel }) => {
-    // Drag overrides only; un-dragged panels position via their `data-anchor` CSS.
-    const positions = new Map<string, Position>([[TOP_PANEL_ID, { x: 12, y: 12 }]]);
+    // Drag overrides only; un-dragged panels (incl. the fixed top toolbar)
+    // position via their `data-anchor` CSS.
+    const positions = new Map<string, Position>();
     // Render keys we have mounted, so a panel that goes away (origin teardown or
     // a false `mountWhen`) gets its stage view cleared instead of going stale.
     const mounted = new Set<string>();
@@ -49,16 +48,16 @@ export function registerToolPanel(system: Registry) {
       return { x, y };
     };
     const panelPosition = (panel: PanelDef) => positions.get(panel.id) ?? anchorPosition(panel);
-    const isCollapsed = (panel: PanelDef) => {
-      const folded = panel.foldId ? contexts.fold.folded(panel.foldId) : false;
-      return panel.id === TOP_PANEL_ID ? folded || contexts.fold.folded(ZEN_FOLD_ID) : folded;
-    };
+    // Zen no longer collapses panels — it fades every panel to semi-transparent
+    // via `.shell[data-zen] .tool-panel` CSS, so they stay in place, just quiet.
+    const isCollapsed = (panel: PanelDef) => panel.foldId ? contexts.fold.folded(panel.foldId) : false;
     const buttonsFor = (panelId: string) =>
       contexts.affordances.system('top').filter(aff => (aff.panel ?? TOP_PANEL_ID) === panelId);
 
-    // The top toolbar is the default panel; declaring it routes it through the
-    // same render / drag / collapse path as every other panel.
-    declarePanel({ id: TOP_PANEL_ID, anchor: 'top-left', movable: true, foldId: TOP_PANEL_FOLD_ID, layout: 'toolbar', order: 0 });
+    // The top toolbar is the default panel. It is fixed (not movable, not
+    // collapsible) and centered at the top of the stage — the one piece of
+    // chrome that stays put. Zen still hides it (isCollapsed folds top on zen).
+    declarePanel({ id: TOP_PANEL_ID, anchor: 'top-center', movable: false, layout: 'toolbar', order: 0 });
 
     contexts.commands.register([
       {
@@ -120,18 +119,6 @@ export function registerToolPanel(system: Registry) {
       return btn;
     };
 
-    const leftPanelToggle = () => {
-      const folded = !contexts.fold.isOpen(LEFT_PANEL_FOLD_ID, true);
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'icon-button hamburger';
-      btn.dataset.foldId = LEFT_PANEL_FOLD_ID;
-      btn.setAttribute('aria-expanded', folded ? 'false' : 'true');
-      btn.setAttribute('aria-label', folded ? 'Show panel' : 'Hide panel');
-      btn.textContent = '☰';
-      return btn;
-    };
-
     const addButton = (parent: HTMLElement, aff: { command: string; text?: string; label?: string; className?: string }) => {
       const cmd = contexts.commands.get(aff.command);
       if (cmd?.available && !cmd.available()) return;
@@ -140,14 +127,34 @@ export function registerToolPanel(system: Registry) {
       parent.append(button);
     };
 
-    // The top panel keeps its toolbar template (start/end slots + hamburger);
-    // it is the one panel with surface chrome beyond a button list.
+    // Buttons that share an affordance `group` cluster into a `.tool-group`
+    // wrapper (its slot fixed by first appearance), so related actions read as
+    // one unit — "graph editing" vs "layout" — instead of a flat button run.
+    const groupTarget = (start: HTMLElement, groups: Map<string, HTMLElement>, group?: string) => {
+      if (!group) return start;
+      let el = groups.get(group);
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'tool-group';
+        el.dataset.group = group;
+        start.append(el);
+        groups.set(group, el);
+      }
+      return el;
+    };
+
+    // The top panel keeps the toolbar template (start/end slots); start-slot
+    // buttons are clustered into `.tool-group`s, end-slot buttons (search) stay
+    // pinned right.
     const fillToolbar = (panel: PanelDef, section: HTMLElement) => {
       const toolbar = contexts.templates.clone('toolbar');
       const start = contexts.templates.slot(toolbar, 'start');
       const end = contexts.templates.slot(toolbar, 'end');
-      start.append(leftPanelToggle());
-      buttonsFor(panel.id).forEach(aff => addButton(aff.slot === Slots.End ? end : start, aff));
+      const groups = new Map<string, HTMLElement>();
+      buttonsFor(panel.id).forEach(aff => {
+        if (aff.slot === Slots.End) addButton(end, aff);
+        else addButton(groupTarget(start, groups, aff.group), aff);
+      });
       section.append(toolbar);
     };
 
@@ -227,7 +234,7 @@ export function registerToolPanel(system: Registry) {
     on('app.start', drawPanels);
     on('affordance.contributed', ({ surface }) => { if (surface === 'top') drawPanels(); });
     on('fold.changed', ({ id }) => {
-      if (id === ZEN_FOLD_ID || id === LEFT_PANEL_FOLD_ID || panels().some(p => p.foldId === id)) drawPanels();
+      if (id === ZEN_FOLD_ID || panels().some(p => p.foldId === id)) drawPanels();
     });
     on('debug.enabled.changed', drawPanels);
     on('debug.recording.changed', drawPanels);

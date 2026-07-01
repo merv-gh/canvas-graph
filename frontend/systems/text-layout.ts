@@ -36,9 +36,18 @@ const linesOf = (text: string) => text.split(/\r?\n/).flatMap(line => {
 export const estimateTextSize = (input: TextLayoutInput): Size => {
   const titleLines = linesOf(input.title);
   const bodyLines = linesOf(input.description ?? '');
+  const CHAR_W = 7.2, PAD_X = 32;
   const longest = [...titleLines, ...bodyLines].reduce((max, line) => Math.max(max, line.length), 1);
-  const width = clamp(longest * 7.2 + 36, input.minWidth ?? 112, input.maxWidth ?? 360);
-  const height = clamp(titleLines.length * 20 + bodyLines.length * 15 + 28, input.minHeight ?? 56, input.maxHeight ?? 260);
+  const maxWidth = input.maxWidth ?? 320;
+  // Width tracks the longest line, capped — then height accounts for lines that
+  // wrap at that width AND every explicit newline, so the box fits its text.
+  const width = clamp(longest * CHAR_W + PAD_X, input.minWidth ?? 120, maxWidth);
+  const capacity = Math.max(6, Math.floor((width - PAD_X) / CHAR_W));
+  const wrappedRows = (lines: string[]) =>
+    lines.reduce((rows, line) => rows + Math.max(1, Math.ceil(line.length / capacity)), 0);
+  const titleRows = Math.max(1, wrappedRows(titleLines));
+  const bodyRows = wrappedRows(bodyLines);
+  const height = clamp(titleRows * 22 + bodyRows * 16 + 24, input.minHeight ?? 56, input.maxHeight ?? 280);
   return { w: Math.round(width), h: Math.round(height) };
 };
 

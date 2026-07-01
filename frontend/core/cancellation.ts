@@ -11,6 +11,9 @@ export type Cancellable = {
   priority?: number;
   active: () => boolean;
   cancel: () => void;
+  /** When false, a stage background-click does NOT cancel this (only Escape
+   *  does). Zen mode uses this so it persists until an explicit exit. */
+  background?: boolean;
 };
 
 /** First-class cancellation. Any system that has an "active mode" (modal open,
@@ -23,11 +26,13 @@ export type Cancellable = {
  *  the next. Predictable and easy to test. */
 export function cancellationContext(bus: Bus) {
   const handlers: Cancellable[] = [];
-  bus.on('app.cancel', () => {
+  bus.on('app.cancel', (payload) => {
+    const fromBackground = payload?.source === 'background';
     let chosen: Cancellable | null = null;
     for (let i = handlers.length - 1; i >= 0; i--) {
       const handler = handlers[i];
       if (!handler.active()) continue;
+      if (fromBackground && handler.background === false) continue;
       if (!chosen || (handler.priority ?? 0) > (chosen.priority ?? 0)) chosen = handler;
     }
     chosen?.cancel();

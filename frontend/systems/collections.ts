@@ -15,6 +15,9 @@ export function registerCollections(system: Registry) {
         kind: 'button',
         text: coll.toolbar?.text ?? `+ ${coll.entity?.label ?? coll.kind}`,
         order: coll.toolbar?.order,
+        // Node/edge creation belongs to the "graph editing" cluster; the graph
+        // (document) switcher stays loose.
+        group: coll.kind === 'graph' ? undefined : 'edit',
       };
       ctx.contribute(button);
     });

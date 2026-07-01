@@ -691,7 +691,7 @@ export function registerContainers(system: Registry) {
       if (p.Sections || p.SectionAxis || p.ChildSections) emit('container.children.changed', { id: c.id });
     });
 
-    contribute({ surface: 'top', command: 'editing.container.create', kind: 'button', text: '+ Container', order: 17 });
+    contribute({ surface: 'top', command: 'editing.container.create', kind: 'button', text: '+ Container', order: 17, group: 'edit' });
 
     return () => {
       offEntity();

@@ -96,6 +96,12 @@ export function partitionByScope(ctx: AppCtx): LayoutScope[] {
 type PatchEmit = (id: string, position: Position) => void;
 const nodeKey = (id: string) => `node:${id}`;
 
+// Spacing is derived from actual node sizes so boxes never touch and labels
+// (which live at edge midpoints) get room. Positions are node CENTERS.
+const GAP_X = 56;
+const GAP_Y = 72;
+const sizeOf = (node: GraphNode) => node.Size ?? { w: 160, h: 72 };
+
 function sectionRects(scope: LayoutScope) {
   if (!scope.bounds || !scope.sections?.length) return [];
   const inset = 32;
@@ -162,27 +168,39 @@ function tidyScope(scope: LayoutScope, set: PatchEmit) {
       if (!level.has(e.To)) { level.set(e.To, lv + 1); queue.push(e.To); }
     });
   }
-  const byLevel = new Map<number, string[]>();
+  const byLevel = new Map<number, GraphNode[]>();
   scope.nodes.forEach(n => {
     const lv = level.get(n.id) ?? 0;
-    (byLevel.get(lv) ?? byLevel.set(lv, []).get(lv)!).push(n.id);
+    (byLevel.get(lv) ?? byLevel.set(lv, []).get(lv)!).push(n);
   });
-  const rowH = 130;
-  byLevel.forEach((ids, lv) => {
-    const spread = (ids.length - 1) * 180;
-    ids.forEach((id, i) => set(id, {
-      x: scope.origin.x + -spread / 2 + i * 180,
-      y: scope.origin.y + lv * rowH,
-    }));
-  });
+  // Walk levels top→down; within each level pack nodes left→right by their real
+  // widths (+ gap) and center the row on origin.x. Row height = tallest node,
+  // so the next level clears it with GAP_Y to spare.
+  const levels = [...byLevel.entries()].sort((a, b) => a[0] - b[0]);
+  let y = scope.origin.y;
+  for (const [, nodes] of levels) {
+    const rowH = Math.max(...nodes.map(n => sizeOf(n).h));
+    const totalW = nodes.reduce((sum, n) => sum + sizeOf(n).w, 0) + GAP_X * Math.max(0, nodes.length - 1);
+    let x = scope.origin.x - totalW / 2;
+    nodes.forEach(n => {
+      const w = sizeOf(n).w;
+      set(n.id, { x: x + w / 2, y: y + rowH / 2 });
+      x += w + GAP_X;
+    });
+    y += rowH + GAP_Y;
+  }
 }
 
-/** Square-ish grid per scope, centered at scope.origin. */
+/** Square-ish grid per scope, centered at scope.origin. Cell size = the largest
+ *  node in the scope + gaps, so no two boxes touch regardless of text length. */
 function gridScope(scope: LayoutScope, set: PatchEmit) {
   const cols = Math.max(1, Math.ceil(Math.sqrt(scope.nodes.length)));
-  const colSize = 200, rowSize = 100;
+  const rows = Math.ceil(scope.nodes.length / cols);
+  const maxW = Math.max(...scope.nodes.map(n => sizeOf(n).w), 0);
+  const maxH = Math.max(...scope.nodes.map(n => sizeOf(n).h), 0);
+  const colSize = maxW + GAP_X, rowSize = maxH + GAP_Y;
   const startX = scope.origin.x - ((cols - 1) * colSize) / 2;
-  const startY = scope.origin.y - ((Math.ceil(scope.nodes.length / cols) - 1) * rowSize) / 2;
+  const startY = scope.origin.y - ((rows - 1) * rowSize) / 2;
   scope.nodes.forEach((n, i) => {
     const col = i % cols, row = Math.floor(i / cols);
     set(n.id, { x: startX + col * colSize, y: startY + row * rowSize });
@@ -197,7 +215,11 @@ function radialScope(scope: LayoutScope, focusedId: string | undefined, set: Pat
   const inScope = (id: string | undefined) => !!id && scope.nodes.some(n => n.id === id);
   const root = (focusedId && inScope(focusedId) ? scope.nodes.find(n => n.id === focusedId) : scope.nodes[0])!;
   const others = scope.nodes.filter(n => n.id !== root.id);
-  const radius = Math.max(160, 60 + others.length * 22);
+  // Radius large enough that neighbours on the ring don't overlap: the ring's
+  // circumference must hold every node's width plus a gap.
+  const circumference = others.reduce((sum, n) => sum + sizeOf(n).w + GAP_X, 0);
+  const rootReach = Math.max(sizeOf(root).w, sizeOf(root).h) / 2;
+  const radius = Math.max(160, 60 + others.length * 22, circumference / (2 * Math.PI) + rootReach);
   const center = root.Position ?? scope.origin;
   others.forEach((n, i) => {
     const angle = (i / Math.max(1, others.length)) * Math.PI * 2 - Math.PI / 2;
@@ -207,9 +229,13 @@ function radialScope(scope: LayoutScope, focusedId: string | undefined, set: Pat
 
 export function registerLayout(system: Registry) {
   system('layout', (ctx) => {
-    const { on, emit, contexts, selection, contribute } = ctx;
-    contribute({ surface: 'top', command: 'layout.apply.tidy', kind: 'button', text: 'Tidy', order: 65 });
-    contribute({ surface: 'top', command: 'layout.apply.radial', kind: 'button', text: 'Radial', order: 66 });
+    const { on, emit, contexts, selection, contribute, declarePanel } = ctx;
+    // Layout gets its own dedicated panel (bottom-left), fully separate from the
+    // top-center graph-editing bar — distinct button groups, distinct places.
+    declarePanel({ id: 'layout', anchor: 'bottom-left', movable: false, layout: 'toolbar', order: 10 });
+    contribute({ surface: 'top', panel: 'layout', command: 'layout.apply.tidy', kind: 'button', text: 'Tidy', order: 65 });
+    contribute({ surface: 'top', panel: 'layout', command: 'layout.apply.grid', kind: 'button', text: 'Grid', order: 66 });
+    contribute({ surface: 'top', panel: 'layout', command: 'layout.apply.radial', kind: 'button', text: 'Radial', order: 67 });
     contexts.commands.register([
       { id: 'layout.apply.radial', label: 'Radial layout', group: 'layout', input: { on: 'keydown', key: 'r', prevent: true } },
       { id: 'layout.apply.grid',   label: 'Grid layout',   group: 'layout', input: { on: 'keydown', key: 'G', shift: true, prevent: true } },

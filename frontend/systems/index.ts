@@ -22,11 +22,12 @@ import { registerLog } from './log';
 import { registerMain } from './main';
 import { registerModal } from './modal';
 import { registerItemToolbar } from './item-toolbar';
+import { registerNodeAutosize } from './node-autosize';
 import { registerNodeVisuals } from './node-visuals';
-import { registerOutline } from './outline';
 import { registerRender } from './render';
 import { registerRenderStage } from './render-stage';
 import { registerScenario } from './scenario';
+import { registerShare } from './share';
 import { registerTextLayout } from './text-layout';
 import { registerToolPanel } from './tool-panel';
 import { registerVarflow } from './varflow';
@@ -44,7 +45,6 @@ export function registerSystems(system: Registry) {
   registerMain(system);
   registerToolPanel(system);
   registerLog(system);
-  registerOutline(system);
   registerModal(system);
   registerCommandForm(system);
   registerCommandPicker(system);
@@ -62,12 +62,14 @@ export function registerSystems(system: Registry) {
   registerContextActions(system);
   registerItemToolbar(system);
   registerNodeVisuals(system);
+  registerNodeAutosize(system);
   registerContainers(system);
   registerChoose(system);
   registerDetail(system);
   registerDemo(system);
   registerDebug(system);
   registerScenario(system);
+  registerShare(system);
   registerVarflow(system);
   registerDx(system);
 }

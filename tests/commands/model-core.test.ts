@@ -217,36 +217,38 @@ describe('frontend model and core helpers', () => {
   it('tracks command overrides, conflicts, availability, and disabled commands', () => {
     const ctx = bootApp();
     const commands = ctx.contexts.commands;
-    const help = commands.get('help.open') as CommandSpec;
-    expect(commandShortcut(commands, 'help.open')).toBe('?');
+    // `palette.open.alt` (the `?` opener) is a stable guinea pig for registry
+    // mechanics: it carries a shortcut and conflicts with a real command's key.
+    const help = commands.get('palette.open.alt') as CommandSpec;
+    expect(commandShortcut(commands, 'palette.open.alt')).toBe('?');
     expect(commandShortcut(commands, 'selection.item.delete')).toBe('X');
     expect(commandShortcut(commands, 'graph.node.delete')).toBe('');
-    expect(commands.shortcutConflict('help.open', 'P')?.id).toBe('palette.open');
-    expect(commands.setShortcut('help.open', 'P')).toBe(false);
-    expect(commands.setShortcut('help.open', 'H')).toBe(true);
+    expect(commands.shortcutConflict('palette.open.alt', 'A')?.id).toBe('editing.node.create');
+    expect(commands.setShortcut('palette.open.alt', 'A')).toBe(false);
+    expect(commands.setShortcut('palette.open.alt', 'H')).toBe(true);
     expect(help.shortcut).toBe('H');
 
-    expect(commands.setEnabled('help.open', false)).toBe(true);
-    expect(commands.run('help.open')).toBe(false);
-    expect(commands.setEnabled('help.open', true)).toBe(true);
-    expect(runCommand(ctx, 'help.open')).toBe(true);
+    expect(commands.setEnabled('palette.open.alt', false)).toBe(true);
+    expect(commands.run('palette.open.alt')).toBe(false);
+    expect(commands.setEnabled('palette.open.alt', true)).toBe(true);
+    expect(runCommand(ctx, 'palette.open.alt')).toBe(true);
 
-    expect(commands.unregister('help.open')).toBeUndefined();
-    expect(commands.get('help.open')).toBeUndefined();
+    expect(commands.unregister('palette.open.alt')).toBeUndefined();
+    expect(commands.get('palette.open.alt')).toBeUndefined();
   });
 
   it('treats a blank shortcut override as unbound, not wildcard', async () => {
     const ctx = bootApp();
     const commands = ctx.contexts.commands;
 
-    expect(commands.setShortcut('help.open', '')).toBe(true);
-    expect(commandShortcut(commands, 'help.open')).toBe('');
+    expect(commands.setShortcut('palette.open.alt', '')).toBe(true);
+    expect(commandShortcut(commands, 'palette.open.alt')).toBe('');
 
     document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '?', bubbles: true, cancelable: true }));
     await settle();
 
     expect(document.querySelector('.modal-layer')).toBeNull();
-    expect(runCommand(ctx, 'help.open')).toBe(true);
+    expect(runCommand(ctx, 'palette.open.alt')).toBe(true);
     expect(document.querySelector('.modal-layer')).not.toBeNull();
   });
 });

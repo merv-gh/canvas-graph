@@ -116,7 +116,7 @@ export function registerChoose(system: Registry) {
       emit('editing.container.create', {});
     });
 
-    contribute({ surface: 'top', command: 'choose.all', kind: 'button', text: 'All', order: 40 });
-    contribute({ surface: 'top', command: 'selection.group', kind: 'button', text: 'Group', order: 41 });
+    contribute({ surface: 'top', command: 'choose.all', kind: 'button', text: 'All', order: 40, group: 'edit' });
+    contribute({ surface: 'top', command: 'selection.group', kind: 'button', text: 'Group', order: 41, group: 'edit' });
   }, { requires: ['ability.selectable', 'graph'] });
 }

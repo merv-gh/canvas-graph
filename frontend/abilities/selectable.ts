@@ -61,7 +61,10 @@ export function registerSelectable(system: Registry) {
         input: {
           on: 'pointerdown',
           selector: '[data-item-kind][data-item-id]',
-          when: event => !(event.target as Element).closest('[data-command], [data-drag-handle], [data-resize-handle], [data-container-section-title], [data-container-section-resize]'),
+          // `.modal-layer`, inputs, and labels are excluded so a click on a
+          // property field (the `.properties` form carries data-item-kind/id)
+          // focuses the input instead of being eaten by select's preventDefault.
+          when: event => !(event.target as Element).closest('[data-command], [data-drag-handle], [data-resize-handle], [data-container-section-title], [data-container-section-resize], .modal-layer, input, textarea, select, label'),
           prevent: true,
           stop: true,
         },
@@ -79,7 +82,10 @@ export function registerSelectable(system: Registry) {
           on: 'pointerdown',
           selector: '[data-item-kind][data-item-id]',
           shift: true,
-          when: event => !(event.target as Element).closest('[data-command], [data-drag-handle], [data-resize-handle], [data-container-section-title], [data-container-section-resize]'),
+          // `.modal-layer`, inputs, and labels are excluded so a click on a
+          // property field (the `.properties` form carries data-item-kind/id)
+          // focuses the input instead of being eaten by select's preventDefault.
+          when: event => !(event.target as Element).closest('[data-command], [data-drag-handle], [data-resize-handle], [data-container-section-title], [data-container-section-resize], .modal-layer, input, textarea, select, label'),
           prevent: true,
           stop: true,
         },

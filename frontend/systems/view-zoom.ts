@@ -66,9 +66,13 @@ export function registerViewZoom(system: Registry) {
         input: { on: 'wheel', selector: stageSelector, prevent: true },
         payload: ({ event }) => {
           const wheel = event as WheelEvent;
+          // ctrlKey wheel = trackpad pinch (diverging/converging fingers) — the
+          // browser routes pinch through wheel with a small deltaY, so give it a
+          // stronger coefficient. Plain wheel/scroll zoom is also more sensitive now.
+          const coefficient = wheel.ctrlKey ? 0.01 : 0.0025;
           return {
             screen: contexts.view.clientToScreen(Places.Stage, { x: wheel.clientX, y: wheel.clientY }),
-            factor: Math.exp(-wheel.deltaY * 0.001),
+            factor: Math.exp(-wheel.deltaY * coefficient),
           };
         },
       },

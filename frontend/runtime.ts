@@ -11,6 +11,11 @@ declare module './types' {
     registry?: Registry;
     runtime?: RuntimeFeatureManager;
   }
+  interface CustomEvents {
+    /** Hot-toggle a system/ability/feature flag. Handled here (the feature
+     *  manager owns lifecycle); emitted programmatically (scenario/tests). */
+    'flag.toggle': { name: string; on: boolean };
+  }
 }
 
 /** Hot-toggle the flag-driven lifecycle of any registered entry. One flat

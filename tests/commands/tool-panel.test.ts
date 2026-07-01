@@ -1,51 +1,40 @@
 import { describe, expect, it } from 'vitest';
 import { bootApp, runCommand, settle } from './testkit';
 
-describe('floating tool panels', () => {
-  it('renders the top toolbar as a movable collapsible stage panel', async () => {
+describe('top tool panel', () => {
+  it('renders the top toolbar as a fixed, centered, non-draggable panel', async () => {
     const ctx = bootApp();
     await settle();
 
-    const panel = () => document.querySelector('.tool-panel[data-panel-id="top"]') as HTMLElement | null;
-    const drag = () => document.querySelector('[data-tool-panel-drag="top"]') as HTMLElement | null;
-    const collapse = () => document.querySelector('.tool-panel [data-fold-id="shell.top"]') as HTMLElement | null;
-    const stage = ctx.contexts.places.el('stage')!;
-
-    expect(panel()).not.toBeNull();
-    expect(drag()).not.toBeNull();
-    expect(collapse()).not.toBeNull();
+    const panel = document.querySelector('.tool-panel[data-panel-id="top"]') as HTMLElement | null;
+    expect(panel).not.toBeNull();
+    // Centered at the top — no drag handle, no collapse chevron.
+    expect(panel!.dataset.anchor).toBe('top-center');
+    expect(document.querySelector('[data-tool-panel-drag="top"]')).toBeNull();
+    expect(document.querySelector('.tool-panel[data-panel-id="top"] .tool-panel-collapse')).toBeNull();
     expect(ctx.debug!.snapshot().ui.toolPanels.top.collapsed).toBe(false);
-
-    drag()!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, clientX: 12, clientY: 12 }));
-    stage.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientX: 82, clientY: 52 }));
-    stage.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
-    await settle();
-
-    expect(ctx.debug!.snapshot().ui.toolPanels.top.x).toBe(82);
-    expect(ctx.debug!.snapshot().ui.toolPanels.top.y).toBe(52);
-
-    collapse()!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await settle();
-
-    expect(ctx.debug!.snapshot().ui.toolPanels.top.collapsed).toBe(true);
-    expect(drag()).not.toBeNull();
-    expect(collapse()).not.toBeNull();
   });
 
-  it('collapses the top tool panel while zen is active', async () => {
+  it('fades panels in zen (not collapse), persists through a canvas click, exits on escape', async () => {
     const ctx = bootApp();
     await settle();
 
     expect(runCommand(ctx, 'view.zen')).toBe(true);
     await settle();
 
+    // Zen fades panels via CSS; the top panel stays mounted, not collapsed.
     expect(ctx.debug!.snapshot().ui.shell.zen).toBe(true);
-    expect(ctx.debug!.snapshot().ui.toolPanels.top.collapsed).toBe(true);
+    expect(ctx.debug!.snapshot().ui.toolPanels.top.collapsed).toBe(false);
+    expect(ctx.debug!.snapshot().ui.toolPanels.top.mounted).toBe(true);
 
+    // A canvas background click must NOT exit zen.
+    expect(runCommand(ctx, 'app.cancel.background')).toBe(true);
+    await settle();
+    expect(ctx.debug!.snapshot().ui.shell.zen).toBe(true);
+
+    // Escape exits.
     expect(runCommand(ctx, 'app.cancel.escape')).toBe(true);
     await settle();
-
     expect(ctx.debug!.snapshot().ui.shell.zen).toBe(false);
-    expect(ctx.debug!.snapshot().ui.toolPanels.top.collapsed).toBe(false);
   });
 });

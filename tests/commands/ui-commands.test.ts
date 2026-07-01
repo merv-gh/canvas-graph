@@ -8,20 +8,21 @@ const createNodes = async (ctx: ReturnType<typeof bootApp>, count: number) => {
 };
 
 describe('frontend UI command surfaces', () => {
-  it('renders toolbar, outline title-search, and search filters rows', async () => {
+  it('renders the top toolbar with graph-editing and layout button groups', async () => {
     const ctx = bootApp();
     await createNodes(ctx, 2);
 
-    expect(document.querySelector('.top-tool-panel [data-command="editing.node.create"]')?.textContent).toBe('+ Node');
-    expect(document.querySelector('.top-tool-panel [data-command="editing.edge.create"]')?.textContent).toBe('+ Edge');
-    expect(document.querySelectorAll('.outline-search')).toHaveLength(0);
-
-    const search = document.querySelector<HTMLInputElement>('.outline-title-search[placeholder="Nodes"]')!;
-    search.value = 'node 2';
-    expect(runCommand(ctx, 'outline.search.change', { target: search })).toBe(true);
-    expect([...document.querySelectorAll('.outline-section:has(.outline-title-search[placeholder="Nodes"]) .outline-main')]
-      .map(row => row.textContent)).toEqual(['Node 2']);
-    // Event log rendering disconnected; system kept for future audit-panel toggle.
+    // Graph-editing actions cluster in the top bar's `edit` group.
+    expect(document.querySelector('.tool-panel[data-panel-id="top"] .tool-group[data-group="edit"] [data-command="editing.node.create"]')?.textContent).toBe('+ Node');
+    expect(document.querySelector('.tool-panel[data-panel-id="top"] .tool-group[data-group="edit"] [data-command="editing.edge.create"]')?.textContent).toBe('+ Edge');
+    // Layout lives in its own separate panel, not the top bar.
+    expect(document.querySelector('.tool-panel[data-panel-id="layout"] [data-command="layout.apply.tidy"]')?.textContent).toBe('Tidy');
+    expect(document.querySelector('.tool-panel[data-panel-id="top"] [data-command="layout.apply.tidy"]')).toBeNull();
+    // Search icon lives in the trailing (right) toolbar slot.
+    expect(document.querySelector('.top-tool-panel .toolbar-end [data-command="palette.open"]')).not.toBeNull();
+    // The outline panel and its hamburger toggle are gone.
+    expect(document.querySelector('.outline-panel')).toBeNull();
+    expect(document.querySelector('.top-tool-panel .hamburger')).toBeNull();
     expect(ctx.bus['_emitted'].has('render.view.set')).toBe(true);
   });
 
@@ -50,7 +51,7 @@ describe('frontend UI command surfaces', () => {
     expect(document.querySelector('input[data-keyboard-mode="commandPicker"]')).not.toBeNull();
   });
 
-  it('runs numbered palette rows and closes after simple actions', async () => {
+  it('navigates rows with arrow keys and runs the highlighted one on Enter', async () => {
     const ctx = bootApp();
 
     expect(runCommand(ctx, 'palette.open')).toBe(true);
@@ -58,29 +59,34 @@ describe('frontend UI command surfaces', () => {
     search.value = 'create node';
     expect(runCommand(ctx, 'commandModal.search.change', { target: search })).toBe(true);
 
-    search.dispatchEvent(new KeyboardEvent('keydown', { key: '1', bubbles: true, cancelable: true }));
+    // First row is highlighted by default; Enter runs it.
+    expect(document.querySelector('.command-row.is-selected')).not.toBeNull();
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     await settle();
 
     expect(ctx.graphs.current.nodes()).toHaveLength(1);
     expect(document.querySelector('.modal-layer')).toBeNull();
   });
 
-  it('opens help and blocks duplicate shortcut edits', () => {
+  it('gives each search result an Alt+<unique-key> accelerator', async () => {
     const ctx = bootApp();
+    expect(runCommand(ctx, 'palette.open')).toBe(true);
+    const search = document.querySelector<HTMLInputElement>('.palette-search')!;
+    search.value = 'create';
+    expect(runCommand(ctx, 'commandModal.search.change', { target: search })).toBe(true);
 
-    expect(runCommand(ctx, 'help.open')).toBe(true);
-    const help = document.querySelector<HTMLInputElement>('.shortcut-edit[data-shortcut-command="help.open"]')!;
-    help.value = 'P';
-    expect(runCommand(ctx, 'shortcut.edit.preview', { target: help })).toBe(true);
-    expect(help.classList.contains('is-conflict')).toBe(true);
-    expect(runCommand(ctx, 'shortcut.edit.commit', { target: help })).toBe(true);
-    expect(ctx.contexts.commands.get('help.open')?.shortcut).toBe('?');
+    const chips = [...document.querySelectorAll('.command-row kbd')].map(k => k.textContent);
+    // The first result after "create" is "... node/edge" → an Alt accelerator shows.
+    expect(chips.some(text => /⌥/.test(text ?? ''))).toBe(true);
+  });
 
-    help.value = 'H';
-    expect(runCommand(ctx, 'shortcut.edit.preview', { target: help })).toBe(true);
-    expect(help.classList.contains('is-conflict')).toBe(false);
-    expect(runCommand(ctx, 'shortcut.edit.commit', { target: help })).toBe(true);
-    expect(ctx.contexts.commands.get('help.open')?.shortcut).toBe('H');
+  it('opens the palette via the ? shortcut alias', async () => {
+    const ctx = bootApp();
+    await settle();
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '?', bubbles: true, cancelable: true }));
+    await settle();
+    expect(document.querySelector('.modal-head')?.textContent).toContain('Palette');
+    expect(document.querySelector('[data-command-modal="palette"]')).not.toBeNull();
   });
 
   it('updates view through zoom, pan, fit, and layout commands', async () => {

@@ -155,9 +155,9 @@ describe('frontend choose — multi-item set + bulk actions', () => {
     expect(containers(ctx)).toHaveLength(1);
     const cid = containers(ctx)[0].id;
     expect(containers(ctx)[0].Children).toHaveLength(ids.length);
-    // Visible nesting in the outline + the new container is the selection.
-    ids.forEach(id =>
-      expect(document.querySelector(`.outline-children .outline-row[data-item-kind="node"][data-item-id="${id}"]`)).not.toBeNull());
+    // The chosen nodes nest under the new container, which becomes the selection.
+    const childIds = containers(ctx)[0].Children.map((c: { id: string }) => c.id);
+    ids.forEach(id => expect(childIds).toContain(id));
     expect(ctx.selection.selected()).toEqual({ kind: 'container', id: cid });
   });
 

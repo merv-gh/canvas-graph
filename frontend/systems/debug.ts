@@ -90,18 +90,10 @@ export function registerDebug(system: Registry) {
       emit('debug.recording.changed', { active, count: trace.length });
     };
 
-    // ----- Toolbar contribution (visible only when enabled) --------------------
-    // Approach: always contribute the "Debug" toggle. When enabled, the toggle
-    // re-renders the toolbar and the additional buttons are conditionally
-    // contributed below. Simpler than dynamic affordance contribute/withdraw:
-    // we ALWAYS contribute the affordances; their `command.available` predicate
-    // gates them when disabled.
-    contribute({ surface: 'top', command: 'debug.enable', kind: 'button', text: '🐞 Debug', order: 70 });
-    contribute({ surface: 'top', command: 'debug.record.start', kind: 'button', text: '● Rec', order: 71, className: 'debug-rec' });
-    contribute({ surface: 'top', command: 'debug.record.stop', kind: 'button', text: '■ Stop', order: 72 });
-    contribute({ surface: 'top', command: 'debug.record.clear', kind: 'button', text: 'Clear', order: 73 });
-    contribute({ surface: 'top', command: 'debug.assert.open', kind: 'button', text: 'Assert', order: 74 });
-    contribute({ surface: 'top', command: 'debug.replay.open', kind: 'button', text: 'Replay', order: 75 });
+    // Debug is a developer surface: its commands stay registered (palette,
+    // scenario, tests) but are no longer contributed as top-toolbar buttons —
+    // the release top bar is graph editing + layout + zen + search only.
+    void contribute;
 
     // ----- Commands ------------------------------------------------------------
     contexts.commands.register([
