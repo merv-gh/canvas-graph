@@ -22,7 +22,7 @@ import { registerFeatures } from './features';
 import { appModel, graphStore } from './model';
 import { installRuntimeFeatureManager } from './runtime';
 import { registerSystems } from './systems';
-import { sgGraphToSnapshot, type SnapshotOptions, type VfEdge, type VfGraph, type VfNode } from './systems/varflow';
+import { readableGraph, sgGraphToSnapshot, type SnapshotOptions, type VfEdge, type VfGraph, type VfNode } from './systems/varflow';
 
 export type { VfGraph, VfNode, VfEdge } from './systems/varflow';
 
@@ -46,6 +46,7 @@ export type EdgeClickInfo = {
   source?: NodeClickInfo;
   target?: NodeClickInfo;
 };
+export type GraphViewerLoadResult = { nodes: number; edges: number; totalNodes: number; totalEdges: number; mode: string };
 
 export type GraphViewerHooks = {
   /** Fired when a node is clicked. Use `file`/`line` to jump into source. */
@@ -54,6 +55,8 @@ export type GraphViewerHooks = {
   onEdgeClick?: (info: EdgeClickInfo) => void;
   /** Fired on any selection change (node, edge, or null when cleared). */
   onSelect?: (info: NodeClickInfo | EdgeClickInfo | null) => void;
+  /** Fired when the viewer changes visible graph slice (load, focus, show all). */
+  onViewChange?: (info: GraphViewerLoadResult) => void;
 };
 
 export type GraphViewerOptions = GraphViewerHooks & {
@@ -64,7 +67,11 @@ export type GraphViewerOptions = GraphViewerHooks & {
 export type GraphViewer = {
   /** Replace the displayed graph. `layout: 'flow'` arranges nodes top-down
    *  (best for control-flow); the default clusters by service. */
-  load: (graph: VfGraph, opts?: SnapshotOptions) => { nodes: number; edges: number };
+  load: (graph: VfGraph, opts?: SnapshotOptions) => GraphViewerLoadResult;
+  /** Show every node and edge, bypassing the overview lens. */
+  showAll: () => GraphViewerLoadResult | null;
+  /** Focus one node's path and near neighbors. */
+  focus: (nodeId: string) => GraphViewerLoadResult | null;
   /** Re-frame the camera to fit all nodes. */
   fit: () => void;
   /** Programmatically select (and center) a node by id. */
@@ -150,6 +157,21 @@ const nodeInfo = (n: VfNode): NodeClickInfo => ({
   raw: n,
 });
 
+function serviceContainersFor(graph: VfGraph) {
+  const groups = new Map<string, string[]>();
+  (graph.nodes ?? []).forEach(n => {
+    const service = n.service || 'other';
+    (groups.get(service) ?? groups.set(service, []).get(service)!).push(n.id);
+  });
+  return [...groups.entries()]
+    .filter(([, children]) => children.length > 1)
+    .map(([service, children], i) => ({
+      id: `vf-svc-${i + 1}-${service.replace(/[^a-zA-Z0-9_-]/g, '-')}`,
+      label: service,
+      children,
+    }));
+}
+
 export function createGraphViewer(opts: GraphViewerOptions): GraphViewer {
   const target = typeof opts.target === 'string'
     ? document.querySelector<HTMLElement>(opts.target)
@@ -173,8 +195,22 @@ export function createGraphViewer(opts: GraphViewerOptions): GraphViewer {
   // Click resolution: the model only stores label/type, so keep the original
   // file-projections node/edge metadata here, keyed the same way the adapter
   // keys them (edge ids are r1.. over the filtered edge list).
+  let rawGraph: VfGraph | null = null;
+  let currentOpts: SnapshotOptions = {};
   let nodeMeta = new Map<string, VfNode>();
   let edgeMeta = new Map<string, EdgeClickInfo>();
+  let suppressSelection = false;
+
+  const readableDefaults = (viewOpts: SnapshotOptions): SnapshotOptions => {
+    if (viewOpts.layout === 'flow' || viewOpts.readMode === 'all') return viewOpts;
+    const width = target.getBoundingClientRect().width || window.innerWidth;
+    const caps = width <= 460
+      ? { maxOverviewNodes: 4, maxFocusNodes: 6, expandDepth: 0 }
+      : width <= 760
+        ? { maxOverviewNodes: 12, maxFocusNodes: 16, expandDepth: 1 }
+        : { maxOverviewNodes: 18, maxFocusNodes: 24, expandDepth: 1 };
+    return { ...caps, ...viewOpts };
+  };
 
   const resolveSelection = (kind: string, id: string): NodeClickInfo | EdgeClickInfo | null => {
     if (kind === 'node') { const n = nodeMeta.get(id); return n ? nodeInfo(n) : null; }
@@ -188,9 +224,13 @@ export function createGraphViewer(opts: GraphViewerOptions): GraphViewer {
     if (!primary) { opts.onSelect?.(null); return; }
     const info = resolveSelection(primary.kind, primary.id);
     if (!info) return;
+    if (suppressSelection) return;
     if (primary.kind === 'node') opts.onNodeClick?.(info as NodeClickInfo);
     if (primary.kind === 'edge') opts.onEdgeClick?.(info as EdgeClickInfo);
     opts.onSelect?.(info);
+    if (primary.kind === 'node' && rawGraph && currentOpts.layout !== 'flow' && currentOpts.readMode !== 'all') {
+      window.setTimeout(() => focus(primary.id), 0);
+    }
   });
 
   const fit = () => ctx.bus.emit('view.fit.all');
@@ -214,13 +254,16 @@ export function createGraphViewer(opts: GraphViewerOptions): GraphViewer {
   });
   ro.observe(target);
 
-  const load = (graph: VfGraph, opts: SnapshotOptions = {}) => {
+  const renderLoaded = (graph: VfGraph, viewOpts: SnapshotOptions = {}) => {
+    viewOpts = readableDefaults(viewOpts);
     hasGraph = true;
-    const raw = graph.nodes ?? [];
+    const raw = rawGraph?.nodes ?? graph.nodes ?? [];
     nodeMeta = new Map(raw.map(n => [n.id, n]));
-    const ids = new Set(raw.map(n => n.id));
+    const slice = readableGraph(graph, viewOpts);
+    const visible = slice.graph.nodes ?? [];
+    const ids = new Set(visible.map(n => n.id));
     edgeMeta = new Map();
-    (graph.edges ?? [])
+    (slice.graph.edges ?? [])
       .filter(e => ids.has(e.from) && ids.has(e.to) && e.from !== e.to)
       .forEach((e: VfEdge, i) => {
         edgeMeta.set(`r${i + 1}`, {
@@ -229,24 +272,61 @@ export function createGraphViewer(opts: GraphViewerOptions): GraphViewer {
           target: nodeMeta.get(e.to) && nodeInfo(nodeMeta.get(e.to)!),
         });
       });
-    const snapshot = sgGraphToSnapshot(graph, opts);
+    const snapshot = sgGraphToSnapshot(slice.graph, viewOpts);
     ctx.bus.emit('graph.import.snapshot', snapshot);
+    ctx.bus.emit('container.import.snapshot', { containers: viewOpts.layout === 'flow' ? [] : serviceContainersFor(slice.graph) });
     target.classList.add('varflow');
     // The import's auto-redraw can race the shell/stage mount on the very first
     // load, so force one full stage draw on the next frame, then frame it. In
     // 'flow' mode the nodes ship position-less — run the layered tidy layout.
     requestAnimationFrame(() => {
       ctx.bus.emit('render.stage.draw', { full: true, refs: [] });
-      if (opts.layout === 'flow') ctx.bus.emit('layout.apply.tidy');
+      if (viewOpts.layout === 'flow') ctx.bus.emit('layout.apply.tidy');
       fit();
       setTimeout(fit, 300);
     });
-    return { nodes: snapshot.nodes.length, edges: snapshot.edges.length };
+    const result = {
+      nodes: snapshot.nodes.length,
+      edges: snapshot.edges.length,
+      totalNodes: slice.totalNodes,
+      totalEdges: slice.totalEdges,
+      mode: slice.mode,
+    };
+    opts.onViewChange?.(result);
+    return result;
+  };
+
+  const load = (graph: VfGraph, opts: SnapshotOptions = {}) => {
+    rawGraph = graph;
+    currentOpts = opts;
+    return renderLoaded(graph, opts);
+  };
+
+  const focus = (nodeId: string) => {
+    if (!rawGraph) return null;
+    suppressSelection = true;
+    currentOpts = { ...currentOpts, focusNodeId: nodeId };
+    const result = renderLoaded(rawGraph, currentOpts);
+    requestAnimationFrame(() => {
+      ctx.bus.emit('selection.node.select', { id: nodeId });
+      window.setTimeout(() => { suppressSelection = false; }, 0);
+    });
+    return result;
+  };
+
+  const showAll = () => {
+    if (!rawGraph) return null;
+    currentOpts = { ...currentOpts, readMode: 'all', focusNodeId: undefined };
+    return renderLoaded(rawGraph, currentOpts);
   };
 
   const select = (nodeId: string) => ctx.bus.emit('selection.node.select', { id: nodeId });
-  const clear = () => ctx.bus.emit('graph.import.snapshot', { nodes: [], edges: [] });
+  const clear = () => {
+    rawGraph = null;
+    ctx.bus.emit('graph.import.snapshot', { nodes: [], edges: [] });
+    ctx.bus.emit('container.import.snapshot', { containers: [] });
+  };
   const destroy = () => { off(); ro.disconnect(); target.replaceChildren(); target.classList.remove('varflow', 'graph-viewer-host'); };
 
-  return { load, fit, select, clear, destroy, ctx };
+  return { load, showAll, focus, fit, select, clear, destroy, ctx };
 }

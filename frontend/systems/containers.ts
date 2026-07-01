@@ -42,6 +42,7 @@ declare module '../types' {
     'container.section.resize.move': { x: number; y: number };
     'container.section.resize.end': void;
     'container.children.changed': { id: Id };
+    'container.import.snapshot': { containers: { id: Id; label: string; children: Id[] }[] };
   }
 }
 
@@ -527,6 +528,29 @@ export function registerContainers(system: Registry) {
       });
       emit('container.created', { id });
       emit('selection.item.select', { kind: 'container', id });
+    });
+    on('container.import.snapshot', ({ containers }) => {
+      const here = containersHere();
+      const nest = nestHere();
+      [...here.values()].forEach(c => c.Children.forEach(child => nest.remove(child)));
+      here.clear();
+      containers.forEach(input => {
+        here.set(input.id, {
+          id: input.id,
+          kind: 'container',
+          Label: { text: input.label },
+          Position: { x: 0, y: 0 },
+          Size: { ...DEFAULT_SIZE },
+          AutoFit: true,
+          Sections: [],
+          SectionAxis: 'rows',
+          ChildSections: {},
+          Children: [],
+        });
+        input.children.forEach(id => nest.add(input.id, { kind: 'node', id }));
+        emit('container.created', { id: input.id });
+      });
+      emit('selection.item.clear');
     });
     on('graph.container.delete', ({ id }) => {
       const here = containersHere();

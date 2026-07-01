@@ -1367,6 +1367,95 @@ button.icon:hover { color: var(--ink); }
 /* Reclaim the sidebar column so the stage spans the full width. */
 .varflow .shell { grid-template-columns: 1fr !important; }
 .varflow .stage { grid-column: 1 / -1 !important; }
-/* Program-graph nodes read best a touch tighter and monospace-labelled. */
-.varflow .node-title { font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
-.varflow .node-type-label { letter-spacing: .04em; }
+/* Program-graph reading mode: calm rectangular cards, left-aligned labels,
+   effect/type shown by a restrained accent rail instead of loud fill colors. */
+.varflow .node {
+  justify-content: flex-start;
+  border-radius: 5px;
+  border-color: color-mix(in srgb, var(--line-strong) 82%, transparent);
+  background: color-mix(in srgb, #fbf8f0 92%, var(--panel));
+  box-shadow: 0 1px 2px rgba(70, 55, 30, .05);
+  overflow: hidden;
+}
+.varflow .node::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--line-strong);
+}
+.varflow .node-type-gateway::before { background: #3f6f9f; }
+.varflow .node-type-service::before { background: #24784f; }
+.varflow .node-type-database::before { background: #b07a2b; }
+.varflow .node-type-index::before { background: #b54848; }
+.varflow .node-type-square::before { background: #8a7f6d; }
+.varflow .node-type-gateway,
+.varflow .node-type-service,
+.varflow .node-type-database,
+.varflow .node-type-index,
+.varflow .node-type-square {
+  background: color-mix(in srgb, #fbf8f0 94%, var(--panel));
+}
+.varflow .node-kicker {
+  min-height: 18px;
+  padding: 6px 10px 0 14px;
+}
+.varflow .node-title {
+  padding: 3px 10px 6px 14px;
+  text-align: left;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.25;
+  word-break: break-word;
+}
+.varflow .node-type-label {
+  letter-spacing: .04em;
+  font-size: 9px;
+}
+.varflow .node-body {
+  padding: 0 10px 8px 14px;
+}
+.varflow .node-description {
+  max-height: 34px;
+  font-size: 10.5px;
+  line-height: 1.25;
+}
+.varflow .edge-line {
+  opacity: .72;
+}
+.varflow .edge-line.edge-kind-async {
+  stroke: #6f4fb0;
+}
+.varflow .edge-label {
+  paint-order: stroke;
+  stroke: #fbf8f0;
+  stroke-width: 5px;
+  stroke-linejoin: round;
+  font-size: 10px;
+}
+.varflow .container {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--line-strong) 70%, transparent);
+  background: rgba(244, 240, 232, .34);
+  pointer-events: none;
+}
+.varflow .container-label {
+  top: -9px;
+  left: 10px;
+  background: #ebe7dd;
+  color: color-mix(in srgb, var(--text-muted) 82%, var(--ink));
+  letter-spacing: .04em;
+}
+.varflow .tool-panel[data-panel-id="zoom"] {
+  max-width: calc(100% - 24px);
+  overflow: hidden;
+}
+@media (max-width: 700px) {
+  .varflow .tool-panel[data-panel-id="zoom"] {
+    right: 8px;
+    bottom: 8px;
+  }
+  .varflow .node-title {
+    font-size: 12px;
+  }
+}

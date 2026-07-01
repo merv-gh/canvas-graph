@@ -15,3 +15,5 @@ dx/cli/apply-ws/
 views/
 dx/.selftest-*/
 dx/STOP
+
+dist-lib/graph-viewer.js

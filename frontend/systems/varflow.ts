@@ -81,7 +81,153 @@ function edgeKindFor(e: VfEdge): EdgeKind {
 // surface), then entrypoints, then the files they reach.
 const KIND_ORDER: Record<string, number> = { router: 0, entrypoint: 1, file: 2 };
 
-const CELL_W = 210, CELL_H = 132, CLUSTER_GAP = 120, ROW_TARGET = 5200;
+const CELL_W = 192, CELL_H = 106, CLUSTER_GAP = 54, MIN_ROW_TARGET = 520, MAX_ROW_TARGET = 1180;
+const DEFAULT_OVERVIEW_MAX = 18;
+const DEFAULT_FOCUS_MAX = 24;
+
+const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
+
+const idSet = (nodes: VfNode[]) => new Set(nodes.map(n => n.id));
+const edgeScore = (e: VfEdge) => {
+  if (e.kind === 'api-call') return 120;
+  if (e.cross) return 110;
+  if (e.kind === 'registers') return 80;
+  if (e.kind === 'writes-to' || e.kind === 'reads-from') return 70;
+  return 20;
+};
+const nodeScore = (n: VfNode, incident: VfEdge[]) => {
+  let score = 0;
+  if (n.kind === 'router') score += 120;
+  if (n.kind === 'entrypoint') score += 110;
+  if (incident.some(e => e.kind === 'api-call' || e.cross)) score += 90;
+  if (n.effects?.includes('db')) score += 55;
+  if (n.effects?.includes('network')) score += 45;
+  if (n.effects?.includes('io-write') || n.effects?.includes('io-read')) score += 35;
+  if (n.effects?.includes('process')) score += 15;
+  if (n.service === 'openapi' || n.file?.includes('/e2e/') || n.file?.includes('/gen/')) score -= 70;
+  return score;
+};
+
+function incidentEdges(g: VfGraph) {
+  const out = new Map<string, VfEdge[]>();
+  (g.edges ?? []).forEach(e => {
+    (out.get(e.from) ?? out.set(e.from, []).get(e.from)!).push(e);
+    (out.get(e.to) ?? out.set(e.to, []).get(e.to)!).push(e);
+  });
+  return out;
+}
+
+function bestPathIds(g: VfGraph, through?: string) {
+  const edges = g.edges ?? [];
+  const byId = new Map((g.nodes ?? []).map(n => [n.id, n]));
+  const byFrom = new Map<string, VfEdge[]>();
+  const byTo = new Map<string, VfEdge[]>();
+  edges.forEach(e => {
+    (byFrom.get(e.from) ?? byFrom.set(e.from, []).get(e.from)!).push(e);
+    (byTo.get(e.to) ?? byTo.set(e.to, []).get(e.to)!).push(e);
+  });
+  const rank = (e: VfEdge) => edgeScore(e)
+    - (byId.get(e.from)?.service === 'openapi' ? 55 : 0)
+    - (byId.get(e.to)?.service === 'openapi' ? 55 : 0);
+  const pick = (list: VfEdge[] | undefined) => [...(list ?? [])].sort((a, b) => rank(b) - rank(a))[0];
+  const seed = through
+    ? undefined
+    : [...edges].sort((a, b) => rank(b) - rank(a))[0];
+  const ids = new Set<string>();
+  let current = through ?? seed?.to;
+  if (seed) { ids.add(seed.from); ids.add(seed.to); }
+  if (current) ids.add(current);
+  for (let i = 0; i < 3 && current; i++) {
+    const e = pick(byTo.get(current));
+    if (!e || ids.has(e.from)) break;
+    ids.add(e.from);
+    current = e.from;
+  }
+  current = through ?? seed?.from;
+  for (let i = 0; i < 3 && current; i++) {
+    const e = pick(byFrom.get(current));
+    if (!e || ids.has(e.to)) break;
+    ids.add(e.to);
+    current = e.to;
+  }
+  return ids;
+}
+
+function filteredGraph(g: VfGraph, keep: Set<string>, maxEdges: number): VfGraph {
+  const nodes = (g.nodes ?? []).filter(n => keep.has(n.id));
+  const present = idSet(nodes);
+  const edges = (g.edges ?? [])
+    .filter(e => present.has(e.from) && present.has(e.to) && e.from !== e.to)
+    .sort((a, b) => edgeScore(b) - edgeScore(a))
+    .slice(0, maxEdges);
+  const services = (g.services ?? []).filter(s => {
+    const name = typeof s === 'object' && s && 'name' in s ? String((s as { name?: unknown }).name) : '';
+    return nodes.some(n => n.service === name);
+  });
+  return { services: services.length ? services : g.services, nodes, edges };
+}
+
+export type SliceInfo = {
+  graph: VfGraph;
+  totalNodes: number;
+  totalEdges: number;
+  visibleNodes: number;
+  visibleEdges: number;
+  mode: 'all' | 'overview' | 'focus';
+};
+
+export function readableGraph(g: VfGraph, opts: SnapshotOptions = {}): SliceInfo {
+  const rawNodes = g.nodes ?? [];
+  const rawEdges = g.edges ?? [];
+  const byId = new Map(rawNodes.map(n => [n.id, n]));
+  const totalNodes = rawNodes.length;
+  const totalEdges = rawEdges.length;
+  if (opts.layout === 'flow' || opts.readMode === 'all' || totalNodes <= (opts.maxOverviewNodes ?? DEFAULT_OVERVIEW_MAX)) {
+    return { graph: g, totalNodes, totalEdges, visibleNodes: totalNodes, visibleEdges: totalEdges, mode: 'all' };
+  }
+
+  const incident = incidentEdges(g);
+  const maxNodes = opts.focusNodeId ? (opts.maxFocusNodes ?? DEFAULT_FOCUS_MAX) : (opts.maxOverviewNodes ?? DEFAULT_OVERVIEW_MAX);
+  const keep = opts.focusNodeId ? bestPathIds(g, opts.focusNodeId) : bestPathIds(g);
+
+  if (opts.focusNodeId) {
+    const queue: { id: string; depth: number }[] = [{ id: opts.focusNodeId, depth: 0 }];
+    keep.add(opts.focusNodeId);
+    const seen = new Set<string>(keep);
+    while (queue.length && keep.size < maxNodes) {
+      const { id, depth } = queue.shift()!;
+      if (depth >= (opts.expandDepth ?? 1)) continue;
+      const next = [...(incident.get(id) ?? [])]
+        .flatMap(e => [e.from, e.to])
+        .filter(id => !seen.has(id))
+        .sort((a, b) => nodeScore(byId.get(b) ?? { id: b }, incident.get(b) ?? []) - nodeScore(byId.get(a) ?? { id: a }, incident.get(a) ?? []));
+      for (const nid of next) {
+        if (keep.size >= maxNodes) break;
+        seen.add(nid);
+        keep.add(nid);
+        queue.push({ id: nid, depth: depth + 1 });
+      }
+    }
+  } else {
+    rawNodes
+      .slice()
+      .sort((a, b) => nodeScore(b, incident.get(b.id) ?? []) - nodeScore(a, incident.get(a.id) ?? []))
+      .forEach(n => {
+        if (keep.size < maxNodes && nodeScore(n, incident.get(n.id) ?? []) > 45) keep.add(n.id);
+      });
+  }
+
+  if (!keep.size) rawNodes.slice(0, maxNodes).forEach(n => keep.add(n.id));
+  const graph = filteredGraph(g, keep, Math.max(80, maxNodes * 3));
+  return {
+    graph,
+    totalNodes,
+    totalEdges,
+    visibleNodes: graph.nodes?.length ?? 0,
+    visibleEdges: graph.edges?.length ?? 0,
+    mode: opts.focusNodeId ? 'focus' : 'overview',
+  };
+}
 
 /**
  * Bounded, service-clustered layout computed up front.
@@ -109,9 +255,11 @@ function assignPositions(sn: { id: string; NodeType: NodeType }[], meta: Map<str
       return { svc, ids, cols, rows, w: cols * CELL_W, h: rows * CELL_H };
     })
     .sort((a, b) => b.h - a.h);
+  const area = clusters.reduce((sum, c) => sum + c.w * c.h, 0);
+  const rowTarget = clamp(Math.round(Math.sqrt(Math.max(area, CELL_W * CELL_H) * 1.7)), MIN_ROW_TARGET, MAX_ROW_TARGET);
   let shelfX = 0, shelfY = 0, shelfH = 0;
   for (const c of clusters) {
-    if (shelfX > 0 && shelfX + c.w > ROW_TARGET) { shelfX = 0; shelfY += shelfH + CLUSTER_GAP; shelfH = 0; }
+    if (shelfX > 0 && shelfX + c.w > rowTarget) { shelfX = 0; shelfY += shelfH + CLUSTER_GAP; shelfH = 0; }
     c.ids.forEach((id, i) => {
       const col = i % c.cols, row = Math.floor(i / c.cols);
       pos.set(id, { x: shelfX + col * CELL_W, y: shelfY + row * CELL_H });
@@ -122,19 +270,47 @@ function assignPositions(sn: { id: string; NodeType: NodeType }[], meta: Map<str
   return pos;
 }
 
+function assignFocusPositions(sn: { id: string }[]) {
+  const pos = new Map<string, { x: number; y: number }>();
+  const cols = sn.length <= 5 ? 1 : 2;
+  sn.forEach((n, i) => {
+    const col = i % cols, row = Math.floor(i / cols);
+    pos.set(n.id, { x: col * CELL_W, y: row * (CELL_H + 36) });
+  });
+  return pos;
+}
+
 export type SnapshotOptions = {
   /** 'cluster' (default): group by service and shelf-pack — best for service
    *  graphs. 'flow': leave nodes position-less so a layered top-down layout
    *  (tidy) can arrange them — best for control-flow / call graphs. */
   layout?: 'cluster' | 'flow';
+  /** 'overview' (default for service graphs): show a high-signal readable slice.
+   *  'all': show every node/edge. */
+  readMode?: 'overview' | 'all';
+  /** When set, show the shortest high-signal path through this node plus local
+   *  neighbors. Used for click-to-expand. */
+  focusNodeId?: string;
+  expandDepth?: number;
+  maxOverviewNodes?: number;
+  maxFocusNodes?: number;
 };
+
+function nodeSizeFor(n: VfNode) {
+  const label = n.label || n.method || n.id;
+  const w = Math.max(160, Math.min(230, 116 + label.length * 2.5));
+  const h = n.kind === 'entrypoint' || n.kind === 'router' || (n.effects?.length ?? 0) > 0 ? 74 : 64;
+  return { w, h };
+}
 
 export function sgGraphToSnapshot(g: VfGraph, opts: SnapshotOptions = {}): GraphSnapshot {
   const raw = g.nodes ?? [];
   const meta = new Map(raw.map(n => [n.id, n]));
   const ids = new Set(raw.map(n => n.id));
   const base = raw.map(n => ({ id: n.id, NodeType: nodeTypeFor(n) }));
-  const pos = opts.layout === 'flow' ? new Map<string, { x: number; y: number }>() : assignPositions(base, meta);
+  const pos = opts.layout === 'flow'
+    ? new Map<string, { x: number; y: number }>()
+    : opts.focusNodeId ? assignFocusPositions(base) : assignPositions(base, meta);
   const nodes = raw.map(n => {
     const loc = n.file ? `${n.file}${n.line ? `:${n.line}` : ''}` : '';
     const desc = [n.service && `svc: ${n.service}`, loc, n.effects?.length && `fx: ${n.effects.join(', ')}`]
@@ -144,6 +320,7 @@ export function sgGraphToSnapshot(g: VfGraph, opts: SnapshotOptions = {}): Graph
       Label: { text: n.label || n.method || n.id },
       NodeType: nodeTypeFor(n),
       Description: desc || undefined,
+      Size: nodeSizeFor(n),
       Position: pos.get(n.id),
     };
   });
