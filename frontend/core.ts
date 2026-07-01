@@ -53,6 +53,7 @@ export { storageContext, type StorageApi, type StorageApply } from './core/stora
 export { foldContext, itemFoldId, foldHidden, type FoldStore } from './core/fold';
 export { snapshot, snapshotTree, flattenSnapshotTree, type Snapshot, type SnapshotNode } from './core/snapshot';
 export { traceToTest, defaultEventFilter, type Assertion, type TestGenOptions } from './core/test-gen';
+export { semanticTitle, mergeSemantics, hasCompleteSemantics, hasFailurePlan, type DataScale, type SemanticFields } from './core/semantics';
 
 export type Contexts = ReturnType<typeof createContexts>;
 export type Models = ReturnType<typeof createModelRegistry>;

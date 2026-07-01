@@ -1,14 +1,16 @@
 import type { Id, ItemRef, Label, Position, Rect, Size } from '../types';
+import type { DataScale, SemanticFields } from '../core/semantics';
+export type { DataScale, SemanticFields } from '../core/semantics';
 
 // ----- Domain types -----
 // Live here, next to the classes implementing them. Anything kind-specific
 // (node, edge, future container) belongs in the model layer, not in types.ts.
 export type Entity = { id: Id; kind: string; Label: Label; Size: Size; Position?: Position };
 
-export type SystemNodeType = 'database' | 'kafka' | 'service' | 'index' | 'user-input' | 'gateway';
+export type SystemNodeType = 'database' | 'kafka' | 'service' | 'index' | 'user-input' | 'gateway' | 'cache' | 'rate-limit' | 'circuit-breaker';
 export type NodeType = 'text' | 'square' | 'circle' | SystemNodeType;
 export type EdgeKind = 'read' | 'write' | 'sync' | 'async';
-export type NodeEntity = Entity & {
+export type NodeEntity = Entity & SemanticFields & {
   kind: 'node';
   NodeType: NodeType;
   Description?: string;
@@ -25,8 +27,8 @@ export type NodeDraft = {
   ComputeMs?: number;
   ExpectedRps?: number;
   LatencyMs?: number;
-};
-export type NodePatch = Partial<Pick<NodeEntity, 'Label' | 'Size' | 'Position' | 'NodeType' | 'Description' | 'ComputeMs' | 'ExpectedRps' | 'LatencyMs'>>;
+} & SemanticFields;
+export type NodePatch = Partial<Pick<NodeEntity, 'Label' | 'Size' | 'Position' | 'NodeType' | 'Description' | 'ComputeMs' | 'ExpectedRps' | 'LatencyMs' | 'Purpose' | 'Assumptions' | 'Limits' | 'WhatThen' | 'Observability' | 'FailureMode' | 'DataScale' | 'FreshnessMs'>>;
 export type NodeCreateOptions = { at?: Position; near?: Id | null };
 
 /** Operation-time hints attached to create events. They control the lifecycle around the
@@ -42,7 +44,7 @@ export type CreateHints = {
   connectKind?: EdgeKind;
 };
 
-export type EdgeEntity = {
+export type EdgeEntity = SemanticFields & {
   id: Id;
   kind: 'edge';
   From: Id;
@@ -53,9 +55,9 @@ export type EdgeEntity = {
   ThroughputRps?: number;
   PayloadKb?: number;
 };
-export type EdgeDraft = { From: Id; To: Id; Label?: Label; EdgeKind?: EdgeKind; LatencyMs?: number; ThroughputRps?: number; PayloadKb?: number };
+export type EdgeDraft = { From: Id; To: Id; Label?: Label; EdgeKind?: EdgeKind; LatencyMs?: number; ThroughputRps?: number; PayloadKb?: number } & SemanticFields;
 export type EdgeCreateDraft = Partial<EdgeDraft>;
-export type EdgePatch = Partial<Pick<EdgeEntity, 'Label' | 'From' | 'To' | 'EdgeKind' | 'LatencyMs' | 'ThroughputRps' | 'PayloadKb'>>;
+export type EdgePatch = Partial<Pick<EdgeEntity, 'Label' | 'From' | 'To' | 'EdgeKind' | 'LatencyMs' | 'ThroughputRps' | 'PayloadKb' | 'Purpose' | 'Assumptions' | 'Limits' | 'WhatThen' | 'Observability' | 'FailureMode' | 'DataScale' | 'FreshnessMs'>>;
 export type GraphSnapshot = { nodes: NodeDraftWithId[]; edges: EdgeDraftWithId[] };
 export type NodeDraftWithId = NodeDraft & { id: Id };
 export type EdgeDraftWithId = EdgeDraft & { id: Id };
@@ -75,6 +77,14 @@ export class GraphNode implements NodeEntity {
   ComputeMs?: number;
   ExpectedRps?: number;
   LatencyMs?: number;
+  Purpose?: string;
+  Assumptions?: string;
+  Limits?: string;
+  WhatThen?: string;
+  Observability?: string;
+  FailureMode?: string;
+  DataScale?: DataScale;
+  FreshnessMs?: number;
 
   constructor(readonly graph: Graph, readonly id: Id, draft: NodeDraft = {}) {
     this.Label = draft.Label ?? { text: id };
@@ -85,6 +95,14 @@ export class GraphNode implements NodeEntity {
     this.ComputeMs = draft.ComputeMs;
     this.ExpectedRps = draft.ExpectedRps;
     this.LatencyMs = draft.LatencyMs;
+    this.Purpose = draft.Purpose;
+    this.Assumptions = draft.Assumptions;
+    this.Limits = draft.Limits;
+    this.WhatThen = draft.WhatThen;
+    this.Observability = draft.Observability;
+    this.FailureMode = draft.FailureMode;
+    this.DataScale = draft.DataScale;
+    this.FreshnessMs = draft.FreshnessMs;
   }
 }
 
@@ -95,6 +113,14 @@ export class GraphEdge implements EdgeEntity {
   LatencyMs?: number;
   ThroughputRps?: number;
   PayloadKb?: number;
+  Purpose?: string;
+  Assumptions?: string;
+  Limits?: string;
+  WhatThen?: string;
+  Observability?: string;
+  FailureMode?: string;
+  DataScale?: DataScale;
+  FreshnessMs?: number;
   constructor(readonly graph: Graph, readonly id: Id, draft: EdgeDraft) {
     this.From = draft.From;
     this.To = draft.To;
@@ -103,6 +129,14 @@ export class GraphEdge implements EdgeEntity {
     this.LatencyMs = draft.LatencyMs;
     this.ThroughputRps = draft.ThroughputRps;
     this.PayloadKb = draft.PayloadKb;
+    this.Purpose = draft.Purpose;
+    this.Assumptions = draft.Assumptions;
+    this.Limits = draft.Limits;
+    this.WhatThen = draft.WhatThen;
+    this.Observability = draft.Observability;
+    this.FailureMode = draft.FailureMode;
+    this.DataScale = draft.DataScale;
+    this.FreshnessMs = draft.FreshnessMs;
   }
   From: Id;
   To: Id;
@@ -310,11 +344,11 @@ export class Graph {
 
   snapshot(): GraphSnapshot {
     return {
-      nodes: this.nodes().map(({ id, Label, Position, Size, NodeType, Description, ComputeMs, ExpectedRps, LatencyMs }) => ({
-        id, Label, Position, Size, NodeType, Description, ComputeMs, ExpectedRps, LatencyMs,
+      nodes: this.nodes().map(({ id, Label, Position, Size, NodeType, Description, ComputeMs, ExpectedRps, LatencyMs, Purpose, Assumptions, Limits, WhatThen, Observability, FailureMode, DataScale, FreshnessMs }) => ({
+        id, Label, Position, Size, NodeType, Description, ComputeMs, ExpectedRps, LatencyMs, Purpose, Assumptions, Limits, WhatThen, Observability, FailureMode, DataScale, FreshnessMs,
       })),
-      edges: this.edges().map(({ id, From, To, Label, EdgeKind, LatencyMs, ThroughputRps, PayloadKb }) => ({
-        id, From, To, Label, EdgeKind, LatencyMs, ThroughputRps, PayloadKb,
+      edges: this.edges().map(({ id, From, To, Label, EdgeKind, LatencyMs, ThroughputRps, PayloadKb, Purpose, Assumptions, Limits, WhatThen, Observability, FailureMode, DataScale, FreshnessMs }) => ({
+        id, From, To, Label, EdgeKind, LatencyMs, ThroughputRps, PayloadKb, Purpose, Assumptions, Limits, WhatThen, Observability, FailureMode, DataScale, FreshnessMs,
       })),
     };
   }

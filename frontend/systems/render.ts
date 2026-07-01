@@ -1,4 +1,5 @@
 import { appendRenderable, factScope, itemParentAttr, type Registry } from '../core';
+import { mountRoot } from '../core/mount';
 import { Places } from '../types';
 import type { ItemRef, Place, RedrawScope, Renderable } from '../types';
 
@@ -9,7 +10,7 @@ import type { ItemRef, Place, RedrawScope, Renderable } from '../types';
 export function registerRender(system: Registry) {
   system('render', ctx => {
     const { on, emit, bus, contexts } = ctx;
-    const root = document.getElementById('app')!;
+    const root = mountRoot();
     const views = new Map<Place, Map<string, Renderable>>();
 
     const attr = (value: string) => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');

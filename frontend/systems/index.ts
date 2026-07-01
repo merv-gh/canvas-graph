@@ -29,6 +29,7 @@ import { registerRenderStage } from './render-stage';
 import { registerScenario } from './scenario';
 import { registerTextLayout } from './text-layout';
 import { registerToolPanel } from './tool-panel';
+import { registerVarflow } from './varflow';
 import { registerViewPan } from './view-pan';
 import { registerViewZoom } from './view-zoom';
 
@@ -67,5 +68,6 @@ export function registerSystems(system: Registry) {
   registerDemo(system);
   registerDebug(system);
   registerScenario(system);
+  registerVarflow(system);
   registerDx(system);
 }

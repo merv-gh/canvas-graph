@@ -6,6 +6,7 @@
     "dx": "node dx/cli/dx.mjs",
     "dev": "node dx/cli/dev.mjs",
     "dev:frontend": "vite frontend --host 127.0.0.1 --port 5174 --strictPort",
+    "build:lib": "vite build --config vite.lib.config.ts",
     "test": "npm run test:commands:coverage && npm run test:browser",
     "test:browser": "playwright test",
     "test:commands": "vitest run",

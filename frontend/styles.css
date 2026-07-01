@@ -450,8 +450,8 @@ button.icon:hover { color: var(--ink); }
 .tool-panel-body { display: flex; gap: 4px; }
 .tool-panel-stack .tool-panel-body { flex-direction: column; }
 .tool-panel[data-panel-id="system-design"] {
-  width: 96px;
-  max-width: 96px;
+  width: 140px;
+  max-width: 140px;
 }
 .tool-panel[data-panel-id="system-design"] .tool-panel-body {
   display: grid;
@@ -474,6 +474,9 @@ button.icon:hover { color: var(--ink); }
 .design-node-index { color: #b45309; }
 .design-node-user-input { color: #be123c; }
 .design-node-gateway { color: #4338ca; }
+.design-node-cache { color: #15803d; }
+.design-node-rate-limit { color: #dc2626; }
+.design-node-circuit-breaker { color: #7c2d12; }
 .design-edge-async { border-style: dashed; }
 .design-edge-read { color: #0369a1; }
 .design-edge-write { color: #b45309; }
@@ -609,6 +612,28 @@ button.icon:hover { color: var(--ink); }
 .node-type-index { border-color: color-mix(in srgb, #b45309 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 86%, #fef3c7); }
 .node-type-user-input { border-color: color-mix(in srgb, #be123c 42%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 88%, #ffe4e6); }
 .node-type-gateway { border-color: color-mix(in srgb, #4338ca 42%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 88%, #e0e7ff); }
+.node-type-cache { border-color: color-mix(in srgb, #15803d 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 86%, #dcfce7); }
+.node-type-rate-limit { border-color: color-mix(in srgb, #dc2626 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 88%, #fee2e2); }
+.node-type-circuit-breaker { border-color: color-mix(in srgb, #7c2d12 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 88%, #ffedd5); }
+.node.semantic-big-data {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, #b45309 38%, transparent), var(--shadow-sm);
+}
+.node.semantic-big-data .node-kicker::after {
+  content: "big data";
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, #f59e0b 22%, transparent);
+  color: #92400e;
+  font: 700 9px/1 ui-monospace, monospace;
+  text-transform: uppercase;
+}
+.node.semantic-stale-risk .node-title::after {
+  content: " stale";
+  margin-left: 4px;
+  color: #b45309;
+  font: 700 10px/1 ui-monospace, monospace;
+  text-transform: uppercase;
+}
 
 /* Containers paint behind nodes (EntityDef.order = -10). Dashed border + label
    in the corner so the grouping reads at a glance without competing with nodes. */
@@ -893,9 +918,75 @@ button.icon:hover { color: var(--ink); }
   font-size: 11.5px;
   line-height: 1.3;
 }
+.design-observation-action {
+  justify-self: start;
+  min-height: 22px;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--accent);
+  font-size: 11px;
+}
+.design-observation-action:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
 .design-observation.warn { border-left-color: #d97706; }
 .design-observation.error { border-left-color: var(--danger); }
 .design-observation.info { border-left-color: var(--accent); }
+
+.design-presentation {
+  position: absolute;
+  left: 50%;
+  top: 54px;
+  z-index: 13;
+  width: min(520px, calc(100vw - 220px));
+  transform: translateX(-50%);
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
+  box-shadow: var(--shadow-md);
+  pointer-events: auto;
+}
+.design-presentation-kicker {
+  color: var(--text-muted);
+  font: 700 10px/1.2 ui-monospace, monospace;
+  text-transform: uppercase;
+}
+.design-presentation strong {
+  font-size: 14px;
+  line-height: 1.25;
+}
+.design-presentation p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.design-presentation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.design-presentation-actions button {
+  min-height: 26px;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  font-size: 12px;
+}
+.design-presentation-actions button.primary {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.design-presentation-actions button:disabled {
+  opacity: .45;
+  cursor: default;
+}
 
 /* Side panel typography */
 .panel-title {
@@ -1240,3 +1331,42 @@ button.icon:hover { color: var(--ink); }
 }
 .scenario-hud.done { background: var(--ok, #1a7f4b); }
 @keyframes scenario-pop { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translateX(-50%); } }
+
+/* ============================================================================
+   varflow viewer — file-projections graph mode (.varflow)
+   Warm "paper" palette ported from file-projections src/ui/app.css, plus a
+   read-only chrome: the canvas is for *reading* a program graph, so the node
+   editor, node-type palette, system-design observations, and outline sidebar
+   are hidden. Zoom/Fit stays. Scoped under .varflow so the editor is
+   untouched when the app boots normally.
+   ============================================================================ */
+.varflow {
+  --bg: #ebe7dd;
+  --panel: #f4f0e8;
+  --panel-2: #e2ddd2;
+  --ink: #25231f;
+  --text-muted: #746b5d;
+  --line: #cec6b8;
+  --line-strong: #b8ae9c;
+  --accent: #3f6f9f;
+  --accent-soft: rgba(63, 111, 159, .10);
+  --edge: #8a7f6d;
+  --danger: #b54848;
+  --danger-soft: rgba(181, 72, 72, .08);
+  --shadow-sm: 0 1px 2px rgba(70, 55, 30, .06);
+  --shadow-md: 0 6px 18px rgba(70, 55, 30, .10);
+  color-scheme: light;
+}
+/* Hide editor affordances not applicable to a read-only program-graph view. */
+.varflow [data-panel-id="top"],
+.varflow [data-panel-id="system-design"],
+.varflow .design-hints,
+.varflow .node-type-panel,
+.varflow .item-toolbar,
+.varflow .left { display: none !important; }
+/* Reclaim the sidebar column so the stage spans the full width. */
+.varflow .shell { grid-template-columns: 1fr !important; }
+.varflow .stage { grid-column: 1 / -1 !important; }
+/* Program-graph nodes read best a touch tighter and monospace-labelled. */
+.varflow .node-title { font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+.varflow .node-type-label { letter-spacing: .04em; }
