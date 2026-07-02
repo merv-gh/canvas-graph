@@ -96,7 +96,7 @@ export type NonEmptyArray<T> = [T, ...T[]];
 import { FACT_SUFFIXES, type FactSuffix, Places, type Place, Slots, type SlotName, EntitySlots } from './constants';
 export { FACT_SUFFIXES, Places, Slots, EntitySlots };
 export type { FactSuffix, Place, SlotName };
-export type RawInput = 'click' | 'dblclick' | 'keydown' | 'pointerdown' | 'pointermove' | 'pointerup' | 'wheel' | 'input' | 'change' | 'focusout';
+export type RawInput = 'click' | 'dblclick' | 'keydown' | 'pointerdown' | 'pointermove' | 'pointerup' | 'wheel' | 'input' | 'change' | 'focusout' | 'paste';
 
 // ---------------------------------------------------------------------------
 // Items & extension hooks
@@ -141,7 +141,7 @@ export interface CustomEvents {}
  *  Augment to add a key without editing `AppCtx`. */
 export interface CustomExposable {}
 
-export type ModalVisual = 'panel' | 'command' | 'properties';
+export type ModalVisual = 'panel' | 'command' | 'properties' | 'perf';
 
 /** Framework events guaranteed by the frontend runtime. Domain events live next to
  *  their owners via `CustomEvents` augmentation. */
@@ -188,6 +188,7 @@ interface BuiltinEvents {
    *  (`graph.node.updated`, `container.updated`, …) is the storage system's
    *  responsibility after applying. */
   'item.update': { ref: ItemRef; patch: unknown };
+  'item.update.batch': { updates: { ref: ItemRef; patch: unknown }[] };
 }
 
 export type AppEvents = BuiltinEvents & CustomEvents;

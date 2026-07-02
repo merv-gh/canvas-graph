@@ -54,12 +54,15 @@ export function registerNudgeable(system: Registry) {
     on('item.nudge', ({ dx, dy }) => {
       const all = selection.selectedAll();
       const inSet = (ref: ItemRef) => all.some(r => sameItemRef(r, ref));
+      const updates: { ref: ItemRef; patch: unknown }[] = [];
       all.forEach(ref => {
         if (contexts.hierarchy.parentChain(ref).some(inSet)) return;
         const item = graphs.current.getItem(ref) as Positioned | undefined;
         if (!item?.Position) return;
-        emit('item.update', { ref, patch: { Position: { x: item.Position.x + dx, y: item.Position.y + dy } } });
+        updates.push({ ref, patch: { Position: { x: item.Position.x + dx, y: item.Position.y + dy } } });
       });
+      if (updates.length === 1) emit('item.update', updates[0]);
+      else if (updates.length) emit('item.update.batch', { updates });
     });
   }, { requires: ['ability.selectable'] });
 }

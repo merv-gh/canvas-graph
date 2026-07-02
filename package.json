@@ -13,6 +13,9 @@
     "test:commands:coverage": "vitest run --coverage",
     "bench": "vitest run --config vitest.bench.config.ts",
     "bench:burn": "BURN=1 vitest run --config vitest.bench.config.ts",
+    "perf:browser": "PERF_BROWSER=1 playwright test tests/perf-real.spec.ts --project=chromium --reporter=line",
+    "perf:browser:report": "PERF_BROWSER=1 PERF_ENFORCE=0 playwright test tests/perf-real.spec.ts --project=chromium --reporter=line",
+    "perf:input": "PERF_INPUT=1 playwright test tests/perf-input-delay.spec.ts --project=chromium --reporter=line",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

@@ -24,7 +24,9 @@ export type StorageApi = {
  *  patches. */
 export function storageContext(bus: Bus): StorageApi {
   const handlers = new Map<string, { origin: string; apply: StorageApply }>();
-  bus.on('item.update', ({ ref, patch }) => handlers.get(ref.kind)?.apply(ref, patch));
+  const applyOne = ({ ref, patch }: { ref: ItemRef; patch: unknown }) => handlers.get(ref.kind)?.apply(ref, patch);
+  bus.on('item.update', applyOne);
+  bus.on('item.update.batch', ({ updates }) => updates.forEach(applyOne));
   return {
     register(kind, origin, apply) {
       handlers.set(kind, { origin, apply });

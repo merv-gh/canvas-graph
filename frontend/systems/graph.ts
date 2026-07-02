@@ -34,7 +34,7 @@ declare module '../types' {
     'graph.node.create': NodeDraft & CreateHints;
     'graph.node.created': { graphId: Id; id: Id; hints?: CreateHints };
     'graph.node.update': { id: Id; patch: NodePatch };
-    'graph.node.updated': { graphId: Id; id: Id };
+    'graph.node.updated': { graphId: Id; id: Id; patch?: NodePatch };
     'graph.node.delete': { id: Id };
     'graph.node.deleted': { graphId: Id; id: Id };
     'graph.edge.create': EdgeDraft;
@@ -53,7 +53,7 @@ export function registerGraph(system: Registry) {
   system('graph', ({ on, emit, graphs, contexts, selection, origin }) => {
     contexts.storage.register('node', origin, (ref, patch) => {
       if (graphs.current.updateNode(ref.id, patch as NodePatch)) {
-        emit('graph.node.updated', { graphId: graphs.current.id, id: ref.id });
+        emit('graph.node.updated', { graphId: graphs.current.id, id: ref.id, patch: patch as NodePatch });
       }
     });
     contexts.storage.register('edge', origin, (ref, patch) => {
@@ -156,7 +156,7 @@ export function registerGraph(system: Registry) {
       emit('graph.node.created', { graphId: graphs.current.id, id: node.id, hints: { keepFocus, connectFrom, connectKind, relativeTo } });
     });
     on('graph.node.update', ({ id, patch }) => {
-      if (graphs.current.updateNode(id, patch)) emit('graph.node.updated', { graphId: graphs.current.id, id });
+      if (graphs.current.updateNode(id, patch)) emit('graph.node.updated', { graphId: graphs.current.id, id, patch });
     });
     on('graph.node.delete', ({ id }) => {
       const incident = graphs.current.edgesOf(id).map(e => e.id);

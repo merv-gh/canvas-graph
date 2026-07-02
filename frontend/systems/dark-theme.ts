@@ -39,12 +39,11 @@ export function registerDarkTheme(system: Registry) {
       shell.dataset.colorscheme = resolved;
     };
 
-    // Listen for OS preference changes (only matters when stored === 'system').
     if (typeof window.matchMedia === 'function') {
       const mq = window.matchMedia('(prefers-color-scheme: dark)');
-      mq.addEventListener('change', () => {
+      mq.onchange = () => {
         if (io.get<Theme>(KEY, 'system') === 'system') applyTheme();
-      });
+      };
     }
 
     contexts.commands.register([

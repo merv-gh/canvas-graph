@@ -4,8 +4,11 @@ import { Places, Slots, type CommandSpec, type CommandSpecInput, type ItemRef } 
 declare module '../types' {
   interface CustomEvents {
     'palette.open': void;
+    'help.open': void;
     'commandModal.run': { commandId: string };
     'commandModal.search.changed': { query: string };
+    'shortcut.edit.preview': { id: string; shortcut?: string };
+    'shortcut.edit.commit': { id: string; shortcut?: string };
     'palette.nav': { delta: number };
     'palette.activate': void;
     'palette.alt': { char: string };
@@ -29,7 +32,8 @@ type Row =
 export function registerCommandModal(system: Registry) {
   system('commandModal', (ctx) => {
     const { on, emit, contexts, contribute } = ctx;
-    contribute({ surface: 'top', command: 'palette.open', kind: 'button', text: '🔍', label: 'Search (⌘K)', slot: Slots.End, order: 100 });
+    contribute({ surface: 'top', command: 'help.open', kind: 'button', text: '?', label: 'Help', slot: Slots.End, order: 99 });
+    contribute({ surface: 'top', command: 'palette.open', kind: 'button', text: '🔍', label: 'Search (P)', slot: Slots.End, order: 100 });
 
     let query = '';
     let selected = 0;
@@ -152,6 +156,24 @@ export function registerCommandModal(system: Registry) {
       contexts.templates.slot(palette, 'commands').append(renderList());
       return palette;
     };
+    const renderHelp = () => {
+      const fragment = document.createDocumentFragment();
+      contexts.commands.all()
+        .filter(command => !command.hidden)
+        .sort((a, b) => (a.group ?? '').localeCompare(b.group ?? '') || a.label.localeCompare(b.label))
+        .forEach(command => {
+          const row = contexts.templates.clone<HTMLElement>('help-row');
+          contexts.templates.text(row, 'label', command.label);
+          contexts.templates.text(row, 'id', command.id);
+          const input = row.querySelector('.shortcut-edit') as HTMLInputElement | null;
+          if (input) {
+            input.value = shortcutOf(command);
+            input.dataset.shortcutCommand = command.id;
+          }
+          fragment.append(row);
+        });
+      return fragment;
+    };
     const rerender = () => {
       const list = modalEl()?.querySelector('[data-command-modal="palette"] [data-slot="commands"]');
       if (!list) return;
@@ -175,8 +197,14 @@ export function registerCommandModal(system: Registry) {
         id: 'palette.open',
         label: 'Open palette',
         group: 'modal',
-        shortcut: '⌘K',
-        input: { on: 'keydown', key: 'k', meta: true, prevent: true },
+        shortcut: 'P',
+        input: { on: 'keydown', key: 'p', prevent: true },
+      },
+      {
+        id: 'help.open',
+        label: 'Open help',
+        group: 'modal',
+        shortcut: '?',
       },
       {
         // `?` still opens the same surface (the old Help hotkey).
@@ -250,10 +278,33 @@ export function registerCommandModal(system: Registry) {
         input: { on: 'input', selector: '.palette-search' },
         payload: ({ target }) => ({ query: (target as HTMLInputElement).value }),
       },
+      {
+        id: 'shortcut.edit.preview',
+        label: 'Preview shortcut edit',
+        group: 'modal',
+        hidden: true,
+        input: { on: 'input', selector: '.shortcut-edit' },
+        payload: ({ target }) => ({
+          id: (target as HTMLInputElement).dataset.shortcutCommand ?? '',
+          shortcut: (target as HTMLInputElement).value,
+        }),
+      },
+      {
+        id: 'shortcut.edit.commit',
+        label: 'Commit shortcut edit',
+        group: 'modal',
+        hidden: true,
+        input: { on: 'focusout', selector: '.shortcut-edit' },
+        payload: ({ target }) => ({
+          id: (target as HTMLInputElement).dataset.shortcutCommand ?? '',
+          shortcut: (target as HTMLInputElement).value,
+        }),
+      },
     ]);
 
     const open = () => emit('modal.open', { title: 'Palette', visual: 'command', body: () => renderPalette() });
     on('palette.open', () => { query = ''; selected = 0; open(); });
+    on('help.open', () => emit('modal.open', { title: 'Help', visual: 'command', body: () => renderHelp() }));
     on('palette.nav', ({ delta }) => {
       if (!currentRows.length) return;
       selected = (selected + delta + currentRows.length) % currentRows.length;
@@ -279,6 +330,32 @@ export function registerCommandModal(system: Registry) {
       query = q;
       selected = 0;
       rerender();
+    });
+    const shortcutInput = (id: string) =>
+      modalEl()?.querySelector(`.shortcut-edit[data-shortcut-command="${CSS.escape(id)}"]`) as HTMLInputElement | null;
+    const markShortcutConflict = (id: string, shortcut?: string) => {
+      const input = shortcutInput(id);
+      if (!input) return false;
+      const conflict = !!contexts.commands.shortcutConflict(id, shortcut ?? input.value);
+      input.classList.toggle('is-conflict', conflict);
+      input.closest('.help-row')?.classList.toggle('has-conflict', conflict);
+      return conflict;
+    };
+    on('shortcut.edit.preview', ({ id, shortcut }) => {
+      if (!contexts.commands.get(id)) return;
+      markShortcutConflict(id, shortcut);
+    });
+    on('shortcut.edit.commit', ({ id, shortcut }) => {
+      const command = contexts.commands.get(id);
+      if (!command) return;
+      if (markShortcutConflict(id, shortcut)) {
+        const input = shortcutInput(id);
+        if (input) input.value = shortcutOf(command);
+        return;
+      }
+      contexts.commands.setShortcut(id, shortcut ?? '');
+      const input = shortcutInput(id);
+      if (input) input.value = shortcutOf(command);
     });
   }, { requires: ['modal'] });
 }

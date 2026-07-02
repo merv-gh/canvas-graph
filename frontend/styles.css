@@ -1,14 +1,14 @@
 /* Design tokens. Names mirror Tailwind's neutral-* / blue-* so migration is a search-and-replace.
    Anything visual should derive from these — DO NOT hardcode colors below. */
 :root {
-  --bg: #fafaf9;
+  --bg: rgb(250, 250, 249);
   --panel: #ffffff;
   --panel-2: #f5f5f4;
   --ink: #1c1c1c;
   --text-muted: #6b7280;
   --line: #e5e5e3;
   --line-strong: #d4d4d2;
-  --accent: #2563eb;
+  --accent: rgb(37, 99, 235);
   --accent-soft: rgba(37, 99, 235, .08);
   --edge: #4b5563;
   --danger: #dc2626;
@@ -41,14 +41,14 @@
 /* Auto dark from OS preference (no explicit theme choice yet) */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --bg: #111110;
+    --bg: rgb(17, 17, 16);
     --panel: #1c1c1b;
     --panel-2: #282826;
     --ink: #eeedec;
     --text-muted: #8b919a;
     --line: #333331;
     --line-strong: #444442;
-    --accent: #6094f8;
+    --accent: rgb(96, 148, 248);
     --accent-soft: rgba(96,148,248,.12);
     --edge: #8b919a;
     --danger: #f87171;
@@ -60,14 +60,14 @@
 
 /* Explicit dark (JS toggle wins over media query via specificity on .shell) */
 .shell[data-theme="dark"] {
-  --bg: #111110;
+  --bg: rgb(17, 17, 16);
   --panel: #1c1c1b;
   --panel-2: #282826;
   --ink: #eeedec;
   --text-muted: #8b919a;
   --line: #333331;
   --line-strong: #444442;
-  --accent: #6094f8;
+  --accent: rgb(96, 148, 248);
   --accent-soft: rgba(96,148,248,.12);
   --edge: #8b919a;
   --danger: #f87171;
@@ -78,14 +78,14 @@
 
 /* Explicit light (when OS is dark but user chose light) */
 .shell[data-theme="light"] {
-  --bg: #fafaf9;
+  --bg: rgb(250, 250, 249);
   --panel: #ffffff;
   --panel-2: #f5f5f4;
   --ink: #1c1c1c;
   --text-muted: #6b7280;
   --line: #e5e5e3;
   --line-strong: #d4d4d2;
-  --accent: #2563eb;
+  --accent: rgb(37, 99, 235);
   --accent-soft: rgba(37,99,235,.08);
   --edge: #4b5563;
   --danger: #dc2626;
@@ -1165,6 +1165,8 @@ button.icon:hover { color: var(--ink); }
 .modal-body { padding: var(--space-3); display: grid; gap: var(--space-2); }
 .modal-layer[data-visual="command"] .modal { width: min(520px, calc(100vw - 32px)); }
 .modal-layer[data-visual="properties"] .modal { width: min(360px, calc(100vw - 32px)); }
+.modal-layer[data-visual="perf"] .modal { width: min(1100px, calc(100vw - 32px)); }
+.modal-layer[data-visual="perf"] .modal-body { max-height: calc(100vh - 150px); overflow: auto; }
 
 .palette-search {
   width: 100%;
@@ -1225,6 +1227,86 @@ button.icon:hover { color: var(--ink); }
   padding: 4px 6px;
   font: 12px ui-monospace, monospace;
   background: var(--panel);
+}
+.perf-panel { display: grid; gap: 12px; min-width: 0; }
+.perf-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.perf-actions button { border: 1px solid var(--line); }
+.perf-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.perf-summary-item {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+.perf-summary-item span { color: var(--text-muted); font-size: 11px; }
+.perf-summary-item b { font: 16px ui-monospace, monospace; }
+.perf-panel details {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.perf-panel summary {
+  cursor: pointer;
+  padding: 7px 10px;
+  background: var(--panel-2);
+  font-weight: 600;
+}
+.perf-table-wrap { max-height: 300px; overflow: auto; }
+.perf-table {
+  width: 100%;
+  border-collapse: collapse;
+  font: 11px/1.35 ui-monospace, monospace;
+}
+.perf-table th,
+.perf-table td {
+  padding: 4px 7px;
+  border-top: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+.perf-table th {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  color: var(--text-muted);
+  z-index: 1;
+  cursor: pointer;
+  user-select: none;
+}
+.perf-table th.is-sorted { color: var(--text); }
+.perf-table td:nth-child(n+3) { white-space: nowrap; }
+.perf-table td:last-child { white-space: normal; }
+.perf-bar {
+  display: block;
+  width: 120px;
+  height: 8px;
+  margin-top: 3px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.perf-bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.perf-export {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 180px;
+  resize: vertical;
+  padding: 8px;
+  border: 0;
+  background: var(--panel);
+  color: var(--text);
+  font: 11px/1.4 ui-monospace, monospace;
 }
 .help-row.has-conflict { background: var(--danger-soft); }
 .flag-row { cursor: pointer; }

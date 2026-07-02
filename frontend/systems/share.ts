@@ -307,6 +307,25 @@ export function registerShare(system: Registry) {
     contexts.commands.register([
       { id: 'graph.share.copy', label: 'Copy share link', group: 'graph' },
       { id: 'graph.import.paste', label: 'Import graph from clipboard', group: 'graph' },
+      {
+        id: 'graph.import.mermaid.paste-event',
+        label: 'Import pasted mermaid graph',
+        event: 'graph.import.mermaid',
+        group: 'graph',
+        hidden: true,
+        input: {
+          on: 'paste',
+          global: true,
+          prevent: true,
+          when: event => {
+            const target = event.target as HTMLElement | null;
+            if (target && (target.isContentEditable || /^(INPUT|TEXTAREA)$/.test(target.tagName))) return false;
+            const text = (event as ClipboardEvent).clipboardData?.getData('text') ?? '';
+            return !!text && looksLikeMermaid(text);
+          },
+        },
+        payload: ({ event }) => ({ source: (event as ClipboardEvent).clipboardData?.getData('text') ?? '' }),
+      },
     ]);
 
     // `?g=` carries real positions → keep them. Mermaid has none → tidy first.
@@ -359,19 +378,6 @@ export function registerShare(system: Registry) {
       if (incoming) emit('graph.import.mermaid', { source: incoming });
     };
 
-    // Paste a mermaid graph (or a mermaid.live link) anywhere outside an input
-    // to import it — the zero-friction path the `?in=` param mirrors.
-    const onPaste = (event: ClipboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target && (target.isContentEditable || /^(INPUT|TEXTAREA)$/.test(target.tagName))) return;
-      const text = event.clipboardData?.getData('text') ?? '';
-      if (!text || !looksLikeMermaid(text)) return;
-      event.preventDefault();
-      emit('graph.import.mermaid', { source: text });
-    };
-    document.addEventListener('paste', onPaste);
-
     on('app.start', bootFromUrl);
-    return () => document.removeEventListener('paste', onPaste);
   }, { requires: ['graph'] });
 }

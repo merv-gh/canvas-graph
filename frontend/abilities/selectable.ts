@@ -162,7 +162,9 @@ export function registerSelectable(system: Registry) {
     on('selection.item.delete', () => {
       // Fan out over the chosen set — each kind owner deletes its own items
       // (containers handles 'container'). Same command for 1 or N.
-      selection.selectedAll().forEach(ref => {
+      const refs = selection.selectedAll();
+      selection.select(null);
+      refs.forEach(ref => {
         if (ref.kind === 'node') emit('graph.node.delete', { id: ref.id });
         if (ref.kind === 'edge') emit('graph.edge.delete', { id: ref.id });
       });

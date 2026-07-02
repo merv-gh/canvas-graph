@@ -116,9 +116,11 @@ export function registerFeatures(feature: Registry) {
       emit('graph.edge.create', { From, To, Label: draft.Label });
     });
   }, { requires: ['graph'] });
-  feature('autoLayout', ({ on, emit }) => {
+  feature('autoLayout', ({ on, emit, graphs }) => {
+    const MAX_AUTO_LAYOUT_NODES = 250;
     let pending = false;
     const scheduleTidy = () => {
+      if (graphs.current.nodes().length > MAX_AUTO_LAYOUT_NODES) return;
       if (pending) return;
       pending = true;
       queueMicrotask(() => {

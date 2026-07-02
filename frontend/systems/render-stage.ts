@@ -138,7 +138,10 @@ export function registerRenderStage(system: Registry) {
     const CULL_MARGIN = 200;
     const visibleNodeIds = (): Set<string> | null => {
       const rect = contexts.view.visibleRect(Places.Stage, CULL_MARGIN);
-      return rect ? new Set(graphs.current.nodeIdsInRect(rect)) : null;
+      if (!rect) return null;
+      const ids = graphs.current.nodeIdsInRect(rect);
+      ctx.perf.sample('Render.stage.visibleNodeCandidates', ids.length);
+      return new Set(ids);
     };
 
     type Desired = { ref: ItemRef; def: EntityDef<unknown>; item: unknown };
@@ -160,6 +163,7 @@ export function registerRenderStage(system: Registry) {
           desired.set(keyOf(ref), { ref, def, item });
         });
       });
+      ctx.perf.sample('Render.stage.desiredItems', desired.size);
       return desired;
     };
 
@@ -178,12 +182,32 @@ export function registerRenderStage(system: Registry) {
       }
       layer!.style.transform = layerTransform(contexts.view.get());
       const desired = collectDesired(visibleNodeIds());
-      [...els.keys()].forEach(k => { if (!desired.has(k)) { els.get(k)?.remove(); els.delete(k); sigCache.delete(k); } });
+      let removed = 0;
+      let inserted = 0;
+      [...els.keys()].forEach(k => {
+        if (!desired.has(k)) {
+          els.get(k)?.remove();
+          els.delete(k);
+          sigCache.delete(k);
+          removed++;
+        }
+      });
       desired.forEach(({ ref, def, item }, k) => {
         if (els.has(k)) return; // already on stage — leave it (cheap camera moves)
-        const el = def.render!.draw(item, renderCtxFor(def, item)) as HTMLElement | null;
-        if (el) { stableZ(ref, el); targetLayer(def.render!).append(el); els.set(k, el); cacheSig(k, def, item); }
+        const el = ctx.perf.measure(`Render.entity.${def.kind}.draw`, () =>
+          def.render!.draw(item, renderCtxFor(def, item)) as HTMLElement | null,
+        );
+        if (el) {
+          stableZ(ref, el);
+          targetLayer(def.render!).append(el);
+          els.set(k, el);
+          cacheSig(k, def, item);
+          inserted++;
+        }
       });
+      ctx.perf.count('Render.stage.itemsInserted', inserted);
+      ctx.perf.count('Render.stage.itemsRemoved', removed);
+      ctx.perf.sample('Render.stage.liveItems', els.size);
       if (fresh) emit('render.view.set', { place: Places.Stage, key: 'nodes', view: layer! });
     };
     const drawAll = () => reconcile(true);
@@ -197,7 +221,10 @@ export function registerRenderStage(system: Registry) {
       const renderer = entityDef?.render;
       const item = renderer ? graphs.current.getItem(ref) : undefined;
       const culled = ref.kind === 'node' && !!visible && !visible.has(ref.id);
-      const hidden = (ref.kind !== 'edge' && hiddenByCollapsedAncestor(ref)) || culled;
+      const edgeCulled = ref.kind === 'edge' && !!visible && !!item
+        && !visible.has((item as { From?: string }).From ?? '')
+        && !visible.has((item as { To?: string }).To ?? '');
+      const hidden = (ref.kind !== 'edge' && hiddenByCollapsedAncestor(ref)) || culled || edgeCulled;
       if (!renderer || !item || hidden) { existing?.remove(); els.delete(k); sigCache.delete(k); return; }
       // Fast path: the element exists and nothing but its position changed →
       // move it in place (no rebuild, keeps identity so CSS can ease the move).
@@ -205,7 +232,9 @@ export function registerRenderStage(system: Registry) {
         renderer.reposition(existing, item);
         return;
       }
-      const fresh = renderer.draw(item, renderCtxFor(entityDef!, item)) as HTMLElement | null;
+      const fresh = ctx.perf.measure(`Render.entity.${ref.kind}.draw`, () =>
+        renderer.draw(item, renderCtxFor(entityDef!, item)) as HTMLElement | null,
+      );
       if (!fresh) { existing?.remove(); els.delete(k); sigCache.delete(k); return; }
       stableZ(ref, fresh);
       if (existing) existing.replaceWith(fresh);
@@ -236,33 +265,49 @@ export function registerRenderStage(system: Registry) {
         });
       });
       const visible = visibleNodeIds();
+      ctx.perf.sample('Render.stage.patchRefs', refs.length);
+      ctx.perf.sample('Render.stage.patchItems', todo.size);
       todo.forEach(ref => patchOne(ref, visible));
+      ctx.perf.sample('Render.stage.liveItems', els.size);
     };
 
-    const drawStageOverlays = () => emit('render.view.set', {
-      place: Places.Stage,
-      key: 'overlays',
-      view: () => {
-        const layer = document.createElement('div');
-        layer.className = 'item-overlays';
-        contexts.decorations.overlays.all().forEach(overlay => {
-          const anchor = contexts.hierarchy.anchor(overlay.ref);
-          if (!anchor) return;
-          const screen = contexts.view.spaceToScreen(anchor);
-          const el = document.createElement('div');
-          el.className = 'item-overlay';
-          if (overlay.className) el.classList.add(...overlay.className.split(/\s+/).filter(Boolean));
-          tagItem(el, overlay.ref);
-          if (overlay.id) el.dataset.overlayId = overlay.id;
-          el.textContent = overlay.text;
-          el.style.left = `${screen.x}px`;
-          el.style.top = `${screen.y}px`;
-          layer.append(el);
-        });
-        return layer;
-      },
-    });
+    let overlaysMounted = false;
+    const drawStageOverlays = () => {
+      const overlays = contexts.decorations.overlays.all();
+      if (!overlays.length) {
+        if (overlaysMounted) {
+          overlaysMounted = false;
+          emit('render.view.clear', { place: Places.Stage, key: 'overlays' });
+        }
+        return;
+      }
+      overlaysMounted = true;
+      emit('render.view.set', {
+        place: Places.Stage,
+        key: 'overlays',
+        view: () => {
+          const layer = document.createElement('div');
+          layer.className = 'item-overlays';
+          overlays.forEach(overlay => {
+            const anchor = contexts.hierarchy.anchor(overlay.ref);
+            if (!anchor) return;
+            const screen = contexts.view.spaceToScreen(anchor);
+            const el = document.createElement('div');
+            el.className = 'item-overlay';
+            if (overlay.className) el.classList.add(...overlay.className.split(/\s+/).filter(Boolean));
+            tagItem(el, overlay.ref);
+            if (overlay.id) el.dataset.overlayId = overlay.id;
+            el.textContent = overlay.text;
+            el.style.left = `${screen.x}px`;
+            el.style.top = `${screen.y}px`;
+            layer.append(el);
+          });
+          return layer;
+        },
+      });
+    };
 
+    let emptyMounted = false;
     const drawEmptyState = () => {
       // "Empty" means *nothing renderable* on the stage — not just zero nodes.
       // A graph with containers (even no nodes) shouldn't show "press A to add
@@ -271,9 +316,13 @@ export function registerRenderStage(system: Registry) {
         entityDef.render && graphs.current.itemsOfKind(entityDef.kind).length > 0,
       );
       if (hasAnyItem) {
-        emit('render.view.clear', { place: Places.Stage, key: 'empty' });
+        if (emptyMounted) {
+          emptyMounted = false;
+          emit('render.view.clear', { place: Places.Stage, key: 'empty' });
+        }
         return;
       }
+      emptyMounted = true;
       emit('render.view.set', {
         place: Places.Stage,
         key: 'empty',
@@ -298,12 +347,22 @@ export function registerRenderStage(system: Registry) {
     };
 
     on('render.stage.draw', ({ full, refs }) => {
-      if (full || !refs?.length || !layer) drawAll();
-      else patchItems(refs);
-      drawStageOverlays();
-      drawEmptyState();
+      ctx.perf.measure('Render.stage.draw', () => {
+        if (full || !refs?.length || !layer) {
+          ctx.perf.count('Render.stage.fullDraw');
+          drawAll();
+        } else {
+          ctx.perf.count('Render.stage.patchDraw');
+          patchItems(refs);
+        }
+        drawStageOverlays();
+        drawEmptyState();
+      });
     });
-    on('render.stage.camera', applyCamera);
+    on('render.stage.camera', () => {
+      ctx.perf.count('Render.stage.cameraDraw');
+      ctx.perf.measure('Render.stage.camera', applyCamera);
+    });
     // While a pointer-drag is active, suppress the node move-easing so the dragged
     // node tracks the cursor 1:1 (easing is for discrete keyboard nudges only).
     on('drag.item.start', () => contexts.places.el(Places.Stage)?.classList.add('dragging'));

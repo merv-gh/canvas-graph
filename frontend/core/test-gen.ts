@@ -37,7 +37,7 @@ export type TestGenOptions = {
  *   - `graph.node.*`, `graph.edge.*`, `graph.container.*` — downstream storage
  *     CRUD that the `editing.*` features will emit when replayed
  *   - `selection.node.*`, `focus.*` — downstream of `selection.item.select`
- *   - `item.update` — emitted by drag/edit/nudge from their own intent events;
+ *   - `item.update` / `item.update.batch` — emitted by drag/edit/nudge from their own intent events;
  *     replaying those events reproduces it
  *
  *  What survives is the user-intent slice: `editing.*`, `commandForm.submit`,
@@ -58,7 +58,7 @@ export function defaultEventFilter(event: TraceEvent): boolean {
   if (name === 'app.notice') return false;
   if (name === 'app.start') return false;
   if (name === 'decoration.changed') return false;
-  if (name === 'item.update') return false;
+  if (name === 'item.update' || name === 'item.update.batch') return false;
   // Downstream storage CRUD — re-fired by the editing.* feature flow.
   if (/^graph\.(node|edge|container)\.(create|update|delete)$/.test(name)) return false;
   // Downstream of selection.item.select.

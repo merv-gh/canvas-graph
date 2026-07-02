@@ -58,7 +58,9 @@ export function registerItemToolbar(system: Registry) {
       };
       const topCenter = { x: rect.x + rect.w / 2, y: rect.y };
       const screen = contexts.view.spaceToScreen(topCenter);
-      wrapper.style.left = `${screen.x}px`;
+      const leftPanel = contexts.places.el(Places.Left)?.getBoundingClientRect();
+      const minX = leftPanel && leftPanel.width > 0 ? leftPanel.right + 44 : 0;
+      wrapper.style.left = `${Math.max(screen.x, minX)}px`;
       wrapper.style.top = `${screen.y}px`;
 
       const append = (slot: string, kind: 'button' | 'handler', handlerText = '', baseClass = '') => {
@@ -93,6 +95,8 @@ export function registerItemToolbar(system: Registry) {
       const entityDef = model.entity(ref.kind);
       const item = graphs.current.getItem(ref);
       if (!entityDef || !item) return clear();
+      const bounds = entityDef.render?.bounds?.(item as never);
+      if (bounds && !contexts.view.isVisible(Places.Stage, bounds, 80)) return clear();
       // Skip if the entity has no `surface: 'entity'` affordances at all —
       // nothing to put in the toolbar, no point flashing it.
       const affs = contexts.affordances.entity(entityDef);

@@ -20,8 +20,8 @@ describe('frontend UI command surfaces', () => {
     expect(document.querySelector('.tool-panel[data-panel-id="top"] [data-command="layout.apply.tidy"]')).toBeNull();
     // Search icon lives in the trailing (right) toolbar slot.
     expect(document.querySelector('.top-tool-panel .toolbar-end [data-command="palette.open"]')).not.toBeNull();
-    // The outline panel and its hamburger toggle are gone.
-    expect(document.querySelector('.outline-panel')).toBeNull();
+    // Outline is a left place now; the old top-bar hamburger stays gone.
+    expect(document.querySelector('.outline-panel')).not.toBeNull();
     expect(document.querySelector('.top-tool-panel .hamburger')).toBeNull();
     expect(ctx.bus['_emitted'].has('render.view.set')).toBe(true);
   });

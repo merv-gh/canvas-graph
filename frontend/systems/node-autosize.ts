@@ -29,9 +29,15 @@ export function registerNodeAutosize(system: Registry) {
     };
 
     on('graph.node.created', ({ id }) => apply(id));
-    on('graph.node.updated', ({ id }) => apply(id));
-    // Bulk import (`graph.import.snapshot` → replace) never emits per-node
-    // `created`, so size every node once the imported graph lands.
-    on('graph.imported', () => { autoSized.clear(); graphs.current.nodes().forEach(node => apply(node.id)); });
+    on('graph.node.updated', ({ id, patch }) => {
+      if (patch && !('Label' in patch) && !('Description' in patch) && !('Size' in patch)) return;
+      apply(id);
+    });
+    // Bulk import is a saved-document path. Trust imported sizes and remember
+    // them as the auto-size baseline instead of emitting N item.update events.
+    on('graph.imported', () => {
+      autoSized.clear();
+      graphs.current.nodes().forEach(node => autoSized.set(node.id, node.Size));
+    });
   }, { requires: ['graph'] });
 }

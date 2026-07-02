@@ -113,7 +113,12 @@ export function registerViewZoom(system: Registry) {
       const stage = contexts.places.el(Places.Stage);
       if (!stage) return;
       const rect = stage.getBoundingClientRect();
-      const fittableW = Math.max(1, rect.width - 2 * pixelPadding);
+      const left = contexts.places.el(Places.Left);
+      const leftRect = left?.getBoundingClientRect();
+      const leftInset = leftRect && leftRect.width > 0
+        ? Math.max(0, Math.min(rect.width - 1, leftRect.right - rect.left))
+        : 0;
+      const fittableW = Math.max(1, rect.width - leftInset - 2 * pixelPadding);
       const fittableH = Math.max(1, rect.height - 2 * pixelPadding);
       const bw = Math.max(1, b.maxX - b.minX);
       const bh = Math.max(1, b.maxY - b.minY);
@@ -121,7 +126,7 @@ export function registerViewZoom(system: Registry) {
       const cx = (b.minX + b.maxX) / 2;
       const cy = (b.minY + b.maxY) / 2;
       contexts.view.set({
-        x: cx - rect.width / (2 * scale),
+        x: cx - (leftInset + pixelPadding + fittableW / 2) / scale,
         y: cy - rect.height / (2 * scale),
         scale,
       });

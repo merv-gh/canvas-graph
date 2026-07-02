@@ -1,6 +1,7 @@
-import type { Bus, CommandOrigin, CommandSource, CommandSpec, CommandSpecInput, EventName } from '../types';
+import type { Bus, CommandOrigin, CommandSource, CommandSpec, CommandSpecInput, EventName, RawInput } from '../types';
 import type { IoApi } from './io';
 import { STORAGE_KEYS } from './io';
+import type { PerfApi } from './perf';
 import { bindingParsed, keyMatchesEvent, parseShortcut, shortcutOf } from './shortcuts';
 
 const POINTER_TYPES = new Set(['click', 'pointerdown', 'pointermove', 'pointerup', 'wheel']);
@@ -17,6 +18,13 @@ export function commandsContext(bus: Bus, isFlagOn: (origin?: string) => boolean
   const commandMap = new Map<string, CommandSpec>();
   const shortcutOverrides = io.get<Record<string, string>>(STORAGE_KEYS.shortcuts, {});
   const disabledCommands = new Set<string>(io.get<string[]>(STORAGE_KEYS.disabledCommands, []));
+  let enabledCache: CommandSpec[] | null = null;
+  const inputCache = new Map<RawInput, CommandSpec[]>();
+  const invalidate = () => {
+    enabledCache = null;
+    inputCache.clear();
+  };
+  bus.on('flag.changed', invalidate);
 
   const isEnabled = (command: CommandSpec) =>
     command.enabled !== false
@@ -51,24 +59,37 @@ export function commandsContext(bus: Bus, isFlagOn: (origin?: string) => boolean
   };
 
   return {
-    register: (specs: CommandSpecInput[], origin?: string) => specs.forEach(input => {
-      const command = input as CommandSpec;
-      // `event` defaults to `id`. Most commands have id === event; the option to
-      // override exists for cases where many command ids fire the same event
-      // (e.g. four nudge directions → 'item.update', several pointer variants
-      // → 'drag.item.start').
-      if (!command.event) command.event = command.id as EventName;
-      if (origin && !command.origin) command.origin = origin;
-      applyOverrides(command);
-      commandMap.set(command.id, command);
-    }),
-    unregister(id: string) { commandMap.delete(id); },
+    register: (specs: CommandSpecInput[], origin?: string) => {
+      specs.forEach(input => {
+        const command = input as CommandSpec;
+        // `event` defaults to `id`. Most commands have id === event; the option to
+        // override exists for cases where many command ids fire the same event
+        // (e.g. four nudge directions → 'item.update', several pointer variants
+        // → 'drag.item.start').
+        if (!command.event) command.event = command.id as EventName;
+        if (origin && !command.origin) command.origin = origin;
+        applyOverrides(command);
+        commandMap.set(command.id, command);
+      });
+      invalidate();
+    },
+    unregister(id: string) { commandMap.delete(id); invalidate(); },
     unregisterOrigin(origin: string) {
       for (const [id, command] of commandMap) if (command.origin === origin) commandMap.delete(id);
+      invalidate();
     },
     get: (id: string) => commandMap.get(id),
     all: () => [...commandMap.values()],
-    enabled: () => [...commandMap.values()].filter(isEnabled),
+    enabled: () => enabledCache ??= [...commandMap.values()].filter(isEnabled),
+    enabledForInput(type: RawInput) {
+      let cached = inputCache.get(type);
+      if (!cached) {
+        cached = (enabledCache ??= [...commandMap.values()].filter(isEnabled))
+          .filter(command => command.input?.on === type);
+        inputCache.set(type, cached);
+      }
+      return cached;
+    },
     isEnabled,
     shortcutConflict,
     setShortcut(id: string, shortcut: string) {
@@ -86,6 +107,7 @@ export function commandsContext(bus: Bus, isFlagOn: (origin?: string) => boolean
       if (!command) return false;
       if (enabled) disabledCommands.delete(id); else disabledCommands.add(id);
       bus.emit('command.enabled.changed', { id, enabled });
+      invalidate();
       return true;
     },
     run(id: string, source: CommandSource = {}) {
@@ -121,7 +143,7 @@ export function commandsContext(bus: Bus, isFlagOn: (origin?: string) => boolean
  *       target is outside the modal are skipped. Backdrop, form fields, and
  *       command buttons inside the modal still work; A/E/G/etc on the
  *       background do nothing until the modal closes. */
-export function inputRouter(commands: ReturnType<typeof commandsContext>) {
+export function inputRouter(commands: ReturnType<typeof commandsContext>, perf?: PerfApi) {
   return {
     start(root: Document | HTMLElement = document) {
       /** A modal is "mounted" when [data-place="modal"] has any rendered children. */
@@ -133,36 +155,52 @@ export function inputRouter(commands: ReturnType<typeof commandsContext>) {
         !!modal && !!target && modal.contains(target);
       const route = (event: Event) => {
         const rawTarget = event.target instanceof Element ? event.target : null;
-        const typing = event instanceof KeyboardEvent
-          && (/input|textarea|select/i.test(rawTarget?.tagName ?? '') || (rawTarget instanceof HTMLElement && rawTarget.isContentEditable));
-        const modal = modalScopeEl();
-        const inModal = targetInModal(rawTarget, modal);
+        const trace = perf?.beginInput(event.type, event, rawTarget);
+        const candidates: string[] = [];
+        const matched: string[] = [];
+        const runCommand = (id: string, target: Element) => {
+          matched.push(id);
+          const run = () => commands.run(id, { event, target });
+          return perf?.enabled() ? perf.measure(`Command.run.${id}`, run) : run();
+        };
+        try {
+          const typing = event instanceof KeyboardEvent
+            && (/input|textarea|select/i.test(rawTarget?.tagName ?? '') || (rawTarget instanceof HTMLElement && rawTarget.isContentEditable));
+          const modal = modalScopeEl();
+          const inModal = targetInModal(rawTarget, modal);
 
-        const button = event.type === 'click' ? rawTarget?.closest('[data-command]') : null;
-        if (button instanceof HTMLElement) {
-          // Modal strictness for click-driven data-command buttons too —
-          // background toolbar buttons can't fire while a modal is up.
-          if (modal && !modal.contains(button)) return;
-          event.preventDefault();
-          commands.run(button.dataset.command!, { event, target: button });
-          return;
-        }
+          const button = event.type === 'click' ? rawTarget?.closest('[data-command]') : null;
+          if (button instanceof HTMLElement) {
+            // Modal strictness for click-driven data-command buttons too —
+            // background toolbar buttons can't fire while a modal is up.
+            if (modal && !modal.contains(button)) return;
+            const commandId = button.dataset.command!;
+            candidates.push(commandId);
+            event.preventDefault();
+            runCommand(commandId, button);
+            return;
+          }
 
-        for (const command of commands.enabled()) {
-          const binding = command.input;
-          if (!binding || binding.on !== event.type) continue;
-          if (event instanceof KeyboardEvent && (!binding.key || !keyMatchesEvent(event, bindingParsed(binding)))) continue;
-          const target = rawTarget && binding.selector ? rawTarget.closest(binding.selector) : rawTarget;
-          if (!(target instanceof Element) || (binding.selector && !target)) continue;
-          if (typing && !binding.global && !binding.selector) continue;
-          if (modal && !binding.global && !inModal) continue;
-          if (binding.when && !binding.when(event, target)) continue;
-          if (binding.prevent) event.preventDefault();
-          commands.run(command.id, { event, target });
-          if (binding.stop) break;
+          const commandsForInput = commands.enabledForInput(event.type as RawInput);
+          candidates.push(...commandsForInput.map(command => command.id));
+          for (const command of commandsForInput) {
+            const binding = command.input;
+            if (!binding || binding.on !== event.type) continue;
+            if (event instanceof KeyboardEvent && (!binding.key || !keyMatchesEvent(event, bindingParsed(binding)))) continue;
+            const target = rawTarget && binding.selector ? rawTarget.closest(binding.selector) : rawTarget;
+            if (!(target instanceof Element) || (binding.selector && !target)) continue;
+            if (typing && !binding.global && !binding.selector) continue;
+            if (modal && !binding.global && !inModal) continue;
+            if (binding.when && !binding.when(event, target)) continue;
+            if (binding.prevent) event.preventDefault();
+            runCommand(command.id, target);
+            if (binding.stop) break;
+          }
+        } finally {
+          trace?.end({ candidates, matched });
         }
       };
-      const types: EventName[] | string[] = ['click', 'dblclick', 'keydown', 'pointerdown', 'pointermove', 'pointerup', 'wheel', 'input', 'change', 'focusout'];
+      const types: string[] = ['click', 'dblclick', 'keydown', 'pointerdown', 'pointermove', 'pointerup', 'wheel', 'input', 'change', 'focusout', 'paste'];
       types.forEach(type => root.addEventListener(type, route, type === 'wheel' ? { passive: false } : undefined));
       return () => types.forEach(type => root.removeEventListener(type, route));
     },

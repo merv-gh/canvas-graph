@@ -23,8 +23,7 @@ export function registerLog(system: Registry) {
       scheduled = true;
       requestAnimationFrame(() => {
         scheduled = false;
-        // Log rendering disconnected from left panel; system kept for future audit-panel toggle.
-        // emit('render.view.set', { place: Places.Left, key: 'log', view: renderLog });
+        emit('render.view.set', { place: Places.Left, key: 'log', view: renderLog });
       });
     };
     bus.onAny(event => {

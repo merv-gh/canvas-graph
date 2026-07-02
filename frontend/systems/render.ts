@@ -1,4 +1,4 @@
-import { appendRenderable, factScope, itemParentAttr, type Registry } from '../core';
+import { factScope, itemParentAttr, type Registry } from '../core';
 import { mountRoot } from '../core/mount';
 import { Places } from '../types';
 import type { ItemRef, Place, RedrawScope, Renderable } from '../types';
@@ -12,6 +12,7 @@ export function registerRender(system: Registry) {
     const { on, emit, bus, contexts } = ctx;
     const root = mountRoot();
     const views = new Map<Place, Map<string, Renderable>>();
+    const mounted = new Map<Place, Map<string, Node>>();
 
     const attr = (value: string) => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
     const itemSelector = (ref: ItemRef) => {
@@ -24,23 +25,57 @@ export function registerRender(system: Registry) {
       const active = activeElement();
       if (active?.closest('[data-item-kind][data-item-id]') && typeof active.blur === 'function') active.blur();
     };
-    const flush = (place: Place) => {
+    const nodeOf = (view: Renderable) => typeof view === 'function' ? view() : view;
+    const mountedFor = (place: Place) => mounted.get(place) ?? mounted.set(place, new Map()).get(place)!;
+    const mountView = (place: Place, key: string, view: Renderable) => {
+      const slot = contexts.places.el(place);
+      if (!slot) return;
+      const live = mountedFor(place);
+      const previous = live.get(key);
+      const next = nodeOf(view);
+      if (previous === next) {
+        if (previous.parentNode !== slot) slot.append(previous);
+        return;
+      }
+      if (previous?.parentNode) previous.parentNode.replaceChild(next, previous);
+      else slot.append(next);
+      live.set(key, next);
+    };
+    const remount = (place: Place) => {
       const slot = contexts.places.el(place), parts = views.get(place);
       if (!slot || !parts) return;
-      slot.replaceChildren();
-      [...parts.values()].forEach(view => appendRenderable(slot, view));
+      const live = mountedFor(place);
+      parts.forEach((view, key) => {
+        const node = live.get(key) ?? nodeOf(view);
+        live.set(key, node);
+        slot.append(node);
+      });
     };
 
     on('render.shell', () => {
       root.replaceChildren(contexts.templates.clone('shell'));
       Object.values(Places).forEach(place => contexts.places.set(place, root.querySelector(`[data-place="${place}"]`)));
-      Object.values(Places).forEach(flush);
+      Object.values(Places).forEach(remount);
     });
     on('render.view.set', ({ place, key = 'default', view }) => {
       (views.get(place) || views.set(place, new Map()).get(place)!).set(key, view);
-      flush(place);
+      mountView(place, key, view);
     });
-    on('render.view.clear', ({ place, key }) => { key ? views.get(place)?.delete(key) : views.delete(place); flush(place); });
+    on('render.view.clear', ({ place, key }) => {
+      if (key) {
+        const parts = views.get(place);
+        if (!parts?.has(key)) return;
+        parts.delete(key);
+        const previous = mounted.get(place)?.get(key);
+        previous?.parentNode?.removeChild(previous);
+        mounted.get(place)?.delete(key);
+      } else {
+        if (!views.has(place)) return;
+        views.delete(place);
+        mounted.get(place)?.forEach(node => node.parentNode?.removeChild(node));
+        mounted.delete(place);
+      }
+    });
 
     type RenderScope = 'nodes' | 'outline' | 'camera';
     const dirty = new Set<RenderScope>();
@@ -80,11 +115,22 @@ export function registerRender(system: Registry) {
     const flushDirty = () => {
       scheduled = false;
       flushes++;
+      ctx.perf.count('Render.flush');
+      ctx.perf.sample('Render.flush.dirtyScopes', dirty.size);
       // A full stage draw already re-applies the camera, so only emit the
       // camera-only path when the nodes scope isn't also dirty this frame.
-      if (dirty.has('nodes')) emit('render.stage.draw', { full: fullNodes, refs: [...dirtyItems.values()] });
-      else if (dirty.has('camera')) emit('render.stage.camera');
-      if (dirty.has('outline')) emit('outline.draw');
+      if (dirty.has('nodes')) {
+        ctx.perf.count('Render.flush.nodes');
+        ctx.perf.sample('Render.flush.refs', dirtyItems.size);
+        emit('render.stage.draw', { full: fullNodes, refs: [...dirtyItems.values()] });
+      } else if (dirty.has('camera')) {
+        ctx.perf.count('Render.flush.camera');
+        emit('render.stage.camera');
+      }
+      if (dirty.has('outline')) {
+        ctx.perf.count('Render.flush.outline');
+        emit('outline.draw');
+      }
       dirty.clear();
       dirtyItems.clear();
       fullNodes = false;
@@ -98,6 +144,13 @@ export function registerRender(system: Registry) {
     };
     const applyScope = (scope: RedrawScope) =>
       scope === 'both' ? mark('nodes', 'outline') : mark(scope as RenderScope);
+    const scopeForEvent = (name: string, data: unknown): RedrawScope | null => {
+      if (name === 'graph.node.updated') {
+        const patch = (data as { patch?: Record<string, unknown> } | undefined)?.patch;
+        if (patch && !('Label' in patch)) return 'nodes';
+      }
+      return factScope(name);
+    };
     ctx.expose('render', { flushes: () => flushes });
     on('app.start', () => mark('nodes'));
     on('focus.item.focused', ref => {
@@ -105,7 +158,7 @@ export function registerRender(system: Registry) {
       if (!ref) pendingBlur = true;
     });
     bus.onAny(({ name, data }) => {
-      const scope = factScope(name);
+      const scope = scopeForEvent(name, data);
       if (!scope) return;
       applyScope(scope);
       if (scope === 'nodes' || scope === 'both') {

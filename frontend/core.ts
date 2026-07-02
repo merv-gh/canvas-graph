@@ -8,6 +8,7 @@ import { hierarchyContext } from './core/hierarchy';
 import { localStorageIo, type IoApi } from './core/io';
 import { keyboardCaptureContext } from './core/keyboard';
 import { createModelRegistry } from './core/model-registry';
+import { createAppPerf, installGraphPerf, type PerfApi } from './core/perf';
 import { propertiesContext } from './core/properties';
 import { createSelectionStore, type SelectionStore } from './core/selection';
 import { createSim, type SimApi } from './core/sim';
@@ -48,6 +49,7 @@ export { emptyState, kbdHint } from './core/templates';
 export { grouped } from './core/util';
 export { factScope } from './core/redraw';
 export { createModelRegistry } from './core/model-registry';
+export { createPerfApi, type PerfApi, type PerfCallEdge, type PerfCountRow, type PerfInputRow, type PerfSampleRow, type PerfSnapshot, type PerfTimelineRow, type PerfTimingRow } from './core/perf';
 export { boundsOf, unionRect, expandRect, rectCenter } from './core/geometry';
 export { introspect, type IntrospectKind, type IntrospectNode, type IntrospectEdge, type IntrospectRelation, type IntrospectRef, type IntrospectSnapshot } from './core/introspect';
 export { storageContext, type StorageApi, type StorageApply } from './core/storage';
@@ -70,6 +72,7 @@ export type AppCtx = {
   selection: SelectionStore;
   io: IoApi;
   sim: SimApi;
+  perf: PerfApi;
   dx?: DxApi;
   render?: RenderApi;
 } & import('./types').CustomExposable;
@@ -112,8 +115,6 @@ export const systemOf = (id: string) => id.split('.')[0] || 'app';
 export const uiValue = <T,>(value: UiValue<T> | undefined, item: T, fallback = '') =>
   typeof value === 'function' ? value(item) : value ?? fallback;
 
-/** Bus instrumentation surface — separate so InstrumentedBus stays focused on
- *  the inverse-index accessors callers actually use (introspect, DX, sim). */
 export type BusOriginIndex = {
   /** Origins that subscribed to `name` at least once and haven't fully torn down. */
   _subscribersOf(name: string): string[];
@@ -130,17 +131,13 @@ export type BusOriginIndex = {
   _trackEmit(name: string, origin: string): void;
 };
 type InstrumentedBus = Bus & BusOriginIndex & { _subscribed: Set<string>; _emitted: Set<string> };
-function eventBus(): InstrumentedBus {
+function eventBus(perf?: PerfApi): InstrumentedBus {
   const listeners = new Map<EventName, ((data: unknown, event: AnyEvent) => void)[]>();
   const any: ((event: AnyEvent) => void)[] = [];
   const listenerCounts = new Map<string, number>();
   const subscribed = new Set<string>();
   const emitted = new Set<string>();
-  /** Per-event subscriber counts keyed by origin. Counts (not booleans) because the
-   *  same origin can register multiple handlers on the same event; the origin only
-   *  drops off `_subscribersOf` when the last handler tears down. */
   const subscribersOf = new Map<string, Map<string, number>>();
-  /** Inverse index: per-origin set of currently subscribed event names. */
   const subscriptionsOf = new Map<string, Set<string>>();
   const emittersOf = new Map<string, Set<string>>();
   const emissionsOf = new Map<string, Set<string>>();
@@ -160,8 +157,16 @@ function eventBus(): InstrumentedBus {
   const dispatch = (name: EventName, data: unknown) => {
     emitted.add(name);
     const event = { name, data, at: performance.now() } as AnyEvent;
-    [...any].forEach(fn => fn(event));
-    [...(listeners.get(name) || [])].forEach(fn => fn(event.data, event));
+    perf?.count(`Bus.emit.${String(name)}`);
+    const fireAny = () => [...any].forEach(fn => fn(event));
+    const fireNamed = () => [...(listeners.get(name) || [])].forEach(fn => fn(event.data, event));
+    if (perf?.enabled()) {
+      perf.measure(`Bus.any.${String(name)}`, fireAny);
+      perf.measure(`Bus.listeners.${String(name)}`, fireNamed);
+    } else {
+      fireAny();
+      fireNamed();
+    }
   };
   return {
     on(name, fn) {
@@ -216,11 +221,9 @@ function eventBus(): InstrumentedBus {
   };
 }
 
-/** Contexts that own per-origin state must drop it when a system is disabled.
- *  Implementations live next to the context; registry teardown walks them generically. */
 type OriginScoped = { unregisterOrigin(origin: string): void };
 
-function createContexts(bus: Bus, flags: FlagsApi, io: IoApi) {
+function createContexts(bus: Bus, flags: FlagsApi, io: IoApi, perf: PerfApi) {
   const places = new Map<Place, HTMLElement>();
   const templates = templateContext();
   const view = viewContext(places);
@@ -231,17 +234,13 @@ function createContexts(bus: Bus, flags: FlagsApi, io: IoApi) {
   const hierarchy = hierarchyContext();
   const keyboard = keyboardCaptureContext();
   const commands = commandsContext(bus, origin => !origin || flags.isOn(origin), io);
-  const input = inputRouter(commands);
+  const input = inputRouter(commands, perf);
   const storage = storageContext(bus);
   const fold = foldContext(bus, io);
   const placeContext = {
     set: (place: Place, el: HTMLElement | null) => { if (el) places.set(place, el); },
     el: (place: Place) => places.get(place) ?? null,
   };
-  // DX inspection surface — `dx` system writes here at boot for tests/devtools to read.
-  // `run()` re-evaluates contracts on demand; the dx system installs the live
-  // runner at start so callers (Help modal, devtools) see current state, not a
-  // boot-time snapshot.
   let lastDxIssues: DxIssue[] = [];
   let runner: () => DxIssue[] = () => lastDxIssues;
   const dx = {
@@ -294,7 +293,10 @@ export function registry(defaultKind: FlagKind = 'system'): Registry {
       const index = ctx.bus as Partial<BusOriginIndex>;
       const origin = entry.name;
       const trackedOn = <K extends EventName>(name: K, fn: (data: AppEvents[K], event: EventOf<K>) => void) => {
-        const off = ctx.bus.on(name, fn);
+        const wrapped = ((data: AppEvents[K], event: EventOf<K>) => ctx.perf.enabled()
+          ? ctx.perf.measure(`Bus.listener.${origin}.${String(name)}`, () => fn(data, event))
+          : fn(data, event)) as typeof fn;
+        const off = ctx.bus.on(name, wrapped);
         index._trackSubscribe?.(name, origin);
         let alive = true;
         const wrappedOff = () => {
@@ -382,13 +384,15 @@ export function createAppContext(
   initialFlags: FeatureFlags = {},
   io: IoApi = localStorageIo(),
 ): AppCtx {
-  const bus = eventBus();
+  const perf = createAppPerf(initialFlags);
+  installGraphPerf(graphs, perf);
+  const bus = eventBus(perf);
   const flags = createFlags(bus, initialFlags, io);
   const selection = createSelectionStore(graphs, bus);
   return {
-    bus, graphs, flags, selection, io,
+    bus, graphs, flags, selection, io, perf,
     sim: createSim(bus),
-    contexts: createContexts(bus, flags, io),
+    contexts: createContexts(bus, flags, io, perf),
     model: createModelRegistry(model as ModelDef<ModelCtx>, flags),
   };
 }

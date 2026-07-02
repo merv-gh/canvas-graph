@@ -25,6 +25,8 @@ import { registerModal } from './modal';
 import { registerItemToolbar } from './item-toolbar';
 import { registerNodeAutosize } from './node-autosize';
 import { registerNodeVisuals } from './node-visuals';
+import { registerOutline } from './outline';
+import { registerPerfPanel } from './perf-panel';
 import { registerRender } from './render';
 import { registerRenderStage } from './render-stage';
 import { registerScenario } from './scenario';
@@ -51,6 +53,7 @@ export function registerSystems(system: Registry) {
   registerCommandForm(system);
   registerCommandPicker(system);
   registerCommandModal(system);
+  registerPerfPanel(system);
   // Jump must register before `collections` so its `g` binding sits earlier in
   // the input router's enabled() iteration — combined with `stop: true` it then
   // shadows `graph.switch.next` instead of doubling up.
@@ -66,6 +69,7 @@ export function registerSystems(system: Registry) {
   registerNodeVisuals(system);
   registerNodeAutosize(system);
   registerContainers(system);
+  registerOutline(system);
   registerChoose(system);
   registerDetail(system);
   registerDemo(system);

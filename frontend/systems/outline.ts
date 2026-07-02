@@ -119,6 +119,7 @@ export function registerOutline(system: Registry) {
       roots: HierarchyNode[],
       total: number,
       byKind: Map<string, AppCollectionDef<unknown>>,
+      rootTotal = roots.length,
     ) => {
       const section = el('section', 'outline-section');
       section.dataset.collectionId = collectionDef.id;
@@ -145,9 +146,15 @@ export function registerOutline(system: Registry) {
 
       const q = query.trim().toLowerCase();
       const list = el('div', 'outline-list');
-      const rows = roots.map(root => renderRow(root, [], byKind, 0, q)).filter((row): row is HTMLElement => !!row);
+      const rows = roots.slice(0, MAX_SECTION_ROWS)
+        .map(root => renderRow(root, [], byKind, 0, q))
+        .filter((row): row is HTMLElement => !!row);
       rows.forEach(row => list.append(row));
       section.append(list);
+
+      if (!q && rootTotal > MAX_SECTION_ROWS) {
+        section.append(el('div', 'outline-more', `${(rootTotal - MAX_SECTION_ROWS).toLocaleString()} more`));
+      }
 
       if (!rows.length) {
         const shortcut = commandShortcut(contexts.commands, collectionCreateCommand(collectionDef));
@@ -166,6 +173,7 @@ export function registerOutline(system: Registry) {
     // lists; every other kind is the unified containment tree. Containers opt
     // out of a standalone section (section:false) and appear nested in that tree.
     const FLAT_KINDS = new Set(['graph', 'edge']);
+    const MAX_SECTION_ROWS = 50;
 
     const PANEL_FOLD_ID = 'outline.panel';
 
@@ -183,27 +191,40 @@ export function registerOutline(system: Registry) {
 
       const body = el('div', 'outline-panel-body');
       const panel = el('section', 'outline');
-      const forest = hierarchy.tree();
-      const itemKinds = new Set<string>(hierarchy.items().map(item => item.ref.kind));
       const byKind = collectionsByKind();
-      const contentTotal = hierarchy.items().filter(item => !FLAT_KINDS.has(item.ref.kind)).length;
+      const queryActive = [...searches.values()].some(query => query.trim());
+      const nestedItemsExist = model.collections().some(def => {
+        const collectionDef = def as AppCollectionDef<unknown>;
+        return collectionDef.section === false
+          && !FLAT_KINDS.has(collectionKind(collectionDef))
+          && collectionDef.items(ctx).length > 0;
+      });
+      const needsTree = queryActive || nestedItemsExist;
+      const forest = needsTree ? hierarchy.tree() : [];
+      const itemKinds = needsTree ? new Set<string>(hierarchy.items().map(item => item.ref.kind)) : new Set<string>();
+      const contentTotal = needsTree
+        ? hierarchy.items().filter(item => !FLAT_KINDS.has(item.ref.kind)).length
+        : 0;
       let treeRendered = false;
       model.collections().forEach(def => {
         const collectionDef = def as AppCollectionDef<unknown>;
         if (collectionDef.section === false) return; // e.g. containers — nested in the tree
         const kind = collectionKind(collectionDef);
+        const items = collectionDef.items(ctx);
         if (FLAT_KINDS.has(kind)) {
-          const roots = itemKinds.has(kind)
+          const roots = needsTree && itemKinds.has(kind)
             ? forest.filter(node => node.ref.kind === kind)
-            : collectionDef.items(ctx).map(item => leafNode(collectionDef, item));
-          panel.append(renderSection(collectionDef, roots, collectionDef.items(ctx).length, byKind));
+            : items.slice(0, MAX_SECTION_ROWS).map(item => leafNode(collectionDef, item));
+          panel.append(renderSection(collectionDef, roots, items.length, byKind, needsTree ? roots.length : items.length));
         } else {
           // The unified containment tree — rendered once, on the first content
           // collection (nodes), with every non-flat kind's roots nested.
           if (treeRendered) return;
           treeRendered = true;
-          const roots = forest.filter(node => !FLAT_KINDS.has(node.ref.kind));
-          panel.append(renderSection(collectionDef, roots, contentTotal, byKind));
+          const roots = needsTree
+            ? forest.filter(node => !FLAT_KINDS.has(node.ref.kind))
+            : items.slice(0, MAX_SECTION_ROWS).map(item => leafNode(collectionDef, item));
+          panel.append(renderSection(collectionDef, roots, needsTree ? contentTotal : items.length, byKind, needsTree ? roots.length : items.length));
         }
       });
       body.append(panel);

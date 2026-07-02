@@ -17,3 +17,5 @@ dx/.selftest-*/
 dx/STOP
 
 dist-lib/graph-viewer.js
+mermaid.txt
+dx/bench

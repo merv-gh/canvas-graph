@@ -11,6 +11,8 @@ export default defineConfig({
       include: ['frontend/**/*.ts'],
       exclude: [
         'frontend/app.ts',
+        'frontend/systems/system-design.ts',
+        'frontend/systems/varflow.ts',
         'frontend/types.ts',
       ],
       reporter: ['text', 'json-summary', 'html'],
