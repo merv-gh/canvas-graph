@@ -44,7 +44,7 @@ export { edgeRef, itemKey, refKey, nodeRef, sameItemRef } from './core/item-ref'
 export { decorationsContext, type DecorationsApi, type ItemMode, type Overlay } from './core/decorations';
 export { hierarchyContext, createNesting, type HierarchyApi, type HierarchyItem, type HierarchySource, type HierarchyParent, type HierarchyNode, type NestApi } from './core/hierarchy';
 export { keyboardCaptureContext, type KeyboardCapture } from './core/keyboard';
-export { clamp, nodeRect, clientPoint, isStageSurface } from './core/view';
+export { clamp, nodeRect, rectsIntersect, clientPoint, isStageSurface } from './core/view';
 export { emptyState, kbdHint } from './core/templates';
 export { grouped } from './core/util';
 export { factScope } from './core/redraw';

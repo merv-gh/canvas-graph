@@ -45,6 +45,13 @@ export function registerChoose(system: Registry) {
         input: { on: 'keydown', key: 'a', meta: true, prevent: true },
         available: () => allRefs().length > 0,
       },
+      {
+        // Palette-discoverable alias — people search "select all", not "choose".
+        // No input binding (Ctrl/Cmd+A above already own the keys); no button
+        // (choose.all's "All" button covers the surface). Fires the same event.
+        id: 'select.all', label: 'Select all', event: 'choose.all', group: 'choose',
+        available: () => allRefs().length > 0,
+      },
       { id: 'choose.none', label: 'Choose none', group: 'choose', available: () => selection.selectedAll().length > 0 },
       { id: 'choose.invert', label: 'Invert choice', group: 'choose', available: () => allRefs().length > 0, shortcut: 'I', input: { on: 'keydown', key: 'i', prevent: true } },
       { id: 'choose.follow', label: 'Grow along edges', group: 'choose', available: () => chosenNodes().length > 0 },

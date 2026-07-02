@@ -8,6 +8,10 @@ declare module '../types' {
     'layout.apply.radial': void;
     'layout.apply.grid': void;
     'layout.apply.tidy': void;
+    /** User-triggered layout: apply the algorithm AND re-frame the view. The bare
+     *  `layout.apply.*` events stay fit-free so the autoLayout feature (which tidies
+     *  on every node create) doesn't yank the camera. */
+    'layout.fit': { kind: 'tidy' | 'grid' | 'radial' };
   }
 }
 
@@ -100,7 +104,20 @@ const nodeKey = (id: string) => `node:${id}`;
 // (which live at edge midpoints) get room. Positions are node CENTERS.
 const GAP_X = 56;
 const GAP_Y = 72;
+const LABEL_LINE_H = 14;
 const sizeOf = (node: GraphNode) => node.Size ?? { w: 160, h: 72 };
+
+// Edge labels live at (offset) edge midpoints, so a tall multi-line label needs
+// vertical room between the rows it spans — otherwise it's buried behind the
+// next node. Budget the tallest label in the scope into the row/ring gaps.
+const labelPadOf = (edges: GraphEdge[]) => {
+  let maxLines = 0;
+  for (const e of edges) {
+    const text = e.Label?.text;
+    if (text) maxLines = Math.max(maxLines, text.split(/\r?\n/).length);
+  }
+  return maxLines * LABEL_LINE_H;
+};
 
 function sectionRects(scope: LayoutScope) {
   if (!scope.bounds || !scope.sections?.length) return [];
@@ -177,6 +194,7 @@ function tidyScope(scope: LayoutScope, set: PatchEmit) {
   // widths (+ gap) and center the row on origin.x. Row height = tallest node,
   // so the next level clears it with GAP_Y to spare.
   const levels = [...byLevel.entries()].sort((a, b) => a[0] - b[0]);
+  const labelPad = labelPadOf(scope.edges);
   let y = scope.origin.y;
   for (const [, nodes] of levels) {
     const rowH = Math.max(...nodes.map(n => sizeOf(n).h));
@@ -187,7 +205,7 @@ function tidyScope(scope: LayoutScope, set: PatchEmit) {
       set(n.id, { x: x + w / 2, y: y + rowH / 2 });
       x += w + GAP_X;
     });
-    y += rowH + GAP_Y;
+    y += rowH + GAP_Y + labelPad;
   }
 }
 
@@ -198,7 +216,7 @@ function gridScope(scope: LayoutScope, set: PatchEmit) {
   const rows = Math.ceil(scope.nodes.length / cols);
   const maxW = Math.max(...scope.nodes.map(n => sizeOf(n).w), 0);
   const maxH = Math.max(...scope.nodes.map(n => sizeOf(n).h), 0);
-  const colSize = maxW + GAP_X, rowSize = maxH + GAP_Y;
+  const colSize = maxW + GAP_X, rowSize = maxH + GAP_Y + labelPadOf(scope.edges);
   const startX = scope.origin.x - ((cols - 1) * colSize) / 2;
   const startY = scope.origin.y - ((rows - 1) * rowSize) / 2;
   scope.nodes.forEach((n, i) => {
@@ -219,7 +237,8 @@ function radialScope(scope: LayoutScope, focusedId: string | undefined, set: Pat
   // circumference must hold every node's width plus a gap.
   const circumference = others.reduce((sum, n) => sum + sizeOf(n).w + GAP_X, 0);
   const rootReach = Math.max(sizeOf(root).w, sizeOf(root).h) / 2;
-  const radius = Math.max(160, 60 + others.length * 22, circumference / (2 * Math.PI) + rootReach);
+  const labelPad = labelPadOf(scope.edges);
+  const radius = Math.max(160, 60 + others.length * 22, circumference / (2 * Math.PI) + rootReach + labelPad);
   const center = root.Position ?? scope.origin;
   others.forEach((n, i) => {
     const angle = (i / Math.max(1, others.length)) * Math.PI * 2 - Math.PI / 2;
@@ -236,10 +255,12 @@ export function registerLayout(system: Registry) {
     contribute({ surface: 'top', panel: 'layout', command: 'layout.apply.tidy', kind: 'button', text: 'Tidy', order: 65 });
     contribute({ surface: 'top', panel: 'layout', command: 'layout.apply.grid', kind: 'button', text: 'Grid', order: 66 });
     contribute({ surface: 'top', panel: 'layout', command: 'layout.apply.radial', kind: 'button', text: 'Radial', order: 67 });
+    // User-facing commands re-frame after applying (via layout.fit); the raw
+    // layout.apply.* events do the layout only — reused by autoLayout on create.
     contexts.commands.register([
-      { id: 'layout.apply.radial', label: 'Radial layout', group: 'layout', input: { on: 'keydown', key: 'r', prevent: true } },
-      { id: 'layout.apply.grid',   label: 'Grid layout',   group: 'layout', input: { on: 'keydown', key: 'G', shift: true, prevent: true } },
-      { id: 'layout.apply.tidy',   label: 'Tidy tree layout', group: 'layout', input: { on: 'keydown', key: 't', prevent: true } },
+      { id: 'layout.apply.radial', label: 'Radial layout', group: 'layout', event: 'layout.fit', input: { on: 'keydown', key: 'r', prevent: true }, payload: () => ({ kind: 'radial' }) },
+      { id: 'layout.apply.grid',   label: 'Grid layout',   group: 'layout', event: 'layout.fit', input: { on: 'keydown', key: 'G', shift: true, prevent: true }, payload: () => ({ kind: 'grid' }) },
+      { id: 'layout.apply.tidy',   label: 'Tidy tree layout', group: 'layout', event: 'layout.fit', input: { on: 'keydown', key: 't', prevent: true }, payload: () => ({ kind: 'tidy' }) },
     ]);
 
     const set: PatchEmit = (id, Position) => emit('item.update', { ref: nodeRef(id), patch: { Position } });
@@ -249,6 +270,12 @@ export function registerLayout(system: Registry) {
     on('layout.apply.radial', () => {
       const focusedId = selection.focusedNode()?.id ?? selection.selectedNode()?.id;
       partitionByScope(ctx).forEach(scope => radialScope(scope, focusedId, set));
+    });
+    // Apply the algorithm, then fit — so switching layouts re-centers the graph and
+    // it never "walks away" off-screen.
+    on('layout.fit', ({ kind }) => {
+      emit(({ tidy: 'layout.apply.tidy', grid: 'layout.apply.grid', radial: 'layout.apply.radial' } as const)[kind]);
+      emit('view.fit.all');
     });
   }, { requires: ['graph'] });
 }

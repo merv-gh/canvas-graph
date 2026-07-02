@@ -1,10 +1,10 @@
 var GraphViewer = (function(exports) {
 	Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 	//#region frontend/styles.css?inline
-	var styles_default = "/* Design tokens. Names mirror Tailwind's neutral-* / blue-* so migration is a search-and-replace.\n   Anything visual should derive from these — DO NOT hardcode colors below. */\n:root {\n  --bg: #fafaf9;\n  --panel: #ffffff;\n  --panel-2: #f5f5f4;\n  --ink: #1c1c1c;\n  --text-muted: #6b7280;\n  --line: #e5e5e3;\n  --line-strong: #d4d4d2;\n  --accent: #2563eb;\n  --accent-soft: rgba(37, 99, 235, .08);\n  --edge: #4b5563;\n  --danger: #dc2626;\n  --danger-soft: rgba(220, 38, 38, .06);\n  --shadow-sm: 0 1px 2px rgba(0,0,0,.04);\n  --shadow-md: 0 6px 18px rgba(0,0,0,.06);\n  --radius: 6px;\n  --radius-lg: 10px;\n\n  /* Spacing scale — 8px rhythm */\n  --space-1: 4px;\n  --space-2: 8px;\n  --space-3: 12px;\n  --space-4: 16px;\n  --space-5: 24px;\n  --space-6: 32px;\n\n  /* Animation tokens */\n  --duration-fast: .12s;\n  --duration-normal: .18s;\n  --duration-slow: .25s;\n  --ease-default: ease-out;\n\n  /* Semantic aliases */\n  --border: var(--line);\n\n  color-scheme: light dark;\n}\n\n/* Auto dark from OS preference (no explicit theme choice yet) */\n@media (prefers-color-scheme: dark) {\n  :root:not([data-theme]) {\n    --bg: #111110;\n    --panel: #1c1c1b;\n    --panel-2: #282826;\n    --ink: #eeedec;\n    --text-muted: #8b919a;\n    --line: #333331;\n    --line-strong: #444442;\n    --accent: #6094f8;\n    --accent-soft: rgba(96,148,248,.12);\n    --edge: #8b919a;\n    --danger: #f87171;\n    --danger-soft: rgba(248,113,113,.10);\n    --shadow-sm: 0 1px 2px rgba(0,0,0,.25);\n    --shadow-md: 0 6px 18px rgba(0,0,0,.35);\n  }\n}\n\n/* Explicit dark (JS toggle wins over media query via specificity on .shell) */\n.shell[data-theme=\"dark\"] {\n  --bg: #111110;\n  --panel: #1c1c1b;\n  --panel-2: #282826;\n  --ink: #eeedec;\n  --text-muted: #8b919a;\n  --line: #333331;\n  --line-strong: #444442;\n  --accent: #6094f8;\n  --accent-soft: rgba(96,148,248,.12);\n  --edge: #8b919a;\n  --danger: #f87171;\n  --danger-soft: rgba(248,113,113,.10);\n  --shadow-sm: 0 1px 2px rgba(0,0,0,.25);\n  --shadow-md: 0 6px 18px rgba(0,0,0,.35);\n}\n\n/* Explicit light (when OS is dark but user chose light) */\n.shell[data-theme=\"light\"] {\n  --bg: #fafaf9;\n  --panel: #ffffff;\n  --panel-2: #f5f5f4;\n  --ink: #1c1c1c;\n  --text-muted: #6b7280;\n  --line: #e5e5e3;\n  --line-strong: #d4d4d2;\n  --accent: #2563eb;\n  --accent-soft: rgba(37,99,235,.08);\n  --edge: #4b5563;\n  --danger: #dc2626;\n  --danger-soft: rgba(220,38,38,.06);\n  --shadow-sm: 0 1px 2px rgba(0,0,0,.04);\n  --shadow-md: 0 6px 18px rgba(0,0,0,.06);\n}\n\n/* Dark-mode overrides for hardcoded light color-mix() values */\n.shell[data-theme=\"dark\"] .node-type-square {\n  background: color-mix(in srgb, var(--panel) 88%, #1e3a5f);\n}\n.shell[data-theme=\"dark\"] .node-type-circle {\n  background: color-mix(in srgb, var(--panel) 86%, #1a3a2a);\n}\n.shell[data-theme=\"dark\"] .tool-panel {\n  background: color-mix(in srgb, var(--panel) 94%, transparent);\n}\n.shell[data-theme=\"dark\"] .backdrop {\n  background: rgba(0,0,0,.45);\n}\n.shell[data-theme=\"dark\"] .container {\n  background: rgba(255,255,255,.02);\n}\n.shell[data-theme=\"dark\"] .container:hover {\n  background: rgba(96,148,248,.06);\n}\n.shell[data-theme=\"dark\"] .container.selected {\n  background: rgba(96,148,248,.08);\n}\n.shell[data-theme=\"dark\"] .container.manual {\n  background: rgba(96,148,248,.06);\n}\n.shell[data-theme=\"dark\"] .scenario-hud {\n  background: var(--ink);\n  color: var(--bg);\n}\n\n* { box-sizing: border-box; }\n\n/* Consistent focus ring across all interactive elements.\n   Keep :focus on inputs that auto-focus on modal open (palette, form fields). */\n*:focus-visible {\n  outline: 2px solid var(--accent);\n  outline-offset: 2px;\n}\n\n/* Reduced motion — respect OS preference */\n@media (prefers-reduced-motion: reduce) {\n  *, *::before, *::after {\n    animation-duration: 0.01ms !important;\n    transition-duration: 0.01ms !important;\n  }\n}\n\nbody { margin: 0; min-height: 100vh; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, sans-serif; }\n\n/* --- Keyframes --- */\n@keyframes node-enter {\n  from { opacity: 0; transform: translate(-50%, -50%) scale(0.85); }\n}\n@keyframes modal-enter {\n  from { opacity: 0; }\n}\n@keyframes modal-slide {\n  from { opacity: 0; transform: translateX(-50%) translateY(-6px); }\n}\n\n/* Buttons: ghost by default. Visible only on hover/focus. Borders disappear; weight comes from text.\n   Add .primary for accent treatment; .icon for square icon-only buttons. */\nbutton {\n  border: 1px solid transparent;\n  background: transparent;\n  color: var(--ink);\n  border-radius: var(--radius);\n  padding: 5px 10px;\n  font: inherit;\n  cursor: pointer;\n  line-height: 1.2;\n  transition: background-color var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);\n}\nbutton:hover { background: var(--panel-2); }\nbutton.primary { color: var(--accent); }\nbutton.primary:hover { background: var(--accent-soft); }\nbutton.danger { color: var(--danger); }\nbutton.danger:hover { background: var(--danger-soft); }\nbutton.icon { padding: 4px 7px; min-width: 26px; color: var(--text-muted); }\nbutton.icon:hover { color: var(--ink); }\n\n.shell { display: grid; grid-template: 0 1fr / 1fr; height: 100vh; transition: grid-template-rows var(--duration-fast) var(--ease-default); }\n.shell[data-top-folded=\"true\"] { grid-template-rows: 0 1fr; }\n.shell[data-top-folded=\"true\"] .top { display: none; }\n/* Zen mode — fold the whole shell to canvas only (distraction-free, clean\n * screenshots). Exit with the same `\\` toggle. */\n.shell[data-zen=\"true\"] { grid-template: 0 1fr / 1fr; }\n.shell[data-zen=\"true\"] .top { display: none; }\n.hamburger { font-size: 16px; line-height: 1; padding: 2px 8px; margin-right: 4px; }\n\n/* --- Debug toolbar group --- */\n.toolbar button[data-command^=\"debug.\"] { font-size: 12px; padding: 4px 8px; }\n.toolbar button[data-command=\"debug.record.start\"] { color: var(--danger); }\n.toolbar button[data-command=\"debug.record.start\"]:hover { background: var(--danger-soft); }\n.toolbar button[data-command=\"debug.assert.open\"] { color: var(--accent); }\n\n/* --- Assert modal split layout --- */\n.debug-assert {\n  display: grid;\n  grid-template-columns: minmax(280px, 1fr) minmax(360px, 1.2fr);\n  gap: 14px;\n  width: min(1100px, calc(100vw - 80px));\n  height: min(640px, calc(100vh - 160px));\n}\n.debug-state { display: flex; flex-direction: column; gap: 8px; min-height: 0; }\n.debug-search {\n  padding: 6px 10px;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  background: var(--panel);\n  font: 12px ui-monospace, monospace;\n}\n.debug-search:focus-visible { outline: 2px solid var(--accent); border-color: var(--accent); }\n.debug-tree {\n  flex: 1;\n  overflow: auto;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  background: var(--panel);\n  padding: 6px 4px;\n  font: 12px ui-monospace, monospace;\n}\n.debug-tree-row {\n  display: flex; align-items: center; gap: 6px;\n  padding: 2px 6px;\n  border-radius: 4px;\n}\n.debug-tree-row:hover { background: var(--panel-2); }\n.debug-tree-row[class*=\"depth-\"] { padding-left: calc(6px + var(--depth, 0) * 10px); }\n.debug-tree-row.depth-1 { padding-left: 16px; }\n.debug-tree-row.depth-2 { padding-left: 26px; }\n.debug-tree-row.depth-3 { padding-left: 36px; }\n.debug-tree-row.depth-4 { padding-left: 46px; }\n.debug-tree-row.depth-5 { padding-left: 56px; }\n.debug-tree-row.depth-6 { padding-left: 66px; }\n.debug-tree-row.depth-7 { padding-left: 76px; }\n.debug-tree-row.depth-8 { padding-left: 86px; }\n.debug-tree-row.depth-9 { padding-left: 96px; }\n.debug-tree-label { color: var(--text-muted); min-width: 80px; }\n.debug-tree-summary { color: var(--text-muted); opacity: 0.7; }\n.debug-tree-value {\n  border: 1px solid transparent;\n  background: transparent;\n  padding: 1px 6px;\n  border-radius: 4px;\n  color: var(--ink);\n  font: 12px ui-monospace, monospace;\n  cursor: pointer;\n  text-align: left;\n}\n.debug-tree-value:hover { border-color: var(--accent); background: var(--accent-soft); }\n.debug-tree-array { color: var(--accent); }\n.debug-tree-empty {\n  padding: 14px;\n  color: var(--text-muted);\n  text-align: center;\n}\n\n/* --- Test panel --- */\n.debug-test { display: flex; flex-direction: column; gap: 8px; min-height: 0; }\n.debug-test-head { display: flex; align-items: center; justify-content: space-between; }\n.debug-code {\n  flex: 1;\n  font: 12px/1.5 ui-monospace, monospace;\n  background: var(--panel);\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  padding: 10px;\n  resize: none;\n  white-space: pre;\n  overflow: auto;\n  color: var(--ink);\n}\n.debug-code:focus-visible { border-color: var(--accent); outline: 2px solid var(--accent); }\n.debug-actions { display: flex; gap: 6px; }\n.debug-actions button { border: 1px solid var(--line); padding: 5px 12px; }\n.debug-actions button.primary { border-color: var(--accent); color: var(--accent); }\n\n/* --- Replay modal --- */\n.debug-replay { display: flex; flex-direction: column; gap: 10px; min-width: 560px; }\n.debug-replay-hint { margin: 0; color: var(--text-muted); font-size: 12.5px; }\n.debug-replay textarea {\n  min-height: 320px;\n  resize: vertical;\n  font: 12px/1.4 ui-monospace, monospace;\n  background: var(--panel);\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  padding: 10px;\n}\n.top {\n  grid-column: 1 / -1;\n  grid-row: 1;\n  display: none;\n}\n.toolbar { display: flex; align-items: center; gap: 2px; width: 100%; }\n.toolbar button { white-space: nowrap; font-size: 13px; }\n.toolbar-spacer { flex: 1; }\n.toolbar-start, .toolbar-end { display: flex; align-items: center; gap: 2px; }\n\n\n/* Left panel — floating tool-panel positioned over the stage with screen-edge\n   margins. Not a grid column, so flushing it doesn't destroy stage content. */\n.left {\n  position: absolute;\n  left: var(--space-3);\n  top: var(--space-3);\n  bottom: var(--space-3);\n  width: 260px;\n  max-height: calc(100vh - var(--space-6));\n  z-index: 10;\n  overflow: hidden;\n  pointer-events: auto;\n}\n.left[data-outline-folded=\"true\"] {\n  width: auto;\n  min-width: 42px;\n}\n/* The outline-panel wrapper lives inside .left — the place slot is the raw\n   .left element; the tool-panel chrome (header, body, fold button) is the\n   outline's own renderable. */\n.outline-panel {\n  display: flex;\n  flex-direction: column;\n  height: 100%;\n  background: var(--panel);\n  border: 1px solid var(--line);\n  border-radius: var(--radius-lg);\n  box-shadow: var(--shadow-sm);\n}\n.outline-panel-head {\n  display: flex;\n  align-items: center;\n  gap: var(--space-1);\n  padding: var(--space-2) var(--space-3);\n  border-bottom: 1px solid var(--line);\n  flex: 0 0 auto;\n}\n.outline-panel-body {\n  flex: 1 1 auto;\n  overflow: auto;\n  padding: var(--space-2);\n}\n.outline-panel[data-outline-folded=\"true\"] .outline-panel-body { display: none; }\n.outline-panel[data-outline-folded=\"true\"] .outline-panel-head { border-bottom: 0; }\n\n.stage {\n  grid-column: 1;\n  grid-row: 2;\n  --grid-size: 32px;\n  --grid-x: 0px;\n  --grid-y: 0px;\n  position: relative;\n  overflow: hidden;\n  background: var(--bg);\n  cursor: grab;\n  touch-action: none;\n}\n.stage.panning { cursor: grabbing; }\n.tool-panel {\n  position: absolute;\n  z-index: 12;\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  max-width: min(920px, calc(100% - 24px));\n  min-height: 34px;\n  padding: 4px;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  background: color-mix(in srgb, var(--panel) 94%, transparent);\n  box-shadow: var(--shadow-sm);\n  pointer-events: auto;\n}\n.tool-panel[data-collapsed=\"true\"] {\n  width: auto;\n  min-width: 62px;\n}\n.tool-panel-head {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  flex: 0 0 auto;\n  border-right: 1px solid var(--line);\n  padding-right: 4px;\n}\n.tool-panel[data-collapsed=\"true\"] .tool-panel-head {\n  border-right: 0;\n  padding-right: 0;\n}\n.tool-panel-drag,\n.tool-panel-collapse {\n  min-width: 24px;\n  padding: 3px 6px;\n  color: var(--text-muted);\n}\n.tool-panel-drag { cursor: grab; }\n.tool-panel-drag:active { cursor: grabbing; }\n.tool-panel .toolbar {\n  min-width: 0;\n  overflow: auto hidden;\n  scrollbar-width: none;\n}\n.tool-panel .toolbar::-webkit-scrollbar { display: none; }\n/* Resting position for panels the user has not dragged (drag sets inline left/top). */\n.tool-panel[data-anchor=\"top-left\"] { left: 12px; top: 12px; }\n.tool-panel[data-anchor=\"top-right\"] { right: 12px; top: 12px; }\n.tool-panel[data-anchor=\"middle-right\"] { right: 12px; top: 50%; transform: translateY(-50%); }\n.tool-panel[data-anchor=\"bottom-left\"] { left: 12px; bottom: 12px; }\n.tool-panel[data-anchor=\"bottom-right\"] { right: 12px; bottom: 12px; }\n\n/* Outline panel — sits on the left side like the old aside, but as a floating\n   tool-panel with screen-edge margins. Scrolls internally; collapses via its\n   own fold button in the header. */\n.outline-panel {\n  position: absolute;\n  left: var(--space-3);\n  top: var(--space-3);\n  bottom: var(--space-3);\n  width: 260px;\n  max-height: calc(100vh - var(--space-6));\n  display: flex;\n  flex-direction: column;\n  background: var(--panel);\n  border: 1px solid var(--line);\n  border-radius: var(--radius-lg);\n  box-shadow: var(--shadow-sm);\n  z-index: 10;\n  overflow: hidden;\n}\n.outline-panel-head {\n  display: flex;\n  align-items: center;\n  gap: var(--space-1);\n  padding: var(--space-2) var(--space-3);\n  border-bottom: 1px solid var(--line);\n  flex: 0 0 auto;\n}\n.outline-panel-body {\n  flex: 1 1 auto;\n  overflow: auto;\n  padding: var(--space-2);\n}\n.outline-panel[data-outline-folded=\"true\"] {\n  width: auto;\n  min-width: 42px;\n}\n.outline-panel[data-outline-folded=\"true\"] .outline-panel-body { display: none; }\n.outline-panel[data-outline-folded=\"true\"] .outline-panel-head { border-bottom: 0; }\n/* Stack panels lay their buttons in a column under the drag/collapse head. */\n.tool-panel-stack { flex-direction: column; align-items: stretch; }\n.tool-panel-stack .tool-panel-head { border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 4px; justify-content: flex-end; }\n.tool-panel-stack[data-collapsed=\"true\"] .tool-panel-head { border-bottom: 0; padding: 0; }\n.tool-panel-body { display: flex; gap: 4px; }\n.tool-panel-stack .tool-panel-body { flex-direction: column; }\n.tool-panel[data-panel-id=\"system-design\"] {\n  width: 140px;\n  max-width: 140px;\n}\n.tool-panel[data-panel-id=\"system-design\"] .tool-panel-body {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 4px;\n}\n.design-palette-button {\n  min-width: 0;\n  height: 28px;\n  padding: 0 5px;\n  border: 1px solid var(--line);\n  background: var(--panel);\n  font-size: 11px;\n  white-space: nowrap;\n}\n.design-palette-button:hover { border-color: var(--accent); }\n.design-node-database { color: #0369a1; }\n.design-node-kafka { color: #7c3aed; }\n.design-node-service { color: #0f766e; }\n.design-node-index { color: #b45309; }\n.design-node-user-input { color: #be123c; }\n.design-node-gateway { color: #4338ca; }\n.design-node-cache { color: #15803d; }\n.design-node-rate-limit { color: #dc2626; }\n.design-node-circuit-breaker { color: #7c2d12; }\n.design-edge-async { border-style: dashed; }\n.design-edge-read { color: #0369a1; }\n.design-edge-write { color: #b45309; }\n.node-type-panel {\n  gap: 3px;\n  max-width: none;\n}\n.node-type-button {\n  min-width: 44px;\n  height: 26px;\n  padding: 0 8px;\n  border-radius: 5px;\n  font-size: 12px;\n}\n.node-type-button.active {\n  background: var(--accent);\n  border-color: var(--accent);\n  color: white;\n}\n.keyboard-capture {\n  position: fixed;\n  width: 1px;\n  height: 1px;\n  opacity: 0;\n  pointer-events: none;\n}\n.stage::before {\n  content: \"\";\n  position: absolute;\n  inset: 0;\n  background-image:\n    linear-gradient(var(--line) 1px, transparent 1px),\n    linear-gradient(90deg, var(--line) 1px, transparent 1px);\n  background-position: var(--grid-x) var(--grid-y);\n  background-size: var(--grid-size) var(--grid-size);\n  opacity: .35;\n}\n\n/* Nodes: lighter card with subtle border and a small drop shadow only on hover/selected. */\n.nodes { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; }\n.edges { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }\n.edges line { vector-effect: non-scaling-stroke; }\n.edges .edge-hit { stroke: var(--ink); stroke-opacity: .001; stroke-width: 14px; opacity: 1; pointer-events: stroke; cursor: pointer; }\n.edges .edge-hit:focus, .edges .edge-hit:focus-visible { outline: none; }\n.edges .edge-line { stroke: var(--edge); stroke-width: 2px; opacity: .9; pointer-events: none; }\n.edges .edge-line.selected { stroke: var(--accent); stroke-width: 2px; }\n.edges .edge-line.focused { stroke: var(--accent); stroke-dasharray: 4 3; }\n.edges .edge-line.edge-kind-read { stroke: #0369a1; }\n.edges .edge-line.edge-kind-write { stroke: #b45309; }\n.edges .edge-line.edge-kind-sync { stroke: #4b5563; }\n.edges .edge-line.edge-kind-async { stroke: #7c3aed; stroke-dasharray: 7 5; }\n.edges #edge-arrow path { fill: var(--edge); }\n.edges .edge-label { fill: var(--text-muted); font: 11px ui-monospace, monospace; }\n.edges .edge-label.edge-kind-read { fill: #0369a1; }\n.edges .edge-label.edge-kind-write { fill: #92400e; }\n.edges .edge-label.edge-kind-async { fill: #6d28d9; }\n.item-overlays { position: absolute; inset: 0; pointer-events: none; z-index: 5; }\n.item-overlay {\n  position: absolute;\n  transform: translate(-50%, -140%);\n  padding: 1px 5px;\n  border: 1px solid var(--accent);\n  border-radius: 4px;\n  background: var(--panel);\n  color: var(--ink);\n  box-shadow: var(--shadow-sm);\n  font: 11px ui-monospace, monospace;\n  white-space: nowrap;\n}\n.item-overlay.jump-letter,\n.item-overlay.picker-letter {\n  font-weight: 600;\n  background: var(--accent);\n  color: white;\n  letter-spacing: .05em;\n  text-transform: uppercase;\n}\n.picker-prompt {\n  position: absolute;\n  top: 16px;\n  left: 50%;\n  transform: translateX(-50%);\n  z-index: 6;\n  padding: 6px 14px;\n  border-radius: var(--radius);\n  background: var(--panel);\n  border: 1px solid var(--accent);\n  box-shadow: var(--shadow-md);\n  font: 13px system-ui, sans-serif;\n  pointer-events: none;\n}\n.picker-prompt em { color: var(--text-muted); font-style: normal; }\n.node {\n  position: absolute;\n  min-width: 96px;\n  min-height: 36px;\n  transform: translate(-50%, -50%);\n  border: 1px solid var(--line-strong);\n  border-radius: var(--radius);\n  background: var(--panel);\n  box-shadow: var(--shadow-sm);\n  user-select: none;\n  touch-action: none;\n  display: flex;\n  flex-direction: column;\n  justify-content: center;\n  transition: box-shadow var(--duration-normal) var(--ease-default),\n              border-color var(--duration-normal) var(--ease-default),\n              min-height var(--duration-fast) var(--ease-default),\n              left var(--duration-fast) var(--ease-default),\n              top var(--duration-fast) var(--ease-default);\n  /* animation: node-enter var(--duration-normal) var(--ease-default); */\n}\n/* Keyboard nudge eases via the left/top transition above. A pointer-drag must\n   track the cursor 1:1, so the stage drops the easing while dragging. */\n.stage.dragging .node { transition: box-shadow var(--duration-normal) var(--ease-default), border-color var(--duration-normal) var(--ease-default); }\n.node-type-square {\n  border-radius: 6px;\n  background: color-mix(in srgb, var(--panel) 88%, #e0f2fe);\n}\n.node-type-circle {\n  border-radius: 999px;\n  background: color-mix(in srgb, var(--panel) 86%, #dcfce7);\n}\n.node-type-circle .node-title,\n.node-type-circle .node-body {\n  padding-left: 18px;\n  padding-right: 18px;\n}\n.node-type-service { border-color: color-mix(in srgb, #0f766e 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 86%, #ccfbf1); }\n.node-type-database { border-color: color-mix(in srgb, #0369a1 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 86%, #e0f2fe); }\n.node-type-kafka { border-color: color-mix(in srgb, #7c3aed 42%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 87%, #ede9fe); }\n.node-type-index { border-color: color-mix(in srgb, #b45309 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 86%, #fef3c7); }\n.node-type-user-input { border-color: color-mix(in srgb, #be123c 42%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 88%, #ffe4e6); }\n.node-type-gateway { border-color: color-mix(in srgb, #4338ca 42%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 88%, #e0e7ff); }\n.node-type-cache { border-color: color-mix(in srgb, #15803d 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 86%, #dcfce7); }\n.node-type-rate-limit { border-color: color-mix(in srgb, #dc2626 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 88%, #fee2e2); }\n.node-type-circuit-breaker { border-color: color-mix(in srgb, #7c2d12 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 88%, #ffedd5); }\n.node.semantic-big-data {\n  box-shadow: inset 0 0 0 2px color-mix(in srgb, #b45309 38%, transparent), var(--shadow-sm);\n}\n.node.semantic-big-data .node-kicker::after {\n  content: \"big data\";\n  padding: 1px 4px;\n  border-radius: 4px;\n  background: color-mix(in srgb, #f59e0b 22%, transparent);\n  color: #92400e;\n  font: 700 9px/1 ui-monospace, monospace;\n  text-transform: uppercase;\n}\n.node.semantic-stale-risk .node-title::after {\n  content: \" stale\";\n  margin-left: 4px;\n  color: #b45309;\n  font: 700 10px/1 ui-monospace, monospace;\n  text-transform: uppercase;\n}\n\n/* Containers paint behind nodes (EntityDef.order = -10). Dashed border + label\n   in the corner so the grouping reads at a glance without competing with nodes. */\n.container {\n  position: absolute;\n  transform: translate(-50%, -50%);\n  border: 1px dashed var(--line-strong);\n  border-radius: var(--radius-lg);\n  background: rgba(0, 0, 0, .02);\n  box-shadow: none;\n  user-select: none;\n  pointer-events: auto;\n  transition: width var(--duration-normal) var(--ease-default),\n              height var(--duration-normal) var(--ease-default),\n              border-radius var(--duration-normal) var(--ease-default),\n              background var(--duration-normal) var(--ease-default),\n              border-color var(--duration-fast) var(--ease-default);\n}\n.container:hover { border-color: var(--accent); background: rgba(37, 99, 235, .03); }\n.container.selected { border-color: var(--accent); background: rgba(37, 99, 235, .05); }\n.container.focused { outline: 2px solid var(--accent); outline-offset: 2px; }\n/* Collapsed: a solid badge that sits ABOVE nodes/edges so it reads like a chip,\n   not a faint backdrop. Children are skipped by the renderer so the rect shrinks\n   to COLLAPSED_SIZE and the label centers inside. */\n.container.collapsed {\n  border-style: solid;\n  background: var(--panel);\n  box-shadow: var(--shadow-sm);\n  z-index: 2;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n}\n.container.collapsed .container-label {\n  position: static;\n  padding: 0 10px;\n  background: transparent;\n  color: var(--ink);\n  font: 600 12px/1 system-ui, sans-serif;\n  text-transform: none;\n  letter-spacing: 0;\n}\n.container.collapsed .container-resize { display: none; }\n.container-label {\n  position: absolute;\n  top: -10px;\n  left: 8px;\n  padding: 0 6px;\n  background: var(--bg);\n  color: var(--text-muted);\n  font: 600 10px/1 ui-monospace, monospace;\n  text-transform: uppercase;\n  letter-spacing: .5px;\n}\n.container-label.editing {\n  outline: none;\n  background: var(--panel);\n  color: var(--ink);\n  border-radius: 2px;\n}\n.container-sections {\n  position: absolute;\n  inset: 16px 10px 10px;\n  display: flex;\n  flex-direction: column;\n  pointer-events: none;\n}\n.container-sections[data-axis=\"columns\"] {\n  flex-direction: row;\n}\n.container-section {\n  position: relative;\n  flex: 1 1 0;\n  min-width: 0;\n  min-height: 0;\n  border-top: 1px dashed color-mix(in srgb, var(--line-strong) 70%, transparent);\n}\n.container-section:first-child { border-top: 0; }\n.container-sections[data-axis=\"columns\"] .container-section {\n  border-top: 0;\n  border-left: 1px dashed color-mix(in srgb, var(--line-strong) 70%, transparent);\n}\n.container-sections[data-axis=\"columns\"] .container-section:first-child { border-left: 0; }\n.container-section span {\n  position: absolute;\n  top: 4px;\n  left: 6px;\n  padding: 0 4px;\n  border-radius: 3px;\n  background: color-mix(in srgb, var(--bg) 88%, transparent);\n  color: var(--text-muted);\n  font: 600 10px/1.2 ui-monospace, monospace;\n  pointer-events: auto;\n  cursor: text;\n}\n.container-section span.editing {\n  outline: 2px solid var(--accent);\n  outline-offset: 1px;\n  background: var(--panel);\n  color: var(--ink);\n}\n.container-section-divider {\n  flex: 0 0 8px;\n  align-self: stretch;\n  border: 0;\n  padding: 0;\n  background: transparent;\n  cursor: row-resize;\n  pointer-events: auto;\n  position: relative;\n}\n.container-sections[data-axis=\"columns\"] .container-section-divider { cursor: col-resize; }\n.container-section-divider::before {\n  content: \"\";\n  position: absolute;\n  inset: 3px 0;\n  border-radius: 999px;\n  background: transparent;\n}\n.container-sections[data-axis=\"columns\"] .container-section-divider::before { inset: 0 3px; }\n.container-section-divider:hover::before,\n.container-section-divider:focus-visible::before {\n  background: var(--accent-soft);\n}\n/* Resize handle — bottom-right corner. Visible only on hover/selected/focused. */\n.container-resize {\n  position: absolute;\n  right: -6px;\n  bottom: -6px;\n  width: 14px;\n  height: 14px;\n  border-right: 2px solid var(--line-strong);\n  border-bottom: 2px solid var(--line-strong);\n  cursor: nwse-resize;\n  opacity: 0;\n  transition: opacity .12s, border-color .12s;\n}\n.container:hover .container-resize,\n.container.selected .container-resize,\n.container.focused .container-resize { opacity: 1; }\n.container-resize:hover { border-color: var(--accent); }\n.container.manual { background: rgba(37, 99, 235, .03); }\n.node:hover { box-shadow: var(--shadow-md); border-color: var(--accent); }\n.node.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft), var(--shadow-md); }\n.node.focused { outline: 2px solid var(--accent); outline-offset: 2px; }\n/* Toolbar sits above the selected node in screen-space — separate from the\n   node template so the node body stays free of chrome. */\n.node-toolbar {\n  position: absolute;\n  transform: translate(-50%, calc(-100% - 6px));\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  padding: 3px 5px;\n  border: 1px solid var(--line-strong);\n  border-radius: var(--radius);\n  background: var(--panel);\n  box-shadow: var(--shadow-md);\n  z-index: 4;\n  pointer-events: auto;\n  user-select: none;\n}\n.node-toolbar .node-drag-handle {\n  width: 14px;\n  color: var(--text-muted);\n  cursor: grab;\n  line-height: 1;\n  text-align: center;\n  font-size: 11px;\n}\n.node-toolbar .node-drag-handle:hover { color: var(--ink); }\n.node-action, .node-toggle, .node-config {\n  width: 20px; height: 20px;\n  padding: 0;\n  border: 0; background: transparent;\n  border-radius: 4px;\n  color: var(--text-muted);\n  line-height: 1;\n}\n.node-action:hover, .node-toggle:hover, .node-config:hover { background: var(--panel-2); color: var(--ink); }\n.node-context-actions { font-weight: 700; }\n.node-title {\n  flex: 1; font-weight: 600;\n  font-size: 13px;\n  min-width: 0;\n  padding: var(--space-2) var(--space-3);\n  white-space: pre-line;\n  line-height: 1.3;\n  color: var(--ink);\n  text-align: center;\n}\n.node-kicker {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 6px;\n  min-height: 20px;\n  padding: 6px 8px 0;\n  font: 10px/1.2 ui-monospace, monospace;\n  color: var(--text-muted);\n}\n.node-type-label {\n  font-weight: 700;\n  text-transform: uppercase;\n}\n.node-metrics {\n  min-width: 0;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.node-metrics:empty { display: none; }\n/* Edit mode visual cue — applied only when editable's handler enters the mode.\n   Stays out of the default state so a normal click doesn't suggest editability. */\n.node-title.editing {\n  outline: 2px solid var(--accent);\n  outline-offset: 1px;\n  border-radius: 3px;\n  background: var(--panel);\n  cursor: text;\n}\n.node-body { padding: 0 var(--space-3) var(--space-2); color: var(--text-muted); font-size: 12px; }\n.node-description {\n  display: grid;\n  gap: 3px;\n  max-height: 92px;\n  overflow: hidden;\n  line-height: 1.25;\n  text-align: left;\n}\n.node-description p,\n.node-description h4,\n.node-description ul { margin: 0; }\n.node-description h4 { font-size: 11px; color: var(--ink); }\n.node-description ul { padding-left: 16px; }\n.node-description code {\n  padding: 0 3px;\n  border-radius: 3px;\n  background: var(--panel-2);\n  color: var(--ink);\n}\n.node-description a { color: var(--accent); }\n/* Nodes without descriptions stay title-only; ids are data attrs, not visual noise. */\n.node:not(.has-description) .node-body { display: none; }\n.node.collapsed .node-body { display: none; }\n\n.design-hints {\n  position: absolute;\n  right: 116px;\n  bottom: 12px;\n  z-index: 11;\n  width: min(360px, calc(100vw - 392px));\n  max-height: min(42vh, 360px);\n  overflow: auto;\n  display: grid;\n  gap: 6px;\n  padding: 10px;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  background: color-mix(in srgb, var(--panel) 95%, transparent);\n  box-shadow: var(--shadow-sm);\n  pointer-events: auto;\n}\n.design-hints-title {\n  font-size: 11px;\n  font-weight: 700;\n  text-transform: uppercase;\n  color: var(--text-muted);\n}\n.design-observation {\n  display: grid;\n  gap: 2px;\n  padding-left: 8px;\n  border-left: 3px solid var(--line-strong);\n}\n.design-observation strong {\n  font-size: 12px;\n  line-height: 1.25;\n}\n.design-observation span {\n  color: var(--text-muted);\n  font-size: 11.5px;\n  line-height: 1.3;\n}\n.design-observation-action {\n  justify-self: start;\n  min-height: 22px;\n  padding: 2px 7px;\n  border: 1px solid var(--line);\n  background: var(--panel);\n  color: var(--accent);\n  font-size: 11px;\n}\n.design-observation-action:hover {\n  border-color: var(--accent);\n  background: var(--accent-soft);\n}\n.design-observation.warn { border-left-color: #d97706; }\n.design-observation.error { border-left-color: var(--danger); }\n.design-observation.info { border-left-color: var(--accent); }\n\n.design-presentation {\n  position: absolute;\n  left: 50%;\n  top: 54px;\n  z-index: 13;\n  width: min(520px, calc(100vw - 220px));\n  transform: translateX(-50%);\n  display: grid;\n  gap: 8px;\n  padding: 12px;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  background: color-mix(in srgb, var(--panel) 96%, transparent);\n  box-shadow: var(--shadow-md);\n  pointer-events: auto;\n}\n.design-presentation-kicker {\n  color: var(--text-muted);\n  font: 700 10px/1.2 ui-monospace, monospace;\n  text-transform: uppercase;\n}\n.design-presentation strong {\n  font-size: 14px;\n  line-height: 1.25;\n}\n.design-presentation p {\n  margin: 0;\n  color: var(--text-muted);\n  font-size: 12px;\n  line-height: 1.35;\n}\n.design-presentation-actions {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n}\n.design-presentation-actions button {\n  min-height: 26px;\n  padding: 3px 9px;\n  border: 1px solid var(--line);\n  background: var(--panel);\n  font-size: 12px;\n}\n.design-presentation-actions button.primary {\n  border-color: var(--accent);\n  background: var(--accent-soft);\n  color: var(--accent);\n}\n.design-presentation-actions button:disabled {\n  opacity: .45;\n  cursor: default;\n}\n\n/* Side panel typography */\n.panel-title {\n  margin: 0;\n  font-size: 11px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: .08em;\n  color: var(--text-muted);\n}\n\n/* Event log: text rhythm, no card chrome. */\n.log { display: grid; gap: 1px; font: 11.5px/1.4 ui-monospace, monospace; margin-bottom: 18px; }\n.log .panel-title { margin-bottom: 6px; }\n.log-row {\n  padding: 2px 8px;\n  border-left: 2px solid var(--line-strong);\n  color: var(--text-muted);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.log-row:first-of-type { color: var(--ink); border-left-color: var(--accent); }\n\n/* Outline: each collection is a section. Rows are text; affordances appear on hover. */\n.outline { display: grid; gap: var(--space-4); margin-bottom: 14px; }\n.outline-section { display: grid; gap: 6px; }\n.outline-section.folded { gap: 0; }\n.outline-fold {\n  min-width: 22px;\n  padding: 3px 4px;\n  color: var(--text-muted);\n  font-size: 11px;\n  line-height: 1;\n}\n.outline-fold:hover { color: var(--ink); }\n.outline-head {\n  display: flex; align-items: center; justify-content: space-between;\n  gap: 6px;\n  margin-bottom: 2px;\n}\n.outline-title-search {\n  flex: 1;\n  min-width: 0;\n  border: 1px solid transparent;\n  background: transparent;\n  border-radius: var(--radius);\n  padding: 4px 6px;\n  font-size: 11px;\n  font-weight: 600;\n  line-height: 1.35;\n  color: var(--text-muted);\n  text-align: left;\n  text-transform: uppercase;\n  letter-spacing: .08em;\n}\n.outline-title-search:hover { background: var(--panel); }\n.outline-title-search:focus {\n  background: var(--panel);\n  border-color: var(--line);\n  color: var(--ink);\n  text-transform: none;\n  letter-spacing: 0;\n}\n.outline-title-search::placeholder { color: var(--text-muted); opacity: 1; }\n.outline-list { display: grid; gap: 1px; }\n.outline-item { display: grid; gap: 1px; }\n/* Nested children indent under their parent with a guide rail. */\n.outline-children {\n  display: grid;\n  gap: 1px;\n  margin-left: 11px;\n  padding-left: 6px;\n  border-left: 1px solid var(--border);\n}\n/* Keep leaf rows (no fold toggle) aligned with foldable rows. Stretch so the\n * empty cell's box spans the row height — its top matches sibling controls. */\n.outline-fold-spacer { align-self: stretch; min-width: 22px; }\n.outline-row {\n  display: grid;\n  grid-template-columns: auto minmax(0, 1fr) auto auto;\n  align-items: center;\n  gap: 4px;\n  border-radius: var(--radius);\n}\n.outline-row:hover { background: var(--panel); }\n.outline-main {\n  background: transparent;\n  border: 0;\n  padding: 5px 8px;\n  font-size: 13px;\n  color: var(--ink);\n  overflow: hidden;\n  text-align: left;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.outline-main:hover { background: transparent; }\n.outline-row .icon-button { opacity: 0; }\n.outline-row:hover .icon-button { opacity: 1; }\n.icon-button {\n  min-width: 22px;\n  padding: 3px 6px;\n  border: 0;\n  background: transparent;\n  color: var(--text-muted);\n  border-radius: 4px;\n}\n.icon-button:hover { background: var(--panel-2); color: var(--ink); }\n\n/* Empty state. Text-only. Dashed border only on stage for \"drop hint\" feel. */\n.empty {\n  display: grid; gap: 4px;\n  padding: 10px 12px;\n  color: var(--text-muted);\n  background: transparent;\n  text-align: center;\n}\n.empty-title { font-weight: 500; color: var(--ink); font-size: 13px; }\n.empty-hint { font-size: 12px; }\n.empty kbd {\n  font-family: ui-monospace, monospace; font-size: 11px;\n  background: var(--panel); border: 1px solid var(--line); border-radius: 3px;\n  padding: 0 5px; margin: 0 2px;\n}\n.stage .empty {\n  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);\n  min-width: 240px;\n  border: 1px dashed var(--line-strong); border-radius: var(--radius-lg);\n  padding: 16px 20px;\n  background: var(--bg);\n}\n\n/* Modal — keeps weight on purpose: it's a focal surface. */\n.modal-slot { position: fixed; inset: 0; z-index: 50; pointer-events: none; }\n.modal-layer { position: absolute; inset: 0; pointer-events: auto; animation: modal-enter var(--duration-fast) var(--ease-default); }\n.backdrop { position: absolute; inset: 0; background: rgba(28,28,28,.18); }\n.modal {\n  position: absolute;\n  top: 64px;\n  left: 50%;\n  transform: translateX(-50%);\n  width: min(420px, calc(100vw - 32px));\n  background: var(--panel);\n  border: 1px solid var(--line);\n  border-radius: var(--radius-lg);\n  box-shadow: var(--shadow-md);\n  overflow: hidden;\n  animation: modal-slide var(--duration-normal) var(--ease-default);\n}\n.modal-head {\n  display: flex; justify-content: space-between; align-items: center;\n  padding: var(--space-2) var(--space-4);\n  border-bottom: 1px solid var(--line);\n  font-weight: 600;\n}\n.modal-body { padding: var(--space-3); display: grid; gap: var(--space-2); }\n.modal-layer[data-visual=\"command\"] .modal { width: min(520px, calc(100vw - 32px)); }\n.modal-layer[data-visual=\"properties\"] .modal { width: min(360px, calc(100vw - 32px)); }\n\n.palette-search {\n  width: 100%;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  padding: 7px 10px;\n  font: inherit;\n}\n.palette-search:focus { outline: 2px solid var(--accent); outline-offset: 2px; border-color: transparent; }\n.palette { display: grid; gap: 10px; }\n.command-list, .help-list {\n  display: grid; gap: 14px;\n  max-height: min(60vh, 520px); overflow: auto;\n}\n.command-section { display: grid; gap: 4px; }\n.command-section h3 {\n  margin: 0 0 2px;\n  color: var(--text-muted);\n  font-size: 11px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: .06em;\n}\n.command-section > [data-slot=\"rows\"] { display: grid; gap: 1px; }\n\n/* Command rows: ghost list, full-width, hover treatment. */\n.command-row, .help-row {\n  width: 100%;\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  gap: 12px;\n  text-align: left;\n  background: transparent;\n  border: 0;\n  border-radius: var(--radius);\n  padding: 6px 10px;\n  color: var(--ink);\n}\n.command-row:hover { background: var(--accent-soft); }\n.command-row span, .help-row span { display: grid; gap: 1px; min-width: 0; }\n.command-row small, .help-row small { color: var(--text-muted); font: 11px ui-monospace, monospace; }\n.command-row kbd {\n  border: 1px solid var(--line);\n  background: var(--panel);\n  border-radius: 4px;\n  padding: 1px 5px;\n  color: var(--text-muted);\n  font: 11px ui-monospace, monospace;\n}\n.help-row { padding: 5px 10px; }\n.help-row input {\n  width: 84px;\n  border: 1px solid var(--line);\n  border-radius: 4px;\n  padding: 4px 6px;\n  font: 12px ui-monospace, monospace;\n  background: var(--panel);\n}\n.help-row.has-conflict { background: var(--danger-soft); }\n.flag-row { cursor: pointer; }\n.flag-row input.flag-toggle {\n  width: 16px;\n  height: 16px;\n  margin: 0;\n  padding: 0;\n  accent-color: var(--accent);\n}\n.shortcut-edit.is-conflict { border-color: var(--danger) !important; color: var(--danger); }\n.editable-inline { border: 1px solid transparent !important; background: transparent !important; }\n.editable-inline:hover { background: var(--panel-2) !important; }\n.editable-inline:focus { background: var(--panel) !important; outline: 2px solid var(--accent); }\n.shortcut-edit.is-conflict:focus { outline-color: var(--danger); }\n\n/* Property modal */\n.properties { display: grid; gap: 10px; }\n.properties [data-slot=\"fields\"] { display: grid; gap: 10px; }\n.property-group {\n  margin-top: 2px;\n  color: var(--text-muted);\n  font-size: 11px;\n  font-weight: 700;\n  text-transform: uppercase;\n}\n.properties label {\n  display: grid; gap: 4px;\n  color: var(--text-muted);\n  font-size: 11px;\n  text-transform: uppercase;\n  letter-spacing: .05em;\n}\n.properties input,\n.properties textarea,\n.properties select {\n  width: 100%;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  padding: 6px 8px;\n  color: var(--ink);\n  background: var(--panel);\n  font: 13px system-ui, sans-serif;\n  text-transform: none;\n  letter-spacing: normal;\n}\n.properties textarea {\n  resize: vertical;\n  min-height: 78px;\n  line-height: 1.4;\n}\n\n.properties input.editable-inline {\n  border-bottom: 1px dashed var(--line-strong);\n}\n.properties input:focus,\n.properties textarea:focus,\n.properties select:focus { outline: 2px solid var(--accent); outline-offset: 2px; border-color: transparent; }\n.properties .check-row {\n  display: flex; align-items: center; gap: 8px;\n  color: var(--ink);\n  font-size: 13px;\n  text-transform: none;\n  letter-spacing: normal;\n}\n.properties .check-row input { width: auto; }\n.form-actions { display: flex; justify-content: flex-end; padding-top: 2px; }\n.form-error { min-height: 16px; color: var(--danger); font-size: 12px; }\n.property-group {\n  font-size: 11px;\n  text-transform: uppercase;\n  letter-spacing: .08em;\n  color: var(--text-muted);\n  padding-top: 6px;\n  margin-top: 4px;\n  border-top: 1px solid var(--line);\n}\n.context-actions {\n  display: grid;\n  gap: 8px;\n}\n.context-action-row {\n  display: flex;\n  gap: 6px;\n  flex-wrap: wrap;\n}\n.context-action {\n  width: 100%;\n  justify-content: flex-start;\n}\n.context-action-row .context-action {\n  width: auto;\n}\n.context-action-heading {\n  margin-top: 4px;\n  color: var(--text-muted);\n  font-size: 11px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: .05em;\n}\n\n/* --- Scenario player HUD (presentation / fix-demo overlay) --- */\n.scenario-hud {\n  position: fixed;\n  left: 50%;\n  bottom: 24px;\n  transform: translateX(-50%);\n  z-index: 1000;\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  max-width: 80vw;\n  padding: 8px 16px;\n  border-radius: 999px;\n  background: var(--ink, #1a1a1a);\n  color: var(--bg, #fff);\n  font: 600 13px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;\n  box-shadow: 0 6px 24px rgba(0, 0, 0, .28);\n  pointer-events: none;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  /* animation: scenario-pop .18s ease; */\n}\n.scenario-hud.done { background: var(--ok, #1a7f4b); }\n@keyframes scenario-pop { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translateX(-50%); } }\n\n/* ============================================================================\n   varflow viewer — file-projections graph mode (.varflow)\n   Warm \"paper\" palette ported from file-projections src/ui/app.css, plus a\n   read-only chrome: the canvas is for *reading* a program graph, so the node\n   editor, node-type palette, system-design observations, and outline sidebar\n   are hidden. Zoom/Fit stays. Scoped under .varflow so the editor is\n   untouched when the app boots normally.\n   ============================================================================ */\n.varflow {\n  --bg: #ebe7dd;\n  --panel: #f4f0e8;\n  --panel-2: #e2ddd2;\n  --ink: #25231f;\n  --text-muted: #746b5d;\n  --line: #cec6b8;\n  --line-strong: #b8ae9c;\n  --accent: #3f6f9f;\n  --accent-soft: rgba(63, 111, 159, .10);\n  --edge: #8a7f6d;\n  --danger: #b54848;\n  --danger-soft: rgba(181, 72, 72, .08);\n  --shadow-sm: 0 1px 2px rgba(70, 55, 30, .06);\n  --shadow-md: 0 6px 18px rgba(70, 55, 30, .10);\n  color-scheme: light;\n}\n/* Hide editor affordances not applicable to a read-only program-graph view. */\n.varflow [data-panel-id=\"top\"],\n.varflow [data-panel-id=\"system-design\"],\n.varflow .design-hints,\n.varflow .node-type-panel,\n.varflow .item-toolbar,\n.varflow .left { display: none !important; }\n/* Reclaim the sidebar column so the stage spans the full width. */\n.varflow .shell { grid-template-columns: 1fr !important; }\n.varflow .stage { grid-column: 1 / -1 !important; }\n/* Program-graph reading mode: calm rectangular cards, left-aligned labels,\n   effect/type shown by a restrained accent rail instead of loud fill colors. */\n.varflow .node {\n  justify-content: flex-start;\n  border-radius: 5px;\n  border-color: color-mix(in srgb, var(--line-strong) 82%, transparent);\n  background: color-mix(in srgb, #fbf8f0 92%, var(--panel));\n  box-shadow: 0 1px 2px rgba(70, 55, 30, .05);\n  overflow: hidden;\n}\n.varflow .node::before {\n  content: \"\";\n  position: absolute;\n  inset: 0 auto 0 0;\n  width: 4px;\n  background: var(--line-strong);\n}\n.varflow .node-type-gateway::before { background: #3f6f9f; }\n.varflow .node-type-service::before { background: #24784f; }\n.varflow .node-type-database::before { background: #b07a2b; }\n.varflow .node-type-index::before { background: #b54848; }\n.varflow .node-type-square::before { background: #8a7f6d; }\n.varflow .node-type-gateway,\n.varflow .node-type-service,\n.varflow .node-type-database,\n.varflow .node-type-index,\n.varflow .node-type-square {\n  background: color-mix(in srgb, #fbf8f0 94%, var(--panel));\n}\n.varflow .node-kicker {\n  min-height: 18px;\n  padding: 6px 10px 0 14px;\n}\n.varflow .node-title {\n  padding: 3px 10px 6px 14px;\n  text-align: left;\n  font-family: ui-monospace, Menlo, monospace;\n  font-size: 12.5px;\n  line-height: 1.25;\n  word-break: break-word;\n}\n.varflow .node-type-label {\n  letter-spacing: .04em;\n  font-size: 9px;\n}\n.varflow .node-body {\n  padding: 0 10px 8px 14px;\n}\n.varflow .node-description {\n  max-height: 34px;\n  font-size: 10.5px;\n  line-height: 1.25;\n}\n.varflow .edge-line {\n  opacity: .72;\n}\n.varflow .edge-line.edge-kind-async {\n  stroke: #6f4fb0;\n}\n.varflow .edge-label {\n  paint-order: stroke;\n  stroke: #fbf8f0;\n  stroke-width: 5px;\n  stroke-linejoin: round;\n  font-size: 10px;\n}\n.varflow .container {\n  border-style: solid;\n  border-color: color-mix(in srgb, var(--line-strong) 70%, transparent);\n  background: rgba(244, 240, 232, .34);\n  pointer-events: none;\n}\n.varflow .container-label {\n  top: -9px;\n  left: 10px;\n  background: #ebe7dd;\n  color: color-mix(in srgb, var(--text-muted) 82%, var(--ink));\n  letter-spacing: .04em;\n}\n.varflow .tool-panel[data-panel-id=\"zoom\"] {\n  max-width: calc(100% - 24px);\n  overflow: hidden;\n}\n@media (max-width: 700px) {\n  .varflow .tool-panel[data-panel-id=\"zoom\"] {\n    right: 8px;\n    bottom: 8px;\n  }\n  .varflow .node-title {\n    font-size: 12px;\n  }\n}\n";
+	var styles_default = "/* Design tokens. Names mirror Tailwind's neutral-* / blue-* so migration is a search-and-replace.\n   Anything visual should derive from these — DO NOT hardcode colors below. */\n:root {\n  --bg: rgb(250, 250, 249);\n  --panel: #ffffff;\n  --panel-2: #f5f5f4;\n  --ink: #1c1c1c;\n  --text-muted: #6b7280;\n  --line: #e5e5e3;\n  --line-strong: #d4d4d2;\n  --accent: rgb(37, 99, 235);\n  --accent-soft: rgba(37, 99, 235, .08);\n  --edge: #4b5563;\n  --danger: #dc2626;\n  --danger-soft: rgba(220, 38, 38, .06);\n  --shadow-sm: 0 1px 2px rgba(0,0,0,.04);\n  --shadow-md: 0 6px 18px rgba(0,0,0,.06);\n  --radius: 6px;\n  --radius-lg: 10px;\n\n  /* Spacing scale — 8px rhythm */\n  --space-1: 4px;\n  --space-2: 8px;\n  --space-3: 12px;\n  --space-4: 16px;\n  --space-5: 24px;\n  --space-6: 32px;\n\n  /* Animation tokens */\n  --duration-fast: .12s;\n  --duration-normal: .18s;\n  --duration-slow: .25s;\n  --ease-default: ease-out;\n\n  /* Semantic aliases */\n  --border: var(--line);\n\n  color-scheme: light dark;\n}\n\n/* Auto dark from OS preference (no explicit theme choice yet) */\n@media (prefers-color-scheme: dark) {\n  :root:not([data-theme]) {\n    --bg: rgb(17, 17, 16);\n    --panel: #1c1c1b;\n    --panel-2: #282826;\n    --ink: #eeedec;\n    --text-muted: #8b919a;\n    --line: #333331;\n    --line-strong: #444442;\n    --accent: rgb(96, 148, 248);\n    --accent-soft: rgba(96,148,248,.12);\n    --edge: #8b919a;\n    --danger: #f87171;\n    --danger-soft: rgba(248,113,113,.10);\n    --shadow-sm: 0 1px 2px rgba(0,0,0,.25);\n    --shadow-md: 0 6px 18px rgba(0,0,0,.35);\n  }\n}\n\n/* Explicit dark (JS toggle wins over media query via specificity on .shell) */\n.shell[data-theme=\"dark\"] {\n  --bg: rgb(17, 17, 16);\n  --panel: #1c1c1b;\n  --panel-2: #282826;\n  --ink: #eeedec;\n  --text-muted: #8b919a;\n  --line: #333331;\n  --line-strong: #444442;\n  --accent: rgb(96, 148, 248);\n  --accent-soft: rgba(96,148,248,.12);\n  --edge: #8b919a;\n  --danger: #f87171;\n  --danger-soft: rgba(248,113,113,.10);\n  --shadow-sm: 0 1px 2px rgba(0,0,0,.25);\n  --shadow-md: 0 6px 18px rgba(0,0,0,.35);\n}\n\n/* Explicit light (when OS is dark but user chose light) */\n.shell[data-theme=\"light\"] {\n  --bg: rgb(250, 250, 249);\n  --panel: #ffffff;\n  --panel-2: #f5f5f4;\n  --ink: #1c1c1c;\n  --text-muted: #6b7280;\n  --line: #e5e5e3;\n  --line-strong: #d4d4d2;\n  --accent: rgb(37, 99, 235);\n  --accent-soft: rgba(37,99,235,.08);\n  --edge: #4b5563;\n  --danger: #dc2626;\n  --danger-soft: rgba(220,38,38,.06);\n  --shadow-sm: 0 1px 2px rgba(0,0,0,.04);\n  --shadow-md: 0 6px 18px rgba(0,0,0,.06);\n}\n\n/* Dark-mode overrides for hardcoded light color-mix() values */\n.shell[data-theme=\"dark\"] .node-type-square {\n  background: color-mix(in srgb, var(--panel) 88%, #1e3a5f);\n}\n.shell[data-theme=\"dark\"] .node-type-circle {\n  background: color-mix(in srgb, var(--panel) 86%, #1a3a2a);\n}\n.shell[data-theme=\"dark\"] .tool-panel {\n  background: color-mix(in srgb, var(--panel) 94%, transparent);\n}\n.shell[data-theme=\"dark\"] .backdrop {\n  background: rgba(0,0,0,.45);\n}\n.shell[data-theme=\"dark\"] .container {\n  background: rgba(255,255,255,.02);\n}\n.shell[data-theme=\"dark\"] .container:hover {\n  background: rgba(96,148,248,.06);\n}\n.shell[data-theme=\"dark\"] .container.selected {\n  background: rgba(96,148,248,.08);\n}\n.shell[data-theme=\"dark\"] .container.manual {\n  background: rgba(96,148,248,.06);\n}\n.shell[data-theme=\"dark\"] .scenario-hud {\n  background: var(--ink);\n  color: var(--bg);\n}\n\n* { box-sizing: border-box; }\n\n/* Consistent focus ring across all interactive elements.\n   Keep :focus on inputs that auto-focus on modal open (palette, form fields). */\n*:focus-visible {\n  outline: 2px solid var(--accent);\n  outline-offset: 2px;\n}\n\n/* Reduced motion — respect OS preference */\n@media (prefers-reduced-motion: reduce) {\n  *, *::before, *::after {\n    animation-duration: 0.01ms !important;\n    transition-duration: 0.01ms !important;\n  }\n}\n\nbody { margin: 0; min-height: 100vh; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, sans-serif; }\n\n/* --- Keyframes --- */\n@keyframes node-enter {\n  from { opacity: 0; transform: translate(-50%, -50%) scale(0.85); }\n}\n@keyframes modal-enter {\n  from { opacity: 0; }\n}\n@keyframes modal-slide {\n  from { opacity: 0; transform: translateX(-50%) translateY(-6px); }\n}\n\n/* Buttons: ghost by default. Visible only on hover/focus. Borders disappear; weight comes from text.\n   Add .primary for accent treatment; .icon for square icon-only buttons. */\nbutton {\n  border: 1px solid transparent;\n  background: transparent;\n  color: var(--ink);\n  border-radius: var(--radius);\n  padding: 5px 10px;\n  font: inherit;\n  cursor: pointer;\n  line-height: 1.2;\n  transition: background-color var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);\n}\nbutton:hover { background: var(--panel-2); }\nbutton.primary { color: var(--accent); }\nbutton.primary:hover { background: var(--accent-soft); }\nbutton.danger { color: var(--danger); }\nbutton.danger:hover { background: var(--danger-soft); }\nbutton.icon { padding: 4px 7px; min-width: 26px; color: var(--text-muted); }\nbutton.icon:hover { color: var(--ink); }\n\n.shell { display: grid; grid-template: 0 1fr / 1fr; height: 100vh; transition: grid-template-rows var(--duration-fast) var(--ease-default); }\n.shell[data-top-folded=\"true\"] { grid-template-rows: 0 1fr; }\n.shell[data-top-folded=\"true\"] .top { display: none; }\n/* Zen mode — distraction-free canvas. Every floating tool panel fades to\n * semi-transparent (still there, just quiet) and stays that way until an\n * explicit exit (`\\` or Escape); hover a panel to bring it back to full.\n * Clean screenshots without losing the controls entirely. */\n.shell[data-zen=\"true\"] { grid-template: 0 1fr / 1fr; }\n.shell[data-zen=\"true\"] .top { display: none; }\n.shell[data-zen=\"true\"] .tool-panel {\n  opacity: 0.12;\n  transition: opacity var(--duration-fast) var(--ease-default);\n}\n.shell[data-zen=\"true\"] .tool-panel:hover { opacity: 1; }\n.hamburger { font-size: 16px; line-height: 1; padding: 2px 8px; margin-right: 4px; }\n\n/* --- Debug toolbar group --- */\n.toolbar button[data-command^=\"debug.\"] { font-size: 12px; padding: 4px 8px; }\n.toolbar button[data-command=\"debug.record.start\"] { color: var(--danger); }\n.toolbar button[data-command=\"debug.record.start\"]:hover { background: var(--danger-soft); }\n.toolbar button[data-command=\"debug.assert.open\"] { color: var(--accent); }\n\n/* --- Assert modal split layout --- */\n.debug-assert {\n  display: grid;\n  grid-template-columns: minmax(280px, 1fr) minmax(360px, 1.2fr);\n  gap: 14px;\n  width: min(1100px, calc(100vw - 80px));\n  height: min(640px, calc(100vh - 160px));\n}\n.debug-state { display: flex; flex-direction: column; gap: 8px; min-height: 0; }\n.debug-search {\n  padding: 6px 10px;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  background: var(--panel);\n  font: 12px ui-monospace, monospace;\n}\n.debug-search:focus-visible { outline: 2px solid var(--accent); border-color: var(--accent); }\n.debug-tree {\n  flex: 1;\n  overflow: auto;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  background: var(--panel);\n  padding: 6px 4px;\n  font: 12px ui-monospace, monospace;\n}\n.debug-tree-row {\n  display: flex; align-items: center; gap: 6px;\n  padding: 2px 6px;\n  border-radius: 4px;\n}\n.debug-tree-row:hover { background: var(--panel-2); }\n.debug-tree-row[class*=\"depth-\"] { padding-left: calc(6px + var(--depth, 0) * 10px); }\n.debug-tree-row.depth-1 { padding-left: 16px; }\n.debug-tree-row.depth-2 { padding-left: 26px; }\n.debug-tree-row.depth-3 { padding-left: 36px; }\n.debug-tree-row.depth-4 { padding-left: 46px; }\n.debug-tree-row.depth-5 { padding-left: 56px; }\n.debug-tree-row.depth-6 { padding-left: 66px; }\n.debug-tree-row.depth-7 { padding-left: 76px; }\n.debug-tree-row.depth-8 { padding-left: 86px; }\n.debug-tree-row.depth-9 { padding-left: 96px; }\n.debug-tree-label { color: var(--text-muted); min-width: 80px; }\n.debug-tree-summary { color: var(--text-muted); opacity: 0.7; }\n.debug-tree-value {\n  border: 1px solid transparent;\n  background: transparent;\n  padding: 1px 6px;\n  border-radius: 4px;\n  color: var(--ink);\n  font: 12px ui-monospace, monospace;\n  cursor: pointer;\n  text-align: left;\n}\n.debug-tree-value:hover { border-color: var(--accent); background: var(--accent-soft); }\n.debug-tree-array { color: var(--accent); }\n.debug-tree-empty {\n  padding: 14px;\n  color: var(--text-muted);\n  text-align: center;\n}\n\n/* --- Test panel --- */\n.debug-test { display: flex; flex-direction: column; gap: 8px; min-height: 0; }\n.debug-test-head { display: flex; align-items: center; justify-content: space-between; }\n.debug-code {\n  flex: 1;\n  font: 12px/1.5 ui-monospace, monospace;\n  background: var(--panel);\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  padding: 10px;\n  resize: none;\n  white-space: pre;\n  overflow: auto;\n  color: var(--ink);\n}\n.debug-code:focus-visible { border-color: var(--accent); outline: 2px solid var(--accent); }\n.debug-actions { display: flex; gap: 6px; }\n.debug-actions button { border: 1px solid var(--line); padding: 5px 12px; }\n.debug-actions button.primary { border-color: var(--accent); color: var(--accent); }\n\n/* --- Replay modal --- */\n.debug-replay { display: flex; flex-direction: column; gap: 10px; min-width: 560px; }\n.debug-replay-hint { margin: 0; color: var(--text-muted); font-size: 12.5px; }\n.debug-replay textarea {\n  min-height: 320px;\n  resize: vertical;\n  font: 12px/1.4 ui-monospace, monospace;\n  background: var(--panel);\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  padding: 10px;\n}\n.top {\n  grid-column: 1 / -1;\n  grid-row: 1;\n  display: none;\n}\n.toolbar { display: flex; align-items: center; gap: 2px; width: 100%; }\n.toolbar button { white-space: nowrap; font-size: 13px; }\n.toolbar-spacer { flex: 1; }\n.toolbar-start, .toolbar-end { display: flex; align-items: center; gap: 2px; }\n/* Related actions cluster into a group with a light divider between clusters,\n   so \"graph editing\" and \"layout\" read as distinct units in the top bar. */\n.tool-group { display: flex; align-items: center; gap: 2px; padding-right: 6px; margin-right: 4px; border-right: 1px solid var(--line); }\n.tool-group:last-child { border-right: 0; padding-right: 0; margin-right: 0; }\n.toolbar-end button[data-command=\"palette.open\"] { font-size: 15px; padding: 3px 8px; }\n\n\n/* Left panel — floating tool-panel positioned over the stage with screen-edge\n   margins. Not a grid column, so flushing it doesn't destroy stage content. */\n.left {\n  position: absolute;\n  left: var(--space-3);\n  top: var(--space-3);\n  bottom: var(--space-3);\n  width: 260px;\n  max-height: calc(100vh - var(--space-6));\n  z-index: 10;\n  overflow: hidden;\n  pointer-events: auto;\n}\n.left[data-outline-folded=\"true\"] {\n  width: auto;\n  min-width: 42px;\n}\n/* The outline-panel wrapper lives inside .left — the place slot is the raw\n   .left element; the tool-panel chrome (header, body, fold button) is the\n   outline's own renderable. */\n.outline-panel {\n  display: flex;\n  flex-direction: column;\n  height: 100%;\n  background: var(--panel);\n  border: 1px solid var(--line);\n  border-radius: var(--radius-lg);\n  box-shadow: var(--shadow-sm);\n}\n.outline-panel-head {\n  display: flex;\n  align-items: center;\n  gap: var(--space-1);\n  padding: var(--space-2) var(--space-3);\n  border-bottom: 1px solid var(--line);\n  flex: 0 0 auto;\n}\n.outline-panel-body {\n  flex: 1 1 auto;\n  overflow: auto;\n  padding: var(--space-2);\n}\n.outline-panel[data-outline-folded=\"true\"] .outline-panel-body { display: none; }\n.outline-panel[data-outline-folded=\"true\"] .outline-panel-head { border-bottom: 0; }\n\n.stage {\n  grid-column: 1;\n  grid-row: 2;\n  --grid-size: 32px;\n  --grid-x: 0px;\n  --grid-y: 0px;\n  position: relative;\n  overflow: hidden;\n  background-color: var(--bg);\n  background-image: radial-gradient(circle, var(--line) .5px, transparent .5px);\n  background-size: var(--grid-size);\n  cursor: grab;\n  touch-action: none;\n}\n.stage.panning { cursor: grabbing; }\n.tool-panel {\n  position: absolute;\n  z-index: 12;\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  max-width: min(920px, calc(100% - 24px));\n  min-height: 34px;\n  padding: 4px;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  background: color-mix(in srgb, var(--panel) 94%, transparent);\n  box-shadow: var(--shadow-sm);\n  pointer-events: auto;\n}\n.tool-panel[data-collapsed=\"true\"] {\n  width: auto;\n  min-width: 62px;\n}\n.tool-panel-head {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  flex: 0 0 auto;\n  border-right: 1px solid var(--line);\n  padding-right: 4px;\n}\n.tool-panel[data-collapsed=\"true\"] .tool-panel-head {\n  border-right: 0;\n  padding-right: 0;\n}\n.tool-panel-drag,\n.tool-panel-collapse {\n  min-width: 24px;\n  padding: 3px 6px;\n  color: var(--text-muted);\n}\n.tool-panel-drag { cursor: grab; }\n.tool-panel-drag:active { cursor: grabbing; }\n.tool-panel .toolbar {\n  min-width: 0;\n  overflow: auto hidden;\n  scrollbar-width: none;\n}\n.tool-panel .toolbar::-webkit-scrollbar { display: none; }\n/* Resting position for panels the user has not dragged (drag sets inline left/top). */\n.tool-panel[data-anchor=\"top-left\"] { left: 12px; top: 12px; }\n.tool-panel[data-anchor=\"top-center\"] { left: 50%; top: 12px; transform: translateX(-50%); }\n.tool-panel[data-anchor=\"top-right\"] { right: 12px; top: 12px; }\n.tool-panel[data-anchor=\"middle-right\"] { right: 12px; top: 50%; transform: translateY(-50%); }\n.tool-panel[data-anchor=\"bottom-left\"] { left: 12px; bottom: 12px; }\n.tool-panel[data-anchor=\"bottom-right\"] { right: 12px; bottom: 12px; }\n\n/* Outline panel — sits on the left side like the old aside, but as a floating\n   tool-panel with screen-edge margins. Scrolls internally; collapses via its\n   own fold button in the header. */\n.outline-panel {\n  position: absolute;\n  left: var(--space-3);\n  top: var(--space-3);\n  bottom: var(--space-3);\n  width: 260px;\n  max-height: calc(100vh - var(--space-6));\n  display: flex;\n  flex-direction: column;\n  background: var(--panel);\n  border: 1px solid var(--line);\n  border-radius: var(--radius-lg);\n  box-shadow: var(--shadow-sm);\n  z-index: 10;\n  overflow: hidden;\n}\n.outline-panel-head {\n  display: flex;\n  align-items: center;\n  gap: var(--space-1);\n  padding: var(--space-2) var(--space-3);\n  border-bottom: 1px solid var(--line);\n  flex: 0 0 auto;\n}\n.outline-panel-body {\n  flex: 1 1 auto;\n  overflow: auto;\n  padding: var(--space-2);\n}\n.outline-panel[data-outline-folded=\"true\"] {\n  width: auto;\n  min-width: 42px;\n}\n.outline-panel[data-outline-folded=\"true\"] .outline-panel-body { display: none; }\n.outline-panel[data-outline-folded=\"true\"] .outline-panel-head { border-bottom: 0; }\n/* Stack panels lay their buttons in a column under the drag/collapse head. */\n.tool-panel-stack { flex-direction: column; align-items: stretch; }\n.tool-panel-stack .tool-panel-head { border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 4px; justify-content: flex-end; }\n.tool-panel-stack[data-collapsed=\"true\"] .tool-panel-head { border-bottom: 0; padding: 0; }\n.tool-panel-body { display: flex; gap: 4px; }\n.tool-panel-stack .tool-panel-body { flex-direction: column; }\n.tool-panel[data-panel-id=\"system-design\"] {\n  width: 140px;\n  max-width: 140px;\n}\n.tool-panel[data-panel-id=\"system-design\"] .tool-panel-body {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 4px;\n}\n.design-palette-button {\n  min-width: 0;\n  height: 28px;\n  padding: 0 5px;\n  border: 1px solid var(--line);\n  background: var(--panel);\n  font-size: 11px;\n  white-space: nowrap;\n}\n.design-palette-button:hover { border-color: var(--accent); }\n.design-node-database { color: #0369a1; }\n.design-node-kafka { color: #7c3aed; }\n.design-node-service { color: #0f766e; }\n.design-node-index { color: #b45309; }\n.design-node-user-input { color: #be123c; }\n.design-node-gateway { color: #4338ca; }\n.design-node-cache { color: #15803d; }\n.design-node-rate-limit { color: #dc2626; }\n.design-node-circuit-breaker { color: #7c2d12; }\n.design-edge-async { border-style: dashed; }\n.design-edge-read { color: #0369a1; }\n.design-edge-write { color: #b45309; }\n.node-type-panel {\n  gap: 3px;\n  max-width: none;\n}\n.node-type-button {\n  min-width: 44px;\n  height: 26px;\n  padding: 0 8px;\n  border-radius: 5px;\n  font-size: 12px;\n}\n.node-type-button.active {\n  background: var(--accent);\n  border-color: var(--accent);\n  color: white;\n}\n.keyboard-capture {\n  position: fixed;\n  width: 1px;\n  height: 1px;\n  opacity: 0;\n  pointer-events: none;\n}\n.stage::before {\n  content: \"\";\n  position: absolute;\n  inset: 0;\n  background-image:\n    linear-gradient(var(--line) 1px, transparent 1px),\n    linear-gradient(90deg, var(--line) 1px, transparent 1px);\n  background-position: var(--grid-x) var(--grid-y);\n  background-size: var(--grid-size) var(--grid-size);\n  opacity: .35;\n}\n\n/* Nodes: lighter card with subtle border and a small drop shadow only on hover/selected. */\n.nodes { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; }\n.edges { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }\n.edges line { vector-effect: non-scaling-stroke; }\n.edges .edge-hit { stroke: var(--ink); stroke-opacity: .001; stroke-width: 14px; opacity: 1; pointer-events: stroke; cursor: pointer; }\n.edges .edge-hit:focus, .edges .edge-hit:focus-visible { outline: none; }\n.edges .edge-line { stroke: var(--edge); stroke-width: 2px; opacity: .9; pointer-events: none; }\n.edges .edge-line.selected { stroke: var(--accent); stroke-width: 2px; }\n.edges .edge-line.focused { stroke: var(--accent); stroke-dasharray: 4 3; }\n.edges .edge-line.edge-kind-read { stroke: #0369a1; }\n.edges .edge-line.edge-kind-write { stroke: #b45309; }\n.edges .edge-line.edge-kind-sync { stroke: #4b5563; }\n.edges .edge-line.edge-kind-async { stroke: #7c3aed; stroke-dasharray: 7 5; }\n.edges #edge-arrow path { fill: var(--edge); }\n.edges .edge-label { fill: var(--text-muted); font: 11px ui-monospace, monospace; }\n.edges .edge-label.edge-kind-read { fill: #0369a1; }\n.edges .edge-label.edge-kind-write { fill: #92400e; }\n.edges .edge-label.edge-kind-async { fill: #6d28d9; }\n.item-overlays { position: absolute; inset: 0; pointer-events: none; z-index: 5; }\n.item-overlay {\n  position: absolute;\n  transform: translate(-50%, -140%);\n  padding: 1px 5px;\n  border: 1px solid var(--accent);\n  border-radius: 4px;\n  background: var(--panel);\n  color: var(--ink);\n  box-shadow: var(--shadow-sm);\n  font: 11px ui-monospace, monospace;\n  white-space: nowrap;\n}\n.item-overlay.jump-letter,\n.item-overlay.picker-letter {\n  font-weight: 600;\n  background: var(--accent);\n  color: white;\n  letter-spacing: .05em;\n  text-transform: uppercase;\n}\n.picker-prompt {\n  position: absolute;\n  top: 16px;\n  left: 50%;\n  transform: translateX(-50%);\n  z-index: 6;\n  padding: 6px 14px;\n  border-radius: var(--radius);\n  background: var(--panel);\n  border: 1px solid var(--accent);\n  box-shadow: var(--shadow-md);\n  font: 13px system-ui, sans-serif;\n  pointer-events: none;\n}\n.picker-prompt em { color: var(--text-muted); font-style: normal; }\n.node {\n  position: absolute;\n  min-width: 96px;\n  min-height: 36px;\n  transform: translate(-50%, -50%);\n  border: 1px solid var(--line-strong);\n  border-radius: var(--radius);\n  background: var(--panel);\n  box-shadow: var(--shadow-sm);\n  user-select: none;\n  touch-action: none;\n  cursor: pointer;\n  display: flex;\n  flex-direction: column;\n  justify-content: center;\n  transition: box-shadow var(--duration-normal) var(--ease-default),\n              border-color var(--duration-normal) var(--ease-default),\n              min-height var(--duration-fast) var(--ease-default),\n              left var(--duration-fast) var(--ease-default),\n              top var(--duration-fast) var(--ease-default);;\n}\n.node:hover {\n  border-color: var(--accent);\n  box-shadow: var(--shadow-sm), 0 0 0 1px rgba(37, 99, 235, .08);\n}\n/* Keyboard nudge eases via the left/top transition above. A pointer-drag must\n   track the cursor 1:1, so the stage drops the easing while dragging. */\n.stage.dragging .node { cursor: grabbing; transition: box-shadow var(--duration-normal) var(--ease-default), border-color var(--duration-normal) var(--ease-default); }\n.node-type-square {\n  border-radius: 6px;\n  background: color-mix(in srgb, var(--panel) 88%, #e0f2fe);\n}\n.node-type-circle {\n  border-radius: 999px;\n  background: color-mix(in srgb, var(--panel) 86%, #dcfce7);\n}\n.node-type-circle .node-title,\n.node-type-circle .node-body {\n  padding-left: 18px;\n  padding-right: 18px;\n}\n.node-type-service { border-color: color-mix(in srgb, #0f766e 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 86%, #ccfbf1); }\n.node-type-database { border-color: color-mix(in srgb, #0369a1 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 86%, #e0f2fe); }\n.node-type-kafka { border-color: color-mix(in srgb, #7c3aed 42%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 87%, #ede9fe); }\n.node-type-index { border-color: color-mix(in srgb, #b45309 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 86%, #fef3c7); }\n.node-type-user-input { border-color: color-mix(in srgb, #be123c 42%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 88%, #ffe4e6); }\n.node-type-gateway { border-color: color-mix(in srgb, #4338ca 42%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 88%, #e0e7ff); }\n.node-type-cache { border-color: color-mix(in srgb, #15803d 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 86%, #dcfce7); }\n.node-type-rate-limit { border-color: color-mix(in srgb, #dc2626 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 88%, #fee2e2); }\n.node-type-circuit-breaker { border-color: color-mix(in srgb, #7c2d12 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 88%, #ffedd5); }\n.node.semantic-big-data {\n  box-shadow: inset 0 0 0 2px color-mix(in srgb, #b45309 38%, transparent), var(--shadow-sm);\n}\n.node.semantic-big-data .node-kicker::after {\n  content: \"big data\";\n  padding: 1px 4px;\n  border-radius: 4px;\n  background: color-mix(in srgb, #f59e0b 22%, transparent);\n  color: #92400e;\n  font: 700 9px/1 ui-monospace, monospace;\n  text-transform: uppercase;\n}\n.node.semantic-stale-risk .node-title::after {\n  content: \" stale\";\n  margin-left: 4px;\n  color: #b45309;\n  font: 700 10px/1 ui-monospace, monospace;\n  text-transform: uppercase;\n}\n\n/* Containers paint behind nodes (EntityDef.order = -10). Dashed border + label\n   in the corner so the grouping reads at a glance without competing with nodes. */\n.container {\n  position: absolute;\n  transform: translate(-50%, -50%);\n  border: 1px dashed var(--line-strong);\n  border-radius: var(--radius-lg);\n  background: rgba(0, 0, 0, .02);\n  box-shadow: none;\n  user-select: none;\n  pointer-events: auto;\n  transition: width var(--duration-normal) var(--ease-default),\n              height var(--duration-normal) var(--ease-default),\n              border-radius var(--duration-normal) var(--ease-default),\n              background var(--duration-normal) var(--ease-default),\n              border-color var(--duration-fast) var(--ease-default);\n}\n.container:hover { border-color: var(--accent); background: rgba(37, 99, 235, .03); }\n.container.selected { border-color: var(--accent); background: rgba(37, 99, 235, .05); }\n.container.focused { outline: 2px solid var(--accent); outline-offset: 2px; }\n/* Collapsed: a solid badge that sits ABOVE nodes/edges so it reads like a chip,\n   not a faint backdrop. Children are skipped by the renderer so the rect shrinks\n   to COLLAPSED_SIZE and the label centers inside. */\n.container.collapsed {\n  border-style: solid;\n  background: var(--panel);\n  box-shadow: var(--shadow-sm);\n  z-index: 2;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n}\n.container.collapsed .container-label {\n  position: static;\n  padding: 0 10px;\n  background: transparent;\n  color: var(--ink);\n  font: 600 12px/1 system-ui, sans-serif;\n  text-transform: none;\n  letter-spacing: 0;\n}\n.container.collapsed .container-resize { display: none; }\n.container-label {\n  position: absolute;\n  top: -10px;\n  left: 8px;\n  padding: 0 6px;\n  background: var(--bg);\n  color: var(--text-muted);\n  font: 600 10px/1 ui-monospace, monospace;\n  text-transform: uppercase;\n  letter-spacing: .5px;\n}\n.container-label.editing {\n  outline: none;\n  background: var(--panel);\n  color: var(--ink);\n  border-radius: 2px;\n}\n.container-sections {\n  position: absolute;\n  inset: 16px 10px 10px;\n  display: flex;\n  flex-direction: column;\n  pointer-events: none;\n}\n.container-sections[data-axis=\"columns\"] {\n  flex-direction: row;\n}\n.container-section {\n  position: relative;\n  flex: 1 1 0;\n  min-width: 0;\n  min-height: 0;\n  border-top: 1px dashed color-mix(in srgb, var(--line-strong) 70%, transparent);\n}\n.container-section:first-child { border-top: 0; }\n.container-sections[data-axis=\"columns\"] .container-section {\n  border-top: 0;\n  border-left: 1px dashed color-mix(in srgb, var(--line-strong) 70%, transparent);\n}\n.container-sections[data-axis=\"columns\"] .container-section:first-child { border-left: 0; }\n.container-section span {\n  position: absolute;\n  top: 4px;\n  left: 6px;\n  padding: 0 4px;\n  border-radius: 3px;\n  background: color-mix(in srgb, var(--bg) 88%, transparent);\n  color: var(--text-muted);\n  font: 600 10px/1.2 ui-monospace, monospace;\n  pointer-events: auto;\n  cursor: text;\n}\n.container-section span.editing {\n  outline: 2px solid var(--accent);\n  outline-offset: 1px;\n  background: var(--panel);\n  color: var(--ink);\n}\n.container-section-divider {\n  flex: 0 0 8px;\n  align-self: stretch;\n  border: 0;\n  padding: 0;\n  background: transparent;\n  cursor: row-resize;\n  pointer-events: auto;\n  position: relative;\n}\n.container-sections[data-axis=\"columns\"] .container-section-divider { cursor: col-resize; }\n.container-section-divider::before {\n  content: \"\";\n  position: absolute;\n  inset: 3px 0;\n  border-radius: 999px;\n  background: transparent;\n}\n.container-sections[data-axis=\"columns\"] .container-section-divider::before { inset: 0 3px; }\n.container-section-divider:hover::before,\n.container-section-divider:focus-visible::before {\n  background: var(--accent-soft);\n}\n/* Resize handle — bottom-right corner. Visible only on hover/selected/focused. */\n.container-resize {\n  position: absolute;\n  right: -6px;\n  bottom: -6px;\n  width: 14px;\n  height: 14px;\n  border-right: 2px solid var(--line-strong);\n  border-bottom: 2px solid var(--line-strong);\n  cursor: nwse-resize;\n  opacity: 0;\n  transition: opacity .12s, border-color .12s;\n}\n.container:hover .container-resize,\n.container.selected .container-resize,\n.container.focused .container-resize { opacity: 1; }\n.container-resize:hover { border-color: var(--accent); }\n.container.manual { background: rgba(37, 99, 235, .03); }\n.node:hover { box-shadow: var(--shadow-md); border-color: var(--accent); }\n.node.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft), var(--shadow-md); }\n.node.focused { outline: 2px solid var(--accent); outline-offset: 2px; }\n/* Toolbar sits above the selected node in screen-space — separate from the\n   node template so the node body stays free of chrome. */\n.node-toolbar {\n  position: absolute;\n  transform: translate(-50%, calc(-100% - 6px));\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  padding: 3px 5px;\n  border: 1px solid var(--line-strong);\n  border-radius: var(--radius);\n  background: var(--panel);\n  box-shadow: var(--shadow-md);\n  z-index: 4;\n  pointer-events: auto;\n  user-select: none;\n}\n.node-toolbar .node-drag-handle {\n  width: 14px;\n  color: var(--text-muted);\n  cursor: grab;\n  line-height: 1;\n  text-align: center;\n  font-size: 11px;\n}\n.node-toolbar .node-drag-handle:hover { color: var(--ink); }\n.node-action, .node-toggle, .node-config {\n  width: 20px; height: 20px;\n  padding: 0;\n  border: 0; background: transparent;\n  border-radius: 4px;\n  color: var(--text-muted);\n  line-height: 1;\n}\n.node-action:hover, .node-toggle:hover, .node-config:hover { background: var(--panel-2); color: var(--ink); }\n.node-context-actions { font-weight: 700; }\n.node-title {\n  flex: 1; font-weight: 600;\n  font-size: 13px;\n  min-width: 0;\n  padding: var(--space-2) var(--space-3);\n  white-space: pre-line;\n  line-height: 1.3;\n  color: var(--ink);\n  text-align: center;\n}\n.node-kicker {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 6px;\n  min-height: 20px;\n  padding: 6px 8px 0;\n  font: 10px/1.2 ui-monospace, monospace;\n  color: var(--text-muted);\n}\n.node-type-label {\n  font-weight: 700;\n  text-transform: uppercase;\n}\n.node-metrics {\n  min-width: 0;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.node-metrics:empty { display: none; }\n/* Edit mode visual cue — applied only when editable's handler enters the mode.\n   Stays out of the default state so a normal click doesn't suggest editability. */\n.node-title.editing {\n  outline: 2px solid var(--accent);\n  outline-offset: 1px;\n  border-radius: 3px;\n  background: var(--panel);\n  cursor: text;\n}\n.node-body { padding: 0 var(--space-3) var(--space-2); color: var(--text-muted); font-size: 12px; }\n.node-description {\n  display: grid;\n  gap: 3px;\n  max-height: 92px;\n  overflow: hidden;\n  line-height: 1.25;\n  text-align: left;\n}\n.node-description p,\n.node-description h4,\n.node-description ul { margin: 0; }\n.node-description h4 { font-size: 11px; color: var(--ink); }\n.node-description ul { padding-left: 16px; }\n.node-description code {\n  padding: 0 3px;\n  border-radius: 3px;\n  background: var(--panel-2);\n  color: var(--ink);\n}\n.node-description a { color: var(--accent); }\n/* Nodes without descriptions stay title-only; ids are data attrs, not visual noise. */\n.node:not(.has-description) .node-body { display: none; }\n.node.collapsed .node-body { display: none; }\n\n.design-hints {\n  position: absolute;\n  right: 116px;\n  bottom: 12px;\n  z-index: 11;\n  width: min(360px, calc(100vw - 392px));\n  max-height: min(42vh, 360px);\n  overflow: auto;\n  display: grid;\n  gap: 6px;\n  padding: 10px;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  background: color-mix(in srgb, var(--panel) 95%, transparent);\n  box-shadow: var(--shadow-sm);\n  pointer-events: auto;\n}\n.design-hints-title {\n  font-size: 11px;\n  font-weight: 700;\n  text-transform: uppercase;\n  color: var(--text-muted);\n}\n.design-observation {\n  display: grid;\n  gap: 2px;\n  padding-left: 8px;\n  border-left: 3px solid var(--line-strong);\n}\n.design-observation strong {\n  font-size: 12px;\n  line-height: 1.25;\n}\n.design-observation span {\n  color: var(--text-muted);\n  font-size: 11.5px;\n  line-height: 1.3;\n}\n.design-observation-action {\n  justify-self: start;\n  min-height: 22px;\n  padding: 2px 7px;\n  border: 1px solid var(--line);\n  background: var(--panel);\n  color: var(--accent);\n  font-size: 11px;\n}\n.design-observation-action:hover {\n  border-color: var(--accent);\n  background: var(--accent-soft);\n}\n.design-observation.warn { border-left-color: #d97706; }\n.design-observation.error { border-left-color: var(--danger); }\n.design-observation.info { border-left-color: var(--accent); }\n\n.design-presentation {\n  position: absolute;\n  left: 50%;\n  top: 54px;\n  z-index: 13;\n  width: min(520px, calc(100vw - 220px));\n  transform: translateX(-50%);\n  display: grid;\n  gap: 8px;\n  padding: 12px;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  background: color-mix(in srgb, var(--panel) 96%, transparent);\n  box-shadow: var(--shadow-md);\n  pointer-events: auto;\n}\n.design-presentation-kicker {\n  color: var(--text-muted);\n  font: 700 10px/1.2 ui-monospace, monospace;\n  text-transform: uppercase;\n}\n.design-presentation strong {\n  font-size: 14px;\n  line-height: 1.25;\n}\n.design-presentation p {\n  margin: 0;\n  color: var(--text-muted);\n  font-size: 12px;\n  line-height: 1.35;\n}\n.design-presentation-actions {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n}\n.design-presentation-actions button {\n  min-height: 26px;\n  padding: 3px 9px;\n  border: 1px solid var(--line);\n  background: var(--panel);\n  font-size: 12px;\n}\n.design-presentation-actions button.primary {\n  border-color: var(--accent);\n  background: var(--accent-soft);\n  color: var(--accent);\n}\n.design-presentation-actions button:disabled {\n  opacity: .45;\n  cursor: default;\n}\n\n/* Side panel typography */\n.panel-title {\n  margin: 0;\n  font-size: 11px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: .08em;\n  color: var(--text-muted);\n}\n\n/* Event log: text rhythm, no card chrome. */\n.log { display: grid; gap: 1px; font: 11.5px/1.4 ui-monospace, monospace; margin-bottom: 18px; }\n.log .panel-title { margin-bottom: 6px; }\n.log-row {\n  padding: 2px 8px;\n  border-left: 2px solid var(--line-strong);\n  color: var(--text-muted);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.log-row:first-of-type { color: var(--ink); border-left-color: var(--accent); }\n\n/* Outline: each collection is a section. Rows are text; affordances appear on hover. */\n.outline { display: grid; gap: var(--space-4); margin-bottom: 14px; }\n.outline-section { display: grid; gap: 6px; }\n.outline-section.folded { gap: 0; }\n.outline-fold {\n  min-width: 22px;\n  padding: 3px 4px;\n  color: var(--text-muted);\n  font-size: 11px;\n  line-height: 1;\n}\n.outline-fold:hover { color: var(--ink); }\n.outline-head {\n  display: flex; align-items: center; justify-content: space-between;\n  gap: 6px;\n  margin-bottom: 2px;\n}\n.outline-title-search {\n  flex: 1;\n  min-width: 0;\n  border: 1px solid transparent;\n  background: transparent;\n  border-radius: var(--radius);\n  padding: 4px 6px;\n  font-size: 11px;\n  font-weight: 600;\n  line-height: 1.35;\n  color: var(--text-muted);\n  text-align: left;\n  text-transform: uppercase;\n  letter-spacing: .08em;\n}\n.outline-title-search:hover { background: var(--panel); }\n.outline-title-search:focus {\n  background: var(--panel);\n  border-color: var(--line);\n  color: var(--ink);\n  text-transform: none;\n  letter-spacing: 0;\n}\n.outline-title-search::placeholder { color: var(--text-muted); opacity: 1; }\n.outline-list { display: grid; gap: 1px; }\n.outline-item { display: grid; gap: 1px; }\n/* Nested children indent under their parent with a guide rail. */\n.outline-children {\n  display: grid;\n  gap: 1px;\n  margin-left: 11px;\n  padding-left: 6px;\n  border-left: 1px solid var(--border);\n}\n/* Keep leaf rows (no fold toggle) aligned with foldable rows. Stretch so the\n * empty cell's box spans the row height — its top matches sibling controls. */\n.outline-fold-spacer { align-self: stretch; min-width: 22px; }\n.outline-row {\n  display: grid;\n  grid-template-columns: auto minmax(0, 1fr) auto auto;\n  align-items: center;\n  gap: 4px;\n  border-radius: var(--radius);\n}\n.outline-row:hover { background: var(--panel); }\n.outline-main {\n  background: transparent;\n  border: 0;\n  padding: 5px 8px;\n  font-size: 13px;\n  color: var(--ink);\n  overflow: hidden;\n  text-align: left;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.outline-main:hover { background: transparent; }\n.outline-row .icon-button { opacity: 0; }\n.outline-row:hover .icon-button { opacity: 1; }\n.icon-button {\n  min-width: 22px;\n  padding: 3px 6px;\n  border: 0;\n  background: transparent;\n  color: var(--text-muted);\n  border-radius: 4px;\n}\n.icon-button:hover { background: var(--panel-2); color: var(--ink); }\n\n/* Empty state. Text-only. Dashed border only on stage for \"drop hint\" feel. */\n.empty {\n  display: grid; gap: 4px;\n  padding: 10px 12px;\n  color: var(--text-muted);\n  background: transparent;\n  text-align: center;\n}\n.empty-title { font-weight: 500; color: var(--ink); font-size: 13px; }\n.empty-hint { font-size: 12px; }\n.empty kbd {\n  font-family: ui-monospace, monospace; font-size: 11px;\n  background: var(--panel); border: 1px solid var(--line); border-radius: 3px;\n  padding: 0 5px; margin: 0 2px;\n}\n.stage .empty {\n  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);\n  min-width: 240px;\n  border: 1px dashed var(--line-strong); border-radius: var(--radius-lg);\n  padding: 16px 20px;\n  background: var(--bg);\n}\n\n/* Modal — keeps weight on purpose: it's a focal surface. */\n.modal-slot { position: fixed; inset: 0; z-index: 50; pointer-events: none; }\n.modal-layer { position: absolute; inset: 0; pointer-events: auto; animation: modal-enter var(--duration-fast) var(--ease-default); }\n.backdrop { position: absolute; inset: 0; background: rgba(28,28,28,.18); }\n.modal {\n  position: absolute;\n  top: 64px;\n  left: 50%;\n  transform: translateX(-50%);\n  width: min(420px, calc(100vw - 32px));\n  background: var(--panel);\n  border: 1px solid var(--line);\n  border-radius: var(--radius-lg);\n  box-shadow: var(--shadow-md);\n  overflow: hidden;\n  animation: modal-slide var(--duration-normal) var(--ease-default);\n}\n.modal-head {\n  display: flex; justify-content: space-between; align-items: center;\n  padding: var(--space-2) var(--space-4);\n  border-bottom: 1px solid var(--line);\n  font-weight: 600;\n}\n.modal-body { padding: var(--space-3); display: grid; gap: var(--space-2); }\n.modal-layer[data-visual=\"command\"] .modal { width: min(520px, calc(100vw - 32px)); }\n.modal-layer[data-visual=\"properties\"] .modal { width: min(360px, calc(100vw - 32px)); }\n.modal-layer[data-visual=\"perf\"] .modal { width: min(1100px, calc(100vw - 32px)); }\n.modal-layer[data-visual=\"perf\"] .modal-body { max-height: calc(100vh - 150px); overflow: auto; }\n\n.palette-search {\n  width: 100%;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  padding: 7px 10px;\n  font: inherit;\n}\n.palette-search:focus { outline: 2px solid var(--accent); outline-offset: 2px; border-color: transparent; }\n.palette { display: grid; gap: 10px; }\n.command-list, .help-list {\n  display: grid; gap: 14px;\n  max-height: min(60vh, 520px); overflow: auto;\n}\n.command-section { display: grid; gap: 4px; }\n.command-section h3 {\n  margin: 0 0 2px;\n  color: var(--text-muted);\n  font-size: 11px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: .06em;\n}\n.command-section > [data-slot=\"rows\"] { display: grid; gap: 1px; }\n\n/* Command rows: ghost list, full-width, hover treatment. */\n.command-row, .help-row {\n  width: 100%;\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  gap: 12px;\n  text-align: left;\n  background: transparent;\n  border: 0;\n  border-radius: var(--radius);\n  padding: 6px 10px;\n  color: var(--ink);\n}\n.command-row:hover { background: var(--accent-soft); }\n/* Arrow-key highlight — the row Enter will run. */\n.command-row.is-selected { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }\n.command-row span, .help-row span { display: grid; gap: 1px; min-width: 0; }\n.command-row small, .help-row small { color: var(--text-muted); font: 11px ui-monospace, monospace; }\n.command-row kbd {\n  border: 1px solid var(--line);\n  background: var(--panel);\n  border-radius: 4px;\n  padding: 1px 5px;\n  color: var(--text-muted);\n  font: 11px ui-monospace, monospace;\n}\n.help-row { padding: 5px 10px; }\n.help-row input {\n  width: 84px;\n  border: 1px solid var(--line);\n  border-radius: 4px;\n  padding: 4px 6px;\n  font: 12px ui-monospace, monospace;\n  background: var(--panel);\n}\n.perf-panel { display: grid; gap: 12px; min-width: 0; }\n.perf-actions { display: flex; gap: 6px; justify-content: flex-end; }\n.perf-actions button { border: 1px solid var(--line); }\n.perf-summary {\n  display: grid;\n  grid-template-columns: repeat(4, minmax(0, 1fr));\n  gap: 8px;\n}\n.perf-summary-item {\n  display: grid;\n  gap: 2px;\n  min-width: 0;\n  padding: 8px 10px;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  background: var(--panel-2);\n}\n.perf-summary-item span { color: var(--text-muted); font-size: 11px; }\n.perf-summary-item b { font: 16px ui-monospace, monospace; }\n.perf-panel details {\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  overflow: hidden;\n}\n.perf-panel summary {\n  cursor: pointer;\n  padding: 7px 10px;\n  background: var(--panel-2);\n  font-weight: 600;\n}\n.perf-table-wrap { max-height: 300px; overflow: auto; }\n.perf-table {\n  width: 100%;\n  border-collapse: collapse;\n  font: 11px/1.35 ui-monospace, monospace;\n}\n.perf-table th,\n.perf-table td {\n  padding: 4px 7px;\n  border-top: 1px solid var(--line);\n  text-align: left;\n  vertical-align: top;\n}\n.perf-table th {\n  position: sticky;\n  top: 0;\n  background: var(--panel);\n  color: var(--text-muted);\n  z-index: 1;\n  cursor: pointer;\n  user-select: none;\n}\n.perf-table th.is-sorted { color: var(--text); }\n.perf-table td:nth-child(n+3) { white-space: nowrap; }\n.perf-table td:last-child { white-space: normal; }\n.perf-bar {\n  display: block;\n  width: 120px;\n  height: 8px;\n  margin-top: 3px;\n  border-radius: 999px;\n  background: var(--line);\n  overflow: hidden;\n}\n.perf-bar span {\n  display: block;\n  height: 100%;\n  background: var(--accent);\n}\n.perf-export {\n  box-sizing: border-box;\n  width: 100%;\n  min-height: 180px;\n  resize: vertical;\n  padding: 8px;\n  border: 0;\n  background: var(--panel);\n  color: var(--text);\n  font: 11px/1.4 ui-monospace, monospace;\n}\n.help-row.has-conflict { background: var(--danger-soft); }\n.flag-row { cursor: pointer; }\n.flag-row input.flag-toggle {\n  width: 16px;\n  height: 16px;\n  margin: 0;\n  padding: 0;\n  accent-color: var(--accent);\n}\n.shortcut-edit.is-conflict { border-color: var(--danger) !important; color: var(--danger); }\n.editable-inline { border: 1px solid transparent !important; background: transparent !important; }\n.editable-inline:hover { background: var(--panel-2) !important; }\n.editable-inline:focus { background: var(--panel) !important; outline: 2px solid var(--accent); }\n.shortcut-edit.is-conflict:focus { outline-color: var(--danger); }\n\n/* Property modal */\n.properties { display: grid; gap: 10px; }\n.properties [data-slot=\"fields\"] { display: grid; gap: 10px; }\n.property-group {\n  margin-top: 2px;\n  color: var(--text-muted);\n  font-size: 11px;\n  font-weight: 700;\n  text-transform: uppercase;\n}\n.properties label {\n  display: grid; gap: 4px;\n  color: var(--text-muted);\n  font-size: 11px;\n  text-transform: uppercase;\n  letter-spacing: .05em;\n}\n.properties input,\n.properties textarea,\n.properties select {\n  width: 100%;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  padding: 6px 8px;\n  color: var(--ink);\n  background: var(--panel);\n  font: 13px system-ui, sans-serif;\n  text-transform: none;\n  letter-spacing: normal;\n}\n.properties textarea {\n  resize: vertical;\n  min-height: 78px;\n  line-height: 1.4;\n}\n\n.properties input.editable-inline {\n  border-bottom: 1px dashed var(--line-strong);\n}\n.properties input:focus,\n.properties textarea:focus,\n.properties select:focus { outline: 2px solid var(--accent); outline-offset: 2px; border-color: transparent; }\n.properties .check-row {\n  display: flex; align-items: center; gap: 8px;\n  color: var(--ink);\n  font-size: 13px;\n  text-transform: none;\n  letter-spacing: normal;\n}\n.properties .check-row input { width: auto; }\n.form-actions { display: flex; justify-content: flex-end; padding-top: 2px; }\n.form-error { min-height: 16px; color: var(--danger); font-size: 12px; }\n.property-group {\n  font-size: 11px;\n  text-transform: uppercase;\n  letter-spacing: .08em;\n  color: var(--text-muted);\n  padding-top: 6px;\n  margin-top: 4px;\n  border-top: 1px solid var(--line);\n}\n.context-actions {\n  display: grid;\n  gap: 8px;\n}\n.context-action-row {\n  display: flex;\n  gap: 6px;\n  flex-wrap: wrap;\n}\n.context-action {\n  width: 100%;\n  justify-content: flex-start;\n}\n.context-action-row .context-action {\n  width: auto;\n}\n.context-action-heading {\n  margin-top: 4px;\n  color: var(--text-muted);\n  font-size: 11px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: .05em;\n}\n\n/* --- Scenario player HUD (presentation / fix-demo overlay) --- */\n.scenario-hud {\n  position: fixed;\n  left: 50%;\n  bottom: 24px;\n  transform: translateX(-50%);\n  z-index: 1000;\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  max-width: 80vw;\n  padding: 8px 16px;\n  border-radius: 999px;\n  background: var(--ink, #1a1a1a);\n  color: var(--bg, #fff);\n  font: 600 13px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;\n  box-shadow: 0 6px 24px rgba(0, 0, 0, .28);\n  pointer-events: none;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  /* animation: scenario-pop .18s ease; */\n}\n.scenario-hud.done { background: var(--ok, #1a7f4b); }\n@keyframes scenario-pop { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translateX(-50%); } }\n\n/* ============================================================================\n   varflow viewer — file-projections graph mode (.varflow)\n   Warm \"paper\" palette ported from file-projections src/ui/app.css, plus a\n   read-only chrome: the canvas is for *reading* a program graph, so the node\n   editor, node-type palette, system-design observations, and outline sidebar\n   are hidden. Zoom/Fit stays. Scoped under .varflow so the editor is\n   untouched when the app boots normally.\n   ============================================================================ */\n.varflow {\n  --bg: #ebe7dd;\n  --panel: #f4f0e8;\n  --panel-2: #e2ddd2;\n  --ink: #25231f;\n  --text-muted: #746b5d;\n  --line: #cec6b8;\n  --line-strong: #b8ae9c;\n  --accent: #3f6f9f;\n  --accent-soft: rgba(63, 111, 159, .10);\n  --edge: #8a7f6d;\n  --danger: #b54848;\n  --danger-soft: rgba(181, 72, 72, .08);\n  --shadow-sm: 0 1px 2px rgba(70, 55, 30, .06);\n  --shadow-md: 0 6px 18px rgba(70, 55, 30, .10);\n  color-scheme: light;\n}\n/* Hide editor affordances not applicable to a read-only program-graph view. */\n.varflow [data-panel-id=\"top\"],\n.varflow [data-panel-id=\"system-design\"],\n.varflow .design-hints,\n.varflow .node-type-panel,\n.varflow .item-toolbar,\n.varflow .left { display: none !important; }\n/* Reclaim the sidebar column so the stage spans the full width. */\n.varflow .shell { grid-template-columns: 1fr !important; }\n.varflow .stage { grid-column: 1 / -1 !important; }\n/* Program-graph reading mode: calm rectangular cards, left-aligned labels,\n   effect/type shown by a restrained accent rail instead of loud fill colors. */\n.varflow .node {\n  justify-content: flex-start;\n  border-radius: 5px;\n  border-color: color-mix(in srgb, var(--line-strong) 82%, transparent);\n  background: color-mix(in srgb, #fbf8f0 92%, var(--panel));\n  box-shadow: 0 1px 2px rgba(70, 55, 30, .05);\n  overflow: hidden;\n}\n.varflow .node::before {\n  content: \"\";\n  position: absolute;\n  inset: 0 auto 0 0;\n  width: 4px;\n  background: var(--line-strong);\n}\n.varflow .node-type-gateway::before { background: #3f6f9f; }\n.varflow .node-type-service::before { background: #24784f; }\n.varflow .node-type-database::before { background: #b07a2b; }\n.varflow .node-type-index::before { background: #b54848; }\n.varflow .node-type-square::before { background: #8a7f6d; }\n.varflow .node-type-gateway,\n.varflow .node-type-service,\n.varflow .node-type-database,\n.varflow .node-type-index,\n.varflow .node-type-square {\n  background: color-mix(in srgb, #fbf8f0 94%, var(--panel));\n}\n.varflow .node-kicker {\n  min-height: 18px;\n  padding: 6px 10px 0 14px;\n}\n.varflow .node-title {\n  padding: 3px 10px 6px 14px;\n  text-align: left;\n  font-family: ui-monospace, Menlo, monospace;\n  font-size: 12.5px;\n  line-height: 1.25;\n  word-break: break-word;\n}\n.varflow .node-type-label {\n  letter-spacing: .04em;\n  font-size: 9px;\n}\n.varflow .node-body {\n  padding: 0 10px 8px 14px;\n}\n.varflow .node-description {\n  max-height: 34px;\n  font-size: 10.5px;\n  line-height: 1.25;\n}\n.varflow .edge-line {\n  opacity: .72;\n}\n.varflow .edge-line.edge-kind-async {\n  stroke: #6f4fb0;\n}\n.varflow .edge-label {\n  paint-order: stroke;\n  stroke: #fbf8f0;\n  stroke-width: 5px;\n  stroke-linejoin: round;\n  font-size: 10px;\n}\n.varflow .container {\n  border-style: solid;\n  border-color: color-mix(in srgb, var(--line-strong) 70%, transparent);\n  background: rgba(244, 240, 232, .34);\n  pointer-events: none;\n}\n.varflow .container-label {\n  top: -9px;\n  left: 10px;\n  background: #ebe7dd;\n  color: color-mix(in srgb, var(--text-muted) 82%, var(--ink));\n  letter-spacing: .04em;\n}\n.varflow .tool-panel[data-panel-id=\"zoom\"] {\n  max-width: calc(100% - 24px);\n  overflow: hidden;\n}\n@media (max-width: 700px) {\n  .varflow .tool-panel[data-panel-id=\"zoom\"] {\n    right: 8px;\n    bottom: 8px;\n  }\n  .varflow .node-title {\n    font-size: 12px;\n  }\n}\n";
 	//#endregion
 	//#region frontend/index.html?raw
-	var frontend_default = "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>Graph Editor</title>\n  <link rel=\"stylesheet\" href=\"styles.css\">\n  <script type=\"module\" src=\"app.ts\"><\/script>\n</head>\n<body>\n  <div id=\"app\"></div>\n\n  <template id=\"tpl-shell\">\n    <section class=\"shell\">\n      <header class=\"top\" data-place=\"top\"></header>\n      <main class=\"stage\" data-place=\"stage\"></main>\n      <div class=\"left\" data-place=\"left\"></div>\n      <div class=\"modal-slot\" data-place=\"modal\"></div>\n    </section>\n  </template>\n\n  <template id=\"tpl-toolbar\">\n    <nav class=\"toolbar\" aria-label=\"App commands\">\n      <div class=\"toolbar-start\" data-slot=\"start\"></div>\n      <span class=\"toolbar-spacer\"></span>\n      <div class=\"toolbar-end\" data-slot=\"end\"></div>\n    </nav>\n  </template>\n\n  <template id=\"tpl-log\">\n    <section>\n      <h2 class=\"panel-title\">Event log</h2>\n      <div class=\"log\" data-slot=\"rows\"></div>\n    </section>\n  </template>\n\n  <template id=\"tpl-log-row\">\n    <div class=\"log-row\" data-text=\"name\"></div>\n  </template>\n\n  <template id=\"tpl-nodes\">\n    <div class=\"nodes\">\n      <svg class=\"edges\" data-slot=\"edges\" overflow=\"visible\" aria-hidden=\"true\">\n        <defs>\n          <!-- Directional arrowhead shared by every edge. `orient=\"auto\"` aligns\n               with the line direction; `markerUnits=\"userSpaceOnUse\"` keeps the\n               arrow size fixed in graph space, independent of stroke width. -->\n          <marker id=\"edge-arrow\" viewBox=\"0 0 12 12\" refX=\"11\" refY=\"6\"\n                  markerWidth=\"12\" markerHeight=\"12\" orient=\"auto\" markerUnits=\"userSpaceOnUse\">\n            <path d=\"M0,0 L12,6 L0,12 Z\" />\n          </marker>\n        </defs>\n      </svg>\n    </div>\n  </template>\n\n  <template id=\"tpl-empty\">\n    <div class=\"empty\" role=\"status\" aria-live=\"polite\">\n      <div class=\"empty-title\" data-text=\"title\"></div>\n      <div class=\"empty-hint\" data-slot=\"hint\"></div>\n    </div>\n  </template>\n\n  <template id=\"tpl-node\">\n    <article class=\"node\">\n      <div class=\"node-kicker\">\n        <span class=\"node-type-label\" data-slot=\"type\" data-text=\"type\"></span>\n        <span class=\"node-metrics\" data-slot=\"metrics\" data-text=\"metrics\"></span>\n      </div>\n      <div class=\"node-title\" data-editable-title data-slot=\"title\" data-text=\"title\"></div>\n      <div class=\"node-body\">\n        <div class=\"node-description\" data-slot=\"description\"></div>\n      </div>\n    </article>\n  </template>\n\n  <template id=\"tpl-modal\">\n    <div class=\"modal-layer\">\n      <div class=\"backdrop\" data-command=\"modal.close\"></div>\n      <section class=\"modal\">\n        <div class=\"modal-head\">\n          <span data-text=\"title\"></span>\n          <button data-command=\"modal.close\">Close</button>\n        </div>\n        <div class=\"modal-body\" data-slot=\"body\"></div>\n      </section>\n    </div>\n  </template>\n\n  <template id=\"tpl-palette\">\n    <section class=\"palette\">\n      <input class=\"palette-search\" placeholder=\"Search commands\" autocomplete=\"off\" autofocus>\n      <div class=\"command-list\" data-slot=\"commands\"></div>\n    </section>\n  </template>\n\n  <template id=\"tpl-command-section\">\n    <section class=\"command-section\">\n      <h3 data-text=\"group\"></h3>\n      <div data-slot=\"rows\"></div>\n    </section>\n  </template>\n\n  <template id=\"tpl-command-row\">\n    <button class=\"command-row\">\n      <span><b data-text=\"label\"></b><small data-text=\"id\"></small></span>\n      <kbd data-text=\"shortcut\"></kbd>\n    </button>\n  </template>\n\n  <template id=\"tpl-help-row\">\n    <div class=\"help-row\">\n      <span><b data-text=\"label\"></b><small data-text=\"id\"></small></span>\n      <input class=\"shortcut-edit editable-inline\">\n    </div>\n  </template>\n\n  <template id=\"tpl-properties\">\n    <section class=\"properties\">\n      <div data-slot=\"fields\"></div>\n    </section>\n  </template>\n</body>\n</html>\n";
+	var frontend_default = "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>Graph Editor</title>\n  <link rel=\"stylesheet\" href=\"styles.css\">\n  <script type=\"module\" src=\"app.ts\"><\/script>\n</head>\n<body>\n  <div id=\"app\"></div>\n\n  <template id=\"tpl-shell\">\n    <section class=\"shell\">\n      <header class=\"top\" data-place=\"top\"></header>\n      <main class=\"stage\" data-place=\"stage\"></main>\n      <div class=\"left\" data-place=\"left\"></div>\n      <div class=\"modal-slot\" data-place=\"modal\"></div>\n    </section>\n  </template>\n\n  <template id=\"tpl-toolbar\">\n    <nav class=\"toolbar\" aria-label=\"App commands\">\n      <div class=\"toolbar-start\" data-slot=\"start\"></div>\n      <span class=\"toolbar-spacer\"></span>\n      <div class=\"toolbar-end\" data-slot=\"end\"></div>\n    </nav>\n  </template>\n\n  <template id=\"tpl-log\">\n    <section>\n      <h2 class=\"panel-title\">Event log</h2>\n      <div class=\"log\" data-slot=\"rows\"></div>\n    </section>\n  </template>\n\n  <template id=\"tpl-log-row\">\n    <div class=\"log-row\" data-text=\"name\"></div>\n  </template>\n\n  <template id=\"tpl-nodes\">\n    <div class=\"nodes\">\n      <svg class=\"edges\" data-slot=\"edges\" overflow=\"visible\" aria-hidden=\"true\">\n        <defs>\n          <!-- Directional arrowhead shared by every edge. `orient=\"auto\"` aligns\n               with the line direction; `markerUnits=\"userSpaceOnUse\"` keeps the\n               arrow size fixed in graph space, independent of stroke width. -->\n          <marker id=\"edge-arrow\" viewBox=\"0 0 12 12\" refX=\"11\" refY=\"6\"\n                  markerWidth=\"12\" markerHeight=\"12\" orient=\"auto\" markerUnits=\"userSpaceOnUse\">\n            <path d=\"M0,0 L12,6 L0,12 Z\" />\n          </marker>\n        </defs>\n      </svg>\n    </div>\n  </template>\n\n  <template id=\"tpl-empty\">\n    <div class=\"empty\" role=\"status\" aria-live=\"polite\">\n      <div class=\"empty-title\" data-text=\"title\"></div>\n      <div class=\"empty-hint\" data-slot=\"hint\"></div>\n    </div>\n  </template>\n\n  <template id=\"tpl-node\">\n    <article class=\"node\">\n  \n      <div class=\"node-title\" data-editable-title data-slot=\"title\" data-text=\"title\"></div>\n      <div class=\"node-body\">\n        <div class=\"node-description\" data-slot=\"description\"></div>\n      </div>\n    </article>\n  </template>\n\n  <template id=\"tpl-modal\">\n    <div class=\"modal-layer\">\n      <div class=\"backdrop\" data-command=\"modal.close\"></div>\n      <section class=\"modal\">\n        <div class=\"modal-head\">\n          <span data-text=\"title\"></span>\n          <button data-command=\"modal.close\">Close</button>\n        </div>\n        <div class=\"modal-body\" data-slot=\"body\"></div>\n      </section>\n    </div>\n  </template>\n\n  <template id=\"tpl-palette\">\n    <section class=\"palette\">\n      <input class=\"palette-search\" placeholder=\"Search commands\" autocomplete=\"off\" autofocus>\n      <div class=\"command-list\" data-slot=\"commands\"></div>\n    </section>\n  </template>\n\n  <template id=\"tpl-command-section\">\n    <section class=\"command-section\">\n      <h3 data-text=\"group\"></h3>\n      <div data-slot=\"rows\"></div>\n    </section>\n  </template>\n\n  <template id=\"tpl-command-row\">\n    <button class=\"command-row\">\n      <span><b data-text=\"label\"></b><small data-text=\"id\"></small></span>\n      <kbd data-text=\"shortcut\"></kbd>\n    </button>\n  </template>\n\n  <template id=\"tpl-help-row\">\n    <div class=\"help-row\">\n      <span><b data-text=\"label\"></b><small data-text=\"id\"></small></span>\n      <input class=\"shortcut-edit editable-inline\">\n    </div>\n  </template>\n\n  <template id=\"tpl-properties\">\n    <section class=\"properties\">\n      <div data-slot=\"fields\"></div>\n    </section>\n  </template>\n</body>\n</html>\n";
 	//#endregion
 	//#region frontend/core/affordances.ts
 	/** Unified affordance lookup. Two kinds, one context:
@@ -74,11 +74,13 @@ var GraphViewer = (function(exports) {
 	*  the next. Predictable and easy to test. */
 	function cancellationContext(bus) {
 		const handlers = [];
-		bus.on("app.cancel", () => {
+		bus.on("app.cancel", (payload) => {
+			const fromBackground = payload?.source === "background";
 			let chosen = null;
 			for (let i = handlers.length - 1; i >= 0; i--) {
 				const handler = handlers[i];
 				if (!handler.active()) continue;
+				if (fromBackground && handler.background === false) continue;
 				if (!chosen || (handler.priority ?? 0) > (chosen.priority ?? 0)) chosen = handler;
 			}
 			chosen?.cancel();
@@ -236,6 +238,13 @@ var GraphViewer = (function(exports) {
 		const commandMap = /* @__PURE__ */ new Map();
 		const shortcutOverrides = io.get(STORAGE_KEYS.shortcuts, {});
 		const disabledCommands = new Set(io.get(STORAGE_KEYS.disabledCommands, []));
+		let enabledCache = null;
+		const inputCache = /* @__PURE__ */ new Map();
+		const invalidate = () => {
+			enabledCache = null;
+			inputCache.clear();
+		};
+		bus.on("flag.changed", invalidate);
 		const isEnabled = (command) => command.enabled !== false && !disabledCommands.has(command.id) && isFlagOn(command.origin);
 		const normalizeShortcut = (shortcut) => {
 			const p = parseShortcut(shortcut);
@@ -268,22 +277,35 @@ var GraphViewer = (function(exports) {
 			if (override != null) applyShortcut(command, override);
 		};
 		return {
-			register: (specs, origin) => specs.forEach((input) => {
-				const command = input;
-				if (!command.event) command.event = command.id;
-				if (origin && !command.origin) command.origin = origin;
-				applyOverrides(command);
-				commandMap.set(command.id, command);
-			}),
+			register: (specs, origin) => {
+				specs.forEach((input) => {
+					const command = input;
+					if (!command.event) command.event = command.id;
+					if (origin && !command.origin) command.origin = origin;
+					applyOverrides(command);
+					commandMap.set(command.id, command);
+				});
+				invalidate();
+			},
 			unregister(id) {
 				commandMap.delete(id);
+				invalidate();
 			},
 			unregisterOrigin(origin) {
 				for (const [id, command] of commandMap) if (command.origin === origin) commandMap.delete(id);
+				invalidate();
 			},
 			get: (id) => commandMap.get(id),
 			all: () => [...commandMap.values()],
-			enabled: () => [...commandMap.values()].filter(isEnabled),
+			enabled: () => enabledCache ??= [...commandMap.values()].filter(isEnabled),
+			enabledForInput(type) {
+				let cached = inputCache.get(type);
+				if (!cached) {
+					cached = (enabledCache ??= [...commandMap.values()].filter(isEnabled)).filter((command) => command.input?.on === type);
+					inputCache.set(type, cached);
+				}
+				return cached;
+			},
 			isEnabled,
 			shortcutConflict,
 			setShortcut(id, shortcut) {
@@ -293,14 +315,21 @@ var GraphViewer = (function(exports) {
 				if (shortcutConflict(id, next)) return false;
 				applyShortcut(command, next);
 				shortcutOverrides[id] = next;
-				io.set(STORAGE_KEYS.shortcuts, shortcutOverrides);
+				bus.emit("command.shortcut.changed", {
+					id,
+					shortcut: next
+				});
 				return true;
 			},
 			setEnabled(id, enabled) {
 				if (!commandMap.get(id)) return false;
 				if (enabled) disabledCommands.delete(id);
 				else disabledCommands.add(id);
-				io.set(STORAGE_KEYS.disabledCommands, [...disabledCommands]);
+				bus.emit("command.enabled.changed", {
+					id,
+					enabled
+				});
+				invalidate();
 				return true;
 			},
 			run(id, source = {}) {
@@ -341,7 +370,7 @@ var GraphViewer = (function(exports) {
 	*       target is outside the modal are skipped. Backdrop, form fields, and
 	*       command buttons inside the modal still work; A/E/G/etc on the
 	*       background do nothing until the modal closes. */
-	function inputRouter(commands) {
+	function inputRouter(commands, perf) {
 		return { start(root = document) {
 			/** A modal is "mounted" when [data-place="modal"] has any rendered children. */
 			const modalScopeEl = () => {
@@ -351,34 +380,50 @@ var GraphViewer = (function(exports) {
 			const targetInModal = (target, modal) => !!modal && !!target && modal.contains(target);
 			const route = (event) => {
 				const rawTarget = event.target instanceof Element ? event.target : null;
-				const typing = event instanceof KeyboardEvent && (/input|textarea|select/i.test(rawTarget?.tagName ?? "") || rawTarget instanceof HTMLElement && rawTarget.isContentEditable);
-				const modal = modalScopeEl();
-				const inModal = targetInModal(rawTarget, modal);
-				const button = event.type === "click" ? rawTarget?.closest("[data-command]") : null;
-				if (button instanceof HTMLElement) {
-					if (modal && !modal.contains(button)) return;
-					event.preventDefault();
-					commands.run(button.dataset.command, {
-						event,
-						target: button
-					});
-					return;
-				}
-				for (const command of commands.enabled()) {
-					const binding = command.input;
-					if (!binding || binding.on !== event.type) continue;
-					if (event instanceof KeyboardEvent && (!binding.key || !keyMatchesEvent(event, bindingParsed(binding)))) continue;
-					const target = rawTarget && binding.selector ? rawTarget.closest(binding.selector) : rawTarget;
-					if (!(target instanceof Element) || binding.selector && !target) continue;
-					if (typing && !binding.global && !binding.selector) continue;
-					if (modal && !binding.global && !inModal) continue;
-					if (binding.when && !binding.when(event, target)) continue;
-					if (binding.prevent) event.preventDefault();
-					commands.run(command.id, {
+				const trace = perf?.beginInput(event.type, event, rawTarget);
+				const candidates = [];
+				const matched = [];
+				const runCommand = (id, target) => {
+					matched.push(id);
+					const run = () => commands.run(id, {
 						event,
 						target
 					});
-					if (binding.stop) break;
+					return perf?.enabled() ? perf.measure(`Command.run.${id}`, run) : run();
+				};
+				try {
+					const typing = event instanceof KeyboardEvent && (/input|textarea|select/i.test(rawTarget?.tagName ?? "") || rawTarget instanceof HTMLElement && rawTarget.isContentEditable);
+					const modal = modalScopeEl();
+					const inModal = targetInModal(rawTarget, modal);
+					const button = event.type === "click" ? rawTarget?.closest("[data-command]") : null;
+					if (button instanceof HTMLElement) {
+						if (modal && !modal.contains(button)) return;
+						const commandId = button.dataset.command;
+						candidates.push(commandId);
+						event.preventDefault();
+						runCommand(commandId, button);
+						return;
+					}
+					const commandsForInput = commands.enabledForInput(event.type);
+					candidates.push(...commandsForInput.map((command) => command.id));
+					for (const command of commandsForInput) {
+						const binding = command.input;
+						if (!binding || binding.on !== event.type) continue;
+						if (event instanceof KeyboardEvent && (!binding.key || !keyMatchesEvent(event, bindingParsed(binding)))) continue;
+						const target = rawTarget && binding.selector ? rawTarget.closest(binding.selector) : rawTarget;
+						if (!(target instanceof Element) || binding.selector && !target) continue;
+						if (typing && !binding.global && !binding.selector) continue;
+						if (modal && !binding.global && !inModal) continue;
+						if (binding.when && !binding.when(event, target)) continue;
+						if (binding.prevent) event.preventDefault();
+						runCommand(command.id, target);
+						if (binding.stop) break;
+					}
+				} finally {
+					trace?.end({
+						candidates,
+						matched
+					});
 				}
 			};
 			const types = [
@@ -391,7 +436,8 @@ var GraphViewer = (function(exports) {
 				"wheel",
 				"input",
 				"change",
-				"focusout"
+				"focusout",
+				"paste"
 			];
 			types.forEach((type) => root.addEventListener(type, route, type === "wheel" ? { passive: false } : void 0));
 			return () => types.forEach((type) => root.removeEventListener(type, route));
@@ -404,6 +450,7 @@ var GraphViewer = (function(exports) {
 		ref.kind,
 		ref.id
 	]);
+	var refKey = (ref) => `${ref.kind}:${ref.id}`;
 	var sameItemRef = (a, b) => a === b || !!a && !!b && itemKey(a) === itemKey(b);
 	var nodeRef = (id) => ({
 		kind: "node",
@@ -494,7 +541,7 @@ var GraphViewer = (function(exports) {
 	}
 	//#endregion
 	//#region frontend/core/flags.ts
-	function createFlags(initial = {}, io = localStorageIo()) {
+	function createFlags(bus, initial = {}, io = localStorageIo()) {
 		const persisted = io.get(STORAGE_KEYS.flags, {});
 		const state = {
 			...initial,
@@ -512,7 +559,7 @@ var GraphViewer = (function(exports) {
 			},
 			set(name, on) {
 				state[name] = on;
-				io.set(STORAGE_KEYS.flags, state);
+				bus.emit("flag.changed");
 			},
 			declared: (kind) => kind == null ? Object.keys(state) : Object.keys(state).filter((name) => kinds.get(name) === kind),
 			kind: (name) => kinds.get(name),
@@ -521,7 +568,6 @@ var GraphViewer = (function(exports) {
 	}
 	//#endregion
 	//#region frontend/core/hierarchy.ts
-	var key = (ref) => `${ref.kind}:${ref.id}`;
 	/** hierarchy — the app's tree of navigable, orderable items.
 	*
 	*  It answers the two questions the app keeps asking:
@@ -554,7 +600,7 @@ var GraphViewer = (function(exports) {
 			const seen = /* @__PURE__ */ new Set();
 			let current = parentRefOf(ref);
 			while (current) {
-				const k = key(current);
+				const k = refKey(current);
 				if (seen.has(k)) break;
 				seen.add(k);
 				chain.unshift(current);
@@ -581,11 +627,13 @@ var GraphViewer = (function(exports) {
 			const rootList = [];
 			for (const it of list) {
 				const parent = parentRefOf(it.ref);
-				if (parent) (childIndex.get(key(parent)) ?? childIndex.set(key(parent), []).get(key(parent))).push(it);
-				else rootList.push(it);
+				if (parent) {
+					const pkey = refKey(parent);
+					(childIndex.get(pkey) ?? childIndex.set(pkey, []).get(pkey)).push(it);
+				} else rootList.push(it);
 			}
 			const build = (it, seen) => {
-				const k = key(it.ref);
+				const k = refKey(it.ref);
 				const kids = seen.has(k) ? [] : (childIndex.get(k) ?? []).slice().sort(byOrder);
 				const nextSeen = new Set(seen).add(k);
 				return {
@@ -636,12 +684,9 @@ var GraphViewer = (function(exports) {
 	*  lines of its own file. */
 	function createNesting(opts) {
 		const { parents, parentKind, onChange } = opts;
-		const k = (ref) => `${ref.kind}:${ref.id}`;
-		const sameRef = (a, b) => a.kind === b.kind && a.id === b.id;
-		/** Child kind:id → parent id. The single source of truth for hierarchy. */
 		const parentOf = /* @__PURE__ */ new Map();
 		const parentRefOf = (ref) => {
-			const pid = parentOf.get(k(ref));
+			const pid = parentOf.get(refKey(ref));
 			return pid && parents.has(pid) ? {
 				kind: parentKind,
 				id: pid
@@ -651,10 +696,10 @@ var GraphViewer = (function(exports) {
 			let cur = descendant;
 			const seen = /* @__PURE__ */ new Set();
 			while (cur) {
-				const ck = k(cur);
+				const ck = refKey(cur);
 				if (seen.has(ck)) return false;
 				seen.add(ck);
-				if (sameRef(cur, ancestor)) return true;
+				if (sameItemRef(cur, ancestor)) return true;
 				const pid = parentOf.get(ck);
 				cur = pid ? {
 					kind: parentKind,
@@ -664,11 +709,11 @@ var GraphViewer = (function(exports) {
 			return false;
 		};
 		const detach = (childRef) => {
-			const ck = k(childRef);
+			const ck = refKey(childRef);
 			const prev = parentOf.get(ck);
 			if (!prev) return void 0;
 			const p = parents.get(prev);
-			if (p) p.Children = p.Children.filter((r) => !sameRef(r, childRef));
+			if (p) p.Children = p.Children.filter((r) => !sameItemRef(r, childRef));
 			parentOf.delete(ck);
 			onChange?.(prev);
 			return prev;
@@ -684,11 +729,11 @@ var GraphViewer = (function(exports) {
 					kind: parentKind,
 					id: parentId
 				})) return "cycle";
-				const prev = parentOf.get(k(childRef));
+				const prev = parentOf.get(refKey(childRef));
 				if (prev === parentId) return "noop";
 				if (prev) detach(childRef);
-				if (!p.Children.some((r) => sameRef(r, childRef))) p.Children.push(childRef);
-				parentOf.set(k(childRef), parentId);
+				if (!p.Children.some((r) => sameItemRef(r, childRef))) p.Children.push(childRef);
+				parentOf.set(refKey(childRef), parentId);
 				onChange?.(parentId);
 				return "ok";
 			}
@@ -841,6 +886,651 @@ var GraphViewer = (function(exports) {
 			registerCollection
 		};
 	};
+	//#endregion
+	//#region frontend/model/graph.ts
+	var parentKey = (parent) => JSON.stringify(parent ?? []);
+	var GraphNode = class {
+		constructor(graph, id, draft = {}) {
+			this.graph = graph;
+			this.id = id;
+			this.kind = "node";
+			this.Label = draft.Label ?? { text: id };
+			this.Size = draft.Size ?? {
+				w: 150,
+				h: 64
+			};
+			this.Position = draft.Position;
+			this.NodeType = draft.NodeType ?? "text";
+			this.Description = draft.Description ?? "";
+			this.ComputeMs = draft.ComputeMs;
+			this.ExpectedRps = draft.ExpectedRps;
+			this.LatencyMs = draft.LatencyMs;
+			this.Purpose = draft.Purpose;
+			this.Assumptions = draft.Assumptions;
+			this.Limits = draft.Limits;
+			this.WhatThen = draft.WhatThen;
+			this.Observability = draft.Observability;
+			this.FailureMode = draft.FailureMode;
+			this.DataScale = draft.DataScale;
+			this.FreshnessMs = draft.FreshnessMs;
+		}
+	};
+	var GraphEdge = class {
+		constructor(graph, id, draft) {
+			this.graph = graph;
+			this.id = id;
+			this.kind = "edge";
+			this.From = draft.From;
+			this.To = draft.To;
+			this.Label = draft.Label;
+			this.EdgeKind = draft.EdgeKind ?? draft.Label?.text;
+			this.LatencyMs = draft.LatencyMs;
+			this.ThroughputRps = draft.ThroughputRps;
+			this.PayloadKb = draft.PayloadKb;
+			this.Purpose = draft.Purpose;
+			this.Assumptions = draft.Assumptions;
+			this.Limits = draft.Limits;
+			this.WhatThen = draft.WhatThen;
+			this.Observability = draft.Observability;
+			this.FailureMode = draft.FailureMode;
+			this.DataScale = draft.DataScale;
+			this.FreshnessMs = draft.FreshnessMs;
+		}
+	};
+	var Graph = class Graph {
+		static new(id) {
+			return new Graph(id);
+		}
+		static {
+			this.CELL = 256;
+		}
+		cellKey(x, y) {
+			return `${Math.floor(x / Graph.CELL)},${Math.floor(y / Graph.CELL)}`;
+		}
+		indexNode(node) {
+			const p = node.Position;
+			if (!p) return;
+			const key = this.cellKey(p.x, p.y);
+			const prev = this.nodeCell.get(node.id);
+			if (prev === key) return;
+			if (prev) this.grid.get(prev)?.delete(node.id);
+			(this.grid.get(key) ?? this.grid.set(key, /* @__PURE__ */ new Set()).get(key)).add(node.id);
+			this.nodeCell.set(node.id, key);
+		}
+		unindexNode(id) {
+			const prev = this.nodeCell.get(id);
+			if (prev) {
+				this.grid.get(prev)?.delete(id);
+				this.nodeCell.delete(id);
+			}
+		}
+		/** Node ids whose cell overlaps `rect`. A node spans at most one extra cell
+		*  beyond its center, and callers pass a margin-expanded rect, so cell-level
+		*  granularity is sufficient (the renderer still has exact bounds to refine). */
+		nodeIdsInRect(rect) {
+			const x0 = Math.floor(rect.x / Graph.CELL), x1 = Math.floor((rect.x + rect.w) / Graph.CELL);
+			const y0 = Math.floor(rect.y / Graph.CELL), y1 = Math.floor((rect.y + rect.h) / Graph.CELL);
+			const out = [];
+			for (let cx = x0; cx <= x1; cx++) for (let cy = y0; cy <= y1; cy++) this.grid.get(`${cx},${cy}`)?.forEach((id) => out.push(id));
+			return out;
+		}
+		addAdj(edge) {
+			(this.adjacency.get(edge.From) ?? this.adjacency.set(edge.From, /* @__PURE__ */ new Set()).get(edge.From)).add(edge.id);
+			(this.adjacency.get(edge.To) ?? this.adjacency.set(edge.To, /* @__PURE__ */ new Set()).get(edge.To)).add(edge.id);
+		}
+		removeAdj(edge) {
+			this.adjacency.get(edge.From)?.delete(edge.id);
+			this.adjacency.get(edge.To)?.delete(edge.id);
+		}
+		constructor(id) {
+			this.id = id;
+			this.nextNode = 1;
+			this.nextEdge = 1;
+			this.items = /* @__PURE__ */ new Map();
+			this.edgeMap = /* @__PURE__ */ new Map();
+			this.itemStores = /* @__PURE__ */ new Map();
+			this.nodeArr = null;
+			this.edgeArr = null;
+			this.adjacency = /* @__PURE__ */ new Map();
+			this.grid = /* @__PURE__ */ new Map();
+			this.nodeCell = /* @__PURE__ */ new Map();
+			this.registerItemStore("node", () => this.nodes());
+			this.registerItemStore("edge", () => this.edges());
+		}
+		registerItemStore(kind, provider) {
+			this.itemStores.set(kind, provider);
+			return () => {
+				if (this.itemStores.get(kind) === provider) this.itemStores.delete(kind);
+			};
+		}
+		itemsOfKind(kind) {
+			const provider = this.itemStores.get(kind);
+			if (!provider) return [];
+			return kind === "node" || kind === "edge" ? provider() : [...provider()];
+		}
+		getItem(ref) {
+			if (ref.kind === "node") return this.items.get(ref.id);
+			if (ref.kind === "edge") return this.edgeMap.get(ref.id);
+			return this.itemsOfKind(ref.kind).find((item) => {
+				if (!item || typeof item !== "object") return false;
+				const candidate = item;
+				if (candidate.id !== ref.id) return false;
+				if (candidate.parent == null) return true;
+				return parentKey(candidate.parent) === parentKey(ref.parent);
+			});
+		}
+		createEdge(draft) {
+			const id = `r${this.nextEdge++}`;
+			const edge = new GraphEdge(this, id, draft);
+			this.edgeMap.set(id, edge);
+			this.addAdj(edge);
+			this.edgeArr = null;
+			return edge;
+		}
+		getEdge(id) {
+			return this.edgeMap.get(id);
+		}
+		edges() {
+			return this.edgeArr ??= [...this.edgeMap.values()];
+		}
+		edgesOf(nodeId) {
+			const ids = this.adjacency.get(nodeId);
+			if (!ids) return [];
+			const out = [];
+			ids.forEach((eid) => {
+				const e = this.edgeMap.get(eid);
+				if (e) out.push(e);
+			});
+			return out;
+		}
+		updateEdge(id, patch) {
+			const edge = this.edgeMap.get(id);
+			if (!edge) return false;
+			const reindex = "From" in patch || "To" in patch;
+			if (reindex) this.removeAdj(edge);
+			Object.assign(edge, patch);
+			if (reindex) this.addAdj(edge);
+			return true;
+		}
+		deleteEdge(id) {
+			const edge = this.edgeMap.get(id);
+			if (!edge) return false;
+			this.removeAdj(edge);
+			this.edgeMap.delete(id);
+			this.edgeArr = null;
+			return true;
+		}
+		getNode(id) {
+			return this.items.get(id);
+		}
+		/** Create-or-place-near. `nearPosition` is the caller's job — Graph stays unaware of selection. */
+		createNode(draft = {}, options = {}) {
+			const id = `e${this.nextNode++}`;
+			const node = new GraphNode(this, id, this.withDefaults(draft, options));
+			this.items.set(id, node);
+			this.indexNode(node);
+			this.nodeArr = null;
+			return node;
+		}
+		node(value = {}, options = {}) {
+			if (typeof value === "string") return this.items.get(value);
+			return this.createNode(value, options);
+		}
+		nodes() {
+			return this.nodeArr ??= [...this.items.values()];
+		}
+		updateNode(id, patch) {
+			const node = this.items.get(id);
+			if (!node) return false;
+			Object.assign(node, patch);
+			if ("Position" in patch) this.indexNode(node);
+			return true;
+		}
+		deleteNode(id) {
+			const incident = this.adjacency.get(id);
+			if (incident) {
+				[...incident].forEach((eid) => {
+					const e = this.edgeMap.get(eid);
+					if (e) {
+						this.removeAdj(e);
+						this.edgeMap.delete(eid);
+					}
+				});
+				this.adjacency.delete(id);
+				this.edgeArr = null;
+			}
+			const removed = this.items.delete(id);
+			if (removed) {
+				this.unindexNode(id);
+				this.nodeArr = null;
+			}
+			return removed;
+		}
+		withDefaults(draft, options) {
+			const anchor = options.nearPosition ?? options.at ?? {
+				x: 0,
+				y: 0
+			};
+			const hasAnchor = options.nearPosition != null;
+			const index = this.items.size;
+			if (hasAnchor) {
+				const row = index % 3;
+				return {
+					...draft,
+					Position: draft.Position ?? {
+						x: anchor.x + 220,
+						y: anchor.y + row * 100
+					}
+				};
+			}
+			const cols = 3;
+			const col = index % cols;
+			const row = Math.floor(index / cols);
+			return {
+				...draft,
+				Position: draft.Position ?? {
+					x: anchor.x + (col - (cols - 1) / 2) * 240,
+					y: anchor.y + row * 100
+				}
+			};
+		}
+		snapshot() {
+			return {
+				nodes: this.nodes().map(({ id, Label, Position, Size, NodeType, Description, ComputeMs, ExpectedRps, LatencyMs, Purpose, Assumptions, Limits, WhatThen, Observability, FailureMode, DataScale, FreshnessMs }) => ({
+					id,
+					Label,
+					Position,
+					Size,
+					NodeType,
+					Description,
+					ComputeMs,
+					ExpectedRps,
+					LatencyMs,
+					Purpose,
+					Assumptions,
+					Limits,
+					WhatThen,
+					Observability,
+					FailureMode,
+					DataScale,
+					FreshnessMs
+				})),
+				edges: this.edges().map(({ id, From, To, Label, EdgeKind, LatencyMs, ThroughputRps, PayloadKb, Purpose, Assumptions, Limits, WhatThen, Observability, FailureMode, DataScale, FreshnessMs }) => ({
+					id,
+					From,
+					To,
+					Label,
+					EdgeKind,
+					LatencyMs,
+					ThroughputRps,
+					PayloadKb,
+					Purpose,
+					Assumptions,
+					Limits,
+					WhatThen,
+					Observability,
+					FailureMode,
+					DataScale,
+					FreshnessMs
+				}))
+			};
+		}
+		replace(snapshot) {
+			this.items.clear();
+			this.edgeMap.clear();
+			this.adjacency.clear();
+			this.grid.clear();
+			this.nodeCell.clear();
+			let maxNode = 0;
+			let maxEdge = 0;
+			snapshot.nodes.forEach((draft) => {
+				const node = new GraphNode(this, draft.id, draft);
+				this.items.set(node.id, node);
+				this.indexNode(node);
+				const seq = parseInt(node.id.replace(/^\D+/, ""), 10);
+				if (Number.isFinite(seq)) maxNode = Math.max(maxNode, seq);
+			});
+			snapshot.edges.forEach((draft) => {
+				if (!this.items.has(draft.From) || !this.items.has(draft.To) || draft.From === draft.To) return;
+				const edge = new GraphEdge(this, draft.id, draft);
+				this.edgeMap.set(edge.id, edge);
+				this.addAdj(edge);
+				const seq = parseInt(edge.id.replace(/^\D+/, ""), 10);
+				if (Number.isFinite(seq)) maxEdge = Math.max(maxEdge, seq);
+			});
+			this.nextNode = maxNode + 1;
+			this.nextEdge = maxEdge + 1;
+			this.nodeArr = null;
+			this.edgeArr = null;
+		}
+	};
+	function graphStore() {
+		let next = 1;
+		const graphs = /* @__PURE__ */ new Map();
+		const nextId = () => {
+			let id = `g${next++}`;
+			while (graphs.has(id)) id = `g${next++}`;
+			return id;
+		};
+		const create = (id = nextId()) => {
+			const existing = graphs.get(id);
+			if (existing) return existing;
+			const graph = Graph.new(id);
+			graphs.set(id, graph);
+			return graph;
+		};
+		let current = create();
+		return {
+			get current() {
+				return current;
+			},
+			all: () => [...graphs.values()],
+			get: (id) => graphs.get(id),
+			create,
+			delete(id) {
+				if (graphs.size <= 1) return current;
+				graphs.delete(id);
+				if (current.id === id) current = graphs.values().next().value ?? create();
+				return current;
+			},
+			switch(id) {
+				current = graphs.get(id) ?? create(id);
+				return current;
+			}
+		};
+	}
+	//#endregion
+	//#region frontend/core/perf.ts
+	var now = () => performance.now();
+	var MAX_TIMELINE = 2e3;
+	var MAX_INPUTS = 500;
+	var MAX_LONG_TASKS = 200;
+	var pushCapped = (rows, row, max) => {
+		rows.push(row);
+		if (rows.length > max) rows.splice(0, rows.length - max);
+	};
+	var labelFor = (el) => {
+		const id = el.id ? `#${el.id}` : "";
+		const cls = [...el.classList].slice(0, 3).map((name) => `.${name}`).join("");
+		const item = el instanceof HTMLElement && el.dataset.itemKind && el.dataset.itemId ? `[${el.dataset.itemKind}:${el.dataset.itemId}]` : "";
+		return `${el.localName}${id}${cls}${item}`;
+	};
+	var selectorPathFor = (target, limit = 4) => {
+		if (!target) return [];
+		const parts = [];
+		let el = target;
+		while (el && parts.length < limit) {
+			parts.unshift(labelFor(el));
+			el = el.parentElement;
+		}
+		return parts;
+	};
+	var selectorFor$1 = (target) => selectorPathFor(target).join(" > ");
+	var eventPathFor = (event, target) => {
+		const labels = (typeof event?.composedPath === "function" ? event.composedPath() : []).filter((entry) => entry instanceof Element).slice(0, 8).map(labelFor);
+		return labels.length ? labels : selectorPathFor(target, 8).reverse();
+	};
+	var eventStartTime = (event, processingStart) => {
+		const start = event?.timeStamp ?? processingStart;
+		const delay = processingStart - start;
+		return Number.isFinite(delay) && delay >= -1 && delay < 6e4 ? start : processingStart;
+	};
+	function createPerfApi(initialEnabled = false) {
+		let on = initialEnabled;
+		const timings = /* @__PURE__ */ new Map();
+		const counts = /* @__PURE__ */ new Map();
+		const samples = /* @__PURE__ */ new Map();
+		const marks = [];
+		const timeline = [];
+		const inputs = [];
+		const longTasks = [];
+		const stack = [];
+		const callEdges = /* @__PURE__ */ new Map();
+		let nextId = 1;
+		const recordTiming = (label, ms) => {
+			const row = timings.get(label) ?? timings.set(label, {
+				calls: 0,
+				totalMs: 0,
+				maxMs: 0
+			}).get(label);
+			row.calls++;
+			row.totalMs += ms;
+			row.maxMs = Math.max(row.maxMs, ms);
+		};
+		const recordSpan = (span, parent) => {
+			pushCapped(timeline, span, MAX_TIMELINE);
+			if (!parent) return;
+			const key = `${parent.label}=>${span.label}`;
+			const edge = callEdges.get(key) ?? callEdges.set(key, {
+				from: parent.label,
+				to: span.label,
+				calls: 0,
+				totalMs: 0,
+				maxMs: 0
+			}).get(key);
+			edge.calls++;
+			edge.totalMs += span.duration;
+			edge.maxMs = Math.max(edge.maxMs, span.duration);
+		};
+		return {
+			enabled: () => on,
+			setEnabled(next) {
+				on = next;
+			},
+			reset() {
+				timings.clear();
+				counts.clear();
+				samples.clear();
+				marks.length = 0;
+				timeline.length = 0;
+				inputs.length = 0;
+				longTasks.length = 0;
+				stack.length = 0;
+				callEdges.clear();
+			},
+			count(label, by = 1) {
+				if (!on) return;
+				counts.set(label, (counts.get(label) ?? 0) + by);
+			},
+			sample(label, value) {
+				if (!on || !Number.isFinite(value)) return;
+				const row = samples.get(label) ?? samples.set(label, {
+					samples: 0,
+					total: 0,
+					min: Infinity,
+					max: -Infinity,
+					last: value
+				}).get(label);
+				row.samples++;
+				row.total += value;
+				row.min = Math.min(row.min, value);
+				row.max = Math.max(row.max, value);
+				row.last = value;
+			},
+			mark(label) {
+				if (!on) return;
+				marks.push({
+					label,
+					at: now()
+				});
+			},
+			measure(label, fn) {
+				if (!on) return fn();
+				const start = now();
+				const parent = stack[stack.length - 1];
+				const frame = {
+					id: nextId++,
+					label
+				};
+				stack.push(frame);
+				try {
+					return fn();
+				} finally {
+					const end = now();
+					const duration = end - start;
+					stack.pop();
+					recordTiming(label, duration);
+					recordSpan({
+						id: frame.id,
+						label,
+						start,
+						end,
+						duration,
+						parentId: parent?.id
+					}, parent);
+				}
+			},
+			beginInput(name, event, target) {
+				if (!on) return void 0;
+				const processingStart = now();
+				const startTime = eventStartTime(event, processingStart);
+				const inputDelay = Math.max(0, processingStart - startTime);
+				const parent = stack[stack.length - 1];
+				const frame = {
+					id: nextId++,
+					label: `Input.${name}`
+				};
+				stack.push(frame);
+				let done = false;
+				return { end(trace = {}) {
+					if (done) return;
+					done = true;
+					const processingEnd = now();
+					const processingDuration = Math.max(0, processingEnd - processingStart);
+					if (stack[stack.length - 1]?.id === frame.id) stack.pop();
+					recordSpan({
+						id: frame.id,
+						label: frame.label,
+						start: processingStart,
+						end: processingEnd,
+						duration: processingDuration,
+						parentId: parent?.id
+					}, parent);
+					pushCapped(inputs, {
+						id: nextId++,
+						source: "router",
+						name,
+						target: selectorFor$1(target),
+						startTime,
+						processingStart,
+						processingEnd,
+						duration: inputDelay + processingDuration,
+						inputDelay,
+						processingDuration,
+						presentationDelay: 0,
+						path: eventPathFor(event, target),
+						candidates: trace.candidates,
+						matched: trace.matched
+					}, MAX_INPUTS);
+				} };
+			},
+			recordInput(row) {
+				if (!on) return;
+				pushCapped(inputs, {
+					id: nextId++,
+					...row
+				}, MAX_INPUTS);
+			},
+			recordLongTask(row) {
+				if (!on) return;
+				pushCapped(longTasks, {
+					id: nextId++,
+					...row
+				}, MAX_LONG_TASKS);
+			},
+			snapshot() {
+				const timingRows = [...timings.entries()].map(([label, row]) => ({
+					label,
+					calls: row.calls,
+					totalMs: row.totalMs,
+					avgMs: row.totalMs / Math.max(1, row.calls),
+					maxMs: row.maxMs
+				})).sort((a, b) => b.totalMs - a.totalMs);
+				const countRows = [...counts.entries()].map(([label, count]) => ({
+					label,
+					count
+				})).sort((a, b) => b.count - a.count);
+				const sampleRows = [...samples.entries()].map(([label, row]) => ({
+					label,
+					samples: row.samples,
+					min: row.min,
+					max: row.max,
+					avg: row.total / Math.max(1, row.samples),
+					last: row.last
+				})).sort((a, b) => b.max - a.max);
+				const graphRows = [...callEdges.values()].map((row) => ({ ...row })).sort((a, b) => b.totalMs - a.totalMs);
+				return {
+					enabled: on,
+					timings: timingRows,
+					counts: countRows,
+					samples: sampleRows,
+					marks: [...marks],
+					timeline: [...timeline],
+					callGraph: graphRows,
+					inputs: [...inputs],
+					longTasks: [...longTasks]
+				};
+			}
+		};
+	}
+	var WRAPPED = Symbol("ecg.perf.wrapped");
+	var PERF_BY_TARGET = /* @__PURE__ */ new WeakMap();
+	function bindPerfTarget(target, perf) {
+		PERF_BY_TARGET.set(target, perf);
+	}
+	function installMethodPerf(proto, labelPrefix, names) {
+		const target = proto;
+		names.forEach((name) => {
+			const current = target[name];
+			if (typeof current !== "function" || current[WRAPPED]) return;
+			const original = current;
+			const wrapped = function(...args) {
+				const perf = PERF_BY_TARGET.get(this);
+				if (!perf?.enabled()) return original.apply(this, args);
+				return perf.measure(`${labelPrefix}.${name}`, () => original.apply(this, args));
+			};
+			wrapped[WRAPPED] = true;
+			target[name] = wrapped;
+		});
+	}
+	var perfEnabledFrom = (initialFlags) => {
+		const search = typeof location === "undefined" ? "" : location.search;
+		const params = new URLSearchParams(search);
+		const env = globalThis.process?.env;
+		return initialFlags.perf === true || params.get("perf") === "1" || params.has("perf") || env?.PERF === "1";
+	};
+	var createAppPerf = (initialFlags) => createPerfApi(perfEnabledFrom(initialFlags));
+	function installGraphPerf(graphs, perf) {
+		installMethodPerf(Graph.prototype, "Graph", [
+			"itemsOfKind",
+			"getItem",
+			"nodes",
+			"edges",
+			"edgesOf",
+			"deleteNode",
+			"createNode",
+			"createEdge",
+			"getNode",
+			"updateNode",
+			"updateEdge",
+			"replace",
+			"snapshot",
+			"nodeIdsInRect"
+		]);
+		graphs.all().forEach((graph) => bindPerfTarget(graph, perf));
+		const create = graphs.create.bind(graphs);
+		graphs.create = ((id) => {
+			const graph = create(id);
+			bindPerfTarget(graph, perf);
+			return graph;
+		});
+		const switchGraph = graphs.switch.bind(graphs);
+		graphs.switch = ((id) => {
+			const graph = switchGraph(id);
+			bindPerfTarget(graph, perf);
+			return graph;
+		});
+	}
 	//#endregion
 	//#region frontend/core/properties.ts
 	/** Property input registry — turns `prop.input` (a string) into an HTMLElement.
@@ -1047,7 +1737,9 @@ var GraphViewer = (function(exports) {
 	*  patches. */
 	function storageContext(bus) {
 		const handlers = /* @__PURE__ */ new Map();
-		bus.on("item.update", ({ ref, patch }) => handlers.get(ref.kind)?.apply(ref, patch));
+		const applyOne = ({ ref, patch }) => handlers.get(ref.kind)?.apply(ref, patch);
+		bus.on("item.update", applyOne);
+		bus.on("item.update.batch", ({ updates }) => updates.forEach(applyOne));
 		return {
 			register(kind, origin, apply) {
 				handlers.set(kind, {
@@ -1080,12 +1772,10 @@ var GraphViewer = (function(exports) {
 	*  left panel, future inspector pane, …). Lives next to selection / view as a
 	*  presentation-layer store — not graph data. */
 	function foldContext(bus, io) {
-		const KEY = "frontend.fold";
-		const state = io.get(KEY, {});
+		const state = io.get("frontend.fold", {});
 		const isOpen = (id, defaultOpen = true) => Object.prototype.hasOwnProperty.call(state, id) ? state[id] : defaultOpen;
 		const set = (id, open) => {
 			state[id] = open;
-			io.set(KEY, state);
 			bus.emit("fold.changed", {
 				id,
 				open
@@ -1311,7 +2001,9 @@ var GraphViewer = (function(exports) {
 		return [...groups.entries()];
 	};
 	//#endregion
-	//#region frontend/types.ts
+	//#region frontend/constants.ts
+	/** Runtime constants — split from types.ts so type definitions stay focused on the MODEL MAP.
+	*  Re-exported from types.ts for backward compatibility. */
 	var Places = {
 		Top: "top",
 		Left: "left",
@@ -1928,7 +2620,7 @@ var GraphViewer = (function(exports) {
 	*   - `graph.node.*`, `graph.edge.*`, `graph.container.*` — downstream storage
 	*     CRUD that the `editing.*` features will emit when replayed
 	*   - `selection.node.*`, `focus.*` — downstream of `selection.item.select`
-	*   - `item.update` — emitted by drag/edit/nudge from their own intent events;
+	*   - `item.update` / `item.update.batch` — emitted by drag/edit/nudge from their own intent events;
 	*     replaying those events reproduces it
 	*
 	*  What survives is the user-intent slice: `editing.*`, `commandForm.submit`,
@@ -1949,7 +2641,7 @@ var GraphViewer = (function(exports) {
 		if (name === "app.notice") return false;
 		if (name === "app.start") return false;
 		if (name === "decoration.changed") return false;
-		if (name === "item.update") return false;
+		if (name === "item.update" || name === "item.update.batch") return false;
 		if (/^graph\.(node|edge|container)\.(create|update|delete)$/.test(name)) return false;
 		if (/^selection\.(node|item)\.(selected|cleared)$/.test(name)) return false;
 		if (/^selection\.node\.(select|clear)$/.test(name)) return false;
@@ -2005,12 +2697,6 @@ ${assertLines}
 	}
 	//#endregion
 	//#region frontend/core/semantics.ts
-	var mergeSemantics = (base, item) => ({
-		...base,
-		...item
-	});
-	var hasCompleteSemantics = (item) => !!(item.Purpose && item.Assumptions && item.Limits && item.WhatThen && item.Observability);
-	var hasFailurePlan = (item) => !!(item.FailureMode || item.WhatThen?.match(/retry|dlq|fallback|circuit|timeout|reconcile/i));
 	var semanticTitle = (item) => [
 		item.Purpose && `Purpose: ${item.Purpose}`,
 		item.Assumptions && `Assumptions: ${item.Assumptions}`,
@@ -2025,17 +2711,13 @@ ${assertLines}
 	//#region frontend/core.ts
 	var systemOf = (id) => id.split(".")[0] || "app";
 	var uiValue = (value, item, fallback = "") => typeof value === "function" ? value(item) : value ?? fallback;
-	function eventBus() {
+	function eventBus(perf) {
 		const listeners = /* @__PURE__ */ new Map();
 		const any = [];
 		const listenerCounts = /* @__PURE__ */ new Map();
 		const subscribed = /* @__PURE__ */ new Set();
 		const emitted = /* @__PURE__ */ new Set();
-		/** Per-event subscriber counts keyed by origin. Counts (not booleans) because the
-		*  same origin can register multiple handlers on the same event; the origin only
-		*  drops off `_subscribersOf` when the last handler tears down. */
 		const subscribersOf = /* @__PURE__ */ new Map();
-		/** Inverse index: per-origin set of currently subscribed event names. */
 		const subscriptionsOf = /* @__PURE__ */ new Map();
 		const emittersOf = /* @__PURE__ */ new Map();
 		const emissionsOf = /* @__PURE__ */ new Map();
@@ -2062,8 +2744,16 @@ ${assertLines}
 				data,
 				at: performance.now()
 			};
-			[...any].forEach((fn) => fn(event));
-			[...listeners.get(name) || []].forEach((fn) => fn(event.data, event));
+			perf?.count(`Bus.emit.${String(name)}`);
+			const fireAny = () => [...any].forEach((fn) => fn(event));
+			const fireNamed = () => [...listeners.get(name) || []].forEach((fn) => fn(event.data, event));
+			if (perf?.enabled()) {
+				perf.measure(`Bus.any.${String(name)}`, fireAny);
+				perf.measure(`Bus.listeners.${String(name)}`, fireNamed);
+			} else {
+				fireAny();
+				fireNamed();
+			}
 		};
 		return {
 			on(name, fn) {
@@ -2124,7 +2814,7 @@ ${assertLines}
 			}
 		};
 	}
-	function createContexts(bus, flags, io) {
+	function createContexts(bus, flags, io, perf) {
 		const places = /* @__PURE__ */ new Map();
 		const templates = templateContext();
 		const view = viewContext(places);
@@ -2135,7 +2825,7 @@ ${assertLines}
 		const hierarchy = hierarchyContext();
 		const keyboard = keyboardCaptureContext();
 		const commands = commandsContext(bus, (origin) => !origin || flags.isOn(origin), io);
-		const input = inputRouter(commands);
+		const input = inputRouter(commands, perf);
 		const storage = storageContext(bus);
 		const fold = foldContext(bus, io);
 		const placeContext = {
@@ -2156,10 +2846,10 @@ ${assertLines}
 			dx: {
 				issues: () => lastDxIssues,
 				run: () => runner(),
-				_set(issues) {
+				setIssues(issues) {
 					lastDxIssues = issues;
 				},
-				_setRunner(fn) {
+				setRunner(fn) {
 					runner = fn;
 				}
 			},
@@ -2210,7 +2900,8 @@ ${assertLines}
 				const index = ctx.bus;
 				const origin = entry.name;
 				const trackedOn = (name, fn) => {
-					const off = ctx.bus.on(name, fn);
+					const wrapped = ((data, event) => ctx.perf.enabled() ? ctx.perf.measure(`Bus.listener.${origin}.${String(name)}`, () => fn(data, event)) : fn(data, event));
+					const off = ctx.bus.on(name, wrapped);
 					index._trackSubscribe?.(name, origin);
 					let alive = true;
 					const wrappedOff = () => {
@@ -2301,16 +2992,20 @@ ${assertLines}
 		wrapped.kindOf = base.kindOf;
 		return wrapped;
 	}
-	function createAppContext(graphs, model, flags = createFlags(), io = localStorageIo()) {
-		const bus = eventBus();
+	function createAppContext(graphs, model, initialFlags = {}, io = localStorageIo()) {
+		const perf = createAppPerf(initialFlags);
+		installGraphPerf(graphs, perf);
+		const bus = eventBus(perf);
+		const flags = createFlags(bus, initialFlags, io);
 		return {
 			bus,
 			graphs,
 			flags,
 			selection: createSelectionStore(graphs, bus),
 			io,
+			perf,
 			sim: createSim(bus),
-			contexts: createContexts(bus, flags, io),
+			contexts: createContexts(bus, flags, io, perf),
 			model: createModelRegistry(model, flags)
 		};
 	}
@@ -2528,6 +3223,29 @@ ${assertLines}
 	function registerDraggable(system) {
 		system("ability.draggable", ({ on, emit, contexts, graphs }) => {
 			let drag = null;
+			let pending = null;
+			let scheduled = false;
+			const applyPending = () => {
+				scheduled = false;
+				if (!drag || !pending) return;
+				const pointer = contexts.view.clientToSpace(Places.Stage, pending);
+				pending = null;
+				const Position = {
+					x: drag.start.x + pointer.x - drag.pointer.x,
+					y: drag.start.y + pointer.y - drag.pointer.y
+				};
+				emit("item.update", {
+					ref: drag.ref,
+					patch: { Position }
+				});
+				emit("drag.item.moved", { ref: drag.ref });
+			};
+			const scheduleMove = (point) => {
+				pending = point;
+				if (scheduled) return;
+				scheduled = true;
+				requestAnimationFrame(applyPending);
+			};
 			contexts.commands.register([
 				{
 					id: "drag.item.start",
@@ -2587,23 +3305,15 @@ ${assertLines}
 				};
 			});
 			on("drag.item.move", ({ x, y }) => {
-				if (!drag) return;
-				const pointer = contexts.view.clientToSpace(Places.Stage, {
+				if (drag) scheduleMove({
 					x,
 					y
 				});
-				const Position = {
-					x: drag.start.x + pointer.x - drag.pointer.x,
-					y: drag.start.y + pointer.y - drag.pointer.y
-				};
-				emit("item.update", {
-					ref: drag.ref,
-					patch: { Position }
-				});
-				emit("drag.item.moved", { ref: drag.ref });
 			});
 			on("drag.item.end", () => {
+				if (pending) applyPending();
 				drag = null;
+				pending = null;
 			});
 		});
 	}
@@ -2817,11 +3527,12 @@ ${assertLines}
 			on("item.nudge", ({ dx, dy }) => {
 				const all = selection.selectedAll();
 				const inSet = (ref) => all.some((r) => sameItemRef(r, ref));
+				const updates = [];
 				all.forEach((ref) => {
 					if (contexts.hierarchy.parentChain(ref).some(inSet)) return;
 					const item = graphs.current.getItem(ref);
 					if (!item?.Position) return;
-					emit("item.update", {
+					updates.push({
 						ref,
 						patch: { Position: {
 							x: item.Position.x + dx,
@@ -2829,6 +3540,8 @@ ${assertLines}
 						} }
 					});
 				});
+				if (updates.length === 1) emit("item.update", updates[0]);
+				else if (updates.length) emit("item.update.batch", { updates });
 			});
 		}, { requires: ["ability.selectable"] });
 	}
@@ -3004,7 +3717,7 @@ ${assertLines}
 					input: {
 						on: "pointerdown",
 						selector: "[data-item-kind][data-item-id]",
-						when: (event) => !event.target.closest("[data-command], [data-drag-handle], [data-resize-handle], [data-container-section-title], [data-container-section-resize]"),
+						when: (event) => !event.target.closest("[data-command], [data-drag-handle], [data-resize-handle], [data-container-section-title], [data-container-section-resize], .modal-layer, input, textarea, select, label"),
 						prevent: true,
 						stop: true
 					},
@@ -3019,7 +3732,7 @@ ${assertLines}
 						on: "pointerdown",
 						selector: "[data-item-kind][data-item-id]",
 						shift: true,
-						when: (event) => !event.target.closest("[data-command], [data-drag-handle], [data-resize-handle], [data-container-section-title], [data-container-section-resize]"),
+						when: (event) => !event.target.closest("[data-command], [data-drag-handle], [data-resize-handle], [data-container-section-title], [data-container-section-resize], .modal-layer, input, textarea, select, label"),
 						prevent: true,
 						stop: true
 					},
@@ -3099,7 +3812,9 @@ ${assertLines}
 				else emit("focus.item.clear");
 			});
 			on("selection.item.delete", () => {
-				selection.selectedAll().forEach((ref) => {
+				const refs = selection.selectedAll();
+				selection.select(null);
+				refs.forEach((ref) => {
 					if (ref.kind === "node") emit("graph.node.delete", { id: ref.id });
 					if (ref.kind === "edge") emit("graph.edge.delete", { id: ref.id });
 				});
@@ -3143,2239 +3858,8 @@ ${assertLines}
 		return el;
 	};
 	//#endregion
-	//#region frontend/systems/system-design.ts
-	var PANEL_ID$1 = "system-design";
-	var PANEL_FOLD_ID = "system-design.palette";
-	var HINTS_KEY = "system-design:hints";
-	var PRESENTATION_KEY = "system-design:presentation";
-	var NODE_TYPES$1 = [
-		"user-input",
-		"gateway",
-		"service",
-		"database",
-		"kafka",
-		"index",
-		"cache",
-		"rate-limit",
-		"circuit-breaker"
-	];
-	var EDGE_KINDS$1 = [
-		"sync",
-		"async",
-		"read",
-		"write"
-	];
-	var EDGE_KIND_SET = new Set(EDGE_KINDS$1);
-	var nodeTitle = {
-		"user-input": "User input",
-		gateway: "Gateway",
-		service: "Service",
-		database: "Database",
-		kafka: "Kafka",
-		index: "Search index",
-		cache: "Cache",
-		"rate-limit": "Rate limiter",
-		"circuit-breaker": "Circuit breaker"
-	};
-	var nodeDefaults = {
-		"user-input": {
-			Label: { text: "User input" },
-			Size: {
-				w: 148,
-				h: 78
-			},
-			Description: "External actor, mobile app, CLI, or browser request source.",
-			ExpectedRps: 200,
-			LatencyMs: 20
-		},
-		gateway: {
-			Label: { text: "Gateway" },
-			Size: {
-				w: 170,
-				h: 82
-			},
-			Description: "Auth, routing, rate limits, request shaping.",
-			ExpectedRps: 5e3,
-			ComputeMs: 4,
-			LatencyMs: 15
-		},
-		service: {
-			Label: { text: "Service" },
-			Size: {
-				w: 196,
-				h: 108
-			},
-			Description: "Stateless compute. Add CPU time, downstream calls, and data ownership notes.",
-			ExpectedRps: 1500,
-			ComputeMs: 20,
-			LatencyMs: 60
-		},
-		database: {
-			Label: { text: "Database" },
-			Size: {
-				w: 176,
-				h: 92
-			},
-			Description: "Durable source of truth. Mark read/write edges and expected load.",
-			ExpectedRps: 2e3,
-			LatencyMs: 12
-		},
-		kafka: {
-			Label: { text: "Kafka" },
-			Size: {
-				w: 170,
-				h: 82
-			},
-			Description: "Async event boundary. Track event names, lag target, retention, and payload size.",
-			ExpectedRps: 1e4,
-			LatencyMs: 5
-		},
-		index: {
-			Label: { text: "Index" },
-			Size: {
-				w: 176,
-				h: 92
-			},
-			Description: "Derived read model for search, ranking, or vector lookup.",
-			ExpectedRps: 3e3,
-			LatencyMs: 25
-		},
-		cache: {
-			Label: { text: "Cache" },
-			Size: {
-				w: 168,
-				h: 84
-			},
-			Description: "Fast temporary read layer. Track hit rate, TTL, and invalidation.",
-			ExpectedRps: 8e3,
-			LatencyMs: 3
-		},
-		"rate-limit": {
-			Label: { text: "Rate limiter" },
-			Size: {
-				w: 176,
-				h: 84
-			},
-			Description: "Rejects or shapes excess demand before it reaches expensive work.",
-			ExpectedRps: 1e4,
-			ComputeMs: 2,
-			LatencyMs: 5
-		},
-		"circuit-breaker": {
-			Label: { text: "Circuit breaker" },
-			Size: {
-				w: 190,
-				h: 84
-			},
-			Description: "Fails fast around unhealthy dependencies and protects caller budgets.",
-			ExpectedRps: 3e3,
-			ComputeMs: 2,
-			LatencyMs: 5
-		}
-	};
-	var nodeSemantics = {
-		"user-input": {
-			Purpose: "Makes demand visible: who calls the system, why, and at what rate.",
-			Assumptions: "Client identity, request shape, burstiness, and retry behavior are known.",
-			Limits: "Users can retry, disconnect, send bad input, or create burst traffic.",
-			WhatThen: "Add idempotency keys, client backoff, validation, and product-level degradation.",
-			Observability: "Track request rate, bad requests, client retries, abandonment, and top endpoints.",
-			FailureMode: "Client sees timeout or degraded response; avoid hidden duplicate writes.",
-			DataScale: "small"
-		},
-		gateway: {
-			Purpose: "Protects and routes the system: auth, rate limits, traffic shaping, and fanout control.",
-			Assumptions: "Fast decisions, cheap auth/cache lookups, and clear timeout budgets.",
-			Limits: "Can become a global bottleneck or amplify retries into downstream storms.",
-			WhatThen: "Partition by route/tenant, add circuit breakers, shed load, queue optional work.",
-			Observability: "Track per-route RPS, p95/p99 latency, rejected requests, retries, and downstream errors.",
-			FailureMode: "Fail closed for auth, fail fast for unavailable dependencies, return explicit 429/503.",
-			DataScale: "medium"
-		},
-		service: {
-			Purpose: "Owns business computation and coordinates calls across storage or services.",
-			Assumptions: "Stateless or explicitly owns state; timeout and retry budgets are bounded.",
-			Limits: "Sync fanout, thread pools, N+1 calls, and slow dependencies dominate latency.",
-			WhatThen: "Split hot paths, cache, batch, parallelize independent calls, or move slow work async.",
-			Observability: "Track RED metrics, dependency spans, queue depth, saturation, and error classes.",
-			FailureMode: "Use timeouts, bulkheads, retries with jitter, idempotency, and fallback where safe.",
-			DataScale: "medium"
-		},
-		database: {
-			Purpose: "Stores durable state or blobs with clear ownership and recovery expectations.",
-			Assumptions: "Access patterns, write volume, consistency needs, backup/RPO, and growth are estimated.",
-			Limits: "Hot partitions, lock contention, replication lag, storage growth, and expensive queries.",
-			WhatThen: "Add indexes, replicas, partitioning, sharding, snapshots, WAL/backups, and archival policy.",
-			Observability: "Track QPS, slow queries, locks, replication lag, storage growth, and backup freshness.",
-			FailureMode: "Recover from backups or fail over; writes may need idempotency and reconciliation.",
-			DataScale: "big"
-		},
-		kafka: {
-			Purpose: "Decouples producers and consumers with an observable async event boundary.",
-			Assumptions: "Partition key, ordering scope, delivery semantics, retention, and consumer lag budget are known.",
-			Limits: "Poison messages, rebalances, lag, duplicate delivery, and partition-key skew.",
-			WhatThen: "Add DLQ, retries, idempotent consumers, schema versioning, and partition expansion.",
-			Observability: "Track producer errors, consumer lag, retries, DLQ count, partition skew, and age of oldest message.",
-			FailureMode: "At-least-once usually means duplicates; consumers must be idempotent.",
-			DataScale: "big"
-		},
-		index: {
-			Purpose: "Turns large or expensive reads into fast lookups, search, or ranked retrieval.",
-			Assumptions: "Good keys/analyzers/hash, enough memory/cache, and acceptable staleness.",
-			Limits: "Stale data, reindexing cost, collisions/skew, memory pressure, and irrelevant old data.",
-			WhatThen: "Improve keys, partition/shard, add replicas/cache warming, TTLs, backfill/reindex pipelines.",
-			Observability: "Track query p95/p99, hit rate, index size, freshness lag, rejected queries, and reindex progress.",
-			FailureMode: "Fall back to degraded search or stale results; avoid blocking writes on reindexing.",
-			DataScale: "big"
-		},
-		cache: {
-			Purpose: "Makes hot reads fast and protects slower storage or services from repeated work.",
-			Assumptions: "High hit rate is plausible, TTL/invalidation is defined, and stale values are acceptable within a budget.",
-			Limits: "Stampedes, stale data, memory pressure, hot keys, and invalidation mistakes.",
-			WhatThen: "Use TTLs, request coalescing, cache warming, partitioning, and explicit stale/fallback behavior.",
-			Observability: "Track hit rate, evictions, memory, key skew, p95 latency, stampede count, and stale age.",
-			FailureMode: "Bypass to source with backpressure, serve stale if safe, or shed optional reads.",
-			DataScale: "big"
-		},
-		"rate-limit": {
-			Purpose: "Turns uncontrolled demand into explicit accepted/rejected traffic before expensive work.",
-			Assumptions: "Limit key, quota, burst budget, and reject/degrade policy are known.",
-			Limits: "Bad keys cause unfairness; too strict loses good traffic; too loose overloads downstream.",
-			WhatThen: "Use token bucket/sliding window, per-tenant limits, retry-after, priority lanes, and load shedding.",
-			Observability: "Track allowed/rejected rate, top limit keys, retry-after usage, and downstream saturation.",
-			FailureMode: "Fail closed for abuse and fail open/degraded only for trusted paths.",
-			DataScale: "medium"
-		},
-		"circuit-breaker": {
-			Purpose: "Stops slow or failing dependencies from consuming request budgets and thread pools.",
-			Assumptions: "Dependency health signal, timeout, open threshold, and fallback behavior are explicit.",
-			Limits: "False opens, retry storms after half-open, and hidden data loss if fallback is vague.",
-			WhatThen: "Add bulkheads, bounded retries with jitter, half-open probes, fallback, and dependency SLO alerts.",
-			Observability: "Track open/half-open state, dependency errors, timeout rate, fallback count, and saved latency.",
-			FailureMode: "Fail fast with fallback or explicit error; recover via half-open probes.",
-			DataScale: "small"
-		}
-	};
-	var edgeSemantics = {
-		sync: {
-			Purpose: "Gets an answer in the current request path.",
-			Assumptions: "Both endpoints are fast and share a clear timeout budget.",
-			Limits: "Adds tail latency, retry amplification, and cascading failure risk.",
-			WhatThen: "Use deadlines, circuit breakers, cache, parallelism, or move slow work async.",
-			Observability: "Trace span, p95/p99 latency, timeout rate, retry count, and downstream error class.",
-			FailureMode: "Caller must have timeout, fallback, or explicit error behavior."
-		},
-		async: {
-			Purpose: "Decouples work from the request path and absorbs bursts.",
-			Assumptions: "Consumers are idempotent and eventual consistency is acceptable.",
-			Limits: "Lag, poison messages, duplicate delivery, and ordering scope.",
-			WhatThen: "Add DLQ, retry policy, partitioning, idempotency keys, and lag alerts.",
-			Observability: "Track lag, oldest message age, retries, DLQ count, consumer errors, and throughput.",
-			FailureMode: "Retry with backoff; send poison messages to DLQ; replay after fix.",
-			FreshnessMs: 6e4
-		},
-		read: {
-			Purpose: "Fetches state needed to answer or enrich work.",
-			Assumptions: "Query shape, consistency needs, and cacheability are understood.",
-			Limits: "N+1 reads, stale replicas, hot keys, and query fanout.",
-			WhatThen: "Add cache/read replica/index/denormalization, batch reads, or tighten access pattern.",
-			Observability: "Track QPS, p95/p99, cache hit rate, slow query count, and replica lag.",
-			FailureMode: "Fail closed for critical reads, or return stale/degraded data when product allows."
-		},
-		write: {
-			Purpose: "Changes durable or derived state.",
-			Assumptions: "Ownership, idempotency, ordering, and consistency are explicit.",
-			Limits: "Multiple writes can diverge, lock, conflict, or require distributed transactions.",
-			WhatThen: "Use single writer, outbox, saga, idempotency key, reconciliation, or event sourcing.",
-			Observability: "Track write latency, conflicts, retries, duplicate keys, and replication/outbox lag.",
-			FailureMode: "Retry only if idempotent; otherwise compensate or reconcile."
-		}
-	};
-	var labelFor = (type) => ({
-		"user-input": "UI",
-		gateway: "GW",
-		service: "Svc",
-		database: "DB",
-		kafka: "Kafka",
-		index: "Index",
-		cache: "Cache",
-		"rate-limit": "Limit",
-		"circuit-breaker": "CB"
-	})[type];
-	var edgeLabel = (kind) => ({
-		sync: "Sync",
-		async: "Async",
-		read: "Read",
-		write: "Write"
-	})[kind];
-	var compactSemantics = (item) => {
-		const compact = {
-			p: item.Purpose || void 0,
-			a: item.Assumptions || void 0,
-			l: item.Limits || void 0,
-			w: item.WhatThen || void 0,
-			o: item.Observability || void 0,
-			f: item.FailureMode || void 0,
-			d: item.DataScale,
-			fr: item.FreshnessMs
-		};
-		return Object.values(compact).some((value) => value != null && value !== "") ? compact : void 0;
-	};
-	var expandSemantics = (compact) => compact ? {
-		Purpose: compact.p,
-		Assumptions: compact.a,
-		Limits: compact.l,
-		WhatThen: compact.w,
-		Observability: compact.o,
-		FailureMode: compact.f,
-		DataScale: compact.d,
-		FreshnessMs: compact.fr
-	} : {};
-	var fillSnapshotSemantics = (snapshot) => ({
-		nodes: snapshot.nodes.map((node) => {
-			return mergeSemantics(node.NodeType && node.NodeType in nodeSemantics ? nodeSemantics[node.NodeType] : {}, node);
-		}),
-		edges: snapshot.edges.map((edge) => {
-			return mergeSemantics(edgeSemantics[edge.EdgeKind ?? "sync"], edge);
-		})
-	});
-	var bytesToBase64Url = (bytes) => {
-		let binary = "";
-		bytes.forEach((byte) => {
-			binary += String.fromCharCode(byte);
-		});
-		return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-	};
-	var base64UrlToBytes = (value) => {
-		const padded = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
-		const binary = atob(padded);
-		return Uint8Array.from(binary, (char) => char.charCodeAt(0));
-	};
-	var encodeSystemDesignSnapshot = (snapshot) => bytesToBase64Url(new TextEncoder().encode(JSON.stringify(toCompact(snapshot))));
-	var decodeSystemDesignSnapshot = (encoded) => {
-		try {
-			return fromCompact(JSON.parse(new TextDecoder().decode(base64UrlToBytes(encoded))));
-		} catch {
-			return null;
-		}
-	};
-	var toCompact = (snapshot) => ({
-		v: 2,
-		n: snapshot.nodes.map((node) => [
-			node.id,
-			node.Label?.text ?? node.id,
-			node.NodeType ?? "text",
-			Math.round(node.Position?.x ?? 0),
-			Math.round(node.Position?.y ?? 0),
-			Math.round(node.Size?.w ?? 150),
-			Math.round(node.Size?.h ?? 64),
-			node.Description || void 0,
-			node.ComputeMs,
-			node.ExpectedRps,
-			node.LatencyMs,
-			compactSemantics(node)
-		]),
-		e: snapshot.edges.map((edge) => [
-			edge.id,
-			edge.From,
-			edge.To,
-			edge.EdgeKind ?? "",
-			edge.Label?.text || void 0,
-			edge.LatencyMs,
-			edge.ThroughputRps,
-			edge.PayloadKb,
-			compactSemantics(edge)
-		])
-	});
-	var fromCompact = (compact) => {
-		if (compact.v !== 1 && compact.v !== 2 || !Array.isArray(compact.n) || !Array.isArray(compact.e)) return null;
-		return fillSnapshotSemantics({
-			nodes: compact.n.map(([id, title, NodeType, x, y, w, h, Description, ComputeMs, ExpectedRps, LatencyMs, semantics]) => ({
-				id,
-				Label: { text: title },
-				NodeType,
-				Position: {
-					x,
-					y
-				},
-				Size: {
-					w,
-					h
-				},
-				Description,
-				ComputeMs,
-				ExpectedRps,
-				LatencyMs,
-				...expandSemantics(semantics)
-			})),
-			edges: compact.e.map(([id, From, To, EdgeKind, label, LatencyMs, ThroughputRps, PayloadKb, semantics]) => ({
-				id,
-				From,
-				To,
-				EdgeKind: EDGE_KIND_SET.has(EdgeKind) ? EdgeKind : void 0,
-				Label: label ? { text: label } : void 0,
-				LatencyMs,
-				ThroughputRps,
-				PayloadKb,
-				...expandSemantics(semantics)
-			}))
-		});
-	};
-	var imageSearchSnapshot = () => fillSnapshotSemantics({
-		nodes: [
-			{
-				id: "e1",
-				Label: { text: "Mobile app" },
-				NodeType: "user-input",
-				Position: {
-					x: -760,
-					y: -70
-				},
-				Size: {
-					w: 150,
-					h: 92
-				},
-				ExpectedRps: 250,
-				LatencyMs: 30,
-				Description: "User uploads product photos and searches by photo."
-			},
-			{
-				id: "e2",
-				Label: { text: "Load balancer" },
-				NodeType: "gateway",
-				Position: {
-					x: -520,
-					y: -70
-				},
-				Size: {
-					w: 178,
-					h: 78
-				},
-				ExpectedRps: 5e3,
-				ComputeMs: 3,
-				LatencyMs: 10,
-				Description: "Routes upload/search traffic; enforce auth and request limits."
-			},
-			{
-				id: "e3",
-				Label: { text: "Image Service" },
-				NodeType: "service",
-				Position: {
-					x: -250,
-					y: -180
-				},
-				Size: {
-					w: 190,
-					h: 104
-				},
-				ExpectedRps: 800,
-				ComputeMs: 25,
-				LatencyMs: 80,
-				Description: "`POST /upload`\nStores bytes and emits photo key."
-			},
-			{
-				id: "e4",
-				Label: { text: "Photo S3" },
-				NodeType: "database",
-				Position: {
-					x: -40,
-					y: -310
-				},
-				Size: {
-					w: 170,
-					h: 88
-				},
-				ExpectedRps: 1e3,
-				LatencyMs: 35,
-				Description: "Original image bytes keyed by `photo_key`."
-			},
-			{
-				id: "e5",
-				Label: { text: "ML Job" },
-				NodeType: "service",
-				Position: {
-					x: 400,
-					y: -360
-				},
-				Size: {
-					w: 170,
-					h: 82
-				},
-				ExpectedRps: 80,
-				ComputeMs: 18e4,
-				LatencyMs: 0,
-				Description: "Batch job every 3h recomputes vectors for changed photos."
-			},
-			{
-				id: "e6",
-				Label: { text: "Photo Embedding S3" },
-				NodeType: "database",
-				Position: {
-					x: 140,
-					y: -260
-				},
-				Size: {
-					w: 196,
-					h: 92
-				},
-				ExpectedRps: 1e3,
-				LatencyMs: 35,
-				Description: "Vector blobs keyed by SKU/photo."
-			},
-			{
-				id: "e7",
-				Label: { text: "Search Service" },
-				NodeType: "service",
-				Position: {
-					x: -250,
-					y: 90
-				},
-				Size: {
-					w: 190,
-					h: 104
-				},
-				ExpectedRps: 1200,
-				ComputeMs: 18,
-				LatencyMs: 120,
-				Description: "`GET /search_by_vec`\nTakes photo_key, returns SKU list."
-			},
-			{
-				id: "e8",
-				Label: { text: "Elasticsearch" },
-				NodeType: "index",
-				Position: {
-					x: -250,
-					y: 270
-				},
-				Size: {
-					w: 184,
-					h: 92
-				},
-				ExpectedRps: 2500,
-				LatencyMs: 35,
-				Description: "Vector search index: `sku_id`, `vector<N>`."
-			},
-			{
-				id: "e9",
-				Label: { text: "MyService" },
-				NodeType: "service",
-				Position: {
-					x: 170,
-					y: 40
-				},
-				Size: {
-					w: 250,
-					h: 150
-				},
-				ExpectedRps: 900,
-				ComputeMs: 40,
-				LatencyMs: 160,
-				Description: "Consumes SKU changes, calls encoder, writes derived vector index."
-			},
-			{
-				id: "e10",
-				Label: { text: "ML encoder" },
-				NodeType: "service",
-				Position: {
-					x: 570,
-					y: 20
-				},
-				Size: {
-					w: 170,
-					h: 92
-				},
-				ExpectedRps: 650,
-				ComputeMs: 90,
-				LatencyMs: 120,
-				Description: "`POST /encode/product`\nReturns vector for product JSON + photo."
-			},
-			{
-				id: "e11",
-				Label: { text: "Redis" },
-				NodeType: "database",
-				Position: {
-					x: 410,
-					y: 185
-				},
-				Size: {
-					w: 160,
-					h: 78
-				},
-				ExpectedRps: 5e3,
-				LatencyMs: 3,
-				Description: "Persistent cache for encoder results and retries."
-			},
-			{
-				id: "e12",
-				Label: { text: "Kafka" },
-				NodeType: "kafka",
-				Position: {
-					x: 420,
-					y: 360
-				},
-				Size: {
-					w: 160,
-					h: 78
-				},
-				ExpectedRps: 3e3,
-				LatencyMs: 8,
-				Description: "Events: `sku_changed`, `vectors_computed`."
-			},
-			{
-				id: "e13",
-				Label: { text: "Assortment service" },
-				NodeType: "service",
-				Position: {
-					x: 760,
-					y: 390
-				},
-				Size: {
-					w: 196,
-					h: 96
-				},
-				ExpectedRps: 500,
-				ComputeMs: 18,
-				LatencyMs: 70,
-				Description: "Writes product JSON and SKU changes."
-			},
-			{
-				id: "e14",
-				Label: { text: "Actor" },
-				NodeType: "user-input",
-				Position: {
-					x: 1030,
-					y: 390
-				},
-				Size: {
-					w: 120,
-					h: 70
-				},
-				ExpectedRps: 50,
-				LatencyMs: 20,
-				Description: "Internal operator changes SKU assortment."
-			},
-			{
-				id: "e15",
-				Label: { text: "Indexer" },
-				NodeType: "service",
-				Position: {
-					x: -10,
-					y: 300
-				},
-				Size: {
-					w: 180,
-					h: 94
-				},
-				ExpectedRps: 900,
-				ComputeMs: 22,
-				LatencyMs: 60,
-				Description: "Builds Elasticsearch documents from derived vectors."
-			}
-		],
-		edges: [
-			{
-				id: "r1",
-				From: "e1",
-				To: "e2",
-				EdgeKind: "sync",
-				Label: { text: "HTTPS" },
-				LatencyMs: 35,
-				ThroughputRps: 250,
-				PayloadKb: 900
-			},
-			{
-				id: "r2",
-				From: "e2",
-				To: "e3",
-				EdgeKind: "sync",
-				Label: { text: "POST /upload" },
-				LatencyMs: 15,
-				ThroughputRps: 80,
-				PayloadKb: 1024
-			},
-			{
-				id: "r3",
-				From: "e3",
-				To: "e4",
-				EdgeKind: "write",
-				Label: { text: "photo bytes" },
-				LatencyMs: 45,
-				ThroughputRps: 80,
-				PayloadKb: 1024
-			},
-			{
-				id: "r4",
-				From: "e5",
-				To: "e4",
-				EdgeKind: "read",
-				Label: { text: "scan every 3h" },
-				LatencyMs: 80,
-				ThroughputRps: 80,
-				PayloadKb: 1024
-			},
-			{
-				id: "r5",
-				From: "e5",
-				To: "e6",
-				EdgeKind: "write",
-				Label: { text: "vectors" },
-				LatencyMs: 45,
-				ThroughputRps: 80,
-				PayloadKb: 1
-			},
-			{
-				id: "r6",
-				From: "e2",
-				To: "e7",
-				EdgeKind: "sync",
-				Label: { text: "GET /search" },
-				LatencyMs: 15,
-				ThroughputRps: 170,
-				PayloadKb: 4
-			},
-			{
-				id: "r7",
-				From: "e7",
-				To: "e6",
-				EdgeKind: "read",
-				Label: { text: "photo vector" },
-				LatencyMs: 40,
-				ThroughputRps: 170,
-				PayloadKb: 1
-			},
-			{
-				id: "r8",
-				From: "e7",
-				To: "e8",
-				EdgeKind: "read",
-				Label: { text: "kNN query" },
-				LatencyMs: 50,
-				ThroughputRps: 170,
-				PayloadKb: 1
-			},
-			{
-				id: "r9",
-				From: "e12",
-				To: "e9",
-				EdgeKind: "async",
-				Label: { text: "sku_changed" },
-				LatencyMs: 10,
-				ThroughputRps: 500,
-				PayloadKb: 1
-			},
-			{
-				id: "r10",
-				From: "e9",
-				To: "e10",
-				EdgeKind: "sync",
-				Label: { text: "encode product" },
-				LatencyMs: 140,
-				ThroughputRps: 500,
-				PayloadKb: 1
-			},
-			{
-				id: "r11",
-				From: "e9",
-				To: "e11",
-				EdgeKind: "write",
-				Label: { text: "cache result" },
-				LatencyMs: 4,
-				ThroughputRps: 500,
-				PayloadKb: 1
-			},
-			{
-				id: "r12",
-				From: "e9",
-				To: "e15",
-				EdgeKind: "async",
-				Label: { text: "vectors_computed" },
-				LatencyMs: 8,
-				ThroughputRps: 500,
-				PayloadKb: 1
-			},
-			{
-				id: "r13",
-				From: "e15",
-				To: "e8",
-				EdgeKind: "write",
-				Label: { text: "bulk insert" },
-				LatencyMs: 60,
-				ThroughputRps: 500,
-				PayloadKb: 1
-			},
-			{
-				id: "r14",
-				From: "e14",
-				To: "e13",
-				EdgeKind: "sync",
-				Label: { text: "change SKU" },
-				LatencyMs: 40,
-				ThroughputRps: 50,
-				PayloadKb: 2
-			},
-			{
-				id: "r15",
-				From: "e13",
-				To: "e12",
-				EdgeKind: "async",
-				Label: { text: "publish sku_changed" },
-				LatencyMs: 12,
-				ThroughputRps: 500,
-				PayloadKb: 1
-			}
-		]
-	});
-	var resilientCheckoutSnapshot = () => fillSnapshotSemantics({
-		nodes: [
-			{
-				id: "e1",
-				Label: { text: "Buyer app" },
-				NodeType: "user-input",
-				Position: {
-					x: -720,
-					y: -80
-				},
-				Size: {
-					w: 150,
-					h: 86
-				},
-				ExpectedRps: 900,
-				LatencyMs: 25,
-				Description: "Checkout traffic with retries and mobile disconnects.",
-				DataScale: "medium"
-			},
-			{
-				id: "e2",
-				Label: { text: "API Gateway" },
-				NodeType: "gateway",
-				Position: {
-					x: -500,
-					y: -80
-				},
-				Size: {
-					w: 170,
-					h: 88
-				},
-				ExpectedRps: 4e3,
-				ComputeMs: 4,
-				LatencyMs: 18,
-				Description: "Auth, token bucket, route deadlines, request shedding.",
-				WhatThen: "Drop low-value retries, return 429 with retry-after, route high-risk payment calls through stricter timeout."
-			},
-			{
-				id: "e3",
-				Label: { text: "Checkout Service" },
-				NodeType: "service",
-				Position: {
-					x: -245,
-					y: -80
-				},
-				Size: {
-					w: 220,
-					h: 124
-				},
-				ExpectedRps: 1200,
-				ComputeMs: 35,
-				LatencyMs: 110,
-				Description: "Validates cart, writes order intent, calls payment, emits outbox event.",
-				Assumptions: "Request has idempotency key and bounded deadline.",
-				Limits: "Sync payment plus writes can exceed p99 budget under retry storms."
-			},
-			{
-				id: "e4",
-				Label: { text: "Idempotency Store" },
-				NodeType: "database",
-				Position: {
-					x: -250,
-					y: -260
-				},
-				Size: {
-					w: 190,
-					h: 90
-				},
-				ExpectedRps: 2e3,
-				LatencyMs: 8,
-				Description: "Deduplicates checkout retries by idempotency key.",
-				DataScale: "big",
-				FreshnessMs: 0
-			},
-			{
-				id: "e5",
-				Label: { text: "Order DB" },
-				NodeType: "database",
-				Position: {
-					x: -10,
-					y: -20
-				},
-				Size: {
-					w: 180,
-					h: 92
-				},
-				ExpectedRps: 1e3,
-				LatencyMs: 20,
-				Description: "Source of truth for order intent and status.",
-				DataScale: "big"
-			},
-			{
-				id: "e6",
-				Label: { text: "Payment Gateway" },
-				NodeType: "gateway",
-				Position: {
-					x: -10,
-					y: -190
-				},
-				Size: {
-					w: 186,
-					h: 88
-				},
-				ExpectedRps: 800,
-				ComputeMs: 10,
-				LatencyMs: 180,
-				Description: "External payment dependency; suspicious sync latency.",
-				Limits: "External p99 and availability are not controlled by us.",
-				WhatThen: "Circuit breaker, timeout below caller deadline, async capture for slow providers."
-			},
-			{
-				id: "e7",
-				Label: { text: "Outbox Relay" },
-				NodeType: "service",
-				Position: {
-					x: 250,
-					y: -20
-				},
-				Size: {
-					w: 180,
-					h: 92
-				},
-				ExpectedRps: 1e3,
-				ComputeMs: 20,
-				LatencyMs: 60,
-				Description: "Polls committed outbox rows and publishes order events.",
-				Purpose: "Makes DB write and event publish mechanically recoverable."
-			},
-			{
-				id: "e8",
-				Label: { text: "Orders Kafka" },
-				NodeType: "kafka",
-				Position: {
-					x: 500,
-					y: -20
-				},
-				Size: {
-					w: 170,
-					h: 86
-				},
-				ExpectedRps: 3e3,
-				LatencyMs: 10,
-				Description: "Events: order_created, payment_authorized.",
-				FreshnessMs: 3e4
-			},
-			{
-				id: "e9",
-				Label: { text: "DLQ" },
-				NodeType: "kafka",
-				Position: {
-					x: 505,
-					y: 170
-				},
-				Size: {
-					w: 150,
-					h: 78
-				},
-				ExpectedRps: 100,
-				LatencyMs: 10,
-				Description: "Poison order events land here with reason and replay key.",
-				Purpose: "Keeps failure observable and replayable instead of blocking the stream."
-			},
-			{
-				id: "e10",
-				Label: { text: "Search Projector" },
-				NodeType: "service",
-				Position: {
-					x: 760,
-					y: -80
-				},
-				Size: {
-					w: 200,
-					h: 96
-				},
-				ExpectedRps: 1200,
-				ComputeMs: 30,
-				LatencyMs: 80,
-				Description: "Builds read model from order events; idempotent by event id."
-			},
-			{
-				id: "e11",
-				Label: { text: "Order Search Index" },
-				NodeType: "index",
-				Position: {
-					x: 1010,
-					y: -80
-				},
-				Size: {
-					w: 210,
-					h: 98
-				},
-				ExpectedRps: 5e3,
-				LatencyMs: 35,
-				Description: "Big-data read path for support/search/order history.",
-				DataScale: "huge",
-				FreshnessMs: 45e3,
-				Assumptions: "Stale order search is acceptable within 45s."
-			},
-			{
-				id: "e12",
-				Label: { text: "Support UI" },
-				NodeType: "user-input",
-				Position: {
-					x: 760,
-					y: 180
-				},
-				Size: {
-					w: 150,
-					h: 82
-				},
-				ExpectedRps: 120,
-				LatencyMs: 30,
-				Description: "Reads order history and support search."
-			}
-		],
-		edges: [
-			{
-				id: "r1",
-				From: "e1",
-				To: "e2",
-				EdgeKind: "sync",
-				Label: { text: "POST /checkout" },
-				LatencyMs: 35,
-				ThroughputRps: 900,
-				PayloadKb: 8,
-				Purpose: "Request path for checkout conversion.",
-				Limits: "Too much traffic should be shaped at gateway, not queued in services."
-			},
-			{
-				id: "r2",
-				From: "e2",
-				To: "e3",
-				EdgeKind: "sync",
-				Label: { text: "checkout command" },
-				LatencyMs: 20,
-				ThroughputRps: 900,
-				PayloadKb: 8
-			},
-			{
-				id: "r3",
-				From: "e3",
-				To: "e4",
-				EdgeKind: "read",
-				Label: { text: "dedupe key" },
-				LatencyMs: 8,
-				ThroughputRps: 900,
-				PayloadKb: 1
-			},
-			{
-				id: "r4",
-				From: "e3",
-				To: "e4",
-				EdgeKind: "write",
-				Label: { text: "record key" },
-				LatencyMs: 10,
-				ThroughputRps: 900,
-				PayloadKb: 1
-			},
-			{
-				id: "r5",
-				From: "e3",
-				To: "e6",
-				EdgeKind: "sync",
-				Label: { text: "authorize payment" },
-				LatencyMs: 220,
-				ThroughputRps: 700,
-				PayloadKb: 4,
-				FailureMode: "Timeout then retry only with provider idempotency key; circuit-break on provider errors."
-			},
-			{
-				id: "r6",
-				From: "e3",
-				To: "e5",
-				EdgeKind: "write",
-				Label: { text: "order + outbox" },
-				LatencyMs: 25,
-				ThroughputRps: 900,
-				PayloadKb: 3,
-				Purpose: "Atomic source-of-truth write and event intent."
-			},
-			{
-				id: "r7",
-				From: "e7",
-				To: "e5",
-				EdgeKind: "read",
-				Label: { text: "poll outbox" },
-				LatencyMs: 30,
-				ThroughputRps: 900,
-				PayloadKb: 2,
-				FreshnessMs: 15e3
-			},
-			{
-				id: "r8",
-				From: "e7",
-				To: "e8",
-				EdgeKind: "async",
-				Label: { text: "publish order_created" },
-				LatencyMs: 10,
-				ThroughputRps: 900,
-				PayloadKb: 2,
-				FailureMode: "Retry with jitter; unresolved publish errors stay in outbox."
-			},
-			{
-				id: "r9",
-				From: "e8",
-				To: "e10",
-				EdgeKind: "async",
-				Label: { text: "consume orders" },
-				LatencyMs: 20,
-				ThroughputRps: 900,
-				PayloadKb: 2,
-				FailureMode: "Retry by event id, then DLQ with replay pointer."
-			},
-			{
-				id: "r10",
-				From: "e10",
-				To: "e11",
-				EdgeKind: "write",
-				Label: { text: "upsert read model" },
-				LatencyMs: 55,
-				ThroughputRps: 900,
-				PayloadKb: 2,
-				FreshnessMs: 45e3
-			},
-			{
-				id: "r11",
-				From: "e10",
-				To: "e9",
-				EdgeKind: "async",
-				Label: { text: "poison event" },
-				LatencyMs: 10,
-				ThroughputRps: 30,
-				PayloadKb: 2,
-				Purpose: "Make unrecoverable projection failures observable and replayable."
-			},
-			{
-				id: "r12",
-				From: "e12",
-				To: "e11",
-				EdgeKind: "read",
-				Label: { text: "search order" },
-				LatencyMs: 45,
-				ThroughputRps: 120,
-				PayloadKb: 1
-			}
-		]
-	});
-	var learningCheckoutSnapshot = () => fillSnapshotSemantics({
-		nodes: [
-			{
-				id: "e1",
-				Label: { text: "Buyer app" },
-				NodeType: "user-input",
-				Position: {
-					x: -690,
-					y: -70
-				},
-				Size: {
-					w: 172,
-					h: 98
-				},
-				ExpectedRps: 1500,
-				LatencyMs: 25,
-				Description: "Bursty checkout client. Retries are uncontrolled."
-			},
-			{
-				id: "e2",
-				Label: { text: "API Gateway" },
-				NodeType: "gateway",
-				Position: {
-					x: -470,
-					y: -70
-				},
-				Size: {
-					w: 190,
-					h: 98
-				},
-				ExpectedRps: 900,
-				ComputeMs: 5,
-				LatencyMs: 20,
-				Description: "No explicit rate limit. Hints should flag overload."
-			},
-			{
-				id: "e3",
-				Label: { text: "Checkout Service" },
-				NodeType: "service",
-				Position: {
-					x: -220,
-					y: -70
-				},
-				Size: {
-					w: 224,
-					h: 112
-				},
-				ExpectedRps: 900,
-				ComputeMs: 35,
-				LatencyMs: 110,
-				Description: "Sync payment, two writes, no outbox.",
-				Limits: "This design mixes user latency, external dependency, and multiple writes."
-			},
-			{
-				id: "e4",
-				Label: { text: "Payment Provider" },
-				NodeType: "gateway",
-				Position: {
-					x: 40,
-					y: -230
-				},
-				Size: {
-					w: 198,
-					h: 90
-				},
-				ExpectedRps: 500,
-				ComputeMs: 8,
-				LatencyMs: 260,
-				Description: "Slow external dependency. No breaker yet."
-			},
-			{
-				id: "e5",
-				Label: { text: "Order DB" },
-				NodeType: "database",
-				Position: {
-					x: 40,
-					y: -20
-				},
-				Size: {
-					w: 188,
-					h: 98
-				},
-				ExpectedRps: 800,
-				LatencyMs: 25,
-				Description: "Source of truth. Read strategy is missing.",
-				DataScale: "huge"
-			},
-			{
-				id: "e6",
-				Label: { text: "Support UI" },
-				NodeType: "user-input",
-				Position: {
-					x: -220,
-					y: 170
-				},
-				Size: {
-					w: 172,
-					h: 98
-				},
-				ExpectedRps: 120,
-				LatencyMs: 30,
-				Description: "Reads order history from the source DB."
-			}
-		],
-		edges: [
-			{
-				id: "r1",
-				From: "e1",
-				To: "e2",
-				EdgeKind: "sync",
-				Label: { text: "POST /checkout" },
-				LatencyMs: 35,
-				ThroughputRps: 1500,
-				PayloadKb: 8
-			},
-			{
-				id: "r2",
-				From: "e2",
-				To: "e3",
-				EdgeKind: "sync",
-				Label: { text: "checkout command" },
-				LatencyMs: 20,
-				ThroughputRps: 1500,
-				PayloadKb: 8
-			},
-			{
-				id: "r3",
-				From: "e3",
-				To: "e4",
-				EdgeKind: "sync",
-				Label: { text: "authorize payment" },
-				LatencyMs: 280,
-				ThroughputRps: 900,
-				PayloadKb: 4
-			},
-			{
-				id: "r4",
-				From: "e3",
-				To: "e5",
-				EdgeKind: "write",
-				Label: { text: "write order" },
-				LatencyMs: 25,
-				ThroughputRps: 900,
-				PayloadKb: 3
-			},
-			{
-				id: "r5",
-				From: "e3",
-				To: "e5",
-				EdgeKind: "write",
-				Label: { text: "write audit" },
-				LatencyMs: 20,
-				ThroughputRps: 900,
-				PayloadKb: 1
-			},
-			{
-				id: "r6",
-				From: "e6",
-				To: "e5",
-				EdgeKind: "read",
-				Label: { text: "order lookup" },
-				LatencyMs: 120,
-				ThroughputRps: 120,
-				PayloadKb: 1
-			}
-		]
-	});
-	var presentationSteps = [
-		{
-			title: "Start: intentionally rough checkout",
-			detail: "This graph has obvious design smells: gateway overload, sync external payment, multiple writes, big data read directly, and no failure path. Watch the observations panel."
-		},
-		{
-			title: "Shape excess traffic before it reaches checkout",
-			detail: "Gateway demand is higher than its budget. Add a rate limiter so overload becomes explicit accepted/rejected traffic.",
-			action: {
-				kind: "rate-limit-node",
-				id: "e2",
-				label: "Add limiter"
-			},
-			focus: "e2"
-		},
-		{
-			title: "Protect the slow external payment call",
-			detail: "The payment provider is slow and outside our control. Add a circuit breaker so the request path can fail fast with a known fallback/error.",
-			action: {
-				kind: "circuit-breaker-edge",
-				id: "r3",
-				label: "Add breaker"
-			},
-			focus: "e4"
-		},
-		{
-			title: "Make multiple writes recoverable",
-			detail: "Checkout writes order and audit separately. Add an outbox so the design has one local durable write plus replayable async work.",
-			action: {
-				kind: "outbox-node",
-				id: "e3",
-				label: "Add outbox"
-			},
-			focus: "e3"
-		},
-		{
-			title: "Make big data readable",
-			detail: "Support reads a huge order DB directly. Add an index/read model so the hot read path becomes mechanically visible.",
-			action: {
-				kind: "index-node",
-				id: "e5",
-				label: "Add index"
-			},
-			focus: "e5"
-		},
-		{
-			title: "Cache a slow read only with assumptions",
-			detail: "The direct support read is slow. Add cache only because the tooltip semantics make TTL, stale data, and bypass behavior explicit.",
-			action: {
-				kind: "cache-edge",
-				id: "r6",
-				label: "Add cache"
-			},
-			focus: "e6"
-		},
-		{
-			title: "Read the result",
-			detail: "The graph is still not perfect, but the design is now observable: limiter, breaker, outbox, index, cache, freshness, and failure paths are visible and questionable."
-		}
-	];
-	function registerSystemDesign(system) {
-		system("system.design", ({ on, emit, bus, graphs, selection, contexts, contribute, declarePanel }) => {
-			declarePanel({
-				id: PANEL_ID$1,
-				anchor: "middle-right",
-				movable: true,
-				foldId: PANEL_FOLD_ID,
-				layout: "stack",
-				order: 12
-			});
-			const selectedEdgeId = () => selection.selected()?.kind === "edge" ? selection.selected()?.id : void 0;
-			const selectedNodeId = () => selection.selectedNode()?.id;
-			const nodeCreatePayload = (nodeType) => ({ nodeType });
-			contexts.commands.register([
-				...NODE_TYPES$1.map((nodeType) => ({
-					id: `systemDesign.node.${nodeType}`,
-					label: `Create ${nodeTitle[nodeType]}`,
-					event: "systemDesign.node.create",
-					group: "system design",
-					payload: () => nodeCreatePayload(nodeType)
-				})),
-				...EDGE_KINDS$1.map((edgeKind) => ({
-					id: `systemDesign.edge.${edgeKind}`,
-					label: `Set edge type: ${edgeLabel(edgeKind)}`,
-					event: "systemDesign.edge.kind.set",
-					group: "system design",
-					payload: () => ({
-						id: selectedEdgeId(),
-						edgeKind
-					})
-				})),
-				{
-					id: "systemDesign.action.apply",
-					label: "Apply semantic design action",
-					group: "system design",
-					hidden: true,
-					payload: ({ target }) => ({
-						action: target?.dataset.semanticAction,
-						id: target?.dataset.semanticId ?? ""
-					})
-				},
-				{
-					id: "systemDesign.share.copy",
-					label: "Copy graph share link",
-					group: "system design"
-				},
-				{
-					id: "systemDesign.demo.imageSearch",
-					label: "Load image-search system design example",
-					group: "system design"
-				},
-				{
-					id: "systemDesign.demo.resilientCheckout",
-					label: "Load resilient checkout system design example",
-					group: "system design"
-				},
-				{
-					id: "systemDesign.presentation.start",
-					label: "Start system-design learning mode",
-					group: "system design"
-				},
-				{
-					id: "systemDesign.presentation.next",
-					label: "Next learning step",
-					group: "system design",
-					hidden: true
-				},
-				{
-					id: "systemDesign.presentation.prev",
-					label: "Previous learning step",
-					group: "system design",
-					hidden: true
-				},
-				{
-					id: "systemDesign.presentation.apply",
-					label: "Apply learning step",
-					group: "system design",
-					hidden: true
-				},
-				{
-					id: "systemDesign.presentation.close",
-					label: "Close learning mode",
-					group: "system design",
-					hidden: true
-				}
-			]);
-			NODE_TYPES$1.forEach((nodeType, index) => contribute({
-				surface: "top",
-				panel: PANEL_ID$1,
-				command: `systemDesign.node.${nodeType}`,
-				kind: "button",
-				text: labelFor(nodeType),
-				label: `Create ${nodeTitle[nodeType]}`,
-				className: `design-palette-button design-node-${nodeType}`,
-				order: 10 + index
-			}));
-			EDGE_KINDS$1.forEach((edgeKind, index) => contribute({
-				surface: "top",
-				panel: PANEL_ID$1,
-				command: `systemDesign.edge.${edgeKind}`,
-				kind: "button",
-				text: edgeLabel(edgeKind),
-				label: `Set selected edge to ${edgeLabel(edgeKind)}`,
-				className: `design-palette-button design-edge-${edgeKind}`,
-				order: 30 + index
-			}));
-			contribute({
-				surface: "top",
-				panel: PANEL_ID$1,
-				command: "systemDesign.share.copy",
-				kind: "button",
-				text: "Link",
-				label: "Copy share link",
-				className: "design-palette-button",
-				order: 50
-			});
-			contribute({
-				surface: "top",
-				panel: PANEL_ID$1,
-				command: "systemDesign.demo.imageSearch",
-				kind: "button",
-				text: "Example",
-				label: "Load image-search example",
-				className: "design-palette-button",
-				order: 51
-			});
-			contribute({
-				surface: "top",
-				panel: PANEL_ID$1,
-				command: "systemDesign.demo.resilientCheckout",
-				kind: "button",
-				text: "Checkout",
-				label: "Load resilient checkout example",
-				className: "design-palette-button",
-				order: 52
-			});
-			contribute({
-				surface: "top",
-				panel: PANEL_ID$1,
-				command: "systemDesign.presentation.start",
-				kind: "button",
-				text: "Learn",
-				label: "Start guided learning mode",
-				className: "design-palette-button",
-				order: 53
-			});
-			on("systemDesign.node.create", ({ nodeType }) => {
-				const source = selectedNodeId();
-				const defaults = nodeDefaults[nodeType];
-				emit("graph.node.create", {
-					...nodeSemantics[nodeType],
-					...defaults,
-					Label: { text: defaults.Label?.text ?? nodeTitle[nodeType] },
-					NodeType: nodeType,
-					relativeTo: source,
-					connectFrom: source,
-					connectKind: "sync"
-				});
-			});
-			on("systemDesign.edge.kind.set", ({ id, edgeKind }) => {
-				if (!id) return;
-				emit("item.update", {
-					ref: edgeRef(id),
-					patch: {
-						...edgeSemantics[edgeKind],
-						EdgeKind: edgeKind
-					}
-				});
-			});
-			const createNode = (draft) => {
-				const node = graphs.current.createNode(mergeSemantics(nodeSemantics[draft.NodeType], draft));
-				emit("graph.node.created", {
-					graphId: graphs.current.id,
-					id: node.id
-				});
-				return node;
-			};
-			const createEdge = (draft) => {
-				const edge = graphs.current.createEdge(mergeSemantics(edgeSemantics[draft.EdgeKind], draft));
-				emit("graph.edge.created", {
-					graphId: graphs.current.id,
-					id: edge.id,
-					edge
-				});
-				return edge;
-			};
-			const midpoint = (fromId, toId, offset = {}) => {
-				const from = graphs.current.getNode(fromId)?.Position ?? {
-					x: 0,
-					y: 0
-				};
-				const to = graphs.current.getNode(toId)?.Position ?? {
-					x: from.x + 220,
-					y: from.y
-				};
-				return {
-					x: (from.x + to.x) / 2 + (offset.x ?? 0),
-					y: (from.y + to.y) / 2 + (offset.y ?? 0)
-				};
-			};
-			const addQueueOnEdge = (id) => {
-				const edge = graphs.current.getEdge(id);
-				if (!edge) return;
-				const label = edge.Label?.text ?? `${nodeName(edge.From)} to ${nodeName(edge.To)}`;
-				const queue = createNode({
-					...nodeDefaults.kafka,
-					NodeType: "kafka",
-					Label: { text: `${label} queue` },
-					Position: midpoint(edge.From, edge.To, { y: 80 }),
-					Description: `Async buffer inserted for ${label}.`,
-					Purpose: "Absorbs bursts and removes slow work from the synchronous request path.",
-					Assumptions: "Eventual consistency is acceptable and consumers are idempotent."
-				});
-				emit("graph.edge.delete", { id: edge.id });
-				createEdge({
-					From: edge.From,
-					To: queue.id,
-					EdgeKind: "async",
-					Label: { text: `enqueue ${label}` },
-					LatencyMs: 10,
-					ThroughputRps: edge.ThroughputRps,
-					PayloadKb: edge.PayloadKb
-				});
-				createEdge({
-					From: queue.id,
-					To: edge.To,
-					EdgeKind: "async",
-					Label: { text: `consume ${label}` },
-					LatencyMs: 20,
-					ThroughputRps: edge.ThroughputRps,
-					PayloadKb: edge.PayloadKb
-				});
-			};
-			const addDlqForEdge = (id) => {
-				const edge = graphs.current.getEdge(id);
-				if (!edge) return;
-				const anchor = graphs.current.getNode(edge.To)?.Position ?? midpoint(edge.From, edge.To);
-				const dlq = createNode({
-					...nodeDefaults.kafka,
-					NodeType: "kafka",
-					Label: { text: `${edge.Label?.text ?? "edge"} DLQ` },
-					Position: {
-						x: anchor.x + 180,
-						y: anchor.y + 150
-					},
-					Size: {
-						w: 150,
-						h: 78
-					},
-					ExpectedRps: Math.max(10, Math.round((edge.ThroughputRps ?? 100) * .05)),
-					Description: "Dead-letter stream for poison messages and replay.",
-					Purpose: "Makes failed async work observable and replayable.",
-					FailureMode: "Replay after fix using event id and original payload."
-				});
-				createEdge({
-					From: edge.To,
-					To: dlq.id,
-					EdgeKind: "async",
-					Label: { text: "poison message" },
-					LatencyMs: 10,
-					ThroughputRps: dlq.ExpectedRps,
-					PayloadKb: edge.PayloadKb,
-					Purpose: "Route unrecoverable failures to a replayable dead-letter stream."
-				});
-			};
-			const addIndexForNode = (id) => {
-				const node = graphs.current.getNode(id);
-				if (!node) return;
-				const pos = node.Position ?? {
-					x: 0,
-					y: 0
-				};
-				const index = createNode({
-					...nodeDefaults.index,
-					NodeType: "index",
-					Label: { text: `${node.Label.text} index` },
-					Position: {
-						x: pos.x + 240,
-						y: pos.y
-					},
-					DataScale: node.DataScale === "huge" ? "huge" : "big",
-					FreshnessMs: node.FreshnessMs ?? 6e4,
-					Description: `Read model/index for ${node.Label.text}.`,
-					Assumptions: "Queries have a stable key/analyzer and stale reads are acceptable within the freshness budget."
-				});
-				createEdge({
-					From: node.id,
-					To: index.id,
-					EdgeKind: "write",
-					Label: { text: "update index" },
-					LatencyMs: 30,
-					ThroughputRps: node.ExpectedRps,
-					PayloadKb: 2,
-					FreshnessMs: index.FreshnessMs
-				});
-				createEdge({
-					From: index.id,
-					To: node.id,
-					EdgeKind: "read",
-					Label: { text: "fast lookup" },
-					LatencyMs: 20,
-					ThroughputRps: node.ExpectedRps,
-					PayloadKb: 1
-				});
-			};
-			const addOutboxForNode = (id) => {
-				const node = graphs.current.getNode(id);
-				if (!node) return;
-				const pos = node.Position ?? {
-					x: 0,
-					y: 0
-				};
-				const outbox = createNode({
-					...nodeDefaults.database,
-					NodeType: "database",
-					Label: { text: `${node.Label.text} outbox` },
-					Position: {
-						x: pos.x + 220,
-						y: pos.y + 120
-					},
-					Size: {
-						w: 180,
-						h: 88
-					},
-					Description: "Transactional outbox for multi-write consistency.",
-					Purpose: "Turns multiple writes into one durable write plus replayable async publish.",
-					WhatThen: "Relay to Kafka, retry safely, and reconcile stuck rows."
-				});
-				createEdge({
-					From: node.id,
-					To: outbox.id,
-					EdgeKind: "write",
-					Label: { text: "write outbox" },
-					LatencyMs: 15,
-					ThroughputRps: node.ExpectedRps,
-					PayloadKb: 2,
-					Purpose: "Single local write that records the event intent atomically."
-				});
-			};
-			const addCacheOnEdge = (id) => {
-				const edge = graphs.current.getEdge(id);
-				if (!edge) return;
-				const label = edge.Label?.text ?? `${nodeName(edge.From)} read`;
-				const cache = createNode({
-					...nodeDefaults.cache,
-					NodeType: "cache",
-					Label: { text: `${label} cache` },
-					Position: midpoint(edge.From, edge.To, { y: -90 }),
-					Description: `Cache inserted for ${label}.`,
-					Purpose: "Makes repeated reads fast and reduces pressure on the source.",
-					Assumptions: "The read is cacheable and stale values are acceptable within TTL.",
-					FreshnessMs: edge.FreshnessMs ?? 3e4
-				});
-				emit("graph.edge.delete", { id: edge.id });
-				createEdge({
-					From: edge.From,
-					To: cache.id,
-					EdgeKind: "read",
-					Label: { text: `cache lookup` },
-					LatencyMs: 3,
-					ThroughputRps: edge.ThroughputRps,
-					PayloadKb: edge.PayloadKb,
-					FreshnessMs: cache.FreshnessMs
-				});
-				createEdge({
-					From: cache.id,
-					To: edge.To,
-					EdgeKind: "read",
-					Label: { text: `cache miss ${label}` },
-					LatencyMs: edge.LatencyMs,
-					ThroughputRps: Math.round((edge.ThroughputRps ?? 100) * .2),
-					PayloadKb: edge.PayloadKb,
-					FreshnessMs: cache.FreshnessMs
-				});
-			};
-			const addRateLimitBeforeNode = (id) => {
-				const node = graphs.current.getNode(id);
-				if (!node) return;
-				const pos = node.Position ?? {
-					x: 0,
-					y: 0
-				};
-				createEdge({
-					From: createNode({
-						...nodeDefaults["rate-limit"],
-						NodeType: "rate-limit",
-						Label: { text: `${node.Label.text} limiter` },
-						Position: {
-							x: pos.x - 220,
-							y: pos.y - 110
-						},
-						ExpectedRps: node.ExpectedRps,
-						Description: `Rate limiter protecting ${node.Label.text}.`,
-						Purpose: "Rejects excess demand before it saturates the protected component."
-					}).id,
-					To: node.id,
-					EdgeKind: "sync",
-					Label: { text: "allowed traffic" },
-					LatencyMs: 5,
-					ThroughputRps: node.ExpectedRps,
-					PayloadKb: 1,
-					Purpose: "Only admitted traffic reaches the protected node."
-				});
-			};
-			const addCircuitBreakerOnEdge = (id) => {
-				const edge = graphs.current.getEdge(id);
-				if (!edge) return;
-				const label = edge.Label?.text ?? `${nodeName(edge.From)} call`;
-				const breaker = createNode({
-					...nodeDefaults["circuit-breaker"],
-					NodeType: "circuit-breaker",
-					Label: { text: `${label} breaker` },
-					Position: midpoint(edge.From, edge.To, { y: -80 }),
-					Description: `Circuit breaker around ${label}.`,
-					Purpose: "Fails fast when the dependency is slow or unhealthy.",
-					FailureMode: "Open circuit returns fallback or explicit dependency-unavailable error."
-				});
-				emit("graph.edge.delete", { id: edge.id });
-				createEdge({
-					From: edge.From,
-					To: breaker.id,
-					EdgeKind: "sync",
-					Label: { text: `guard ${label}` },
-					LatencyMs: 5,
-					ThroughputRps: edge.ThroughputRps,
-					PayloadKb: edge.PayloadKb
-				});
-				createEdge({
-					From: breaker.id,
-					To: edge.To,
-					EdgeKind: "sync",
-					Label: { text: label },
-					LatencyMs: edge.LatencyMs,
-					ThroughputRps: edge.ThroughputRps,
-					PayloadKb: edge.PayloadKb,
-					FailureMode: edge.FailureMode
-				});
-			};
-			const applySemanticAction = (action, id) => {
-				if (!id) return;
-				if (action === "queue-edge") addQueueOnEdge(id);
-				if (action === "dlq-edge") addDlqForEdge(id);
-				if (action === "index-node") addIndexForNode(id);
-				if (action === "outbox-node") addOutboxForNode(id);
-				if (action === "cache-edge") addCacheOnEdge(id);
-				if (action === "rate-limit-node") addRateLimitBeforeNode(id);
-				if (action === "circuit-breaker-edge") addCircuitBreakerOnEdge(id);
-				emit("view.fit.all");
-			};
-			on("systemDesign.action.apply", ({ action, id }) => {
-				applySemanticAction(action, id);
-			});
-			on("systemDesign.share.copy", () => {
-				const encoded = encodeSystemDesignSnapshot(graphs.current.snapshot());
-				const url = new URL(location.href);
-				url.searchParams.set("g", encoded);
-				navigator.clipboard?.writeText?.(url.toString()).catch(() => {});
-				emit("systemDesign.shared", { url: url.toString() });
-				emit("app.notice", { message: "Graph share link copied." });
-			});
-			on("systemDesign.demo.imageSearch", () => {
-				emit("graph.import.snapshot", imageSearchSnapshot());
-				emit("view.fit.all");
-			});
-			on("systemDesign.demo.resilientCheckout", () => {
-				emit("graph.import.snapshot", resilientCheckoutSnapshot());
-				emit("view.fit.all");
-			});
-			let presentationIndex = null;
-			const currentStep = () => presentationIndex == null ? null : presentationSteps[presentationIndex] ?? null;
-			const drawPresentation = () => {
-				const step = currentStep();
-				if (!step) {
-					emit("render.view.clear", {
-						place: Places.Stage,
-						key: PRESENTATION_KEY
-					});
-					return;
-				}
-				emit("render.view.set", {
-					place: Places.Stage,
-					key: PRESENTATION_KEY,
-					view: () => {
-						const panel = document.createElement("section");
-						panel.className = "design-presentation";
-						panel.title = "Guided mode: apply one improvement, then watch the live observations update.";
-						const kicker = document.createElement("div");
-						kicker.className = "design-presentation-kicker";
-						kicker.textContent = `Step ${presentationIndex + 1} / ${presentationSteps.length}`;
-						const title = document.createElement("strong");
-						title.textContent = step.title;
-						const detail = document.createElement("p");
-						detail.textContent = step.detail;
-						panel.append(kicker, title, detail);
-						const actions = document.createElement("div");
-						actions.className = "design-presentation-actions";
-						const prev = document.createElement("button");
-						prev.type = "button";
-						prev.dataset.command = "systemDesign.presentation.prev";
-						prev.textContent = "Prev";
-						prev.disabled = presentationIndex === 0;
-						const next = document.createElement("button");
-						next.type = "button";
-						next.dataset.command = "systemDesign.presentation.next";
-						next.textContent = presentationIndex === presentationSteps.length - 1 ? "Done" : "Next";
-						actions.append(prev);
-						if (step.action) {
-							const apply = document.createElement("button");
-							apply.type = "button";
-							apply.dataset.command = "systemDesign.presentation.apply";
-							apply.className = "primary";
-							apply.textContent = step.action.label;
-							apply.title = "Apply this improvement to the graph, then inspect the observations panel.";
-							actions.append(apply);
-						}
-						actions.append(next);
-						const close = document.createElement("button");
-						close.type = "button";
-						close.dataset.command = "systemDesign.presentation.close";
-						close.textContent = "Close";
-						actions.append(close);
-						panel.append(actions);
-						return panel;
-					}
-				});
-			};
-			const setPresentationIndex = (index) => {
-				presentationIndex = Math.max(0, Math.min(index, presentationSteps.length - 1));
-				const step = currentStep();
-				if (step?.focus) emit("view.fit.item", {
-					kind: "node",
-					id: step.focus
-				});
-				drawPresentation();
-			};
-			on("systemDesign.presentation.start", () => {
-				emit("graph.import.snapshot", learningCheckoutSnapshot());
-				emit("view.fit.all");
-				setPresentationIndex(0);
-			});
-			on("systemDesign.presentation.next", () => {
-				if (presentationIndex == null) return;
-				if (presentationIndex >= presentationSteps.length - 1) {
-					presentationIndex = null;
-					emit("render.view.clear", {
-						place: Places.Stage,
-						key: PRESENTATION_KEY
-					});
-					return;
-				}
-				setPresentationIndex(presentationIndex + 1);
-			});
-			on("systemDesign.presentation.prev", () => {
-				if (presentationIndex == null) return;
-				setPresentationIndex(presentationIndex - 1);
-			});
-			on("systemDesign.presentation.apply", () => {
-				const step = currentStep();
-				if (!step?.action) return;
-				applySemanticAction(step.action.kind, step.action.id);
-				drawPresentation();
-			});
-			on("systemDesign.presentation.close", () => {
-				presentationIndex = null;
-				emit("render.view.clear", {
-					place: Places.Stage,
-					key: PRESENTATION_KEY
-				});
-			});
-			const bootFromUrl = () => {
-				const encoded = new URLSearchParams(location.search).get("g");
-				if (!encoded) return;
-				const snapshot = decodeSystemDesignSnapshot(encoded);
-				if (!snapshot) {
-					emit("app.notice", {
-						message: "Share link graph could not be decoded.",
-						level: "warn"
-					});
-					return;
-				}
-				emit("graph.import.snapshot", snapshot);
-				emit("view.fit.all");
-			};
-			const outgoing = (id, kinds) => graphs.current.edgesOf(id).filter((edge) => edge.From === id && (!kinds || kinds.has(edge.EdgeKind ?? "sync")));
-			const incoming = (id) => graphs.current.edgesOf(id).filter((edge) => edge.To === id);
-			const nodeCost = (id) => {
-				const node = graphs.current.getNode(id);
-				return (node?.ComputeMs ?? 0) + (node?.LatencyMs ?? 0);
-			};
-			const edgeCost = (edge) => edge.LatencyMs ?? (edge.EdgeKind === "async" ? 1 : 5);
-			const nodeName = (id) => graphs.current.getNode(id)?.Label.text ?? id;
-			const findCycle = () => {
-				const visiting = /* @__PURE__ */ new Set();
-				const visited = /* @__PURE__ */ new Set();
-				const stack = [];
-				const dfs = (id) => {
-					if (visiting.has(id)) return [...stack.slice(stack.indexOf(id)), id];
-					if (visited.has(id)) return null;
-					visiting.add(id);
-					stack.push(id);
-					for (const edge of outgoing(id)) {
-						const cycle = dfs(edge.To);
-						if (cycle) return cycle;
-					}
-					stack.pop();
-					visiting.delete(id);
-					visited.add(id);
-					return null;
-				};
-				for (const node of graphs.current.nodes()) {
-					const cycle = dfs(node.id);
-					if (cycle) return cycle;
-				}
-				return null;
-			};
-			const syncPathFrom = (start, seen = /* @__PURE__ */ new Set()) => {
-				if (seen.has(start)) return {
-					cost: 0,
-					path: [start]
-				};
-				const nextSeen = new Set(seen).add(start);
-				const syncEdges = outgoing(start, new Set([
-					"sync",
-					"read",
-					"write"
-				]));
-				if (!syncEdges.length) return {
-					cost: nodeCost(start),
-					path: [start]
-				};
-				return syncEdges.map((edge) => {
-					const child = syncPathFrom(edge.To, nextSeen);
-					return {
-						cost: nodeCost(start) + edgeCost(edge) + child.cost,
-						path: [start, ...child.path]
-					};
-				}).sort((a, b) => b.cost - a.cost)[0];
-			};
-			const observations = () => {
-				const nodes = graphs.current.nodes();
-				const edges = graphs.current.edges();
-				const items = [];
-				if (!nodes.length) return [{
-					level: "info",
-					title: "Start with the right-side palette",
-					detail: "Add a gateway, service, database, Kafka topic, index, or user input node. Metrics you add in properties will feed the linter."
-				}];
-				const cycle = findCycle();
-				if (cycle) items.push({
-					level: "error",
-					title: "Cycle detected",
-					detail: `${cycle.map(nodeName).join(" -> ")}. Ask whether this is a control loop, retry loop, feedback pipeline, or accidental dependency.`
-				});
-				const requestRoots = nodes.filter((node) => node.NodeType === "user-input" || node.NodeType === "gateway");
-				const longest = (requestRoots.length ? requestRoots : nodes.filter((node) => incoming(node.id).length === 0)).map((node) => syncPathFrom(node.id)).sort((a, b) => b.cost - a.cost)[0];
-				if (longest?.cost) {
-					const labels = longest.path.map((id) => graphs.current.getNode(id)?.Label.text ?? id).join(" -> ");
-					items.push({
-						level: longest.cost > 500 ? "error" : longest.cost > 200 ? "warn" : "info",
-						title: `Sequential round trip ~${Math.round(longest.cost)} ms`,
-						detail: labels
-					});
-				}
-				nodes.forEach((node) => {
-					const outSync = outgoing(node.id, new Set([
-						"sync",
-						"read",
-						"write"
-					]));
-					if (!hasCompleteSemantics(node)) items.push({
-						level: "info",
-						title: `${node.Label.text} needs semantic intent`,
-						detail: "Fill purpose, assumptions, limits, what-then, and observability so warnings become tied to a design decision."
-					});
-					if (outSync.length >= 2) {
-						const sum = outSync.reduce((total, edge) => total + edgeCost(edge) + nodeCost(edge.To), 0);
-						items.push({
-							level: "warn",
-							title: `${node.Label.text} has ${outSync.length} sync fan-out calls`,
-							detail: `If sequential, downstream work is roughly ${Math.round(sum)} ms. Mark independent work async or document parallelism.`
-						});
-					}
-					const writeFanout = outgoing(node.id, new Set(["write"]));
-					if (writeFanout.length >= 2) items.push({
-						level: "warn",
-						title: `${node.Label.text} writes to ${writeFanout.length} places`,
-						detail: "Multiple writes can diverge. Consider single writer, outbox, saga, idempotency, or reconciliation.",
-						action: {
-							kind: "outbox-node",
-							id: node.id,
-							label: "Add outbox"
-						}
-					});
-					const maxEdgeRps = Math.max(0, ...graphs.current.edgesOf(node.id).map((edge) => edge.ThroughputRps ?? 0));
-					if (node.ExpectedRps != null && maxEdgeRps > node.ExpectedRps) items.push({
-						level: "warn",
-						title: `${node.Label.text} capacity below edge traffic`,
-						detail: `Edge peak ${maxEdgeRps}/s exceeds node budget ${node.ExpectedRps}/s. Add rate limiting, shedding, queueing, or scaling.`,
-						action: {
-							kind: "rate-limit-node",
-							id: node.id,
-							label: "Add limiter"
-						}
-					});
-					if ((node.DataScale === "big" || node.DataScale === "huge") && node.NodeType !== "index" && node.NodeType !== "kafka" && !outgoing(node.id, new Set(["read"])).length && !incoming(node.id).some((edge) => edge.EdgeKind === "read")) items.push({
-						level: "info",
-						title: `${node.Label.text} is big data without a read strategy`,
-						detail: "Make it readable with an index, partition key, cache, replica, retention, or query-shaping rule.",
-						action: {
-							kind: "index-node",
-							id: node.id,
-							label: "Add index"
-						}
-					});
-					if (node.NodeType === "index" && (node.DataScale === "big" || node.DataScale === "huge")) {
-						const hasRead = incoming(node.id).some((edge) => edge.EdgeKind === "read");
-						const hasWrite = incoming(node.id).some((edge) => edge.EdgeKind === "write");
-						items.push({
-							level: hasRead && hasWrite ? "info" : "warn",
-							title: `${node.Label.text} makes big data readable`,
-							detail: hasRead && hasWrite ? "Good: write/update path and read path are both visible. Watch freshness, partitioning, and reindexing." : "Show both who updates the index and who reads it, plus freshness and reindex behavior."
-						});
-					}
-					if (node.FreshnessMs != null && node.FreshnessMs > 3e4) items.push({
-						level: "info",
-						title: `${node.Label.text} can be stale for ${Math.round(node.FreshnessMs / 1e3)}s`,
-						detail: "Make the product-visible stale state explicit and add freshness lag alerts."
-					});
-					if ((node.NodeType === "database" || node.NodeType === "index") && !incoming(node.id).some((edge) => edge.EdgeKind === "write")) items.push({
-						level: "info",
-						title: `${node.Label.text} has no write path`,
-						detail: "Read models need an owner, backfill path, and freshness target."
-					});
-					if (node.NodeType === "kafka") {
-						if (!incoming(node.id).length) items.push({
-							level: "warn",
-							title: `${node.Label.text} has no producer`,
-							detail: "Topics should show who publishes the event and expected payload size."
-						});
-						if (!outgoing(node.id).length) items.push({
-							level: "warn",
-							title: `${node.Label.text} has no consumer`,
-							detail: "Show at least one consumer or mark it as out of scope."
-						});
-					}
-				});
-				edges.forEach((edge) => {
-					const target = graphs.current.getNode(edge.To);
-					const kind = edge.EdgeKind ?? "sync";
-					const edgeLatency = edgeCost(edge) + nodeCost(edge.To);
-					if (!hasCompleteSemantics(edge)) items.push({
-						level: "info",
-						title: `${edge.Label?.text || `${nodeName(edge.From)} -> ${nodeName(edge.To)}`} needs edge semantics`,
-						detail: "Purpose, limits, failure mode, and observability make edge questions actionable."
-					});
-					if (kind === "sync") items.push({
-						level: edgeLatency > 180 ? "warn" : "info",
-						title: `Sync edge: ${edge.Label?.text || `${nodeName(edge.From)} -> ${nodeName(edge.To)}`}`,
-						detail: `Sync edges are suspicious by default. Downstream budget is about ${Math.round(edgeLatency)} ms; require fast target, timeout, and fallback.`,
-						action: {
-							kind: edgeLatency > 180 ? "circuit-breaker-edge" : "queue-edge",
-							id: edge.id,
-							label: edgeLatency > 180 ? "Add breaker" : "Insert queue"
-						}
-					});
-					if (kind === "read" && edgeLatency > 80) items.push({
-						level: "info",
-						title: `${edge.Label?.text || "Read"} may benefit from cache`,
-						detail: `Read path costs about ${Math.round(edgeLatency)} ms. Cache only if hit rate and staleness assumptions are explicit.`,
-						action: {
-							kind: "cache-edge",
-							id: edge.id,
-							label: "Add cache"
-						}
-					});
-					if ((kind === "async" || kind === "write") && !hasFailurePlan(edge)) items.push({
-						level: "warn",
-						title: `${edge.Label?.text || kind} has no failure policy`,
-						detail: "Add retry/backoff, DLQ, idempotency, compensation, or reconciliation notes.",
-						action: {
-							kind: "dlq-edge",
-							id: edge.id,
-							label: "Add DLQ"
-						}
-					});
-					if (kind === "async" && edge.FreshnessMs != null) items.push({
-						level: "info",
-						title: `${edge.Label?.text || "Async edge"} freshness budget`,
-						detail: `Data may be stale for up to ${Math.round(edge.FreshnessMs / 1e3)}s. Alert on lag and age of oldest message.`
-					});
-					if (target && edge.ThroughputRps != null && target.ExpectedRps != null && edge.ThroughputRps > target.ExpectedRps) items.push({
-						level: "warn",
-						title: `${edge.Label?.text || "Edge"} can overload ${target.Label.text}`,
-						detail: `${edge.ThroughputRps}/s exceeds target budget ${target.ExpectedRps}/s. Add backpressure, queueing, shedding, or scaling.`,
-						action: {
-							kind: "queue-edge",
-							id: edge.id,
-							label: "Buffer"
-						}
-					});
-				});
-				const asyncEdges = edges.filter((edge) => edge.EdgeKind === "async");
-				if (asyncEdges.length) {
-					const names = asyncEdges.slice(0, 3).map((edge) => edge.Label?.text || `${edge.From}->${edge.To}`).join(", ");
-					items.push({
-						level: "info",
-						title: `${asyncEdges.length} async ${asyncEdges.length === 1 ? "boundary" : "boundaries"}`,
-						detail: `Add lag, retry, DLQ, idempotency, and ordering notes near: ${names}.`
-					});
-				}
-				if (!edges.some((edge) => edge.LatencyMs != null) || !nodes.some((node) => node.ExpectedRps != null)) items.push({
-					level: "info",
-					title: "Add latency and throughput numbers",
-					detail: "Open properties on nodes and edges. The linter becomes more useful once the diagram has budgets."
-				});
-				return items.slice(0, 12);
-			};
-			const drawHints = () => emit("render.view.set", {
-				place: Places.Stage,
-				key: HINTS_KEY,
-				view: () => {
-					const panel = document.createElement("section");
-					panel.className = "design-hints";
-					const title = document.createElement("div");
-					title.className = "design-hints-title";
-					title.textContent = "Observations";
-					panel.append(title);
-					observations().forEach((obs) => {
-						const row = document.createElement("div");
-						row.className = `design-observation ${obs.level}`;
-						const head = document.createElement("strong");
-						head.textContent = obs.title;
-						const detail = document.createElement("span");
-						detail.textContent = obs.detail;
-						row.append(head, detail);
-						if (obs.action) {
-							const button = document.createElement("button");
-							button.type = "button";
-							button.className = "design-observation-action";
-							button.dataset.command = "systemDesign.action.apply";
-							button.dataset.semanticAction = obs.action.kind;
-							button.dataset.semanticId = obs.action.id;
-							button.textContent = obs.action.label;
-							row.append(button);
-						}
-						panel.append(row);
-					});
-					return panel;
-				}
-			});
-			let queued = false;
-			const scheduleHints = () => {
-				if (queued) return;
-				queued = true;
-				queueMicrotask(() => {
-					queued = false;
-					drawHints();
-				});
-			};
-			bus.onAny((event) => {
-				if ((event.name.startsWith("graph.") || event.name === "selection.changed") && graphs.current.nodes().length) scheduleHints();
-			});
-			on("app.start", () => {
-				bootFromUrl();
-				if (graphs.current.nodes().length) drawHints();
-			});
-		}, { requires: [
-			"graph",
-			"tool.panel",
-			"render.stage",
-			"ability.selectable"
-		] });
-	}
-	//#endregion
 	//#region frontend/features.ts
 	function registerFeatures(feature) {
-		registerSystemDesign(feature);
 		feature("nodeLifecycle", ({ on, emit, contexts, graphs, selection }) => {
 			const rectContains = (outer, inner) => inner.x >= outer.x && inner.y >= outer.y && inner.x + inner.w <= outer.x + outer.w && inner.y + inner.h <= outer.y + outer.h;
 			const createdNodeIsOffscreen = (id) => {
@@ -5494,9 +3978,11 @@ ${assertLines}
 				});
 			});
 		}, { requires: ["graph"] });
-		feature("autoLayout", ({ on, emit }) => {
+		feature("autoLayout", ({ on, emit, graphs }) => {
+			const MAX_AUTO_LAYOUT_NODES = 250;
 			let pending = false;
 			const scheduleTidy = () => {
+				if (graphs.current.nodes().length > MAX_AUTO_LAYOUT_NODES) return;
 				if (pending) return;
 				pending = true;
 				queueMicrotask(() => {
@@ -5692,25 +4178,6 @@ ${assertLines}
 		}
 	];
 	var isEdgeKind = (value) => EDGE_KINDS.some((option) => option.value === value);
-	var DATA_SCALES = [
-		{
-			value: "small",
-			label: "Small"
-		},
-		{
-			value: "medium",
-			label: "Medium"
-		},
-		{
-			value: "big",
-			label: "Big data"
-		},
-		{
-			value: "huge",
-			label: "Huge / hot"
-		}
-	];
-	var isDataScale = (value) => DATA_SCALES.some((option) => option.value === value);
 	var typeLabel = (type) => NODE_TYPES.find((option) => option.value === type)?.label ?? type;
 	var numberPatch = (key, value) => {
 		const n = Number(value);
@@ -5777,6 +4244,20 @@ ${assertLines}
 		abilities: [],
 		render: {
 			layer: "svg",
+			collect(graph, hiddenByFold, visibleNodeIds) {
+				const g = graph;
+				const nodeIds = visibleNodeIds ?? new Set(g.nodes().map((n) => n.id));
+				const seen = /* @__PURE__ */ new Set();
+				const edges = [];
+				for (const nid of nodeIds) for (const e of g.edgesOf(nid)) {
+					const k = e.id;
+					if (!seen.has(k)) {
+						seen.add(k);
+						edges.push(e);
+					}
+				}
+				return edges;
+			},
 			draw(edge, ctx) {
 				const from = resolveEndpoint({
 					kind: "node",
@@ -5792,7 +4273,7 @@ ${assertLines}
 				const tipAtTarget = intersectRectBoundary(from.center, to.center, to.half);
 				const tipAtSource = intersectRectBoundary(to.center, from.center, from.half);
 				const g = svg("g", {});
-				const edgeKind = edge.EdgeKind ?? "sync";
+				const edgeKind = isEdgeKind(edge.EdgeKind) ? edge.EdgeKind : "sync";
 				g.setAttribute("class", `edge edge-kind-${edgeKind}`);
 				const titleText = semanticTitle(edge);
 				if (titleText) {
@@ -5815,15 +4296,25 @@ ${assertLines}
 				};
 				g.append(line("edge-hit", from.center.x, from.center.y, to.center.x, to.center.y, { tabindex: -1 }));
 				g.append(line("edge-line", tipAtSource.x, tipAtSource.y, tipAtTarget.x, tipAtTarget.y, { "marker-end": "url(#edge-arrow)" }));
-				const label = edge.Label?.text || edgeKind;
+				const label = edge.Label?.text;
 				if (label) {
+					const midX = (from.center.x + to.center.x) / 2;
+					const midY = (from.center.y + to.center.y) / 2;
+					const lines = label.split(/\r?\n/);
+					const lineH = 14;
+					const startY = midY - (lines.length - 1) * lineH / 2 - 4;
 					const text = svg("text", {
 						class: `edge-label edge-kind-${edgeKind}`,
-						x: (from.center.x + to.center.x) / 2,
-						y: (from.center.y + to.center.y) / 2 - 4,
 						"text-anchor": "middle"
 					});
-					text.textContent = label;
+					lines.forEach((line, i) => {
+						const tspan = svg("tspan", {
+							x: midX,
+							y: startY + i * lineH
+						});
+						tspan.textContent = line;
+						text.append(tspan);
+					});
 					g.append(text);
 				}
 				return g;
@@ -5972,6 +4463,13 @@ ${assertLines}
 				render: {
 					layer: "html",
 					bounds: nodeBoundsOf,
+					collect(graph, hiddenByFold, visibleNodeIds) {
+						const g = graph;
+						return (visibleNodeIds ? [...visibleNodeIds].map((id) => g.node(id)).filter((n) => !!n) : g.nodes()).filter((n) => !hiddenByFold({
+							kind: "node",
+							id: n.id
+						}));
+					},
 					draw(node, ctx) {
 						const el = ctx.cloneTemplate("node");
 						const pos = node.Position ?? {
@@ -6050,109 +4548,6 @@ ${assertLines}
 						patch: (_node, value) => isNodeType(value) ? { NodeType: value } : void 0
 					}),
 					property({
-						id: "expectedRps",
-						label: "Expected rps",
-						input: "number",
-						min: 0,
-						step: 10,
-						group: "Performance",
-						value: (node) => node.ExpectedRps ?? "",
-						patch: (_node, value) => numberPatch("ExpectedRps", value)
-					}),
-					property({
-						id: "latencyMs",
-						label: "Latency budget ms",
-						input: "number",
-						min: 0,
-						step: 1,
-						group: "Performance",
-						value: (node) => node.LatencyMs ?? "",
-						patch: (_node, value) => numberPatch("LatencyMs", value)
-					}),
-					property({
-						id: "computeMs",
-						label: "Compute ms",
-						input: "number",
-						min: 0,
-						step: 1,
-						group: "Performance",
-						value: (node) => node.ComputeMs ?? "",
-						patch: (_node, value) => numberPatch("ComputeMs", value)
-					}),
-					property({
-						id: "dataScale",
-						label: "Data scale",
-						input: "select",
-						options: DATA_SCALES,
-						group: "Semantics",
-						value: (node) => node.DataScale ?? "medium",
-						patch: (_node, value) => isDataScale(value) ? { DataScale: value } : void 0
-					}),
-					property({
-						id: "purpose",
-						label: "Purpose",
-						input: "textarea",
-						rows: 3,
-						group: "Semantics",
-						value: (node) => node.Purpose ?? "",
-						patch: (_node, value) => ({ Purpose: String(value) })
-					}),
-					property({
-						id: "assumptions",
-						label: "Assumptions",
-						input: "textarea",
-						rows: 3,
-						group: "Semantics",
-						value: (node) => node.Assumptions ?? "",
-						patch: (_node, value) => ({ Assumptions: String(value) })
-					}),
-					property({
-						id: "limits",
-						label: "Limits",
-						input: "textarea",
-						rows: 3,
-						group: "Semantics",
-						value: (node) => node.Limits ?? "",
-						patch: (_node, value) => ({ Limits: String(value) })
-					}),
-					property({
-						id: "whatThen",
-						label: "What then",
-						input: "textarea",
-						rows: 3,
-						group: "Semantics",
-						value: (node) => node.WhatThen ?? "",
-						patch: (_node, value) => ({ WhatThen: String(value) })
-					}),
-					property({
-						id: "observability",
-						label: "Observability",
-						input: "textarea",
-						rows: 3,
-						group: "Observability",
-						value: (node) => node.Observability ?? "",
-						patch: (_node, value) => ({ Observability: String(value) })
-					}),
-					property({
-						id: "failureMode",
-						label: "What if fails",
-						input: "textarea",
-						rows: 3,
-						group: "Observability",
-						value: (node) => node.FailureMode ?? "",
-						patch: (_node, value) => ({ FailureMode: String(value) })
-					}),
-					property({
-						id: "freshnessMs",
-						label: "Freshness budget ms",
-						input: "number",
-						min: 0,
-						step: 100,
-						group: "Observability",
-						value: (node) => node.FreshnessMs ?? "",
-						patch: (_node, value) => numberPatch("FreshnessMs", value)
-					}),
-					property({
 						id: "description",
 						label: "Markdown description",
 						input: "textarea",
@@ -6197,346 +4592,6 @@ ${assertLines}
 		],
 		collections: appCollections
 	};
-	//#endregion
-	//#region frontend/model/graph.ts
-	var parentKey = (parent) => JSON.stringify(parent ?? []);
-	var GraphNode = class {
-		constructor(graph, id, draft = {}) {
-			this.graph = graph;
-			this.id = id;
-			this.kind = "node";
-			this.Label = draft.Label ?? { text: id };
-			this.Size = draft.Size ?? {
-				w: 150,
-				h: 64
-			};
-			this.Position = draft.Position;
-			this.NodeType = draft.NodeType ?? "text";
-			this.Description = draft.Description ?? "";
-			this.ComputeMs = draft.ComputeMs;
-			this.ExpectedRps = draft.ExpectedRps;
-			this.LatencyMs = draft.LatencyMs;
-			this.Purpose = draft.Purpose;
-			this.Assumptions = draft.Assumptions;
-			this.Limits = draft.Limits;
-			this.WhatThen = draft.WhatThen;
-			this.Observability = draft.Observability;
-			this.FailureMode = draft.FailureMode;
-			this.DataScale = draft.DataScale;
-			this.FreshnessMs = draft.FreshnessMs;
-		}
-	};
-	var GraphEdge = class {
-		constructor(graph, id, draft) {
-			this.graph = graph;
-			this.id = id;
-			this.kind = "edge";
-			this.From = draft.From;
-			this.To = draft.To;
-			this.Label = draft.Label;
-			this.EdgeKind = draft.EdgeKind ?? draft.Label?.text;
-			this.LatencyMs = draft.LatencyMs;
-			this.ThroughputRps = draft.ThroughputRps;
-			this.PayloadKb = draft.PayloadKb;
-			this.Purpose = draft.Purpose;
-			this.Assumptions = draft.Assumptions;
-			this.Limits = draft.Limits;
-			this.WhatThen = draft.WhatThen;
-			this.Observability = draft.Observability;
-			this.FailureMode = draft.FailureMode;
-			this.DataScale = draft.DataScale;
-			this.FreshnessMs = draft.FreshnessMs;
-		}
-	};
-	var Graph = class Graph {
-		static new(id) {
-			return new Graph(id);
-		}
-		static {
-			this.CELL = 256;
-		}
-		cellKey(x, y) {
-			return `${Math.floor(x / Graph.CELL)},${Math.floor(y / Graph.CELL)}`;
-		}
-		indexNode(node) {
-			const p = node.Position;
-			if (!p) return;
-			const key = this.cellKey(p.x, p.y);
-			const prev = this.nodeCell.get(node.id);
-			if (prev === key) return;
-			if (prev) this.grid.get(prev)?.delete(node.id);
-			(this.grid.get(key) ?? this.grid.set(key, /* @__PURE__ */ new Set()).get(key)).add(node.id);
-			this.nodeCell.set(node.id, key);
-		}
-		unindexNode(id) {
-			const prev = this.nodeCell.get(id);
-			if (prev) {
-				this.grid.get(prev)?.delete(id);
-				this.nodeCell.delete(id);
-			}
-		}
-		/** Node ids whose cell overlaps `rect`. A node spans at most one extra cell
-		*  beyond its center, and callers pass a margin-expanded rect, so cell-level
-		*  granularity is sufficient (the renderer still has exact bounds to refine). */
-		nodeIdsInRect(rect) {
-			const x0 = Math.floor(rect.x / Graph.CELL), x1 = Math.floor((rect.x + rect.w) / Graph.CELL);
-			const y0 = Math.floor(rect.y / Graph.CELL), y1 = Math.floor((rect.y + rect.h) / Graph.CELL);
-			const out = [];
-			for (let cx = x0; cx <= x1; cx++) for (let cy = y0; cy <= y1; cy++) this.grid.get(`${cx},${cy}`)?.forEach((id) => out.push(id));
-			return out;
-		}
-		addAdj(edge) {
-			(this.adjacency.get(edge.From) ?? this.adjacency.set(edge.From, /* @__PURE__ */ new Set()).get(edge.From)).add(edge.id);
-			(this.adjacency.get(edge.To) ?? this.adjacency.set(edge.To, /* @__PURE__ */ new Set()).get(edge.To)).add(edge.id);
-		}
-		removeAdj(edge) {
-			this.adjacency.get(edge.From)?.delete(edge.id);
-			this.adjacency.get(edge.To)?.delete(edge.id);
-		}
-		constructor(id) {
-			this.id = id;
-			this.nextNode = 1;
-			this.nextEdge = 1;
-			this.items = /* @__PURE__ */ new Map();
-			this.edgeMap = /* @__PURE__ */ new Map();
-			this.itemStores = /* @__PURE__ */ new Map();
-			this.nodeArr = null;
-			this.edgeArr = null;
-			this.adjacency = /* @__PURE__ */ new Map();
-			this.grid = /* @__PURE__ */ new Map();
-			this.nodeCell = /* @__PURE__ */ new Map();
-			this.registerItemStore("node", () => this.nodes());
-			this.registerItemStore("edge", () => this.edges());
-		}
-		registerItemStore(kind, provider) {
-			this.itemStores.set(kind, provider);
-			return () => {
-				if (this.itemStores.get(kind) === provider) this.itemStores.delete(kind);
-			};
-		}
-		itemsOfKind(kind) {
-			const provider = this.itemStores.get(kind);
-			if (!provider) return [];
-			return kind === "node" || kind === "edge" ? provider() : [...provider()];
-		}
-		getItem(ref) {
-			if (ref.kind === "node") return this.items.get(ref.id);
-			if (ref.kind === "edge") return this.edgeMap.get(ref.id);
-			return this.itemsOfKind(ref.kind).find((item) => {
-				if (!item || typeof item !== "object") return false;
-				const candidate = item;
-				if (candidate.id !== ref.id) return false;
-				if (candidate.parent == null) return true;
-				return parentKey(candidate.parent) === parentKey(ref.parent);
-			});
-		}
-		createEdge(draft) {
-			const id = `r${this.nextEdge++}`;
-			const edge = new GraphEdge(this, id, draft);
-			this.edgeMap.set(id, edge);
-			this.addAdj(edge);
-			this.edgeArr = null;
-			return edge;
-		}
-		getEdge(id) {
-			return this.edgeMap.get(id);
-		}
-		edges() {
-			return this.edgeArr ??= [...this.edgeMap.values()];
-		}
-		edgesOf(nodeId) {
-			const ids = this.adjacency.get(nodeId);
-			if (!ids) return [];
-			const out = [];
-			ids.forEach((eid) => {
-				const e = this.edgeMap.get(eid);
-				if (e) out.push(e);
-			});
-			return out;
-		}
-		updateEdge(id, patch) {
-			const edge = this.edgeMap.get(id);
-			if (!edge) return false;
-			const reindex = "From" in patch || "To" in patch;
-			if (reindex) this.removeAdj(edge);
-			Object.assign(edge, patch);
-			if (reindex) this.addAdj(edge);
-			return true;
-		}
-		deleteEdge(id) {
-			const edge = this.edgeMap.get(id);
-			if (!edge) return false;
-			this.removeAdj(edge);
-			this.edgeMap.delete(id);
-			this.edgeArr = null;
-			return true;
-		}
-		getNode(id) {
-			return this.items.get(id);
-		}
-		/** Create-or-place-near. `nearPosition` is the caller's job — Graph stays unaware of selection. */
-		createNode(draft = {}, options = {}) {
-			const id = `e${this.nextNode++}`;
-			const node = new GraphNode(this, id, this.withDefaults(draft, options));
-			this.items.set(id, node);
-			this.indexNode(node);
-			this.nodeArr = null;
-			return node;
-		}
-		node(value = {}, options = {}) {
-			if (typeof value === "string") return this.items.get(value);
-			return this.createNode(value, options);
-		}
-		nodes() {
-			return this.nodeArr ??= [...this.items.values()];
-		}
-		updateNode(id, patch) {
-			const node = this.items.get(id);
-			if (!node) return false;
-			Object.assign(node, patch);
-			if ("Position" in patch) this.indexNode(node);
-			return true;
-		}
-		deleteNode(id) {
-			const incident = this.adjacency.get(id);
-			if (incident) {
-				[...incident].forEach((eid) => {
-					const e = this.edgeMap.get(eid);
-					if (e) {
-						this.removeAdj(e);
-						this.edgeMap.delete(eid);
-					}
-				});
-				this.adjacency.delete(id);
-				this.edgeArr = null;
-			}
-			const removed = this.items.delete(id);
-			if (removed) {
-				this.unindexNode(id);
-				this.nodeArr = null;
-			}
-			return removed;
-		}
-		withDefaults(draft, options) {
-			const anchor = options.nearPosition ?? options.at ?? {
-				x: 0,
-				y: 0
-			};
-			const hasAnchor = options.nearPosition != null;
-			const spread = this.items.size % 4;
-			return {
-				...draft,
-				Position: draft.Position ?? {
-					x: anchor.x + (hasAnchor ? 180 : spread * 24),
-					y: anchor.y + (hasAnchor ? 0 : this.items.size % 3 * 18)
-				}
-			};
-		}
-		snapshot() {
-			return {
-				nodes: this.nodes().map(({ id, Label, Position, Size, NodeType, Description, ComputeMs, ExpectedRps, LatencyMs, Purpose, Assumptions, Limits, WhatThen, Observability, FailureMode, DataScale, FreshnessMs }) => ({
-					id,
-					Label,
-					Position,
-					Size,
-					NodeType,
-					Description,
-					ComputeMs,
-					ExpectedRps,
-					LatencyMs,
-					Purpose,
-					Assumptions,
-					Limits,
-					WhatThen,
-					Observability,
-					FailureMode,
-					DataScale,
-					FreshnessMs
-				})),
-				edges: this.edges().map(({ id, From, To, Label, EdgeKind, LatencyMs, ThroughputRps, PayloadKb, Purpose, Assumptions, Limits, WhatThen, Observability, FailureMode, DataScale, FreshnessMs }) => ({
-					id,
-					From,
-					To,
-					Label,
-					EdgeKind,
-					LatencyMs,
-					ThroughputRps,
-					PayloadKb,
-					Purpose,
-					Assumptions,
-					Limits,
-					WhatThen,
-					Observability,
-					FailureMode,
-					DataScale,
-					FreshnessMs
-				}))
-			};
-		}
-		replace(snapshot) {
-			this.items.clear();
-			this.edgeMap.clear();
-			this.adjacency.clear();
-			this.grid.clear();
-			this.nodeCell.clear();
-			let maxNode = 0;
-			let maxEdge = 0;
-			snapshot.nodes.forEach((draft) => {
-				const node = new GraphNode(this, draft.id, draft);
-				this.items.set(node.id, node);
-				this.indexNode(node);
-				const seq = parseInt(node.id.replace(/^\D+/, ""), 10);
-				if (Number.isFinite(seq)) maxNode = Math.max(maxNode, seq);
-			});
-			snapshot.edges.forEach((draft) => {
-				if (!this.items.has(draft.From) || !this.items.has(draft.To) || draft.From === draft.To) return;
-				const edge = new GraphEdge(this, draft.id, draft);
-				this.edgeMap.set(edge.id, edge);
-				this.addAdj(edge);
-				const seq = parseInt(edge.id.replace(/^\D+/, ""), 10);
-				if (Number.isFinite(seq)) maxEdge = Math.max(maxEdge, seq);
-			});
-			this.nextNode = maxNode + 1;
-			this.nextEdge = maxEdge + 1;
-			this.nodeArr = null;
-			this.edgeArr = null;
-		}
-	};
-	function graphStore() {
-		let next = 1;
-		const graphs = /* @__PURE__ */ new Map();
-		const nextId = () => {
-			let id = `g${next++}`;
-			while (graphs.has(id)) id = `g${next++}`;
-			return id;
-		};
-		const create = (id = nextId()) => {
-			const existing = graphs.get(id);
-			if (existing) return existing;
-			const graph = Graph.new(id);
-			graphs.set(id, graph);
-			return graph;
-		};
-		let current = create();
-		return {
-			get current() {
-				return current;
-			},
-			all: () => [...graphs.values()],
-			get: (id) => graphs.get(id),
-			create,
-			delete(id) {
-				if (graphs.size <= 1) return current;
-				graphs.delete(id);
-				if (current.id === id) current = graphs.values().next().value ?? create();
-				return current;
-			},
-			switch(id) {
-				current = graphs.get(id) ?? create(id);
-				return current;
-			}
-		};
-	}
 	//#endregion
 	//#region frontend/runtime.ts
 	/** Hot-toggle the flag-driven lifecycle of any registered entry. One flat
@@ -6587,7 +4642,8 @@ ${assertLines}
 					key: "Escape",
 					global: true,
 					prevent: true
-				}
+				},
+				payload: () => ({ source: "escape" })
 			}, {
 				id: "app.cancel.background",
 				label: "Cancel on canvas background click",
@@ -6598,7 +4654,8 @@ ${assertLines}
 					on: "pointerdown",
 					selector: `[data-place="${Places.Stage}"]`,
 					when: isStageSurface
-				}
+				},
+				payload: () => ({ source: "background" })
 			}]);
 		}, { requires: ["input"] });
 	}
@@ -6755,14 +4812,16 @@ ${assertLines}
 				command: "choose.all",
 				kind: "button",
 				text: "All",
-				order: 40
+				order: 40,
+				group: "edit"
 			});
 			contribute({
 				surface: "top",
 				command: "selection.group",
 				kind: "button",
 				text: "Group",
-				order: 41
+				order: 41,
+				group: "edit"
 			});
 		}, { requires: ["ability.selectable", "graph"] });
 	}
@@ -6781,7 +4840,8 @@ ${assertLines}
 					command: collectionCreateCommand(coll),
 					kind: "button",
 					text: coll.toolbar?.text ?? `+ ${coll.entity?.label ?? coll.kind}`,
-					order: coll.toolbar?.order
+					order: coll.toolbar?.order,
+					group: coll.kind === "graph" ? void 0 : "edit"
 				};
 				ctx.contribute(button);
 			});
@@ -6789,66 +4849,44 @@ ${assertLines}
 	}
 	//#endregion
 	//#region frontend/systems/command-modal.ts
-	var commandModals = {
-		palette: {
-			id: "palette",
-			title: "Palette",
-			event: "palette.open",
-			label: "Open palette",
-			shortcut: "P",
-			key: "p",
-			editableHotkeys: false,
-			availableOnly: true,
-			placeholder: "Search commands"
-		},
-		help: {
-			id: "help",
-			title: "Help",
-			event: "help.open",
-			label: "Open help",
-			shortcut: "?",
-			key: "?",
-			editableHotkeys: true,
-			availableOnly: false,
-			placeholder: "Search shortcuts"
-		}
-	};
-	var NUMBERED_ROWS = 5;
+	var PLACEHOLDER = "Search commands & nodes";
+	var ALT_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789".split("");
+	/** The palette is the single command+search surface (⌘K / `?`). Navigate with
+	*  arrow keys (Enter runs the highlighted row); each search result also gets an
+	*  `Alt+<key>` accelerator, where <key> is the first character (unique across
+	*  results) that follows the typed query in the result's label — so typing
+	*  "kaf" turns "kafka" into Alt+K and "kafkian" into Alt+I. */
 	function registerCommandModal(system) {
 		system("commandModal", (ctx) => {
-			const { on, emit, contexts, contribute, flags } = ctx;
-			contribute({
-				surface: "top",
-				command: "palette.open",
-				kind: "button",
-				text: "Palette",
-				order: 30
-			});
+			const { on, emit, contexts, contribute } = ctx;
 			contribute({
 				surface: "top",
 				command: "help.open",
 				kind: "button",
-				text: "Help",
-				order: 40
+				text: "?",
+				label: "Help",
+				slot: Slots.End,
+				order: 99
 			});
-			const queries = /* @__PURE__ */ new Map();
+			contribute({
+				surface: "top",
+				command: "palette.open",
+				kind: "button",
+				text: "🔍",
+				label: "Search (P)",
+				slot: Slots.End,
+				order: 100
+			});
+			let query = "";
+			let selected = 0;
+			let currentRows = [];
+			let altOfRow = /* @__PURE__ */ new Map();
+			let rowOfAlt = /* @__PURE__ */ new Map();
 			const modalEl = () => contexts.places.el(Places.Modal);
 			const activePalette = () => !!modalEl()?.querySelector("[data-command-modal=\"palette\"]");
-			const queryOf = (modalId) => {
-				const input = modalEl()?.querySelector(`[data-command-modal="${modalId}"] .palette-search`);
-				return input instanceof HTMLInputElement ? input.value : queries.get(modalId) ?? "";
-			};
-			const syncShortcutConflict = (input) => {
-				const conflict = contexts.commands.shortcutConflict(input.dataset.shortcutCommand, input.value);
-				input.classList.toggle("is-conflict", !!conflict);
-				input.toggleAttribute("aria-invalid", !!conflict);
-				input.title = conflict ? `Already used by ${conflict.label}` : "";
-				input.closest(".help-row")?.classList.toggle("has-conflict", !!conflict);
-				return !conflict;
-			};
-			const visibleCommands = (modal, query = "") => {
-				const q = query.trim().toLowerCase();
-				return contexts.commands.all().filter((command) => !command.hidden).filter((command) => !modal.availableOnly || !!q || command.available?.() !== false).filter((command) => !q || `${command.id} ${command.label} ${command.group ?? ""} ${shortcutOf(command)}`.toLowerCase().includes(q));
+			const visibleCommands = (q = "") => {
+				const needle = q.trim().toLowerCase();
+				return contexts.commands.all().filter((command) => !command.hidden).filter((command) => !!needle || command.available?.() !== false).filter((command) => !needle || `${command.id} ${command.label} ${command.group ?? ""} ${shortcutOf(command)}`.toLowerCase().includes(needle));
 			};
 			const TARGET_GROUPS = new Set([
 				"item",
@@ -6859,170 +4897,227 @@ ${assertLines}
 				"container"
 			]);
 			const groupRank = (group) => TARGET_GROUPS.has(group) === ctx.selection.selectedAll().length > 0 ? 0 : 1;
-			const orderedCommands = (modal, query = "") => {
+			const orderedCommands = (q = "") => {
 				const ordered = [];
-				[...grouped(visibleCommands(modal, query), (command) => command.group ?? systemOf(command.id))].sort((a, b) => groupRank(a[0]) - groupRank(b[0])).forEach(([, commands]) => ordered.push(...commands));
+				[...grouped(visibleCommands(q), (command) => command.group ?? systemOf(command.id))].sort((a, b) => groupRank(a[0]) - groupRank(b[0])).forEach(([, commands]) => ordered.push(...commands));
 				return ordered;
 			};
-			const numberedCommandId = (index) => orderedCommands(commandModals.palette, queryOf("palette"))[index]?.id ?? "";
-			const commandSection = (modal, group, commands, nextNumber) => {
-				const section = contexts.templates.clone("command-section");
-				const rows = contexts.templates.slot(section, "rows");
-				contexts.templates.text(section, "group", group);
-				commands.forEach((command) => {
-					const shortcut = shortcutOf(command);
-					const number = nextNumber?.() ?? null;
-					const row = contexts.templates.clone(modal.editableHotkeys ? "help-row" : "command-row");
-					if (!modal.editableHotkeys) {
-						row.dataset.command = "commandModal.run";
-						row.dataset.commandId = command.id;
+			const itemResults = (q) => {
+				const needle = q.trim().toLowerCase();
+				if (!needle) return [];
+				return contexts.hierarchy.targets().filter((item) => item.label.toLowerCase().includes(needle)).slice(0, 8);
+			};
+			const buildRows = (q) => {
+				const rows = [];
+				itemResults(q).forEach((item) => rows.push({
+					kind: "goto",
+					ref: item.ref,
+					label: item.label,
+					group: "go to",
+					shortcut: ""
+				}));
+				orderedCommands(q).forEach((command) => rows.push({
+					kind: "command",
+					id: command.id,
+					label: command.label,
+					group: command.group ?? systemOf(command.id),
+					shortcut: shortcutOf(command)
+				}));
+				return rows;
+			};
+			const assignAlt = (rows, q) => {
+				altOfRow = /* @__PURE__ */ new Map();
+				rowOfAlt = /* @__PURE__ */ new Map();
+				const needle = q.trim().toLowerCase();
+				if (!needle) return;
+				const used = /* @__PURE__ */ new Set();
+				rows.forEach((row, i) => {
+					const label = row.label.toLowerCase();
+					const at = label.indexOf(needle);
+					const start = at >= 0 ? at + needle.length : 0;
+					const seq = label.slice(start) + label.slice(0, start);
+					for (const ch of seq) {
+						if (!ALT_CHARS.includes(ch) || used.has(ch)) continue;
+						used.add(ch);
+						altOfRow.set(i, ch);
+						rowOfAlt.set(ch, i);
+						break;
 					}
-					contexts.templates.text(row, "label", command.label);
-					contexts.templates.text(row, "id", command.id);
-					if (modal.editableHotkeys) {
-						const input = row.querySelector("input");
-						if (input) {
-							input.dataset.shortcutCommand = command.id;
-							input.value = shortcut;
-							input.setAttribute("aria-label", `${command.label} shortcut`);
-							syncShortcutConflict(input);
-						}
-					} else if (number || shortcut) contexts.templates.text(row, "shortcut", [number, shortcut].filter(Boolean).join(" · "));
-					else row.querySelector("kbd")?.remove();
-					rows.append(row);
 				});
-				return section;
 			};
-			const itemResults = (query) => {
-				const q = query.trim().toLowerCase();
-				if (!q) return [];
-				return contexts.hierarchy.targets().filter((item) => item.label.toLowerCase().includes(q)).slice(0, NUMBERED_ROWS);
-			};
-			const gotoSection = (items) => {
-				const section = contexts.templates.clone("command-section");
-				const rows = contexts.templates.slot(section, "rows");
-				contexts.templates.text(section, "group", "go to");
-				items.forEach((item) => {
-					const row = contexts.templates.clone("command-row");
-					row.dataset.command = "palette.goto";
-					row.dataset.gotoKind = item.ref.kind;
-					row.dataset.gotoId = item.ref.id;
-					contexts.templates.text(row, "label", item.label);
-					contexts.templates.text(row, "id", item.ref.kind);
-					row.querySelector("kbd")?.remove();
-					rows.append(row);
-				});
-				return section;
-			};
-			const renderList = (modal, query = "") => {
-				const fragment = document.createDocumentFragment();
-				if (modal.id === "palette" && query.trim()) {
-					const items = itemResults(query);
-					if (items.length) fragment.append(gotoSection(items));
+			const rowEl = (row, index) => {
+				const el = contexts.templates.clone("command-row");
+				el.dataset.index = String(index);
+				if (index === selected) el.classList.add("is-selected");
+				if (row.kind === "command") {
+					el.dataset.command = "commandModal.run";
+					el.dataset.commandId = row.id;
+					contexts.templates.text(el, "id", row.id);
+				} else {
+					el.dataset.command = "palette.goto";
+					el.dataset.gotoKind = row.ref.kind;
+					el.dataset.gotoId = row.ref.id;
+					contexts.templates.text(el, "id", row.ref.kind);
 				}
-				let row = 0;
-				const nextNumber = () => modal.id === "palette" && row < NUMBERED_ROWS ? ++row : null;
-				grouped(orderedCommands(modal, query), (command) => command.group ?? systemOf(command.id)).forEach(([group, commands]) => fragment.append(commandSection(modal, group, commands, nextNumber)));
+				contexts.templates.text(el, "label", row.label);
+				const alt = altOfRow.get(index);
+				const chip = [alt ? `⌥${alt.toUpperCase()}` : "", row.shortcut].filter(Boolean).join(" · ");
+				if (chip) contexts.templates.text(el, "shortcut", chip);
+				else el.querySelector("kbd")?.remove();
+				return el;
+			};
+			const renderList = (q = "") => {
+				currentRows = buildRows(q);
+				assignAlt(currentRows, q);
+				if (selected >= currentRows.length) selected = Math.max(0, currentRows.length - 1);
+				const fragment = document.createDocumentFragment();
+				let index = 0;
+				const sections = /* @__PURE__ */ new Map();
+				const rowsSlotFor = (group) => {
+					let section = sections.get(group);
+					if (!section) {
+						section = contexts.templates.clone("command-section");
+						contexts.templates.text(section, "group", group);
+						sections.set(group, section);
+						fragment.append(section);
+					}
+					return contexts.templates.slot(section, "rows");
+				};
+				currentRows.forEach((row) => rowsSlotFor(row.group).append(rowEl(row, index++)));
 				return fragment;
 			};
-			/** Flag toggle rows shown at the top of Help. Flags are grouped by kind
-			*  (system / ability / feature); flipping a checkbox emits `flag.toggle`,
-			*  which the runtime feature manager applies to the owning registry. The single Help
-			*  panel becomes the place a user goes to disable any non-core piece. */
-			const renderFlagsSection = () => {
-				const section = contexts.templates.clone("command-section");
-				const rows = contexts.templates.slot(section, "rows");
-				contexts.templates.text(section, "group", "Feature flags");
-				[
-					{
-						kind: "system",
-						label: "System"
-					},
-					{
-						kind: "ability",
-						label: "Ability"
-					},
-					{
-						kind: "feature",
-						label: "Feature"
-					}
-				].forEach((g) => flags.declared(g.kind).forEach((name) => {
-					const row = document.createElement("label");
-					row.className = "help-row flag-row";
-					const checkbox = document.createElement("input");
-					checkbox.type = "checkbox";
-					checkbox.className = "flag-toggle";
-					checkbox.dataset.flag = name;
-					checkbox.checked = flags.isOn(name);
-					const meta = document.createElement("span");
-					const title = document.createElement("b");
-					title.textContent = name;
-					const subtitle = document.createElement("small");
-					subtitle.textContent = g.label;
-					meta.append(title, subtitle);
-					row.append(meta, checkbox);
-					rows.append(row);
-				}));
-				return section;
-			};
-			/** Doctor section: surfaces DX issues at the top of Help so contract drift
-			*  is visible to the user, not only to a developer tailing the console.
-			*  Re-reads `contexts.dx.issues()` every render (no caching) — the latest
-			*  flag toggle / runtime.refresh feeds straight in. */
-			const renderDoctorSection = () => {
-				const issues = contexts.dx.run();
-				const section = contexts.templates.clone("command-section");
-				const rows = contexts.templates.slot(section, "rows");
-				const counts = {
-					error: issues.filter((i) => i.level === "error").length,
-					warn: issues.filter((i) => i.level === "warn").length
-				};
-				contexts.templates.text(section, "group", `Doctor — ${counts.error} error · ${counts.warn} warn`);
-				if (!issues.length) {
-					const ok = document.createElement("div");
-					ok.className = "help-row";
-					ok.textContent = "All checks passed.";
-					rows.append(ok);
-					return section;
-				}
-				issues.forEach((issue) => {
-					const row = document.createElement("div");
-					row.className = `help-row dx-row dx-${issue.level}`;
-					const lead = document.createElement("b");
-					lead.textContent = `[${issue.level}] ${issue.rule}`;
-					const detail = document.createElement("small");
-					detail.textContent = issue.message;
-					const wrapper = document.createElement("span");
-					wrapper.append(lead, detail);
-					row.append(wrapper);
-					rows.append(row);
-				});
-				return section;
-			};
-			const renderCommandModal = (modal) => {
+			const renderPalette = () => {
 				const palette = contexts.templates.clone("palette");
-				palette.dataset.commandModal = modal.id;
+				palette.dataset.commandModal = "palette";
 				const input = palette.querySelector(".palette-search");
-				if (input instanceof HTMLInputElement) input.placeholder = modal.placeholder;
-				const slot = contexts.templates.slot(palette, "commands");
-				if (modal.id === "help") {
-					slot.append(renderDoctorSection());
-					slot.append(renderFlagsSection());
-				}
-				slot.append(renderList(modal));
+				if (input instanceof HTMLInputElement) input.placeholder = PLACEHOLDER;
+				contexts.templates.slot(palette, "commands").append(renderList());
 				return palette;
 			};
+			const renderHelp = () => {
+				const fragment = document.createDocumentFragment();
+				contexts.commands.all().filter((command) => !command.hidden).sort((a, b) => (a.group ?? "").localeCompare(b.group ?? "") || a.label.localeCompare(b.label)).forEach((command) => {
+					const row = contexts.templates.clone("help-row");
+					contexts.templates.text(row, "label", command.label);
+					contexts.templates.text(row, "id", command.id);
+					const input = row.querySelector(".shortcut-edit");
+					if (input) {
+						input.value = shortcutOf(command);
+						input.dataset.shortcutCommand = command.id;
+					}
+					fragment.append(row);
+				});
+				return fragment;
+			};
+			const rerender = () => {
+				const list = modalEl()?.querySelector("[data-command-modal=\"palette\"] [data-slot=\"commands\"]");
+				if (!list) return;
+				list.replaceChildren(renderList(query));
+				list.querySelector(".is-selected")?.scrollIntoView?.({ block: "nearest" });
+			};
+			const runRow = (row) => {
+				if (!row) return;
+				emit("modal.close");
+				if (row.kind === "command") {
+					if (contexts.commands.get(row.id)) contexts.commands.run(row.id, { origin: "palette" });
+				} else {
+					emit("selection.item.select", row.ref);
+					emit("view.fit.item", row.ref);
+				}
+			};
 			contexts.commands.register([
-				...Object.values(commandModals).map((modal) => ({
-					id: modal.event,
-					label: modal.label,
+				{
+					id: "palette.open",
+					label: "Open palette",
 					group: "modal",
-					shortcut: modal.shortcut,
+					shortcut: "P",
 					input: {
 						on: "keydown",
-						key: modal.key,
+						key: "p",
 						prevent: true
 					}
+				},
+				{
+					id: "help.open",
+					label: "Open help",
+					group: "modal",
+					shortcut: "?"
+				},
+				{
+					id: "palette.open.alt",
+					label: "Open palette (?)",
+					event: "palette.open",
+					group: "modal",
+					hidden: true,
+					shortcut: "?",
+					input: {
+						on: "keydown",
+						key: "?",
+						prevent: true
+					}
+				},
+				{
+					id: "palette.nav.down",
+					label: "Palette: next row",
+					event: "palette.nav",
+					group: "modal",
+					hidden: true,
+					input: {
+						on: "keydown",
+						key: "ArrowDown",
+						global: true,
+						prevent: true,
+						stop: true,
+						when: activePalette
+					},
+					payload: () => ({ delta: 1 })
+				},
+				{
+					id: "palette.nav.up",
+					label: "Palette: previous row",
+					event: "palette.nav",
+					group: "modal",
+					hidden: true,
+					input: {
+						on: "keydown",
+						key: "ArrowUp",
+						global: true,
+						prevent: true,
+						stop: true,
+						when: activePalette
+					},
+					payload: () => ({ delta: -1 })
+				},
+				{
+					id: "palette.activate",
+					label: "Palette: run highlighted",
+					group: "modal",
+					hidden: true,
+					input: {
+						on: "keydown",
+						key: "Enter",
+						global: true,
+						prevent: true,
+						stop: true,
+						when: activePalette
+					}
+				},
+				...ALT_CHARS.map((char) => ({
+					id: `palette.alt.${char}`,
+					label: `Palette: Alt+${char}`,
+					event: "palette.alt",
+					group: "modal",
+					hidden: true,
+					input: {
+						on: "keydown",
+						key: char,
+						alt: true,
+						global: true,
+						prevent: true,
+						stop: true,
+						when: activePalette
+					},
+					payload: () => ({ char })
 				})),
 				{
 					id: "commandModal.run",
@@ -7044,23 +5139,6 @@ ${assertLines}
 						} : void 0;
 					}
 				},
-				...Array.from({ length: NUMBERED_ROWS }, (_, i) => ({
-					id: `commandModal.run.${i + 1}`,
-					label: `Run palette item ${i + 1}`,
-					event: "commandModal.run",
-					group: "modal",
-					hidden: true,
-					input: {
-						on: "keydown",
-						key: String(i + 1),
-						global: true,
-						prevent: true,
-						stop: true,
-						when: activePalette
-					},
-					available: () => !!numberedCommandId(i),
-					payload: () => ({ commandId: numberedCommandId(i) })
-				})),
 				{
 					id: "commandModal.search.change",
 					label: "Search command modal",
@@ -7071,13 +5149,7 @@ ${assertLines}
 						on: "input",
 						selector: ".palette-search"
 					},
-					payload: ({ target }) => {
-						const root = target?.closest("[data-command-modal]");
-						return {
-							modalId: root instanceof HTMLElement ? root.dataset.commandModal ?? "" : "",
-							query: target.value
-						};
-					}
+					payload: ({ target }) => ({ query: target.value })
 				},
 				{
 					id: "shortcut.edit.preview",
@@ -7089,7 +5161,7 @@ ${assertLines}
 						selector: ".shortcut-edit"
 					},
 					payload: ({ target }) => ({
-						id: target.dataset.shortcutCommand,
+						id: target.dataset.shortcutCommand ?? "",
 						shortcut: target.value
 					})
 				},
@@ -7099,42 +5171,39 @@ ${assertLines}
 					group: "modal",
 					hidden: true,
 					input: {
-						on: "change",
+						on: "focusout",
 						selector: ".shortcut-edit"
 					},
 					payload: ({ target }) => ({
-						id: target.dataset.shortcutCommand,
+						id: target.dataset.shortcutCommand ?? "",
 						shortcut: target.value
-					})
-				},
-				{
-					id: "flag.toggle",
-					label: "Toggle feature flag",
-					group: "modal",
-					hidden: true,
-					input: {
-						on: "change",
-						selector: ".flag-toggle"
-					},
-					payload: ({ target }) => ({
-						name: target.dataset.flag ?? "",
-						on: target.checked
 					})
 				}
 			]);
-			const open = (modal) => emit("modal.open", {
-				title: modal.title,
+			const open = () => emit("modal.open", {
+				title: "Palette",
 				visual: "command",
-				body: () => renderCommandModal(modal)
+				body: () => renderPalette()
 			});
-			const shortcutInput = (id) => modalEl()?.querySelector(`.shortcut-edit[data-shortcut-command="${id}"]`) ?? null;
 			on("palette.open", () => {
-				queries.set("palette", "");
-				open(commandModals.palette);
+				query = "";
+				selected = 0;
+				open();
 			});
-			on("help.open", () => {
-				queries.set("help", "");
-				open(commandModals.help);
+			on("help.open", () => emit("modal.open", {
+				title: "Help",
+				visual: "command",
+				body: () => renderHelp()
+			}));
+			on("palette.nav", ({ delta }) => {
+				if (!currentRows.length) return;
+				selected = (selected + delta + currentRows.length) % currentRows.length;
+				rerender();
+			});
+			on("palette.activate", () => runRow(currentRows[selected]));
+			on("palette.alt", ({ char }) => {
+				const index = rowOfAlt.get(char);
+				if (index != null) runRow(currentRows[index]);
 			});
 			on("commandModal.run", ({ commandId }) => {
 				if (!contexts.commands.get(commandId)) return;
@@ -7147,20 +5216,35 @@ ${assertLines}
 				emit("selection.item.select", ref);
 				emit("view.fit.item", ref);
 			});
-			on("commandModal.search.changed", ({ modalId, query }) => {
-				const modal = commandModals[modalId];
-				if (modal) queries.set(modal.id, query);
-				const list = (modalEl()?.querySelector(`[data-command-modal="${modalId}"]`))?.querySelector("[data-slot=\"commands\"]");
-				if (modal && list) list.replaceChildren(renderList(modal, query));
+			on("commandModal.search.changed", ({ query: q }) => {
+				query = q;
+				selected = 0;
+				rerender();
 			});
-			on("shortcut.edit.preview", ({ id }) => {
+			const shortcutInput = (id) => modalEl()?.querySelector(`.shortcut-edit[data-shortcut-command="${CSS.escape(id)}"]`);
+			const markShortcutConflict = (id, shortcut) => {
 				const input = shortcutInput(id);
-				if (input instanceof HTMLInputElement) syncShortcutConflict(input);
+				if (!input) return false;
+				const conflict = !!contexts.commands.shortcutConflict(id, shortcut ?? input.value);
+				input.classList.toggle("is-conflict", conflict);
+				input.closest(".help-row")?.classList.toggle("has-conflict", conflict);
+				return conflict;
+			};
+			on("shortcut.edit.preview", ({ id, shortcut }) => {
+				if (!contexts.commands.get(id)) return;
+				markShortcutConflict(id, shortcut);
 			});
-			on("shortcut.edit.commit", ({ id }) => {
+			on("shortcut.edit.commit", ({ id, shortcut }) => {
+				const command = contexts.commands.get(id);
+				if (!command) return;
+				if (markShortcutConflict(id, shortcut)) {
+					const input = shortcutInput(id);
+					if (input) input.value = shortcutOf(command);
+					return;
+				}
+				contexts.commands.setShortcut(id, shortcut ?? "");
 				const input = shortcutInput(id);
-				if (!(input instanceof HTMLInputElement) || !syncShortcutConflict(input)) return;
-				contexts.commands.setShortcut(id, input.value);
+				if (input) input.value = shortcutOf(command);
 			});
 		}, { requires: ["modal"] });
 	}
@@ -7456,7 +5540,6 @@ ${assertLines}
 	};
 	var PADDING = 24;
 	var LABEL_BAND = 18;
-	var childKey$1 = (ref) => `${ref.kind}:${ref.id}`;
 	var parseSections = (value, existing = []) => String(value).split(/\r?\n/).map((title) => title.trim()).filter(Boolean).map((title, index) => ({
 		id: existing[index]?.id ?? `s${index + 1}`,
 		title,
@@ -7472,16 +5555,16 @@ ${assertLines}
 		})) ?? [];
 		c.SectionAxis = c.SectionAxis ?? "rows";
 		const valid = new Set(c.Sections.map((section) => section.id));
-		const childKeys = new Set(c.Children.map(childKey$1));
+		const refKeys = new Set(c.Children.map(refKey));
 		const fallback = firstSectionId(c);
 		const next = {};
 		Object.entries(c.ChildSections ?? {}).forEach(([key, sectionId]) => {
-			if (!childKeys.has(key)) return;
+			if (!refKeys.has(key)) return;
 			if (valid.has(sectionId)) next[key] = sectionId;
 			else if (fallback) next[key] = fallback;
 		});
 		c.Children.forEach((child) => {
-			const key = childKey$1(child);
+			const key = refKey(child);
 			if (fallback && !next[key]) next[key] = fallback;
 		});
 		c.ChildSections = next;
@@ -7522,7 +5605,7 @@ ${assertLines}
 				const valid = new Set(c.Sections.map((section) => section.id));
 				const next = sectionId && valid.has(sectionId) ? sectionId : firstSectionId(c);
 				if (!next) return false;
-				const key = childKey$1(childRef);
+				const key = refKey(childRef);
 				const before = c.ChildSections?.[key];
 				c.ChildSections = {
 					...c.ChildSections ?? {},
@@ -7533,7 +5616,7 @@ ${assertLines}
 			const removeChildSection = (childRef, parentId) => {
 				(parentId ? [containersHere().get(parentId)] : [...containersHere().values()]).forEach((c) => {
 					if (!c?.ChildSections) return;
-					delete c.ChildSections[childKey$1(childRef)];
+					delete c.ChildSections[refKey(childRef)];
 				});
 			};
 			const sectionTitleTarget = (target) => {
@@ -7874,7 +5957,7 @@ ${assertLines}
 						const childRef = selection.selected() ?? void 0;
 						const c = childRef ? containerOfChild(childRef) : null;
 						if (!childRef || !c?.Sections?.length) return void 0;
-						const current = c.ChildSections?.[childKey$1(childRef)] ?? firstSectionId(c);
+						const current = c.ChildSections?.[refKey(childRef)] ?? firstSectionId(c);
 						const index = Math.max(0, c.Sections.findIndex((section) => section.id === current));
 						return {
 							containerId: c.id,
@@ -8198,7 +6281,8 @@ ${assertLines}
 				command: "editing.container.create",
 				kind: "button",
 				text: "+ Container",
-				order: 17
+				order: 17,
+				group: "edit"
 			});
 			return () => {
 				offEntity();
@@ -8328,9 +6412,12 @@ ${assertLines}
 				shell.setAttribute("data-theme", resolved);
 				shell.dataset.colorscheme = resolved;
 			};
-			if (typeof window.matchMedia === "function") window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
-				if (io.get(KEY, "system") === "system") applyTheme();
-			});
+			if (typeof window.matchMedia === "function") {
+				const mq = window.matchMedia("(prefers-color-scheme: dark)");
+				mq.onchange = () => {
+					if (io.get(KEY, "system") === "system") applyTheme();
+				};
+			}
 			contexts.commands.register([{
 				id: "theme.toggle",
 				label: "Toggle dark mode",
@@ -8397,49 +6484,6 @@ ${assertLines}
 					count: trace.length
 				});
 			};
-			contribute({
-				surface: "top",
-				command: "debug.enable",
-				kind: "button",
-				text: "🐞 Debug",
-				order: 70
-			});
-			contribute({
-				surface: "top",
-				command: "debug.record.start",
-				kind: "button",
-				text: "● Rec",
-				order: 71,
-				className: "debug-rec"
-			});
-			contribute({
-				surface: "top",
-				command: "debug.record.stop",
-				kind: "button",
-				text: "■ Stop",
-				order: 72
-			});
-			contribute({
-				surface: "top",
-				command: "debug.record.clear",
-				kind: "button",
-				text: "Clear",
-				order: 73
-			});
-			contribute({
-				surface: "top",
-				command: "debug.assert.open",
-				kind: "button",
-				text: "Assert",
-				order: 74
-			});
-			contribute({
-				surface: "top",
-				command: "debug.replay.open",
-				kind: "button",
-				text: "Replay",
-				order: 75
-			});
 			contexts.commands.register([
 				{
 					id: "debug.enable",
@@ -8893,13 +6937,6 @@ ${assertLines}
 				text: "★ Self",
 				order: 60
 			});
-			contribute({
-				surface: "top",
-				command: "demo.render-java",
-				kind: "button",
-				text: "Java Map",
-				order: 61
-			});
 			ctx.contexts.commands.register([
 				{
 					id: "demo.render-self",
@@ -9277,11 +7314,11 @@ ${assertLines}
 	function registerDx(system) {
 		system("dx", (ctx) => {
 			ctx.expose("dx", { run: () => runDx(ctx) });
-			ctx.contexts.dx._setRunner(() => runDx(ctx));
+			ctx.contexts.dx.setRunner(() => runDx(ctx));
 			ctx.on("app.start", () => {
 				queueMicrotask(() => {
 					const issues = runDx(ctx);
-					ctx.contexts.dx._set(issues);
+					ctx.contexts.dx.setIssues(issues);
 					const errors = issues.filter((i) => i.level === "error");
 					const warns = issues.filter((i) => i.level === "warn");
 					if (errors.length) {
@@ -9470,7 +7507,8 @@ ${assertLines}
 			contexts.storage.register("node", origin, (ref, patch) => {
 				if (graphs.current.updateNode(ref.id, patch)) emit("graph.node.updated", {
 					graphId: graphs.current.id,
-					id: ref.id
+					id: ref.id,
+					patch
 				});
 			});
 			contexts.storage.register("edge", origin, (ref, patch) => {
@@ -9602,7 +7640,8 @@ ${assertLines}
 			on("graph.node.update", ({ id, patch }) => {
 				if (graphs.current.updateNode(id, patch)) emit("graph.node.updated", {
 					graphId: graphs.current.id,
-					id
+					id,
+					patch
 				});
 			});
 			on("graph.node.delete", ({ id }) => {
@@ -9687,6 +7726,30 @@ ${assertLines}
 				stopInput = contexts.input.start();
 			});
 			return () => stopInput?.();
+		});
+	}
+	//#endregion
+	//#region frontend/systems/io.ts
+	/** io — persist flag / command / fold state to the IoApi adapter.
+	*  Reads happen at boot (core contexts hydrate from io.get); writes go through
+	*  events so core contexts never call io.set directly (Principle 9).
+	*  The io system owns the persistence boundary — all other systems just emit
+	*  facts that end in `.changed` and this system writes them to storage. */
+	function registerIo(system) {
+		system("io", ({ on, io, flags, contexts }) => {
+			on("flag.changed", () => io.set(STORAGE_KEYS.flags, flags.all()));
+			on("command.shortcut.changed", ({ id, shortcut }) => {
+				const overrides = io.get(STORAGE_KEYS.shortcuts, {});
+				overrides[id] = shortcut;
+				io.set(STORAGE_KEYS.shortcuts, overrides);
+			});
+			on("command.enabled.changed", ({ id, enabled }) => {
+				const disabled = new Set(io.get(STORAGE_KEYS.disabledCommands, []));
+				if (enabled) disabled.delete(id);
+				else disabled.add(id);
+				io.set(STORAGE_KEYS.disabledCommands, [...disabled]);
+			});
+			on("fold.changed", () => io.set("frontend.fold", contexts.fold.all()));
 		});
 	}
 	//#endregion
@@ -9841,6 +7904,12 @@ ${assertLines}
 		});
 	}
 	var nodeKey = (id) => `node:${id}`;
+	var GAP_X = 56;
+	var GAP_Y = 72;
+	var sizeOf = (node) => node.Size ?? {
+		w: 160,
+		h: 72
+	};
 	function sectionRects(scope) {
 		if (!scope.bounds || !scope.sections?.length) return [];
 		const inset = 32;
@@ -9932,23 +8001,35 @@ ${assertLines}
 		const byLevel = /* @__PURE__ */ new Map();
 		scope.nodes.forEach((n) => {
 			const lv = level.get(n.id) ?? 0;
-			(byLevel.get(lv) ?? byLevel.set(lv, []).get(lv)).push(n.id);
+			(byLevel.get(lv) ?? byLevel.set(lv, []).get(lv)).push(n);
 		});
-		const rowH = 130;
-		byLevel.forEach((ids, lv) => {
-			const spread = (ids.length - 1) * 180;
-			ids.forEach((id, i) => set(id, {
-				x: scope.origin.x + -spread / 2 + i * 180,
-				y: scope.origin.y + lv * rowH
-			}));
-		});
+		const levels = [...byLevel.entries()].sort((a, b) => a[0] - b[0]);
+		let y = scope.origin.y;
+		for (const [, nodes] of levels) {
+			const rowH = Math.max(...nodes.map((n) => sizeOf(n).h));
+			const totalW = nodes.reduce((sum, n) => sum + sizeOf(n).w, 0) + GAP_X * Math.max(0, nodes.length - 1);
+			let x = scope.origin.x - totalW / 2;
+			nodes.forEach((n) => {
+				const w = sizeOf(n).w;
+				set(n.id, {
+					x: x + w / 2,
+					y: y + rowH / 2
+				});
+				x += w + GAP_X;
+			});
+			y += rowH + GAP_Y;
+		}
 	}
-	/** Square-ish grid per scope, centered at scope.origin. */
+	/** Square-ish grid per scope, centered at scope.origin. Cell size = the largest
+	*  node in the scope + gaps, so no two boxes touch regardless of text length. */
 	function gridScope(scope, set) {
 		const cols = Math.max(1, Math.ceil(Math.sqrt(scope.nodes.length)));
-		const colSize = 200, rowSize = 100;
+		const rows = Math.ceil(scope.nodes.length / cols);
+		const maxW = Math.max(...scope.nodes.map((n) => sizeOf(n).w), 0);
+		const maxH = Math.max(...scope.nodes.map((n) => sizeOf(n).h), 0);
+		const colSize = maxW + GAP_X, rowSize = maxH + GAP_Y;
 		const startX = scope.origin.x - (cols - 1) * colSize / 2;
-		const startY = scope.origin.y - (Math.ceil(scope.nodes.length / cols) - 1) * rowSize / 2;
+		const startY = scope.origin.y - (rows - 1) * rowSize / 2;
 		scope.nodes.forEach((n, i) => {
 			const col = i % cols, row = Math.floor(i / cols);
 			set(n.id, {
@@ -9965,7 +8046,9 @@ ${assertLines}
 		const inScope = (id) => !!id && scope.nodes.some((n) => n.id === id);
 		const root = focusedId && inScope(focusedId) ? scope.nodes.find((n) => n.id === focusedId) : scope.nodes[0];
 		const others = scope.nodes.filter((n) => n.id !== root.id);
-		const radius = Math.max(160, 60 + others.length * 22);
+		const circumference = others.reduce((sum, n) => sum + sizeOf(n).w + GAP_X, 0);
+		const rootReach = Math.max(sizeOf(root).w, sizeOf(root).h) / 2;
+		const radius = Math.max(160, 60 + others.length * 22, circumference / (2 * Math.PI) + rootReach);
 		const center = root.Position ?? scope.origin;
 		others.forEach((n, i) => {
 			const angle = i / Math.max(1, others.length) * Math.PI * 2 - Math.PI / 2;
@@ -9977,9 +8060,17 @@ ${assertLines}
 	}
 	function registerLayout(system) {
 		system("layout", (ctx) => {
-			const { on, emit, contexts, selection, contribute } = ctx;
+			const { on, emit, contexts, selection, contribute, declarePanel } = ctx;
+			declarePanel({
+				id: "layout",
+				anchor: "bottom-left",
+				movable: false,
+				layout: "toolbar",
+				order: 10
+			});
 			contribute({
 				surface: "top",
+				panel: "layout",
 				command: "layout.apply.tidy",
 				kind: "button",
 				text: "Tidy",
@@ -9987,10 +8078,19 @@ ${assertLines}
 			});
 			contribute({
 				surface: "top",
+				panel: "layout",
+				command: "layout.apply.grid",
+				kind: "button",
+				text: "Grid",
+				order: 66
+			});
+			contribute({
+				surface: "top",
+				panel: "layout",
 				command: "layout.apply.radial",
 				kind: "button",
 				text: "Radial",
-				order: 66
+				order: 67
 			});
 			contexts.commands.register([
 				{
@@ -10045,12 +8145,27 @@ ${assertLines}
 	function registerLog(system) {
 		system("log", ({ bus, emit, contexts }) => {
 			const rows = [];
+			const renderLog = () => {
+				const panel = contexts.templates.clone("log");
+				const list = contexts.templates.slot(panel, "rows");
+				rows.forEach((row) => {
+					const item = contexts.templates.clone("log-row");
+					contexts.templates.text(item, "name", row);
+					list.append(item);
+				});
+				return panel;
+			};
 			let scheduled = false;
 			const scheduleDraw = () => {
 				if (scheduled) return;
 				scheduled = true;
 				requestAnimationFrame(() => {
 					scheduled = false;
+					emit("render.view.set", {
+						place: Places.Left,
+						key: "log",
+						view: renderLog
+					});
 				});
 			};
 			bus.onAny((event) => {
@@ -10071,6 +8186,7 @@ ${assertLines}
 		system("main", ({ on, emit, contexts, contribute, origin }) => {
 			contexts.cancellation.register({
 				origin,
+				background: false,
 				active: () => contexts.fold.folded(ZEN_FOLD_ID$1),
 				cancel: () => contexts.fold.set(ZEN_FOLD_ID$1, true)
 			});
@@ -10078,73 +8194,35 @@ ${assertLines}
 			const syncShellFold = () => {
 				const shell = shellEl();
 				if (!shell) return;
-				shell.dataset.topFolded = contexts.fold.folded("shell.top") ? "true" : "false";
 				shell.dataset.zen = contexts.fold.folded(ZEN_FOLD_ID$1) ? "true" : "false";
 			};
-			contexts.commands.register([
-				{
-					id: "view.left.toggle",
-					label: "Toggle outline panel",
-					group: "view",
-					event: "fold.toggle",
-					shortcut: "B",
-					input: {
-						on: "keydown",
-						key: "b",
-						prevent: true
-					},
-					payload: () => ({ id: "outline.panel" })
+			contexts.commands.register([{
+				id: "view.zen",
+				label: "Toggle zen mode",
+				event: "fold.toggle",
+				group: "view",
+				shortcut: "\\",
+				input: {
+					on: "keydown",
+					key: "\\",
+					prevent: true
 				},
-				{
-					id: "view.top.toggle",
-					label: "Toggle top panel",
-					group: "view",
-					event: "fold.toggle",
-					shortcut: "Shift+T",
-					input: {
-						on: "keydown",
-						key: "T",
-						shift: true,
-						prevent: true
-					},
-					payload: () => ({ id: "shell.top" })
-				},
-				{
-					id: "view.zen",
-					label: "Toggle zen mode",
-					event: "fold.toggle",
-					group: "view",
-					shortcut: "\\",
-					input: {
-						on: "keydown",
-						key: "\\",
-						prevent: true
-					},
-					payload: () => ({ id: ZEN_FOLD_ID$1 })
-				}
-			]);
+				payload: () => ({ id: ZEN_FOLD_ID$1 })
+			}]);
 			contribute({
 				surface: "top",
 				command: "view.zen",
 				kind: "button",
-				text: "⛶",
+				text: "☾",
+				label: "Toggle zen mode",
 				order: 80
-			});
-			contribute({
-				surface: "top",
-				command: "view.top.toggle",
-				kind: "button",
-				text: "▴",
-				label: "Toggle top panel",
-				order: 79
 			});
 			on("app.start", () => {
 				emit("render.shell");
 				syncShellFold();
 			});
 			on("fold.changed", ({ id }) => {
-				if (id !== "shell.top" && id !== ZEN_FOLD_ID$1) return;
-				syncShellFold();
+				if (id === ZEN_FOLD_ID$1) syncShellFold();
 			});
 		}, { requires: ["render"] });
 	}
@@ -10212,7 +8290,9 @@ ${assertLines}
 				button.type = "button";
 				button.dataset.command = ui.command;
 				button.textContent = uiValue(ui.text, item, action.label);
-				button.setAttribute("aria-label", uiValue(ui.label, item, action.label));
+				const label = uiValue(ui.label, item, action.label);
+				button.setAttribute("aria-label", label);
+				button.title = label;
 				if (ui.className) button.classList.add(...ui.className.split(/\s+/).filter(Boolean));
 				Object.entries(ui.attrs ?? {}).forEach(([name, value]) => button.setAttribute(name, uiValue(value, item)));
 				return button;
@@ -10249,7 +8329,9 @@ ${assertLines}
 					y: rect.y
 				};
 				const screen = contexts.view.spaceToScreen(topCenter);
-				wrapper.style.left = `${screen.x}px`;
+				const leftPanel = contexts.places.el(Places.Left)?.getBoundingClientRect();
+				const minX = leftPanel && leftPanel.width > 0 ? leftPanel.right + 44 : 0;
+				wrapper.style.left = `${Math.max(screen.x, minX)}px`;
 				wrapper.style.top = `${screen.y}px`;
 				const append = (slot, kind, handlerText = "", baseClass = "") => {
 					contexts.affordances.entity(entityDef, slot).forEach(({ action, ui }) => {
@@ -10268,6 +8350,7 @@ ${assertLines}
 					context.className = "node-action node-context-actions";
 					context.dataset.command = "item.context.open";
 					context.setAttribute("aria-label", "Context actions");
+					context.title = "More actions";
 					context.textContent = "⋯";
 					wrapper.append(context);
 				}
@@ -10279,6 +8362,8 @@ ${assertLines}
 				const entityDef = model.entity(ref.kind);
 				const item = graphs.current.getItem(ref);
 				if (!entityDef || !item) return clear();
+				const bounds = entityDef.render?.bounds?.(item);
+				if (bounds && !contexts.view.isVisible(Places.Stage, bounds, 80)) return clear();
 				if (!contexts.affordances.entity(entityDef).length) return clear();
 				emit("render.view.set", {
 					place: Places.Stage,
@@ -10289,6 +8374,93 @@ ${assertLines}
 			on("render.stage.draw", draw);
 			on("render.stage.camera", draw);
 		}, { requires: ["render.stage", "graph"] });
+	}
+	//#endregion
+	//#region frontend/systems/text-layout.ts
+	var linesOf = (text) => text.split(/\r?\n/).flatMap((line) => {
+		const trimmed = line.trim();
+		return trimmed ? [trimmed] : [];
+	});
+	var estimateTextSize = (input) => {
+		const titleLines = linesOf(input.title);
+		const bodyLines = linesOf(input.description ?? "");
+		const CHAR_W = 7.2, PAD_X = 32;
+		const longest = [...titleLines, ...bodyLines].reduce((max, line) => Math.max(max, line.length), 1);
+		const maxWidth = input.maxWidth ?? 320;
+		const width = clamp$1(longest * CHAR_W + PAD_X, input.minWidth ?? 120, maxWidth);
+		const capacity = Math.max(6, Math.floor((width - PAD_X) / CHAR_W));
+		const wrappedRows = (lines) => lines.reduce((rows, line) => rows + Math.max(1, Math.ceil(line.length / capacity)), 0);
+		const titleRows = Math.max(1, wrappedRows(titleLines));
+		const bodyRows = wrappedRows(bodyLines);
+		const height = clamp$1(titleRows * 22 + bodyRows * 16 + 24, input.minHeight ?? 56, input.maxHeight ?? 280);
+		return {
+			w: Math.round(width),
+			h: Math.round(height)
+		};
+	};
+	var fitText = (text, box) => {
+		const words = text.trim().split(/\s+/).filter(Boolean);
+		const chars = Math.max(1, words.join(" ").length);
+		const lineCapacity = Math.max(8, Math.floor(box.w / 7));
+		const lines = Math.max(1, Math.ceil(chars / lineCapacity));
+		const lineHeight = 1.25;
+		const fontSize = clamp$1(Math.floor(box.h / (lines * lineHeight)), 10, 14);
+		return {
+			fontSize,
+			lineHeight,
+			lines,
+			overflow: lines * fontSize * lineHeight > box.h
+		};
+	};
+	function registerTextLayout(system) {
+		system("text.layout", (ctx) => {
+			ctx.expose("textLayout", {
+				estimate: estimateTextSize,
+				fit: fitText
+			});
+		});
+	}
+	//#endregion
+	//#region frontend/systems/node-autosize.ts
+	/** Sizes a node's box to fit its title + description (and every newline within),
+	*  so text never overflows and boxes look proportional to their content.
+	*
+	*  Auto-sizing yields to manual resize: we remember the last size we applied per
+	*  node; if the current size differs from that, the user dragged the resize
+	*  handle and we stop touching it. Text edits on an auto-sized node re-fit it. */
+	function registerNodeAutosize(system) {
+		system("node.autosize", ({ on, emit, graphs }) => {
+			const autoSized = /* @__PURE__ */ new Map();
+			const sameSize = (a, b) => !!a && !!b && a.w === b.w && a.h === b.h;
+			const fit = (node) => estimateTextSize({
+				title: node.Label?.text ?? "",
+				description: node.Description
+			});
+			const apply = (id) => {
+				const node = graphs.current.getNode(id);
+				if (!node) return;
+				const prev = autoSized.get(id);
+				if (node.Size && prev && !sameSize(node.Size, prev)) return;
+				const next = fit(node);
+				autoSized.set(id, next);
+				if (!sameSize(node.Size, next)) emit("item.update", {
+					ref: {
+						kind: "node",
+						id
+					},
+					patch: { Size: next }
+				});
+			};
+			on("graph.node.created", ({ id }) => apply(id));
+			on("graph.node.updated", ({ id, patch }) => {
+				if (patch && !("Label" in patch) && !("Description" in patch) && !("Size" in patch)) return;
+				apply(id);
+			});
+			on("graph.imported", () => {
+				autoSized.clear();
+				graphs.current.nodes().forEach((node) => autoSized.set(node.id, node.Size));
+			});
+		}, { requires: ["graph"] });
 	}
 	//#endregion
 	//#region frontend/systems/node-visuals.ts
@@ -10504,7 +8676,7 @@ ${assertLines}
 				label: collectionDef.itemLabel(item),
 				children: []
 			});
-			const renderSection = (collectionDef, roots, total, byKind) => {
+			const renderSection = (collectionDef, roots, total, byKind, rootTotal = roots.length) => {
 				const section = el("section", "outline-section");
 				section.dataset.collectionId = collectionDef.id;
 				const foldId = `outline.collection.${collectionDef.id}`;
@@ -10528,9 +8700,10 @@ ${assertLines}
 				if (!open) return section;
 				const q = query.trim().toLowerCase();
 				const list = el("div", "outline-list");
-				const rows = roots.map((root) => renderRow(root, [], byKind, 0, q)).filter((row) => !!row);
+				const rows = roots.slice(0, MAX_SECTION_ROWS).map((root) => renderRow(root, [], byKind, 0, q)).filter((row) => !!row);
 				rows.forEach((row) => list.append(row));
 				section.append(list);
+				if (!q && rootTotal > MAX_SECTION_ROWS) section.append(el("div", "outline-more", `${(rootTotal - MAX_SECTION_ROWS).toLocaleString()} more`));
 				if (!rows.length) {
 					const shortcut = commandShortcut(contexts.commands, collectionCreateCommand(collectionDef));
 					const label = collectionDef.label.toLowerCase();
@@ -10542,6 +8715,7 @@ ${assertLines}
 				return section;
 			};
 			const FLAT_KINDS = new Set(["graph", "edge"]);
+			const MAX_SECTION_ROWS = 50;
 			const PANEL_FOLD_ID = "outline.panel";
 			const renderOutline = () => {
 				const wrapper = el("div", "tool-panel outline-panel");
@@ -10555,23 +8729,30 @@ ${assertLines}
 				wrapper.append(head);
 				const body = el("div", "outline-panel-body");
 				const panel = el("section", "outline");
-				const forest = hierarchy.tree();
-				const itemKinds = new Set(hierarchy.items().map((item) => item.ref.kind));
 				const byKind = collectionsByKind();
-				const contentTotal = hierarchy.items().filter((item) => !FLAT_KINDS.has(item.ref.kind)).length;
+				const queryActive = [...searches.values()].some((query) => query.trim());
+				const nestedItemsExist = model.collections().some((def) => {
+					const collectionDef = def;
+					return collectionDef.section === false && !FLAT_KINDS.has(collectionKind(collectionDef)) && collectionDef.items(ctx).length > 0;
+				});
+				const needsTree = queryActive || nestedItemsExist;
+				const forest = needsTree ? hierarchy.tree() : [];
+				const itemKinds = needsTree ? new Set(hierarchy.items().map((item) => item.ref.kind)) : /* @__PURE__ */ new Set();
+				const contentTotal = needsTree ? hierarchy.items().filter((item) => !FLAT_KINDS.has(item.ref.kind)).length : 0;
 				let treeRendered = false;
 				model.collections().forEach((def) => {
 					const collectionDef = def;
 					if (collectionDef.section === false) return;
 					const kind = collectionKind(collectionDef);
+					const items = collectionDef.items(ctx);
 					if (FLAT_KINDS.has(kind)) {
-						const roots = itemKinds.has(kind) ? forest.filter((node) => node.ref.kind === kind) : collectionDef.items(ctx).map((item) => leafNode(collectionDef, item));
-						panel.append(renderSection(collectionDef, roots, collectionDef.items(ctx).length, byKind));
+						const roots = needsTree && itemKinds.has(kind) ? forest.filter((node) => node.ref.kind === kind) : items.slice(0, MAX_SECTION_ROWS).map((item) => leafNode(collectionDef, item));
+						panel.append(renderSection(collectionDef, roots, items.length, byKind, needsTree ? roots.length : items.length));
 					} else {
 						if (treeRendered) return;
 						treeRendered = true;
-						const roots = forest.filter((node) => !FLAT_KINDS.has(node.ref.kind));
-						panel.append(renderSection(collectionDef, roots, contentTotal, byKind));
+						const roots = needsTree ? forest.filter((node) => !FLAT_KINDS.has(node.ref.kind)) : items.slice(0, MAX_SECTION_ROWS).map((item) => leafNode(collectionDef, item));
+						panel.append(renderSection(collectionDef, roots, needsTree ? contentTotal : items.length, byKind, needsTree ? roots.length : items.length));
 					}
 				});
 				body.append(panel);
@@ -10615,6 +8796,386 @@ ${assertLines}
 		}, { requires: ["render", "graph"] });
 	}
 	//#endregion
+	//#region frontend/systems/perf-panel.ts
+	var ms = (value) => value == null || !Number.isFinite(value) ? "-" : value < 1 ? value.toFixed(2) : value.toFixed(0);
+	var selectorFor = (target) => {
+		if (!(target instanceof Element)) return "";
+		const parts = [];
+		let el = target;
+		while (el && parts.length < 4) {
+			const id = el.id ? `#${el.id}` : "";
+			const cls = [...el.classList].slice(0, 3).map((name) => `.${name}`).join("");
+			const item = el instanceof HTMLElement && el.dataset.itemKind && el.dataset.itemId ? `[${el.dataset.itemKind}:${el.dataset.itemId}]` : "";
+			parts.unshift(`${el.localName}${id}${cls}${item}`);
+			el = el.parentElement;
+		}
+		return parts.join(" > ");
+	};
+	var topInput = (inputs) => [...inputs].sort((a, b) => b.inputDelay - a.inputDelay).slice(0, 40);
+	var list = (values, sep = ", ") => values?.length ? values.join(sep) : "-";
+	var sortKey = (text) => {
+		const numeric = Number(text.replace(/,/g, "").match(/^-?\d+(?:\.\d+)?/)?.[0]);
+		return Number.isFinite(numeric) ? numeric : text.toLowerCase();
+	};
+	var makeSortable = (t) => {
+		const headers = Array.from(t.tHead?.rows[0]?.cells ?? []);
+		headers.forEach((th, index) => {
+			th.tabIndex = 0;
+			th.title = "Sort";
+			const sort = () => {
+				const dir = th.dataset.dir === "desc" ? "asc" : "desc";
+				headers.forEach((item) => {
+					item.classList.remove("is-sorted");
+					delete item.dataset.dir;
+				});
+				th.classList.add("is-sorted");
+				th.dataset.dir = dir;
+				const sign = dir === "asc" ? 1 : -1;
+				const rows = Array.from(t.tBodies[0]?.rows ?? []);
+				rows.sort((a, b) => {
+					const av = sortKey(a.cells[index]?.textContent ?? "");
+					const bv = sortKey(b.cells[index]?.textContent ?? "");
+					if (typeof av === "number" && typeof bv === "number") return sign * (av - bv);
+					return sign * String(av).localeCompare(String(bv));
+				});
+				t.tBodies[0]?.append(...rows);
+			};
+			th.onclick = sort;
+			th.onkeydown = (event) => {
+				if (event.key !== "Enter" && event.key !== " ") return;
+				event.preventDefault();
+				sort();
+			};
+		});
+	};
+	var appendRow = (parent, cells) => {
+		const row = document.createElement("tr");
+		cells.forEach((cell) => {
+			const td = document.createElement("td");
+			if (typeof cell === "string") td.textContent = cell;
+			else td.append(cell);
+			row.append(td);
+		});
+		parent.append(row);
+	};
+	var table = (headers, rows) => {
+		const wrap = document.createElement("div");
+		wrap.className = "perf-table-wrap";
+		const t = document.createElement("table");
+		t.className = "perf-table";
+		const head = document.createElement("thead");
+		const hr = document.createElement("tr");
+		headers.forEach((label) => {
+			const th = document.createElement("th");
+			th.textContent = label;
+			hr.append(th);
+		});
+		head.append(hr);
+		const body = document.createElement("tbody");
+		rows.forEach((row) => appendRow(body, row));
+		t.append(head, body);
+		makeSortable(t);
+		wrap.append(t);
+		return wrap;
+	};
+	var bar = (value, max) => {
+		const outer = document.createElement("span");
+		outer.className = "perf-bar";
+		const inner = document.createElement("span");
+		inner.style.width = `${Math.max(2, Math.min(100, max > 0 ? value / max * 100 : 0))}%`;
+		outer.append(inner);
+		return outer;
+	};
+	var renderSummary = (snap) => {
+		const inputs = snap.inputs;
+		const maxInput = Math.max(0, ...inputs.map((row) => row.inputDelay));
+		const maxDuration = Math.max(0, ...inputs.map((row) => row.duration));
+		const maxSpan = Math.max(0, ...snap.timeline.map((row) => row.duration));
+		const grid = document.createElement("div");
+		grid.className = "perf-summary";
+		[
+			["Input delay", `${ms(maxInput)} ms`],
+			["Event duration", `${ms(maxDuration)} ms`],
+			["Timeline spans", snap.timeline.length.toLocaleString()],
+			["Max span", `${ms(maxSpan)} ms`]
+		].forEach(([label, value]) => {
+			const item = document.createElement("div");
+			item.className = "perf-summary-item";
+			item.innerHTML = `<span></span><b></b>`;
+			item.querySelector("span").textContent = label;
+			item.querySelector("b").textContent = value;
+			grid.append(item);
+		});
+		return grid;
+	};
+	var renderInputs = (snap) => table([
+		"Event",
+		"Target",
+		"Delay",
+		"Processing",
+		"Presentation",
+		"Duration",
+		"Source",
+		"Matched",
+		"Candidates"
+	], topInput(snap.inputs).map((row) => [
+		row.name,
+		row.target || "-",
+		`${ms(row.inputDelay)} ms`,
+		`${ms(row.processingDuration)} ms`,
+		`${ms(row.presentationDelay)} ms`,
+		`${ms(row.duration)} ms`,
+		row.source,
+		list(row.matched),
+		list(row.candidates)
+	]));
+	var renderInputPaths = (snap) => table([
+		"Event",
+		"Delay",
+		"Source",
+		"Path"
+	], topInput(snap.inputs).map((row) => {
+		const domPath = row.path?.length ? row.path.join(" -> ") : row.target || "-";
+		const commandPath = row.matched?.length ? ` -> ${row.matched.map((id) => `Command.run.${id}`).join(" -> ")}` : "";
+		return [
+			row.name,
+			`${ms(row.inputDelay)} ms`,
+			row.source,
+			`${domPath}${commandPath}`
+		];
+	}));
+	var renderLongTasks = (snap) => table([
+		"Name",
+		"When",
+		"Duration"
+	], [...snap.longTasks].sort((a, b) => b.duration - a.duration).slice(0, 80).map((row) => [
+		row.name || "longtask",
+		`${ms(row.start)} ms`,
+		`${ms(row.duration)} ms`
+	]));
+	var renderTimeline = (snap) => {
+		const rows = snap.timeline.slice(-250);
+		const max = Math.max(1, ...rows.map((row) => row.duration));
+		const labels = new Map(snap.timeline.map((row) => [row.id, row.label]));
+		return table([
+			"Span",
+			"When",
+			"Duration",
+			"Parent",
+			"Bar"
+		], rows.map((row) => [
+			row.label,
+			`${ms(row.start)} ms`,
+			`${ms(row.duration)} ms`,
+			row.parentId ? labels.get(row.parentId) ?? String(row.parentId) : "",
+			bar(row.duration, max)
+		]));
+	};
+	var renderCallGraph = (snap) => table([
+		"From",
+		"To",
+		"Calls",
+		"Total",
+		"Max"
+	], snap.callGraph.slice(0, 80).map((edge) => [
+		edge.from,
+		edge.to,
+		edge.calls.toLocaleString(),
+		`${ms(edge.totalMs)} ms`,
+		`${ms(edge.maxMs)} ms`
+	]));
+	var renderTimings = (snap) => table([
+		"Label",
+		"Calls",
+		"Total",
+		"Avg",
+		"Max"
+	], snap.timings.slice(0, 80).map((row) => [
+		row.label,
+		row.calls.toLocaleString(),
+		`${ms(row.totalMs)} ms`,
+		`${ms(row.avgMs)} ms`,
+		`${ms(row.maxMs)} ms`
+	]));
+	var shortText = (snap) => {
+		const topInputs = topInput(snap.inputs).slice(0, 8);
+		const topLongTasks = [...snap.longTasks].sort((a, b) => b.duration - a.duration).slice(0, 8);
+		const maxInput = Math.max(0, ...snap.inputs.map((row) => row.inputDelay));
+		const maxDuration = Math.max(0, ...snap.inputs.map((row) => row.duration));
+		const maxSpan = Math.max(0, ...snap.timeline.map((row) => row.duration));
+		return [
+			`PERF ${(/* @__PURE__ */ new Date()).toISOString()}`,
+			`summary inputDelay=${ms(maxInput)}ms eventDuration=${ms(maxDuration)}ms spans=${snap.timeline.length} maxSpan=${ms(maxSpan)}ms longTasks=${snap.longTasks.length}`,
+			"inputs:",
+			...topInputs.map((row) => `- ${row.name} delay=${ms(row.inputDelay)}ms dur=${ms(row.duration)}ms proc=${ms(row.processingDuration)}ms pres=${ms(row.presentationDelay)}ms src=${row.source} target=${row.target || "-"} matched=${list(row.matched)} candidates=${list(row.candidates)}`),
+			"paths:",
+			...topInputs.map((row) => `- ${row.name}: ${row.path?.length ? row.path.join(" -> ") : row.target || "-"}${row.matched?.length ? ` -> ${row.matched.join(" -> ")}` : ""}`),
+			"timings:",
+			...snap.timings.slice(0, 10).map((row) => `- ${row.label} calls=${row.calls} total=${ms(row.totalMs)}ms max=${ms(row.maxMs)}ms avg=${ms(row.avgMs)}ms`),
+			"callGraph:",
+			...snap.callGraph.slice(0, 10).map((row) => `- ${row.from} -> ${row.to} calls=${row.calls} total=${ms(row.totalMs)}ms max=${ms(row.maxMs)}ms`),
+			"longTasks:",
+			...topLongTasks.length ? topLongTasks.map((row) => `- ${row.name || "longtask"} at=${ms(row.start)}ms dur=${ms(row.duration)}ms`) : ["- none"]
+		].join("\n");
+	};
+	var renderExport = (snap) => {
+		const wrap = document.createElement("div");
+		wrap.className = "perf-export-wrap";
+		const text = document.createElement("textarea");
+		text.className = "perf-export";
+		text.readOnly = true;
+		text.value = shortText(snap);
+		wrap.append(text);
+		return wrap;
+	};
+	function registerPerfPanel(system) {
+		system("perf.panel", (ctx) => {
+			const { on, emit, contexts, contribute, perf } = ctx;
+			let eventObserverStarted = false;
+			let longTaskObserverStarted = false;
+			const installEventTiming = () => {
+				if (eventObserverStarted || !perf.enabled()) return;
+				eventObserverStarted = true;
+				if (typeof PerformanceObserver === "undefined") return;
+				if (!(PerformanceObserver.supportedEntryTypes ?? []).includes("event")) return;
+				try {
+					new PerformanceObserver((list) => {
+						list.getEntries().forEach((entry) => {
+							const e = entry;
+							const processingStart = e.processingStart ?? e.startTime;
+							const processingEnd = e.processingEnd ?? processingStart;
+							const inputDelay = Math.max(0, processingStart - e.startTime);
+							const processingDuration = Math.max(0, processingEnd - processingStart);
+							const presentationDelay = Math.max(0, e.duration - inputDelay - processingDuration);
+							perf.recordInput({
+								source: "event-timing",
+								name: e.name,
+								target: selectorFor(e.target),
+								startTime: e.startTime,
+								processingStart,
+								processingEnd,
+								duration: e.duration,
+								inputDelay,
+								processingDuration,
+								presentationDelay,
+								interactionId: e.interactionId
+							});
+						});
+					}).observe({
+						type: "event",
+						buffered: true,
+						durationThreshold: 0
+					});
+				} catch {}
+			};
+			const installLongTasks = () => {
+				if (longTaskObserverStarted || !perf.enabled()) return;
+				longTaskObserverStarted = true;
+				if (typeof PerformanceObserver === "undefined") return;
+				if (!(PerformanceObserver.supportedEntryTypes ?? []).includes("longtask")) return;
+				try {
+					new PerformanceObserver((list) => {
+						list.getEntries().forEach((entry) => {
+							perf.recordLongTask({
+								name: entry.name,
+								start: entry.startTime,
+								duration: entry.duration
+							});
+						});
+					}).observe({
+						type: "longtask",
+						buffered: true
+					});
+				} catch {}
+			};
+			const installObservers = () => {
+				installEventTiming();
+				installLongTasks();
+			};
+			const renderPanel = () => {
+				installObservers();
+				const snap = perf.snapshot();
+				const root = document.createElement("section");
+				root.className = "perf-panel";
+				const actions = document.createElement("div");
+				actions.className = "perf-actions";
+				const refresh = document.createElement("button");
+				refresh.dataset.command = "perf.show";
+				refresh.textContent = "Refresh";
+				const copy = document.createElement("button");
+				copy.dataset.command = "perf.copy";
+				copy.textContent = "Copy Short";
+				const reset = document.createElement("button");
+				reset.dataset.command = "perf.reset";
+				reset.textContent = "Reset";
+				actions.append(refresh, copy, reset);
+				root.append(actions, renderSummary(snap));
+				[
+					["Input Events", renderInputs(snap)],
+					["Input Paths", renderInputPaths(snap)],
+					["Long Tasks", renderLongTasks(snap)],
+					["Timeline", renderTimeline(snap)],
+					["Call Graph", renderCallGraph(snap)],
+					["Timing Totals", renderTimings(snap)],
+					["Share Text", renderExport(snap)]
+				].forEach(([title, body], i) => {
+					const details = document.createElement("details");
+					details.open = i < 4;
+					const summary = document.createElement("summary");
+					summary.textContent = title;
+					details.append(summary, body);
+					root.append(details);
+				});
+				return root;
+			};
+			contexts.commands.register([
+				{
+					id: "perf.show",
+					label: "Show: Perf",
+					group: "dx",
+					available: () => perf.enabled()
+				},
+				{
+					id: "perf.reset",
+					label: "Reset perf recorder",
+					group: "dx",
+					hidden: true,
+					available: () => perf.enabled()
+				},
+				{
+					id: "perf.copy",
+					label: "Copy perf summary",
+					group: "dx",
+					hidden: true,
+					available: () => perf.enabled()
+				}
+			]);
+			if (perf.enabled()) contribute({
+				surface: "top",
+				command: "perf.show",
+				kind: "button",
+				text: "Perf",
+				label: "Show perf recorder",
+				order: 120
+			});
+			on("app.start", installObservers);
+			on("perf.show", () => emit("modal.open", {
+				title: "Perf",
+				visual: "perf",
+				body: renderPanel
+			}));
+			on("perf.copy", () => {
+				const text = shortText(perf.snapshot());
+				navigator.clipboard?.writeText(text).catch(() => void 0);
+				console.info(text);
+			});
+			on("perf.reset", () => {
+				perf.reset();
+				emit("perf.show");
+			});
+		}, { requires: ["modal"] });
+	}
+	//#endregion
 	//#region frontend/systems/render.ts
 	/** render owns the shell + slot flush + redraw scheduler — never the canvas paint.
 	*  Stage drawing lives in `render.stage`, which listens for `render.stage.draw`.
@@ -10625,6 +9186,7 @@ ${assertLines}
 			const { on, emit, bus, contexts } = ctx;
 			const root = mountRoot();
 			const views = /* @__PURE__ */ new Map();
+			const mounted = /* @__PURE__ */ new Map();
 			const attr = (value) => value.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
 			const itemSelector = (ref) => {
 				const parent = itemParentAttr(ref.parent);
@@ -10636,24 +9198,55 @@ ${assertLines}
 				const active = activeElement();
 				if (active?.closest("[data-item-kind][data-item-id]") && typeof active.blur === "function") active.blur();
 			};
-			const flush = (place) => {
+			const nodeOf = (view) => typeof view === "function" ? view() : view;
+			const mountedFor = (place) => mounted.get(place) ?? mounted.set(place, /* @__PURE__ */ new Map()).get(place);
+			const mountView = (place, key, view) => {
+				const slot = contexts.places.el(place);
+				if (!slot) return;
+				const live = mountedFor(place);
+				const previous = live.get(key);
+				const next = nodeOf(view);
+				if (previous === next) {
+					if (previous.parentNode !== slot) slot.append(previous);
+					return;
+				}
+				if (previous?.parentNode) previous.parentNode.replaceChild(next, previous);
+				else slot.append(next);
+				live.set(key, next);
+			};
+			const remount = (place) => {
 				const slot = contexts.places.el(place), parts = views.get(place);
 				if (!slot || !parts) return;
-				slot.replaceChildren();
-				[...parts.values()].forEach((view) => appendRenderable(slot, view));
+				const live = mountedFor(place);
+				parts.forEach((view, key) => {
+					const node = live.get(key) ?? nodeOf(view);
+					live.set(key, node);
+					slot.append(node);
+				});
 			};
 			on("render.shell", () => {
 				root.replaceChildren(contexts.templates.clone("shell"));
 				Object.values(Places).forEach((place) => contexts.places.set(place, root.querySelector(`[data-place="${place}"]`)));
-				Object.values(Places).forEach(flush);
+				Object.values(Places).forEach(remount);
 			});
 			on("render.view.set", ({ place, key = "default", view }) => {
 				(views.get(place) || views.set(place, /* @__PURE__ */ new Map()).get(place)).set(key, view);
-				flush(place);
+				mountView(place, key, view);
 			});
 			on("render.view.clear", ({ place, key }) => {
-				key ? views.get(place)?.delete(key) : views.delete(place);
-				flush(place);
+				if (key) {
+					const parts = views.get(place);
+					if (!parts?.has(key)) return;
+					parts.delete(key);
+					const previous = mounted.get(place)?.get(key);
+					previous?.parentNode?.removeChild(previous);
+					mounted.get(place)?.delete(key);
+				} else {
+					if (!views.has(place)) return;
+					views.delete(place);
+					mounted.get(place)?.forEach((node) => node.parentNode?.removeChild(node));
+					mounted.delete(place);
+				}
 			});
 			const dirty = /* @__PURE__ */ new Set();
 			const dirtyItems = /* @__PURE__ */ new Map();
@@ -10696,12 +9289,23 @@ ${assertLines}
 			const flushDirty = () => {
 				scheduled = false;
 				flushes++;
-				if (dirty.has("nodes")) emit("render.stage.draw", {
-					full: fullNodes,
-					refs: [...dirtyItems.values()]
-				});
-				else if (dirty.has("camera")) emit("render.stage.camera");
-				if (dirty.has("outline")) emit("outline.draw");
+				ctx.perf.count("Render.flush");
+				ctx.perf.sample("Render.flush.dirtyScopes", dirty.size);
+				if (dirty.has("nodes")) {
+					ctx.perf.count("Render.flush.nodes");
+					ctx.perf.sample("Render.flush.refs", dirtyItems.size);
+					emit("render.stage.draw", {
+						full: fullNodes,
+						refs: [...dirtyItems.values()]
+					});
+				} else if (dirty.has("camera")) {
+					ctx.perf.count("Render.flush.camera");
+					emit("render.stage.camera");
+				}
+				if (dirty.has("outline")) {
+					ctx.perf.count("Render.flush.outline");
+					emit("outline.draw");
+				}
 				dirty.clear();
 				dirtyItems.clear();
 				fullNodes = false;
@@ -10714,6 +9318,13 @@ ${assertLines}
 				requestAnimationFrame(flushDirty);
 			};
 			const applyScope = (scope) => scope === "both" ? mark("nodes", "outline") : mark(scope);
+			const scopeForEvent = (name, data) => {
+				if (name === "graph.node.updated") {
+					const patch = data?.patch;
+					if (patch && !("Label" in patch)) return "nodes";
+				}
+				return factScope(name);
+			};
 			ctx.expose("render", { flushes: () => flushes });
 			on("app.start", () => mark("nodes"));
 			on("focus.item.focused", (ref) => {
@@ -10721,7 +9332,7 @@ ${assertLines}
 				if (!ref) pendingBlur = true;
 			});
 			bus.onAny(({ name, data }) => {
-				const scope = factScope(name);
+				const scope = scopeForEvent(name, data);
 				if (!scope) return;
 				applyScope(scope);
 				if (scope === "nodes" || scope === "both") {
@@ -10857,37 +9468,25 @@ ${assertLines}
 			const CULL_MARGIN = 200;
 			const visibleNodeIds = () => {
 				const rect = contexts.view.visibleRect(Places.Stage, CULL_MARGIN);
-				return rect ? new Set(graphs.current.nodeIdsInRect(rect)) : null;
+				if (!rect) return null;
+				const ids = graphs.current.nodeIdsInRect(rect);
+				ctx.perf.sample("Render.stage.visibleNodeCandidates", ids.length);
+				return new Set(ids);
 			};
 			/** Everything that should currently be on the stage, keyed by element key. */
 			const collectDesired = (visible) => {
 				const desired = /* @__PURE__ */ new Map();
-				const nodeIds = /* @__PURE__ */ new Set();
-				const nodeDef = model.entity("node");
-				if (nodeDef?.render) (visible ? [...visible].map((id) => graphs.current.getNode(id)).filter((n) => !!n) : graphs.current.nodes()).forEach((node) => {
-					const ref = refOf("node", node);
-					if (!ref || hiddenByCollapsedAncestor(ref)) return;
-					desired.set(keyOf(ref), {
-						ref,
-						def: nodeDef,
-						item: node
-					});
-					nodeIds.add(ref.id);
-				});
-				const edgeDef = model.entity("edge");
-				if (edgeDef?.render) (visible ? [...nodeIds].flatMap((id) => graphs.current.edgesOf(id)) : graphs.current.edges()).forEach((edge) => {
-					const ref = edgeRef(edge.id);
-					desired.set(keyOf(ref), {
-						ref,
-						def: edgeDef,
-						item: edge
-					});
+				const hidden = (r) => hiddenByCollapsedAncestor({
+					kind: r.kind,
+					id: r.id
 				});
 				model.entities().forEach((def) => {
-					if (def.kind === "node" || def.kind === "edge" || !def.render) return;
-					graphs.current.itemsOfKind(def.kind).forEach((item) => {
+					const renderer = def.render;
+					if (!renderer) return;
+					(renderer.collect ? renderer.collect(graphs.current, hidden, visible) : graphs.current.itemsOfKind(def.kind)).forEach((item) => {
 						const ref = refOf(def.kind, item);
-						if (!ref || hiddenByCollapsedAncestor(ref)) return;
+						if (!ref) return;
+						if (def.kind !== "edge" && hiddenByCollapsedAncestor(ref)) return;
 						desired.set(keyOf(ref), {
 							ref,
 							def,
@@ -10895,6 +9494,7 @@ ${assertLines}
 						});
 					});
 				});
+				ctx.perf.sample("Render.stage.desiredItems", desired.size);
 				return desired;
 			};
 			/** Reconcile the DOM to the desired set. `rebuild` makes a fresh layer (first
@@ -10912,23 +9512,30 @@ ${assertLines}
 				}
 				layer.style.transform = layerTransform(contexts.view.get());
 				const desired = collectDesired(visibleNodeIds());
+				let removed = 0;
+				let inserted = 0;
 				[...els.keys()].forEach((k) => {
 					if (!desired.has(k)) {
 						els.get(k)?.remove();
 						els.delete(k);
 						sigCache.delete(k);
+						removed++;
 					}
 				});
 				desired.forEach(({ ref, def, item }, k) => {
 					if (els.has(k)) return;
-					const el = def.render.draw(item, renderCtxFor(def, item));
+					const el = ctx.perf.measure(`Render.entity.${def.kind}.draw`, () => def.render.draw(item, renderCtxFor(def, item)));
 					if (el) {
 						stableZ(ref, el);
 						targetLayer(def.render).append(el);
 						els.set(k, el);
 						cacheSig(k, def, item);
+						inserted++;
 					}
 				});
+				ctx.perf.count("Render.stage.itemsInserted", inserted);
+				ctx.perf.count("Render.stage.itemsRemoved", removed);
+				ctx.perf.sample("Render.stage.liveItems", els.size);
 				if (fresh) emit("render.view.set", {
 					place: Places.Stage,
 					key: "nodes",
@@ -10945,7 +9552,8 @@ ${assertLines}
 				const renderer = entityDef?.render;
 				const item = renderer ? graphs.current.getItem(ref) : void 0;
 				const culled = ref.kind === "node" && !!visible && !visible.has(ref.id);
-				const hidden = ref.kind !== "edge" && hiddenByCollapsedAncestor(ref) || culled;
+				const edgeCulled = ref.kind === "edge" && !!visible && !!item && !visible.has(item.From ?? "") && !visible.has(item.To ?? "");
+				const hidden = ref.kind !== "edge" && hiddenByCollapsedAncestor(ref) || culled || edgeCulled;
 				if (!renderer || !item || hidden) {
 					existing?.remove();
 					els.delete(k);
@@ -10956,7 +9564,7 @@ ${assertLines}
 					renderer.reposition(existing, item);
 					return;
 				}
-				const fresh = renderer.draw(item, renderCtxFor(entityDef, item));
+				const fresh = ctx.perf.measure(`Render.entity.${ref.kind}.draw`, () => renderer.draw(item, renderCtxFor(entityDef, item)));
 				if (!fresh) {
 					existing?.remove();
 					els.delete(k);
@@ -10996,39 +9604,62 @@ ${assertLines}
 					});
 				});
 				const visible = visibleNodeIds();
+				ctx.perf.sample("Render.stage.patchRefs", refs.length);
+				ctx.perf.sample("Render.stage.patchItems", todo.size);
 				todo.forEach((ref) => patchOne(ref, visible));
+				ctx.perf.sample("Render.stage.liveItems", els.size);
 			};
-			const drawStageOverlays = () => emit("render.view.set", {
-				place: Places.Stage,
-				key: "overlays",
-				view: () => {
-					const layer = document.createElement("div");
-					layer.className = "item-overlays";
-					contexts.decorations.overlays.all().forEach((overlay) => {
-						const anchor = contexts.hierarchy.anchor(overlay.ref);
-						if (!anchor) return;
-						const screen = contexts.view.spaceToScreen(anchor);
-						const el = document.createElement("div");
-						el.className = "item-overlay";
-						if (overlay.className) el.classList.add(...overlay.className.split(/\s+/).filter(Boolean));
-						tagItem(el, overlay.ref);
-						if (overlay.id) el.dataset.overlayId = overlay.id;
-						el.textContent = overlay.text;
-						el.style.left = `${screen.x}px`;
-						el.style.top = `${screen.y}px`;
-						layer.append(el);
-					});
-					return layer;
-				}
-			});
-			const drawEmptyState = () => {
-				if (model.entities().some((entityDef) => entityDef.render && graphs.current.itemsOfKind(entityDef.kind).length > 0)) {
-					emit("render.view.clear", {
-						place: Places.Stage,
-						key: "empty"
-					});
+			let overlaysMounted = false;
+			const drawStageOverlays = () => {
+				const overlays = contexts.decorations.overlays.all();
+				if (!overlays.length) {
+					if (overlaysMounted) {
+						overlaysMounted = false;
+						emit("render.view.clear", {
+							place: Places.Stage,
+							key: "overlays"
+						});
+					}
 					return;
 				}
+				overlaysMounted = true;
+				emit("render.view.set", {
+					place: Places.Stage,
+					key: "overlays",
+					view: () => {
+						const layer = document.createElement("div");
+						layer.className = "item-overlays";
+						overlays.forEach((overlay) => {
+							const anchor = contexts.hierarchy.anchor(overlay.ref);
+							if (!anchor) return;
+							const screen = contexts.view.spaceToScreen(anchor);
+							const el = document.createElement("div");
+							el.className = "item-overlay";
+							if (overlay.className) el.classList.add(...overlay.className.split(/\s+/).filter(Boolean));
+							tagItem(el, overlay.ref);
+							if (overlay.id) el.dataset.overlayId = overlay.id;
+							el.textContent = overlay.text;
+							el.style.left = `${screen.x}px`;
+							el.style.top = `${screen.y}px`;
+							layer.append(el);
+						});
+						return layer;
+					}
+				});
+			};
+			let emptyMounted = false;
+			const drawEmptyState = () => {
+				if (model.entities().some((entityDef) => entityDef.render && graphs.current.itemsOfKind(entityDef.kind).length > 0)) {
+					if (emptyMounted) {
+						emptyMounted = false;
+						emit("render.view.clear", {
+							place: Places.Stage,
+							key: "empty"
+						});
+					}
+					return;
+				}
+				emptyMounted = true;
 				emit("render.view.set", {
 					place: Places.Stage,
 					key: "empty",
@@ -11048,12 +9679,22 @@ ${assertLines}
 				drawStageOverlays();
 			};
 			on("render.stage.draw", ({ full, refs }) => {
-				if (full || !refs?.length || !layer) drawAll();
-				else patchItems(refs);
-				drawStageOverlays();
-				drawEmptyState();
+				ctx.perf.measure("Render.stage.draw", () => {
+					if (full || !refs?.length || !layer) {
+						ctx.perf.count("Render.stage.fullDraw");
+						drawAll();
+					} else {
+						ctx.perf.count("Render.stage.patchDraw");
+						patchItems(refs);
+					}
+					drawStageOverlays();
+					drawEmptyState();
+				});
 			});
-			on("render.stage.camera", applyCamera);
+			on("render.stage.camera", () => {
+				ctx.perf.count("Render.stage.cameraDraw");
+				ctx.perf.measure("Render.stage.camera", applyCamera);
+			});
 			on("drag.item.start", () => contexts.places.el(Places.Stage)?.classList.add("dragging"));
 			on("drag.item.end", () => contexts.places.el(Places.Stage)?.classList.remove("dragging"));
 		}, { requires: ["render", "graph"] });
@@ -11207,55 +9848,385 @@ ${assertLines}
 		}, { requires: ["input", "render"] });
 	}
 	//#endregion
-	//#region frontend/systems/text-layout.ts
-	var linesOf = (text) => text.split(/\r?\n/).flatMap((line) => {
-		const trimmed = line.trim();
-		return trimmed ? [trimmed] : [];
-	});
-	var estimateTextSize = (input) => {
-		const titleLines = linesOf(input.title);
-		const bodyLines = linesOf(input.description ?? "");
-		const width = clamp$1([...titleLines, ...bodyLines].reduce((max, line) => Math.max(max, line.length), 1) * 7.2 + 36, input.minWidth ?? 112, input.maxWidth ?? 360);
-		const height = clamp$1(titleLines.length * 20 + bodyLines.length * 15 + 28, input.minHeight ?? 56, input.maxHeight ?? 260);
-		return {
-			w: Math.round(width),
-			h: Math.round(height)
-		};
-	};
-	var fitText = (text, box) => {
-		const words = text.trim().split(/\s+/).filter(Boolean);
-		const chars = Math.max(1, words.join(" ").length);
-		const lineCapacity = Math.max(8, Math.floor(box.w / 7));
-		const lines = Math.max(1, Math.ceil(chars / lineCapacity));
-		const lineHeight = 1.25;
-		const fontSize = clamp$1(Math.floor(box.h / (lines * lineHeight)), 10, 14);
-		return {
-			fontSize,
-			lineHeight,
-			lines,
-			overflow: lines * fontSize * lineHeight > box.h
-		};
-	};
-	function registerTextLayout(system) {
-		system("text.layout", (ctx) => {
-			ctx.expose("textLayout", {
-				estimate: estimateTextSize,
-				fit: fitText
-			});
+	//#region frontend/systems/share.ts
+	var bytesToBase64Url = (bytes) => {
+		let binary = "";
+		bytes.forEach((byte) => {
+			binary += String.fromCharCode(byte);
 		});
+		return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+	};
+	var base64UrlToBytes = (value) => {
+		const padded = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
+		const binary = atob(padded);
+		return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+	};
+	var streamBytes = async (bytes, transform, mode) => {
+		const stream = new (mode === "compress" ? CompressionStream : DecompressionStream)(transform);
+		const writer = stream.writable.getWriter();
+		writer.write(bytes);
+		writer.close();
+		const reader = stream.readable.getReader();
+		const chunks = [];
+		let size = 0;
+		for (;;) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			chunks.push(value);
+			size += value.length;
+		}
+		const out = new Uint8Array(size);
+		let offset = 0;
+		for (const chunk of chunks) {
+			out.set(chunk, offset);
+			offset += chunk.length;
+		}
+		return out;
+	};
+	var deflate = (bytes) => streamBytes(bytes, "deflate-raw", "compress");
+	var inflateRaw = (bytes) => streamBytes(bytes, "deflate-raw", "decompress");
+	var inflateZlib = (bytes) => streamBytes(bytes, "deflate", "decompress");
+	var toCompact = (snapshot) => ({
+		v: 3,
+		n: snapshot.nodes.map((node) => [
+			node.id,
+			node.Label?.text ?? node.id,
+			node.NodeType ?? "text",
+			Math.round(node.Position?.x ?? 0),
+			Math.round(node.Position?.y ?? 0),
+			Math.round(node.Size?.w ?? 200),
+			Math.round(node.Size?.h ?? 120),
+			node.Description || void 0
+		]),
+		e: snapshot.edges.map((edge) => [
+			edge.id,
+			edge.From,
+			edge.To,
+			edge.EdgeKind || void 0,
+			edge.Label?.text || void 0
+		])
+	});
+	var fromCompact = (compact) => ({
+		nodes: compact.n.map(([id, title, NodeType, x, y, w, h, Description]) => ({
+			id,
+			Label: { text: title },
+			NodeType,
+			Position: {
+				x,
+				y
+			},
+			Size: {
+				w,
+				h
+			},
+			...Description ? { Description } : {}
+		})),
+		edges: compact.e.map(([id, From, To, EdgeKind, label]) => ({
+			id,
+			From,
+			To,
+			...EdgeKind ? { EdgeKind } : {},
+			...label ? { Label: { text: label } } : {}
+		}))
+	});
+	/** Compressed graph payload for `?g=`. Prefixed with `~` so the decoder can tell
+	*  it apart from the legacy uncompressed base64-JSON form (backward compatible). */
+	var encodeGraph = async (snapshot) => {
+		return "~" + bytesToBase64Url(await deflate(new TextEncoder().encode(JSON.stringify(toCompact(snapshot)))));
+	};
+	var decodeGraph = async (encoded) => {
+		try {
+			if (encoded.startsWith("~")) {
+				const bytes = await inflateRaw(base64UrlToBytes(encoded.slice(1)));
+				return fromCompact(JSON.parse(new TextDecoder().decode(bytes)));
+			}
+			const raw = JSON.parse(new TextDecoder().decode(base64UrlToBytes(encoded)));
+			if (!Array.isArray(raw.n) || !Array.isArray(raw.e)) return null;
+			return fromCompact(raw);
+		} catch {
+			return null;
+		}
+	};
+	var mermaidLivePayload = (link) => {
+		const hash = link.includes("#") ? link.slice(link.indexOf("#") + 1) : link;
+		const m = /(pako|base64):([A-Za-z0-9\-_+/=]+)/.exec(hash);
+		return m ? {
+			kind: m[1],
+			data: m[2]
+		} : null;
+	};
+	var decodeMermaidLive = async (link) => {
+		const payload = mermaidLivePayload(link);
+		if (!payload) return null;
+		try {
+			const bytes = base64UrlToBytes(payload.data);
+			const json = payload.kind === "pako" ? new TextDecoder().decode(await inflateZlib(bytes)) : new TextDecoder().decode(bytes);
+			const parsed = JSON.parse(json);
+			return typeof parsed.code === "string" ? parsed.code : null;
+		} catch {
+			return null;
+		}
+	};
+	var HTML_ENTITIES = {
+		"&gt;": ">",
+		"&lt;": "<",
+		"&amp;": "&",
+		"&quot;": "\"",
+		"&#39;": "'",
+		"&nbsp;": " ",
+		"#quot;": "\""
+	};
+	var cleanLabel = (raw) => {
+		let s = raw.trim().replace(/^`+|`+$/g, "").trim();
+		s = s.replace(/<\s*br\s*\/?>/gi, "\n").replace(/<\/(h[1-6]|p|li|ul|ol|div)>/gi, "\n").replace(/<li[^>]*>/gi, "\n- ").replace(/<[^>]+>/g, "");
+		s = s.replace(/&#\d+;|#quot;|&[a-z]+;/gi, (m) => HTML_ENTITIES[m.toLowerCase()] ?? HTML_ENTITIES[m] ?? m);
+		return s.split("\n").map((l) => l.trim()).filter(Boolean).join("\n");
+	};
+	var splitLabel = (raw) => {
+		const lines = cleanLabel(raw).split("\n");
+		return {
+			title: lines[0] ?? "",
+			description: lines.slice(1).join("\n") || void 0
+		};
+	};
+	var SHAPE_CLOSE = {
+		"[": "]",
+		"(": ")",
+		"{": "}",
+		">": "]"
+	};
+	var IDENT = /[A-Za-z0-9_.-]/;
+	var parseNode = (s, start) => {
+		let i = start;
+		while (i < s.length && /\s/.test(s[i])) i++;
+		const idStart = i;
+		while (i < s.length && IDENT.test(s[i])) i++;
+		if (i === idStart) return null;
+		const id = s.slice(idStart, i);
+		const open = s[i];
+		if (open && SHAPE_CLOSE[open]) {
+			const close = SHAPE_CLOSE[open];
+			let depth = 0, inQuote = false, j = i;
+			for (; j < s.length; j++) {
+				const ch = s[j];
+				if (ch === "\"") inQuote = !inQuote;
+				else if (!inQuote && (ch === open || open === "(" && ch === "(")) depth++;
+				else if (!inQuote && ch === close) {
+					depth--;
+					if (depth === 0) {
+						j++;
+						break;
+					}
+				}
+			}
+			return {
+				id,
+				label: s.slice(i, j).replace(/^[[({>]+/, "").replace(/[\])}]+$/, "").replace(/^"|"$/g, ""),
+				end: j
+			};
+		}
+		return {
+			id,
+			end: i
+		};
+	};
+	var LINK = /^\s*(?:--+\s*(?:"((?:[^"]|\n)*?)"|([^|>\n]*?))\s*)?(<--+>|--+>|--+|-\.-+>|-\.-+|==+>|==+|--[xo])\s*(?:\|\s*(?:"((?:[^"]|\n)*?)"|([^|]*))\s*\|)?/;
+	var parseMermaid = (source) => {
+		let src = source.replace(/^﻿/, "");
+		src = src.replace(/^\s*---[\s\S]*?---\s*/, "");
+		const statements = [];
+		let depth = 0, inQuote = false, buf = "";
+		for (const ch of src) {
+			if (ch === "\"") {
+				inQuote = !inQuote;
+				buf += ch;
+				continue;
+			}
+			if (!inQuote) {
+				if (ch === "[" || ch === "(" || ch === "{") depth++;
+				else if (ch === "]" || ch === ")" || ch === "}") depth = Math.max(0, depth - 1);
+				if ((ch === "\n" || ch === ";") && depth === 0) {
+					statements.push(buf);
+					buf = "";
+					continue;
+				}
+			}
+			buf += ch;
+		}
+		statements.push(buf);
+		const SKIP = /^\s*(flowchart|graph|sequenceDiagram|subgraph|end\b|classDef|class\s|style\s|linkStyle|click\s|direction\s|%%|title:|accTitle|accDescr)/;
+		const nodes = /* @__PURE__ */ new Map();
+		const edges = [];
+		const note = (id, label) => {
+			const existing = nodes.get(id);
+			if (!existing) nodes.set(id, {
+				id,
+				label
+			});
+			else if (label && !existing.label) existing.label = label;
+		};
+		for (const stmt of statements) {
+			const line = stmt.trim();
+			if (!line || SKIP.test(line)) continue;
+			let cur = parseNode(stmt, 0);
+			if (!cur) continue;
+			note(cur.id, cur.label);
+			let cursor = cur.end;
+			while (cursor < stmt.length) {
+				const rest = stmt.slice(cursor);
+				const link = LINK.exec(rest);
+				if (!link) break;
+				const next = parseNode(stmt, cursor + link[0].length);
+				if (!next) break;
+				note(next.id, next.label);
+				const label = link[1] ?? link[2] ?? link[4] ?? link[5];
+				edges.push({
+					from: cur.id,
+					to: next.id,
+					label: label?.trim() || void 0
+				});
+				cur = next;
+				cursor = next.end;
+			}
+		}
+		return {
+			nodes: [...nodes.values()],
+			edges
+		};
+	};
+	/** mermaid text (or link) -> snapshot with a simple grid layout so it lands
+	*  laid-out; caller fits + tidies. Returns null when nothing parseable. */
+	var mermaidToSnapshot = async (input) => {
+		const source = mermaidLivePayload(input) ? await decodeMermaidLive(input) : input;
+		if (!source) return null;
+		const { nodes, edges } = parseMermaid(source);
+		if (!nodes.length) return null;
+		const cols = Math.max(1, Math.ceil(Math.sqrt(nodes.length)));
+		const CW = 300, CH = 200;
+		return {
+			nodes: nodes.map((node, i) => {
+				const { title, description } = splitLabel(node.label ?? node.id);
+				return {
+					id: node.id,
+					Label: { text: title || node.id },
+					NodeType: "text",
+					Position: {
+						x: i % cols * CW,
+						y: Math.floor(i / cols) * CH
+					},
+					Size: {
+						w: 220,
+						h: 120
+					},
+					...description ? { Description: description } : {}
+				};
+			}),
+			edges: edges.map((edge, i) => ({
+				id: `m-e-${i}`,
+				From: edge.from,
+				To: edge.to,
+				EdgeKind: "sync",
+				...edge.label ? { Label: { text: cleanLabel(edge.label) } } : {}
+			}))
+		};
+	};
+	var looksLikeMermaid = (text) => /(^|\n)\s*(flowchart|graph\s+(TD|TB|BT|LR|RL))/i.test(text) || !!mermaidLivePayload(text) || /-->|---|-\.->|==>/.test(text) && /[A-Za-z0-9_]/.test(text);
+	function registerShare(system) {
+		system("share", ({ on, emit, contexts, graphs }) => {
+			contexts.commands.register([
+				{
+					id: "graph.share.copy",
+					label: "Copy share link",
+					group: "graph"
+				},
+				{
+					id: "graph.import.paste",
+					label: "Import graph from clipboard",
+					group: "graph"
+				},
+				{
+					id: "graph.import.mermaid.paste-event",
+					label: "Import pasted mermaid graph",
+					event: "graph.import.mermaid",
+					group: "graph",
+					hidden: true,
+					input: {
+						on: "paste",
+						global: true,
+						prevent: true,
+						when: (event) => {
+							const target = event.target;
+							if (target && (target.isContentEditable || /^(INPUT|TEXTAREA)$/.test(target.tagName))) return false;
+							const text = event.clipboardData?.getData("text") ?? "";
+							return !!text && looksLikeMermaid(text);
+						}
+					},
+					payload: ({ event }) => ({ source: event.clipboardData?.getData("text") ?? "" })
+				}
+			]);
+			const importSnapshot = (snapshot, tidy = false) => {
+				emit("graph.import.snapshot", snapshot);
+				if (tidy) emit("layout.apply.tidy");
+				emit("view.fit.all");
+			};
+			on("graph.share.copy", () => {
+				(async () => {
+					const encoded = await encodeGraph(graphs.current.snapshot());
+					const url = new URL(location.href);
+					url.hash = "";
+					url.searchParams.delete("in");
+					url.searchParams.set("g", encoded);
+					await navigator.clipboard?.writeText?.(url.toString()).catch(() => {});
+					emit("graph.shared", { url: url.toString() });
+					emit("app.notice", { message: "Share link copied." });
+				})();
+			});
+			on("graph.import.mermaid", ({ source }) => {
+				(async () => {
+					const snapshot = await mermaidToSnapshot(source);
+					if (!snapshot) {
+						emit("app.notice", {
+							message: "Could not read a mermaid graph from that.",
+							level: "warn"
+						});
+						return;
+					}
+					importSnapshot(snapshot, true);
+					emit("app.notice", { message: `Imported ${snapshot.nodes.length} nodes from mermaid.` });
+				})();
+			});
+			on("graph.import.paste", () => {
+				(async () => {
+					const text = await navigator.clipboard?.readText?.().catch(() => "");
+					if (text) emit("graph.import.mermaid", { source: text });
+				})();
+			});
+			const bootFromUrl = () => {
+				const params = new URLSearchParams(location.search);
+				const g = params.get("g");
+				const incoming = params.get("in");
+				if (g) {
+					decodeGraph(g).then((snapshot) => {
+						if (snapshot) importSnapshot(snapshot);
+						else emit("app.notice", {
+							message: "Share link graph could not be decoded.",
+							level: "warn"
+						});
+					});
+					return;
+				}
+				if (incoming) emit("graph.import.mermaid", { source: incoming });
+			};
+			on("app.start", bootFromUrl);
+		}, { requires: ["graph"] });
 	}
 	//#endregion
 	//#region frontend/systems/tool-panel.ts
 	var TOP_PANEL_ID = "top";
-	var TOP_PANEL_FOLD_ID = "shell.top";
-	var LEFT_PANEL_FOLD_ID = "outline.panel";
 	var ZEN_FOLD_ID = "shell.zen";
 	function registerToolPanel(system) {
 		system("tool.panel", ({ on, emit, contexts, declarePanel }) => {
-			const positions = new Map([[TOP_PANEL_ID, {
-				x: 12,
-				y: 12
-			}]]);
+			const positions = /* @__PURE__ */ new Map();
 			const mounted = /* @__PURE__ */ new Set();
 			let drag = null;
 			const keyOf = (id) => `tool-panel:${id}`;
@@ -11279,16 +10250,12 @@ ${assertLines}
 				};
 			};
 			const panelPosition = (panel) => positions.get(panel.id) ?? anchorPosition(panel);
-			const isCollapsed = (panel) => {
-				const folded = panel.foldId ? contexts.fold.folded(panel.foldId) : false;
-				return panel.id === TOP_PANEL_ID ? folded || contexts.fold.folded(ZEN_FOLD_ID) : folded;
-			};
+			const isCollapsed = (panel) => panel.foldId ? contexts.fold.folded(panel.foldId) : false;
 			const buttonsFor = (panelId) => contexts.affordances.system("top").filter((aff) => (aff.panel ?? TOP_PANEL_ID) === panelId);
 			declarePanel({
 				id: TOP_PANEL_ID,
-				anchor: "top-left",
-				movable: true,
-				foldId: TOP_PANEL_FOLD_ID,
+				anchor: "top-center",
+				movable: false,
 				layout: "toolbar",
 				order: 0
 			});
@@ -11365,30 +10332,36 @@ ${assertLines}
 				btn.textContent = collapsed ? "▾" : "▴";
 				return btn;
 			};
-			const leftPanelToggle = () => {
-				const folded = !contexts.fold.isOpen(LEFT_PANEL_FOLD_ID, true);
-				const btn = document.createElement("button");
-				btn.type = "button";
-				btn.className = "icon-button hamburger";
-				btn.dataset.foldId = LEFT_PANEL_FOLD_ID;
-				btn.setAttribute("aria-expanded", folded ? "false" : "true");
-				btn.setAttribute("aria-label", folded ? "Show panel" : "Hide panel");
-				btn.textContent = "☰";
-				return btn;
-			};
 			const addButton = (parent, aff) => {
 				const cmd = contexts.commands.get(aff.command);
 				if (cmd?.available && !cmd.available()) return;
 				const button = buttonFor(aff.command, aff.text ?? aff.command, aff.label);
+				const shortcut = commandShortcut(contexts.commands, aff.command);
+				if (shortcut) button.title = shortcut;
 				if (aff.className) button.classList.add(...aff.className.split(/\s+/).filter(Boolean));
 				parent.append(button);
+			};
+			const groupTarget = (start, groups, group) => {
+				if (!group) return start;
+				let el = groups.get(group);
+				if (!el) {
+					el = document.createElement("div");
+					el.className = "tool-group";
+					el.dataset.group = group;
+					start.append(el);
+					groups.set(group, el);
+				}
+				return el;
 			};
 			const fillToolbar = (panel, section) => {
 				const toolbar = contexts.templates.clone("toolbar");
 				const start = contexts.templates.slot(toolbar, "start");
 				const end = contexts.templates.slot(toolbar, "end");
-				start.append(leftPanelToggle());
-				buttonsFor(panel.id).forEach((aff) => addButton(aff.slot === Slots.End ? end : start, aff));
+				const groups = /* @__PURE__ */ new Map();
+				buttonsFor(panel.id).forEach((aff) => {
+					if (aff.slot === Slots.End) addButton(end, aff);
+					else addButton(groupTarget(start, groups, aff.group), aff);
+				});
 				section.append(toolbar);
 			};
 			const fillStack = (panel, section) => {
@@ -11477,7 +10450,7 @@ ${assertLines}
 				if (surface === "top") drawPanels();
 			});
 			on("fold.changed", ({ id }) => {
-				if (id === ZEN_FOLD_ID || id === LEFT_PANEL_FOLD_ID || panels().some((p) => p.foldId === id)) drawPanels();
+				if (id === ZEN_FOLD_ID || panels().some((p) => p.foldId === id)) drawPanels();
 			});
 			on("debug.enabled.changed", drawPanels);
 			on("debug.recording.changed", drawPanels);
@@ -11886,8 +10859,32 @@ ${assertLines}
 	function registerViewPan(system) {
 		system("view.pan", ({ on, emit, contexts }) => {
 			let pan = null;
+			let pending = null;
+			let scheduled = false;
 			const stageSelector = `[data-place="${Places.Stage}"]`;
 			const commit = () => emit("view.changed", contexts.view.get());
+			const setViewFor = (pointer) => {
+				if (!pan) return;
+				contexts.view.set({
+					x: pan.view.x - (pointer.x - pan.pointer.x) / pan.view.scale,
+					y: pan.view.y - (pointer.y - pan.pointer.y) / pan.view.scale
+				});
+			};
+			const applyPending = () => {
+				scheduled = false;
+				if (!pan || !pending) return;
+				const pointer = pending;
+				pending = null;
+				setViewFor(pointer);
+				commit();
+			};
+			const scheduleMove = (pointer) => {
+				pending = pointer;
+				setViewFor(pointer);
+				if (scheduled) return;
+				scheduled = true;
+				requestAnimationFrame(applyPending);
+			};
 			contexts.commands.register([
 				{
 					id: "view.pan.start",
@@ -11936,15 +10933,12 @@ ${assertLines}
 				contexts.places.el(Places.Stage)?.classList.add("panning");
 			});
 			on("view.pan.move", (pointer) => {
-				if (!pan) return;
-				contexts.view.set({
-					x: pan.view.x - (pointer.x - pan.pointer.x) / pan.view.scale,
-					y: pan.view.y - (pointer.y - pan.pointer.y) / pan.view.scale
-				});
-				commit();
+				if (pan) scheduleMove(pointer);
 			});
 			on("view.pan.end", () => {
+				if (pending) applyPending();
 				pan = null;
+				pending = null;
 				contexts.places.el(Places.Stage)?.classList.remove("panning");
 			});
 		}, { requires: ["render"] });
@@ -12043,12 +11037,13 @@ ${assertLines}
 					},
 					payload: ({ event }) => {
 						const wheel = event;
+						const coefficient = wheel.ctrlKey ? .01 : .0025;
 						return {
 							screen: contexts.view.clientToScreen(Places.Stage, {
 								x: wheel.clientX,
 								y: wheel.clientY
 							}),
-							factor: Math.exp(-wheel.deltaY * .001)
+							factor: Math.exp(-wheel.deltaY * coefficient)
 						};
 					}
 				},
@@ -12156,7 +11151,9 @@ ${assertLines}
 				const stage = contexts.places.el(Places.Stage);
 				if (!stage) return;
 				const rect = stage.getBoundingClientRect();
-				const fittableW = Math.max(1, rect.width - 2 * pixelPadding);
+				const leftRect = contexts.places.el(Places.Left)?.getBoundingClientRect();
+				const leftInset = leftRect && leftRect.width > 0 ? Math.max(0, Math.min(rect.width - 1, leftRect.right - rect.left)) : 0;
+				const fittableW = Math.max(1, rect.width - leftInset - 2 * pixelPadding);
 				const fittableH = Math.max(1, rect.height - 2 * pixelPadding);
 				const bw = Math.max(1, b.maxX - b.minX);
 				const bh = Math.max(1, b.maxY - b.minY);
@@ -12164,7 +11161,7 @@ ${assertLines}
 				const cx = (b.minX + b.maxX) / 2;
 				const cy = (b.minY + b.maxY) / 2;
 				contexts.view.set({
-					x: cx - rect.width / (2 * scale),
+					x: cx - (leftInset + pixelPadding + fittableW / 2) / scale,
 					y: cy - rect.height / (2 * scale),
 					scale
 				});
@@ -12303,16 +11300,17 @@ ${assertLines}
 		registerRenderStage(system);
 		registerTextLayout(system);
 		registerInput(system);
+		registerIo(system);
 		registerFoldable(system);
 		registerCancellation(system);
 		registerMain(system);
 		registerToolPanel(system);
 		registerLog(system);
-		registerOutline(system);
 		registerModal(system);
 		registerCommandForm(system);
 		registerCommandPicker(system);
 		registerCommandModal(system);
+		registerPerfPanel(system);
 		registerJump(system);
 		registerCollections(system);
 		registerGraph(system);
@@ -12323,12 +11321,15 @@ ${assertLines}
 		registerContextActions(system);
 		registerItemToolbar(system);
 		registerNodeVisuals(system);
+		registerNodeAutosize(system);
 		registerContainers(system);
+		registerOutline(system);
 		registerChoose(system);
 		registerDetail(system);
 		registerDemo(system);
 		registerDebug(system);
 		registerScenario(system);
+		registerShare(system);
 		registerVarflow(system);
 		registerDx(system);
 	}
@@ -12428,7 +11429,7 @@ ${assertLines}
 		registerSystems(withKind(plugins, "system"));
 		registerAbilitySystems(withKind(plugins, "ability"));
 		registerFeatures(withKind(plugins, "feature"));
-		const ctx = createAppContext(graphStore(), appModel, createFlags({}, memoryIo()), memoryIo());
+		const ctx = createAppContext(graphStore(), appModel, {}, memoryIo());
 		installRuntimeFeatureManager(ctx, plugins);
 		plugins.start(ctx);
 		ctx.bus.emit("app.start");

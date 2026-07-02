@@ -152,18 +152,36 @@ const edgeRenderer: EntityRenderer<GraphEdge> = {
     g.append(line('edge-line', tipAtSource.x, tipAtSource.y, tipAtTarget.x, tipAtTarget.y, { 'marker-end': 'url(#edge-arrow)' }));
     const label = edge.Label?.text;
     if (label) {
-      const midX = (from.center.x + to.center.x) / 2;
-      const midY = (from.center.y + to.center.y) / 2;
       const lines = label.split(/\r?\n/);
       const lineH = 14;
-      // Center the block on the edge midpoint (top line lifted by half the block).
+      // Offset the label to the RIGHT of the travel direction (from→to) so it
+      // clears the line and bidirectional pairs don't stack on the same point.
+      // Right-normal in screen space (y-down): rotate the direction +90° → (-dy, dx).
+      const dx = to.center.x - from.center.x, dy = to.center.y - from.center.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const blockH = lines.length * lineH;
+      const off = blockH / 2 + 8;
+      const nx = (-dy / len) * off, ny = (dx / len) * off;
+      const midX = (from.center.x + to.center.x) / 2 + nx;
+      const midY = (from.center.y + to.center.y) / 2 + ny;
+      // Center the block on the offset anchor (top line lifted by half the block).
       const startY = midY - ((lines.length - 1) * lineH) / 2 - 4;
-      const text = svg('text', { class: `edge-label edge-kind-${edgeKind}`, 'text-anchor': 'middle' });
+      // Opaque backdrop so the text stays legible where the label crosses an edge
+      // — sized from the text metrics (graph units, so it scales with the label).
+      const charW = 6.6, padX = 4, padY = 2;
+      const boxW = Math.max(...lines.map(l => l.length)) * charW + padX * 2;
+      const boxH = (lines.length - 1) * lineH + 12 + padY * 2;
+      const bg = svg('rect', {
+        class: 'edge-label-bg', x: midX - boxW / 2, y: startY - 9 - padY, width: boxW, height: boxH, rx: 3,
+      });
+      g.append(bg);
+      const text = svg('text', { class: `edge-label edge-kind-${edgeKind}`, 'text-anchor': 'middle', 'font-size': 11 });
       lines.forEach((line, i) => {
         const tspan = svg('tspan', { x: midX, y: startY + i * lineH });
         tspan.textContent = line;
         text.append(tspan);
       });
+      // Backdrop then text → text always paints on top of its own edge line.
       g.append(text);
     }
     return g;

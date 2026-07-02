@@ -141,7 +141,7 @@ export interface CustomEvents {}
  *  Augment to add a key without editing `AppCtx`. */
 export interface CustomExposable {}
 
-export type ModalVisual = 'panel' | 'command' | 'properties' | 'perf';
+export type ModalVisual = 'panel' | 'command' | 'properties' | 'perf' | 'present';
 
 /** Framework events guaranteed by the frontend runtime. Domain events live next to
  *  their owners via `CustomEvents` augmentation. */

@@ -19,14 +19,14 @@ import { registerInput } from './input';
 import { registerIo } from './io';
 import { registerJump } from './jump';
 import { registerLayout } from './layout';
-import { registerLog } from './log';
 import { registerMain } from './main';
+import { registerMarquee } from './marquee';
 import { registerModal } from './modal';
 import { registerItemToolbar } from './item-toolbar';
 import { registerNodeAutosize } from './node-autosize';
 import { registerNodeVisuals } from './node-visuals';
-import { registerOutline } from './outline';
 import { registerPerfPanel } from './perf-panel';
+import { registerPresent } from './present';
 import { registerRender } from './render';
 import { registerRenderStage } from './render-stage';
 import { registerScenario } from './scenario';
@@ -48,7 +48,8 @@ export function registerSystems(system: Registry) {
   registerCancellation(system);
   registerMain(system);
   registerToolPanel(system);
-  registerLog(system);
+  // Log + outline unregistered for release — dev/left-pane chrome that pulled
+  // focus off the canvas. Files kept for type augmentations + revival.
   registerModal(system);
   registerCommandForm(system);
   registerCommandPicker(system);
@@ -62,6 +63,7 @@ export function registerSystems(system: Registry) {
   registerGraph(system);
   registerViewZoom(system);
   registerViewPan(system);
+  registerMarquee(system);
   registerFocus(system);
   registerLayout(system);
   registerContextActions(system);
@@ -69,8 +71,8 @@ export function registerSystems(system: Registry) {
   registerNodeVisuals(system);
   registerNodeAutosize(system);
   registerContainers(system);
-  registerOutline(system);
   registerChoose(system);
+  registerPresent(system);
   registerDetail(system);
   registerDemo(system);
   registerDebug(system);

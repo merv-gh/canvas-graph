@@ -169,5 +169,69 @@ export function runDx(ctx: AppCtx): DxIssue[] {
     if (!collectionKinds.has(kind)) warn('entity.kind-no-collection', `kind "${kind}" has no collection — it won't appear in outline / palette`);
   });
 
+  checkLabelOverlaps(ctx, warn);
+
   return issues;
+}
+
+/** Warn when an edge's label rect crosses a *different* edge's line — the layout
+ *  smell that a multi-line label got buried under other wiring. Mirrors the
+ *  renderer's right-of-direction offset (model/entities.ts) so the geometry it
+ *  checks is the geometry the user sees. Capped by edge count so the validator
+ *  stays sub-frame on large graphs. */
+function checkLabelOverlaps(ctx: AppCtx, warn: (rule: string, message: string) => void) {
+  const graph = ctx.graphs.current;
+  const edges = graph.edges();
+  if (!edges.length || edges.length > 400) return; // perf guard for huge graphs
+  const LINE_H = 14, CHAR_W = 7;
+  const center = (id: string) => {
+    const n = graph.getNode(id) as { Position?: { x: number; y: number }; Size?: { w: number; h: number } } | undefined;
+    return n?.Position ? { pos: n.Position, size: n.Size ?? { w: 160, h: 72 } } : null;
+  };
+  type Seg = { id: string; ax: number; ay: number; bx: number; by: number };
+  const segs: Seg[] = [];
+  for (const e of edges) {
+    const f = center(e.From), t = center(e.To);
+    if (f && t) segs.push({ id: e.id, ax: f.pos.x, ay: f.pos.y, bx: t.pos.x, by: t.pos.y });
+  }
+  const segRect = (s: Seg, r: { x: number; y: number; w: number; h: number }) => {
+    // Segment vs axis-aligned rect: endpoint inside, or segment crosses a side.
+    const inside = (x: number, y: number) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+    if (inside(s.ax, s.ay) || inside(s.bx, s.by)) return true;
+    const cross = (x1: number, y1: number, x2: number, y2: number, x3: number, y3: number, x4: number, y4: number) => {
+      const d = (x2 - x1) * (y4 - y3) - (y2 - y1) * (x4 - x3);
+      if (!d) return false;
+      const u = ((x3 - x1) * (y4 - y3) - (y3 - y1) * (x4 - x3)) / d;
+      const v = ((x3 - x1) * (y2 - y1) - (y3 - y1) * (x2 - x1)) / d;
+      return u >= 0 && u <= 1 && v >= 0 && v <= 1;
+    };
+    return (
+      cross(s.ax, s.ay, s.bx, s.by, r.x, r.y, r.x + r.w, r.y) ||
+      cross(s.ax, s.ay, s.bx, s.by, r.x, r.y + r.h, r.x + r.w, r.y + r.h) ||
+      cross(s.ax, s.ay, s.bx, s.by, r.x, r.y, r.x, r.y + r.h) ||
+      cross(s.ax, s.ay, s.bx, s.by, r.x + r.w, r.y, r.x + r.w, r.y + r.h)
+    );
+  };
+  let hits = 0;
+  for (const e of edges) {
+    const text = e.Label?.text;
+    if (!text) continue;
+    const f = center(e.From), t = center(e.To);
+    if (!f || !t) continue;
+    const lines = text.split(/\r?\n/);
+    const dx = t.pos.x - f.pos.x, dy = t.pos.y - f.pos.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const blockH = lines.length * LINE_H;
+    const off = blockH / 2 + 8;
+    const cx = (f.pos.x + t.pos.x) / 2 + (-dy / len) * off;
+    const cy = (f.pos.y + t.pos.y) / 2 + (dx / len) * off;
+    const w = Math.max(...lines.map(l => l.length)) * CHAR_W;
+    const rect = { x: cx - w / 2, y: cy - blockH / 2, w, h: blockH };
+    const clash = segs.find(s => s.id !== e.id && segRect(s, rect));
+    if (clash) {
+      hits++;
+      if (hits <= 8) warn('layout.label-overlap', `edge "${e.id}" label overlaps edge "${clash.id}" — run a layout or move the label`);
+    }
+  }
+  if (hits > 8) warn('layout.label-overlap', `…and ${hits - 8} more label/edge overlaps`);
 }

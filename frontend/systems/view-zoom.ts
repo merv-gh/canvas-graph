@@ -63,7 +63,8 @@ export function registerViewZoom(system: Registry) {
         event: 'view.zoom.by',
         group: 'view',
         hidden: true,
-        input: { on: 'wheel', selector: stageSelector, prevent: true },
+        // Pinch only (ctrl+wheel). Plain two-finger scroll is pan (view.wheel.pan).
+        input: { on: 'wheel', selector: stageSelector, when: event => (event as WheelEvent).ctrlKey, prevent: true },
         payload: ({ event }) => {
           const wheel = event as WheelEvent;
           // ctrlKey wheel = trackpad pinch (diverging/converging fingers) — the

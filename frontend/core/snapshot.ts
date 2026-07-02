@@ -149,6 +149,16 @@ function captureUi(ctx: AppCtx) {
     stage: {
       emptyStateVisible: !!stageEl?.querySelector('.empty'),
       itemToolbarVisible: !!stageEl?.querySelector('.item-toolbar'),
+      marqueeVisible: !!stageEl?.querySelector('.select-marquee'),
+    },
+    // Presentation-mode lens — active flag, content mode, current focus node, and
+    // how many neighbour cards / overflow chips the frame is showing.
+    present: {
+      active: shellEl?.dataset.present === 'true',
+      mode: shellEl?.dataset.presentMode ?? 'nodes',
+      focusId: shellEl?.dataset.presentFocus || null,
+      neighbours: Number(shellEl?.dataset.presentNeighbours ?? 0),
+      overflow: shellEl?.dataset.presentOverflow === 'true',
     },
     toolPanels: {
       top: toolPanelInfo('top'),
@@ -215,6 +225,14 @@ const RENDERED_CODE: Record<string, string> = {
 const STAGE_CODE: Record<string, string> = {
   emptyStateVisible: "!!ctx.contexts.places.el('stage')?.querySelector('.empty')",
   itemToolbarVisible: "!!ctx.contexts.places.el('stage')?.querySelector('.item-toolbar')",
+  marqueeVisible: "!!ctx.contexts.places.el('stage')?.querySelector('.select-marquee')",
+};
+const PRESENT_CODE: Record<string, string> = {
+  active: "ctx.contexts.places.el('top')?.parentElement?.dataset.present === 'true'",
+  mode: "(ctx.contexts.places.el('top')?.parentElement?.dataset.presentMode ?? 'nodes')",
+  focusId: "(ctx.contexts.places.el('top')?.parentElement?.dataset.presentFocus || null)",
+  neighbours: "Number(ctx.contexts.places.el('top')?.parentElement?.dataset.presentNeighbours ?? 0)",
+  overflow: "ctx.contexts.places.el('top')?.parentElement?.dataset.presentOverflow === 'true'",
 };
 const MODAL_CODE: Record<string, string> = {
   open: "(ctx.contexts.places.el('modal')?.children.length ?? 0) > 0",
@@ -268,7 +286,7 @@ export function snapshotTree(snap: Snapshot): SnapshotNode {
 type Segment =
   | 'root'
   | 'graph' | 'selection' | 'flags' | 'dx'
-  | 'ui' | 'ui.places' | 'ui.shell' | 'ui.colorscheme' | 'ui.rendered' | 'ui.stage' | 'ui.modal' | 'ui.outline' | 'ui.toolPanels'
+  | 'ui' | 'ui.places' | 'ui.shell' | 'ui.colorscheme' | 'ui.rendered' | 'ui.stage' | 'ui.modal' | 'ui.outline' | 'ui.toolPanels' | 'ui.present'
   | 'plain';
 
 function pickCode(parentCode: string, key: string, segment: Segment, optional: boolean): string {
@@ -285,6 +303,7 @@ function pickCode(parentCode: string, key: string, segment: Segment, optional: b
   if (segment === 'ui.modal' && MODAL_CODE[key]) return MODAL_CODE[key];
   if (segment === 'ui.outline' && OUTLINE_CODE[key]) return OUTLINE_CODE[key];
   if (segment === 'ui.toolPanels' && TOOL_PANEL_CODE[key]) return TOOL_PANEL_CODE[key];
+  if (segment === 'ui.present' && PRESENT_CODE[key]) return PRESENT_CODE[key];
   return `${parentCode}${optional ? '?.' : '.'}${key}`;
 }
 
@@ -306,6 +325,7 @@ function nextSegment(parent: Segment, key: string): Segment {
     if (key === 'modal') return 'ui.modal';
     if (key === 'outline') return 'ui.outline';
     if (key === 'toolPanels') return 'ui.toolPanels';
+    if (key === 'present') return 'ui.present';
   }
   return 'plain';
 }
