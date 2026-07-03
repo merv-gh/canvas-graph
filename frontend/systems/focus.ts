@@ -1,4 +1,4 @@
-import { nodeRef, type Registry } from '../core';
+import { nodeRef, sameItemRef, type Registry } from '../core';
 import type { Id, ItemRef } from '../types';
 
 declare module '../types' {
@@ -17,12 +17,14 @@ export function registerFocus(system: Registry) {
     on('focus.node.focus', ({ id }) => emit('focus.item.focus', nodeRef(id)));
     on('focus.node.clear', () => emit('focus.item.clear'));
     on('focus.item.focus', ref => {
+      if (sameItemRef(selection.focused() ?? null, ref)) return;
       selection.focus(ref);
       contexts.decorations.modes.set(origin, 'focused', [ref]);
       emit('focus.item.focused', ref);
       emit('focus.node.focused', { id: ref.kind === 'node' ? ref.id : null });
     });
     on('focus.item.clear', () => {
+      if (!selection.focused()) return;
       selection.focus(null);
       contexts.decorations.unregisterOrigin(origin);
       emit('focus.item.focused', null);

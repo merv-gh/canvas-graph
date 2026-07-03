@@ -19,7 +19,7 @@ declare module '../types' {
 type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
 
 export function registerViewZoom(system: Registry) {
-  system('view.zoom', ({ on, emit, contexts, graphs, selection, contribute, model, declarePanel }) => {
+  system('view.zoom', ({ on, emit, contexts, graphs, selection, contribute, model, declarePanel, frameLoop }) => {
     // Stage tool panel — buttons reach it via panel: 'zoom' on their contribute(...).
     declarePanel({ id: 'zoom', anchor: 'bottom-right', movable: false, layout: 'toolbar', order: 20 });
     contribute({ panel: 'zoom', surface: 'top', command: 'view.zoom.out', kind: 'button', text: '−', slot: Slots.End, order: 10 });
@@ -33,10 +33,10 @@ export function registerViewZoom(system: Registry) {
       contexts.view.zoomAtScreen(contexts.view.screenCenter(Places.Stage), factor);
       commit();
     };
-    let cameraFrame = 0;
+    let cameraCancelled = false;
     const cancelCamera = () => {
-      if (cameraFrame) cancelAnimationFrame(cameraFrame);
-      cameraFrame = 0;
+      cameraCancelled = true;
+      frameLoop.cancel('camera.animate');
     };
     const animateViewTo = (next: { x: number; y: number; scale: number }, duration = 180) => {
       cancelCamera();
@@ -44,16 +44,18 @@ export function registerViewZoom(system: Registry) {
       const dx = next.x - start.x, dy = next.y - start.y, ds = next.scale - start.scale;
       if (Math.abs(dx) + Math.abs(dy) + Math.abs(ds) < 0.001) return;
       const startAt = performance.now();
+      cameraCancelled = false;
+      const gen = cameraCancelled;
       const ease = (t: number) => 1 - Math.pow(1 - t, 3);
       const step = () => {
+        if (cameraCancelled !== gen) return;
         const t = Math.min(1, Math.max(0, (performance.now() - startAt) / duration));
         const k = ease(t);
         contexts.view.set({ x: start.x + dx * k, y: start.y + dy * k, scale: start.scale + ds * k });
         commit();
-        if (t < 1) cameraFrame = requestAnimationFrame(step);
-        else cameraFrame = 0;
+        if (t < 1 && cameraCancelled === gen) frameLoop.schedule('camera.animate', step, 5);
       };
-      cameraFrame = requestAnimationFrame(step);
+      frameLoop.schedule('camera.animate', step, 5);
     };
 
     contexts.commands.register([
@@ -92,7 +94,11 @@ export function registerViewZoom(system: Registry) {
       },
     ]);
 
-    on('view.zoom.by', ({ screen, factor }) => { cancelCamera(); contexts.view.zoomAtScreen(screen, factor); commit(); });
+    on('view.zoom.by', ({ screen, factor }) => {
+      cancelCamera();
+      contexts.view.zoomAtScreen(screen, factor);
+      frameLoop.schedule('view.zoom.commit', commit, 10);
+    });
     on('view.zoom.in', () => centerZoom(1.2));
     on('view.zoom.out', () => centerZoom(1 / 1.2));
     on('view.zoom.reset', () => { cancelCamera(); contexts.view.set({ x: 0, y: 0, scale: 1 }); commit(); });

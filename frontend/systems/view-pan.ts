@@ -28,15 +28,14 @@ export const isMoveIntent = (event: PointerEvent) =>
   (event.pointerType === 'touch' && gesture.pointers.size >= 2);
 
 export function registerViewPan(system: Registry) {
-  system('view.pan', ({ on, emit, contexts }) => {
+  system('view.pan', ({ on, emit, contexts, frameLoop }) => {
     // `panPointerId` pins the pan to the finger/button that started it. With two
     // fingers down, BOTH emit pointermove — responding to both makes the view
     // jump between their positions (the "two fingers same direction" jitter). We
     // track only the owner and drop the rest.
     let pan: { pointer: { x: number; y: number }; view: ViewState } | null = null;
     let panPointerId = -1;
-    let pending: Position | null = null;
-    let scheduled = false;
+    let wheelAccum = { dx: 0, dy: 0 };
     const stageSelector = `[data-place="${Places.Stage}"]`;
     const commit = () => emit('view.changed', contexts.view.get());
 
@@ -56,21 +55,6 @@ export function registerViewPan(system: Registry) {
         x: pan.view.x - (pointer.x - pan.pointer.x) / pan.view.scale,
         y: pan.view.y - (pointer.y - pan.pointer.y) / pan.view.scale,
       });
-    };
-    const applyPending = () => {
-      scheduled = false;
-      if (!pan || !pending) return;
-      const pointer = pending;
-      pending = null;
-      setViewFor(pointer);
-      commit();
-    };
-    const scheduleMove = (pointer: Position) => {
-      pending = pointer;
-      setViewFor(pointer);
-      if (scheduled) return;
-      scheduled = true;
-      requestAnimationFrame(applyPending);
     };
 
     contexts.commands.register([
@@ -114,9 +98,15 @@ export function registerViewPan(system: Registry) {
     ]);
 
     on('view.wheel.pan', ({ dx, dy }) => {
-      const v = contexts.view.get();
-      contexts.view.set({ x: v.x + dx / v.scale, y: v.y + dy / v.scale });
-      commit();
+      wheelAccum.dx += dx;
+      wheelAccum.dy += dy;
+      frameLoop.schedule('view.pan.wheel', () => {
+        if (!wheelAccum.dx && !wheelAccum.dy) return;
+        const v = contexts.view.get();
+        contexts.view.set({ x: v.x + wheelAccum.dx / v.scale, y: v.y + wheelAccum.dy / v.scale });
+        wheelAccum = { dx: 0, dy: 0 };
+        commit();
+      }, 10);
     });
 
     on('view.pan.start', ({ x, y, pointerId = 0 }) => {
@@ -126,14 +116,20 @@ export function registerViewPan(system: Registry) {
       panPointerId = pointerId;
       contexts.places.el(Places.Stage)?.classList.add('panning');
     });
-    on('view.pan.move', p => { const pointerId = p?.pointerId ?? panPointerId; if (pan && pointerId === panPointerId) scheduleMove({ x: p!.x, y: p!.y }); });
+    on('view.pan.move', p => {
+      const pointerId = p?.pointerId ?? panPointerId;
+      if (pan && pointerId === panPointerId) {
+        setViewFor({ x: p!.x, y: p!.y });
+        frameLoop.schedule('view.pan.commit', commit, 10);
+      }
+    });
     on('view.pan.end', p => {
       const pointerId = p?.pointerId ?? panPointerId;
       if (pan && pointerId !== panPointerId) return; // a non-owner finger lifting doesn't end the pan
-      if (pending) applyPending();
+      commit();
+      frameLoop.cancel('view.pan.commit');
       pan = null;
       panPointerId = -1;
-      pending = null;
       contexts.places.el(Places.Stage)?.classList.remove('panning');
     });
 

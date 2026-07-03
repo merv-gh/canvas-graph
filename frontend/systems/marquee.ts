@@ -17,7 +17,7 @@ declare module '../types' {
  *  for move-intent gestures (two-finger / middle / space — see `view-pan.ts`), so
  *  the plain drag is free to mean "select a region". Shift adds to the set. */
 export function registerMarquee(system: Registry) {
-  system('marquee', ({ on, emit, contexts, graphs }) => {
+  system('marquee', ({ on, emit, contexts, graphs, selection }) => {
     const stageSelector = `[data-place="${Places.Stage}"]`;
     let start: Position | null = null;   // client coords
     let add = false;
@@ -95,7 +95,7 @@ export function registerMarquee(system: Registry) {
       if (!wasDrag) {
         // A click, not a drag: clear selection (unless additive) — matches the
         // background-cancel affordance without needing a separate handler.
-        if (!add) emit('selection.item.clear');
+        if (!add && selection.selected()) emit('selection.item.clear');
         return;
       }
       // Convert the band's two client corners to graph space, then choose every

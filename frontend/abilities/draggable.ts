@@ -28,25 +28,9 @@ export const draggable = <T extends Positioned>() => ability<T>('draggable', [ac
 })]);
 
 export function registerDraggable(system: Registry) {
-  system('ability.draggable', ({ on, emit, contexts, graphs }) => {
+  system('ability.draggable', ({ on, emit, contexts, graphs, frameLoop }) => {
     let drag: { ref: ItemRef; pointer: Position; start: Position } | null = null;
     let pending: Position | null = null;
-    let scheduled = false;
-    const applyPending = () => {
-      scheduled = false;
-      if (!drag || !pending) return;
-      const pointer = contexts.view.clientToSpace(Places.Stage, pending);
-      pending = null;
-      const Position = { x: drag.start.x + pointer.x - drag.pointer.x, y: drag.start.y + pointer.y - drag.pointer.y };
-      emit('item.update', { ref: drag.ref, patch: { Position } });
-      emit('drag.item.moved', { ref: drag.ref });
-    };
-    const scheduleMove = (point: Position) => {
-      pending = point;
-      if (scheduled) return;
-      scheduled = true;
-      requestAnimationFrame(applyPending);
-    };
 
     contexts.commands.register([
       {
@@ -75,9 +59,27 @@ export function registerDraggable(system: Registry) {
       const item = graphs.current.getItem(ref) as Positioned | undefined;
       if (item?.Position) drag = { ref, pointer: contexts.view.clientToSpace(Places.Stage, { x, y }), start: { ...item.Position } };
     });
-    on('drag.item.move', ({ x, y }) => { if (drag) scheduleMove({ x, y }); });
+    on('drag.item.move', ({ x, y }) => {
+      if (!drag) return;
+      pending = { x, y };
+      frameLoop.schedule('drag.commit', () => {
+        if (!drag || !pending) return;
+        const pointer = contexts.view.clientToSpace(Places.Stage, pending);
+        pending = null;
+        const Position = { x: drag.start.x + pointer.x - drag.pointer.x, y: drag.start.y + pointer.y - drag.pointer.y };
+        emit('item.update', { ref: drag.ref, patch: { Position } });
+        emit('drag.item.moved', { ref: drag.ref });
+      }, 10);
+    });
     on('drag.item.end', () => {
-      if (pending) applyPending();
+      if (pending && drag) {
+        const pointer = contexts.view.clientToSpace(Places.Stage, pending);
+        pending = null;
+        const Position = { x: drag.start.x + pointer.x - drag.pointer.x, y: drag.start.y + pointer.y - drag.pointer.y };
+        emit('item.update', { ref: drag.ref, patch: { Position } });
+        emit('drag.item.moved', { ref: drag.ref });
+      }
+      frameLoop.cancel('drag.commit');
       drag = null;
       pending = null;
     });

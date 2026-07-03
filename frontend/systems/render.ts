@@ -9,7 +9,7 @@ import type { ItemRef, Place, RedrawScope, Renderable } from '../types';
  *  these out lets the canvas/webgl swap touch a single system. */
 export function registerRender(system: Registry) {
   system('render', ctx => {
-    const { on, emit, bus, contexts } = ctx;
+    const { on, emit, bus, contexts, frameLoop } = ctx;
     const root = mountRoot();
     const views = new Map<Place, Map<string, Renderable>>();
     const mounted = new Map<Place, Map<string, Node>>();
@@ -93,8 +93,9 @@ export function registerRender(system: Registry) {
       if (name.startsWith('graph.edge.')) return { kind: 'edge', id };
       return null;
     };
-    let scheduled = false;
     let flushes = 0;
+    let scheduledRender = false;
+    let lastMarkEvent = '';
     let pendingFocusRef: ItemRef | null = null;
     let pendingBlur = false;
     const focusPendingItem = () => {
@@ -113,10 +114,13 @@ export function registerRender(system: Registry) {
       if (typeof focusable?.focus === 'function') focusable.focus({ preventScroll: true });
     };
     const flushDirty = () => {
-      scheduled = false;
       flushes++;
+      const scopes = [...dirty];
+      const trigger = lastMarkEvent || 'unknown';
       ctx.perf.count('Render.flush');
       ctx.perf.sample('Render.flush.dirtyScopes', dirty.size);
+      if (ctx.flags.isOn('perf')) console.debug(`[render] #${flushes} dirty=[${scopes}] trigger="${trigger}" full=${fullNodes} refs=${dirtyItems.size}`);
+      if (scopes.length === 0) console.warn(`[render] #${flushes} NO-OP flush — dirty set empty, trigger was "${trigger}"`);
       // A full stage draw already re-applies the camera, so only emit the
       // camera-only path when the nodes scope isn't also dirty this frame.
       if (dirty.has('nodes')) {
@@ -134,13 +138,14 @@ export function registerRender(system: Registry) {
       dirty.clear();
       dirtyItems.clear();
       fullNodes = false;
+      scheduledRender = false;
       queueMicrotask(focusPendingItem);
     };
     const mark = (...scopes: RenderScope[]) => {
       scopes.forEach(s => dirty.add(s));
-      if (scheduled) return;
-      scheduled = true;
-      requestAnimationFrame(flushDirty);
+      if (scheduledRender) return;
+      scheduledRender = true;
+      frameLoop.schedule('render.flush', flushDirty, 20);
     };
     const applyScope = (scope: RedrawScope) =>
       scope === 'both' ? mark('nodes', 'outline') : mark(scope as RenderScope);
@@ -151,8 +156,8 @@ export function registerRender(system: Registry) {
       }
       return factScope(name);
     };
-    ctx.expose('render', { flushes: () => flushes });
-    on('app.start', () => mark('nodes'));
+    ctx.expose('render', { flushes: () => flushes, lastTrigger: () => lastMarkEvent });
+    on('app.start', () => { lastMarkEvent = 'app.start'; mark('nodes'); });
     on('focus.item.focused', ref => {
       pendingFocusRef = ref;
       if (!ref) pendingBlur = true;
@@ -160,6 +165,7 @@ export function registerRender(system: Registry) {
     bus.onAny(({ name, data }) => {
       const scope = scopeForEvent(name, data);
       if (!scope) return;
+      lastMarkEvent = name;
       applyScope(scope);
       if (scope === 'nodes' || scope === 'both') {
         const ref = factItemRef(name, data);

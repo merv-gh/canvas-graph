@@ -2,10 +2,10 @@ import type { Registry } from '../core';
 import { Places } from '../types';
 
 /** Event log. Subscribes via bus.onAny, prepends each non-render.* event to a
- *  capped ring, and emits the render.view.set on a single rAF — even under a
- *  100-event burst, the log paints at most once per frame (principle 8). */
+ *  capped ring, and emits the render.view.set on the shared frame loop — even
+ *  under a 100-event burst, the log paints at most once per frame (principle 8). */
 export function registerLog(system: Registry) {
-  system('log', ({ bus, emit, contexts }) => {
+  system('log', ({ bus, emit, contexts, frameLoop }) => {
     const rows: string[] = [];
     const renderLog = () => {
       const panel = contexts.templates.clone('log');
@@ -17,14 +17,10 @@ export function registerLog(system: Registry) {
       });
       return panel;
     };
-    let scheduled = false;
     const scheduleDraw = () => {
-      if (scheduled) return;
-      scheduled = true;
-      requestAnimationFrame(() => {
-        scheduled = false;
+      frameLoop.schedule('log.draw', () => {
         emit('render.view.set', { place: Places.Left, key: 'log', view: renderLog });
-      });
+      }, 30);
     };
     bus.onAny(event => {
       if (event.name.startsWith('render.')) return;

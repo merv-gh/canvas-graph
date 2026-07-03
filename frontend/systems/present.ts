@@ -36,7 +36,7 @@ const rectOf = (n: GraphNode): Rect => {
  *  view exactly as it was. Toggle node text ⟷ edge labels (labels off by default).
  *  Observable via `shell[data-present*]`. */
 export function registerPresent(system: Registry) {
-  system('present', ({ on, emit, contexts, graphs, selection, model, contribute }) => {
+  system('present', ({ on, emit, contexts, graphs, selection, model, contribute, frameLoop }) => {
     let active = false;
     let focusId: string | null = null;
     let mode: Mode = 'nodes';
@@ -236,7 +236,7 @@ export function registerPresent(system: Registry) {
       emit('modal.open', { title: 'Presentation', body: bodyEl!, visual: 'present' });
       renderSubstage();
       // Re-fit once the modal has real dimensions (first paint measured 0).
-      requestAnimationFrame(renderSubstage);
+      frameLoop.schedule('present.refit', renderSubstage, 30);
     };
 
     contexts.commands.register([

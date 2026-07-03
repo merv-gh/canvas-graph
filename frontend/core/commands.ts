@@ -1,8 +1,10 @@
 import type { Bus, CommandOrigin, CommandSource, CommandSpec, CommandSpecInput, EventName, RawInput } from '../types';
+import { Places } from '../types';
 import type { IoApi } from './io';
 import { STORAGE_KEYS } from './io';
 import type { PerfApi } from './perf';
 import { bindingParsed, keyMatchesEvent, parseShortcut, shortcutOf } from './shortcuts';
+import type { FrameLoop } from './frame-loop';
 
 const POINTER_TYPES = new Set(['click', 'pointerdown', 'pointermove', 'pointerup', 'wheel']);
 const originFromEvent = (event?: Event): CommandOrigin => {
@@ -62,10 +64,6 @@ export function commandsContext(bus: Bus, isFlagOn: (origin?: string) => boolean
     register: (specs: CommandSpecInput[], origin?: string) => {
       specs.forEach(input => {
         const command = input as CommandSpec;
-        // `event` defaults to `id`. Most commands have id === event; the option to
-        // override exists for cases where many command ids fire the same event
-        // (e.g. four nudge directions → 'item.update', several pointer variants
-        // → 'drag.item.start').
         if (!command.event) command.event = command.id as EventName;
         if (origin && !command.origin) command.origin = origin;
         applyOverrides(command);
@@ -137,16 +135,21 @@ export function commandsContext(bus: Bus, isFlagOn: (origin?: string) => boolean
  *  shield "in another scope" inputs from spilling into app commands:
  *
  *    1. Typing — inside any input/textarea/select/contenteditable, non-global
- *       commands without a `selector` are skipped (so typing the letter "a"
- *       in a text field doesn't create a node).
+ *       commands without a `selector` are skipped.
  *    2. Modal — when a modal is mounted, non-global commands whose event
- *       target is outside the modal are skipped. Backdrop, form fields, and
- *       command buttons inside the modal still work; A/E/G/etc on the
- *       background do nothing until the modal closes. */
-export function inputRouter(commands: ReturnType<typeof commandsContext>, perf?: PerfApi) {
+ *       target is outside the modal are skipped.
+ *
+ *  Coalescable events (wheel, pointermove, click, dblclick) are batched on the
+ *  shared frame loop: only the latest event of each type dispatches per frame,
+ *  eliminating wasted command matching on events whose intermediate results
+ *  would be overwritten before the next paint.  `[data-command]` button clicks
+ *  are excluded — toolbar buttons dispatch synchronously for instant feedback. */
+export function inputRouter(commands: ReturnType<typeof commandsContext>, perf?: PerfApi, frameLoop?: FrameLoop) {
+  // Events safe to coalesce: only the latest per type matters.  pointerdown /
+  // pointerup must stay synchronous so drag/marquee start/end pair correctly.
+  const COALESCE = new Set(['wheel', 'pointermove', 'click', 'dblclick']);
   return {
     start(root: Document | HTMLElement = document) {
-      /** A modal is "mounted" when [data-place="modal"] has any rendered children. */
       const modalScopeEl = (): Element | null => {
         const placeEl = (root instanceof Document ? root : root).querySelector('[data-place="modal"]');
         return placeEl?.firstElementChild ? placeEl : null;
@@ -171,8 +174,6 @@ export function inputRouter(commands: ReturnType<typeof commandsContext>, perf?:
 
           const button = event.type === 'click' ? rawTarget?.closest('[data-command]') : null;
           if (button instanceof HTMLElement) {
-            // Modal strictness for click-driven data-command buttons too —
-            // background toolbar buttons can't fire while a modal is up.
             if (modal && !modal.contains(button)) return;
             const commandId = button.dataset.command!;
             candidates.push(commandId);
@@ -200,9 +201,42 @@ export function inputRouter(commands: ReturnType<typeof commandsContext>, perf?:
           trace?.end({ candidates, matched });
         }
       };
+
+      // --- Coalescing input batching ---
+      // High-frequency / rapidly-repeatable events: capture the latest event
+      // per type and dispatch once per frame so command matching + handler
+      // dispatch don't run on every micro-event.  Drag/pan/zoom handlers
+      // already defer their heavy work — this eliminates the remaining
+      // synchronous overhead (command scan, payload compute, bus.forward).
+      const batched = new Map<string, Event>();
+      const flushBatch = () => {
+        batched.forEach(evt => route(evt));
+        batched.clear();
+      };
+      const stageSelector = `[data-place="${Places.Stage}"]`;
+      const handleEvent = (event: Event) => {
+        if (frameLoop && COALESCE.has(event.type)) {
+          if (event.type === 'wheel') {
+            const target = event.target instanceof Element ? event.target : null;
+            if (target?.closest(stageSelector)) event.preventDefault();
+          }
+          // [data-command] button clicks dispatch synchronously — toolbar
+          // buttons feel instant.
+          if ((event.type === 'click' || event.type === 'dblclick') &&
+              (event.target instanceof Element ? event.target : null)?.closest('[data-command]')) {
+            route(event);
+            return;
+          }
+          batched.set(event.type, event);
+          frameLoop.schedule('input.batch', flushBatch, 0);
+          return;
+        }
+        route(event);
+      };
+
       const types: string[] = ['click', 'dblclick', 'keydown', 'pointerdown', 'pointermove', 'pointerup', 'wheel', 'input', 'change', 'focusout', 'paste'];
-      types.forEach(type => root.addEventListener(type, route, type === 'wheel' ? { passive: false } : undefined));
-      return () => types.forEach(type => root.removeEventListener(type, route));
+      types.forEach(type => root.addEventListener(type, handleEvent, type === 'wheel' ? { passive: false } : undefined));
+      return () => types.forEach(type => root.removeEventListener(type, handleEvent));
     },
   };
 }

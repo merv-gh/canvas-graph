@@ -46,7 +46,12 @@ export function createSelectionStore(graphs: GraphStore, bus: Bus): SelectionSto
     bus.emit('selection.node.selected', { id: primary?.kind === 'node' ? primary.id : null });
     bus.emit('selection.changed', { refs: arr });
   };
-  const write = (graphId: Id, refs: ItemRef[]) => { sel.set(graphId, refs); commit(graphId); };
+  const write = (graphId: Id, refs: ItemRef[]) => {
+    const current = setOf(graphId);
+    if (current.length === refs.length && current.every((r, i) => sameItemRef(r, refs[i]))) return;
+    sel.set(graphId, refs);
+    commit(graphId);
+  };
 
   const clearFocus = (graphId: Id) => {
     foc.set(graphId, null);

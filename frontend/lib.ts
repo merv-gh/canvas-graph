@@ -279,12 +279,12 @@ export function createGraphViewer(opts: GraphViewerOptions): GraphViewer {
     // The import's auto-redraw can race the shell/stage mount on the very first
     // load, so force one full stage draw on the next frame, then frame it. In
     // 'flow' mode the nodes ship position-less — run the layered tidy layout.
-    requestAnimationFrame(() => {
+    ctx.frameLoop.schedule('lib.render.after', () => {
       ctx.bus.emit('render.stage.draw', { full: true, refs: [] });
       if (viewOpts.layout === 'flow') ctx.bus.emit('layout.apply.tidy');
       fit();
       setTimeout(fit, 300);
-    });
+    }, 30);
     const result = {
       nodes: snapshot.nodes.length,
       edges: snapshot.edges.length,
@@ -307,10 +307,10 @@ export function createGraphViewer(opts: GraphViewerOptions): GraphViewer {
     suppressSelection = true;
     currentOpts = { ...currentOpts, focusNodeId: nodeId };
     const result = renderLoaded(rawGraph, currentOpts);
-    requestAnimationFrame(() => {
+    ctx.frameLoop.schedule('lib.focus.after', () => {
       ctx.bus.emit('selection.node.select', { id: nodeId });
       window.setTimeout(() => { suppressSelection = false; }, 0);
-    });
+    }, 30);
     return result;
   };
 

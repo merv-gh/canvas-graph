@@ -14,6 +14,7 @@ import { createSelectionStore, type SelectionStore } from './core/selection';
 import { createSim, type SimApi } from './core/sim';
 import { storageContext, type StorageApi } from './core/storage';
 import { foldContext, type FoldStore } from './core/fold';
+import { createFrameLoop, type FrameLoop } from './core/frame-loop';
 import { templateContext } from './core/templates';
 import { viewContext } from './core/view';
 import {
@@ -31,7 +32,6 @@ import {
   type UiValue,
   type DxIssue,
 } from './types';
-
 // Re-exports (keep the public surface stable for systems/abilities).
 export { localStorageIo, memoryIo, STORAGE_KEYS, type IoApi } from './core/io';
 export { collectionCreateCommand, collectionDeleteCommand, collectionKind, collectionSelectCommand, singular } from './core/collection-commands';
@@ -57,11 +57,10 @@ export { foldContext, itemFoldId, foldHidden, type FoldStore } from './core/fold
 export { snapshot, snapshotTree, flattenSnapshotTree, type Snapshot, type SnapshotNode } from './core/snapshot';
 export { traceToTest, defaultEventFilter, type Assertion, type TestGenOptions } from './core/test-gen';
 export { semanticTitle, mergeSemantics, hasCompleteSemantics, hasFailurePlan, type DataScale, type SemanticFields } from './core/semantics';
-
 export type Contexts = ReturnType<typeof createContexts>;
 export type Models = ReturnType<typeof createModelRegistry>;
 export type ModelCtx = { graphs: GraphStore };
-export type RenderApi = { flushes(): number };
+export type RenderApi = { flushes(): number; lastTrigger(): string };
 export type DxApi = { run(): DxIssue[] };
 export type AppCtx = {
   bus: Bus;
@@ -73,6 +72,7 @@ export type AppCtx = {
   io: IoApi;
   sim: SimApi;
   perf: PerfApi;
+  frameLoop: FrameLoop;
   dx?: DxApi;
   render?: RenderApi;
 } & import('./types').CustomExposable;
@@ -223,7 +223,7 @@ function eventBus(perf?: PerfApi): InstrumentedBus {
 
 type OriginScoped = { unregisterOrigin(origin: string): void };
 
-function createContexts(bus: Bus, flags: FlagsApi, io: IoApi, perf: PerfApi) {
+function createContexts(bus: Bus, flags: FlagsApi, io: IoApi, perf: PerfApi, frameLoop: FrameLoop) {
   const places = new Map<Place, HTMLElement>();
   const templates = templateContext();
   const view = viewContext(places);
@@ -234,7 +234,7 @@ function createContexts(bus: Bus, flags: FlagsApi, io: IoApi, perf: PerfApi) {
   const hierarchy = hierarchyContext();
   const keyboard = keyboardCaptureContext();
   const commands = commandsContext(bus, origin => !origin || flags.isOn(origin), io);
-  const input = inputRouter(commands, perf);
+  const input = inputRouter(commands, perf, frameLoop);
   const storage = storageContext(bus);
   const fold = foldContext(bus, io);
   const placeContext = {
@@ -389,10 +389,12 @@ export function createAppContext(
   const bus = eventBus(perf);
   const flags = createFlags(bus, initialFlags, io);
   const selection = createSelectionStore(graphs, bus);
+  const frameLoop = createFrameLoop();
   return {
     bus, graphs, flags, selection, io, perf,
+    frameLoop,
     sim: createSim(bus),
-    contexts: createContexts(bus, flags, io, perf),
+    contexts: createContexts(bus, flags, io, perf, frameLoop),
     model: createModelRegistry(model as ModelDef<ModelCtx>, flags),
   };
 }
