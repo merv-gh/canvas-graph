@@ -75,6 +75,20 @@ export type PerfSnapshot = {
   callGraph: PerfCallEdge[];
   inputs: PerfInputRow[];
   longTasks: PerfLongTaskRow[];
+  /** JS heap in use at snapshot time. Chrome: performance.memory; Node/jsdom:
+   *  process.memoryUsage(). Null where neither exists (Firefox/Safari). */
+  heapUsedBytes: number | null;
+};
+
+/** Current JS heap usage, environment-adaptive. Browser (Chromium) reads
+ *  `performance.memory.usedJSHeapSize`; Node/jsdom reads
+ *  `process.memoryUsage().heapUsed`; elsewhere null. */
+export const heapUsedBytes = (): number | null => {
+  const mem = (performance as { memory?: { usedJSHeapSize?: number } }).memory;
+  if (typeof mem?.usedJSHeapSize === 'number') return mem.usedJSHeapSize;
+  const proc = (globalThis as { process?: { memoryUsage?: () => { heapUsed: number } } }).process;
+  if (typeof proc?.memoryUsage === 'function') return proc.memoryUsage().heapUsed;
+  return null;
 };
 
 export type PerfInputTrace = {
@@ -103,6 +117,7 @@ const now = () => performance.now();
 const MAX_TIMELINE = 2000;
 const MAX_INPUTS = 500;
 const MAX_LONG_TASKS = 200;
+const MAX_MARKS = 1000;
 
 const pushCapped = <T>(rows: T[], row: T, max: number) => {
   rows.push(row);
@@ -213,7 +228,9 @@ export function createPerfApi(initialEnabled = false): PerfApi {
     },
     mark(label) {
       if (!on) return;
-      marks.push({ label, at: now() });
+      // Capped like timeline/inputs — an uncapped array is a slow leak in any
+      // long-lived session with perf enabled.
+      pushCapped(marks, { label, at: now() }, MAX_MARKS);
     },
     measure(label, fn) {
       if (!on) return fn();
@@ -316,6 +333,7 @@ export function createPerfApi(initialEnabled = false): PerfApi {
         callGraph: graphRows,
         inputs: [...inputs],
         longTasks: [...longTasks],
+        heapUsedBytes: heapUsedBytes(),
       };
     },
   };

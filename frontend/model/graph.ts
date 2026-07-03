@@ -396,37 +396,50 @@ export class Graph {
   }
 }
 
-export function graphStore() {
-  let next = 1;
-  const graphs = new Map<Id, Graph>();
-  const nextId = () => {
-    let id = `g${next++}`;
-    while (graphs.has(id)) id = `g${next++}`;
+/** The multi-graph registry. A class (like Graph/GraphNode/GraphEdge) so the
+ *  whole model layer is constructors, not object literals — one shape, stricter
+ *  fields, and instance-property methods stay reassignable for instrumentation
+ *  (installGraphPerf wraps create/switch per store). */
+export class GraphStore {
+  private next = 1;
+  private graphs = new Map<Id, Graph>();
+  private active: Graph;
+
+  constructor() {
+    this.active = this.create();
+  }
+
+  private nextId() {
+    let id = `g${this.next++}`;
+    while (this.graphs.has(id)) id = `g${this.next++}`;
     return id;
-  };
-  const create = (id: Id = nextId()) => {
-    const existing = graphs.get(id);
+  }
+
+  get current() { return this.active; }
+  all() { return [...this.graphs.values()]; }
+  get(id: Id) { return this.graphs.get(id); }
+
+  /** Instance property (not prototype method) so perf wrapping can reassign it. */
+  create = (id: Id = this.nextId()): Graph => {
+    const existing = this.graphs.get(id);
     if (existing) return existing;
     const graph = Graph.new(id);
-    graphs.set(id, graph);
+    this.graphs.set(id, graph);
     return graph;
   };
-  let current = create();
-  return {
-    get current() { return current; },
-    all: () => [...graphs.values()],
-    get: (id: Id) => graphs.get(id),
-    create,
-    delete(id: Id) {
-      if (graphs.size <= 1) return current;
-      graphs.delete(id);
-      if (current.id === id) current = graphs.values().next().value ?? create();
-      return current;
-    },
-    switch(id: Id) {
-      current = graphs.get(id) ?? create(id);
-      return current;
-    },
+
+  delete(id: Id) {
+    if (this.graphs.size <= 1) return this.active;
+    this.graphs.delete(id);
+    if (this.active.id === id) this.active = this.graphs.values().next().value ?? this.create();
+    return this.active;
+  }
+
+  /** Instance property for the same reason as `create`. */
+  switch = (id: Id): Graph => {
+    this.active = this.graphs.get(id) ?? this.create(id);
+    return this.active;
   };
 }
-export type GraphStore = ReturnType<typeof graphStore>;
+
+export const graphStore = () => new GraphStore();

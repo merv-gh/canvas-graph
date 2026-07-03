@@ -12,6 +12,7 @@ import { registerFeatures } from '../../frontend/features';
 import { appModel, graphStore } from '../../frontend/model';
 import { installRuntimeFeatureManager } from '../../frontend/runtime';
 import { registerSystems } from '../../frontend/systems';
+import { heapUsedBytes } from '../../frontend/core/perf';
 import { Places, type CommandSource, type FeatureFlags } from '../../frontend/types';
 
 const html = readFileSync(resolve(process.cwd(), 'frontend/index.html'), 'utf8')
@@ -56,6 +57,53 @@ export const settle = async () => {
 
 export const runCommand = (ctx: AppCtx, id: string, source: CommandSource = {}) =>
   ctx.contexts.commands.run(id, source);
+
+export type PerfTraceReport = {
+  /** JS heap delta start→stop in bytes. Node heap is noisy without a forced GC —
+   *  assert loose ceilings only, never exact values. Null when unreadable. */
+  heapDeltaBytes: number | null;
+  /** Render scheduler flushes inside the traced section. `overBudget` counts
+   *  flushes above one 60fps frame (16.7ms) — the render-budget signal. */
+  flush: { count: number; avgMs: number; maxMs: number; overBudget: number };
+  /** Scheduler idle: gap between consecutive flushes. Null with <2 flushes. */
+  idle: { avgGapMs: number; maxGapMs: number } | null;
+};
+
+/** Trace JS heap + render budget + scheduler idle across a test section.
+ *  Turns the perf API on (samples/counters flow), snapshots heap, and reduces
+ *  the scheduler's `Render.flush.*` series into a budget report on stop().
+ *
+ *    const trace = perfTrace(ctx);
+ *    …drive the app…
+ *    const report = trace.stop();
+ *    expect(report.flush.maxMs).toBeLessThan(50);   // jsdom-tolerant
+ */
+export const perfTrace = (ctx: AppCtx) => {
+  const wasEnabled = ctx.perf.enabled();
+  ctx.perf.setEnabled(true);
+  ctx.perf.reset();
+  const heapStart = heapUsedBytes();
+  return {
+    stop(): PerfTraceReport {
+      const snap = ctx.perf.snapshot();
+      if (!wasEnabled) ctx.perf.setEnabled(false);
+      const sample = (label: string) => snap.samples.find(row => row.label === label);
+      const count = (label: string) => snap.counts.find(row => row.label === label)?.count ?? 0;
+      const flush = sample('Render.flush.ms');
+      const gap = sample('Render.flush.gapMs');
+      return {
+        heapDeltaBytes: heapStart != null && snap.heapUsedBytes != null ? snap.heapUsedBytes - heapStart : null,
+        flush: {
+          count: count('Render.flush'),
+          avgMs: flush?.avg ?? 0,
+          maxMs: flush?.max ?? 0,
+          overBudget: count('Render.flush.overBudget'),
+        },
+        idle: gap ? { avgGapMs: gap.avg, maxGapMs: gap.max } : null,
+      };
+    },
+  };
+};
 
 export const commandButton = (id: string) =>
   document.querySelector(`[data-command="${id}"]`) as HTMLElement | null;

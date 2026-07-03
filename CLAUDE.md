@@ -1,6 +1,6 @@
 # ecs-canvas-graph
 
-The app is **`frontend/`** (v1 was removed; frontend is served at root). Read `frontend/CLAUDE.md` before touching it; `README.md` is the project hub + automation/DX guide.
+The app is **`frontend/`** Read `frontend/CLAUDE.md` before touching it; `README.md` is the project hub + automation/DX guide.
 
 - `frontend/` — TypeScript event-driven graph editor (systems/abilities/features plugins).
 - `dx/` — local-model TDD loop + app-aware tooling (`node dx/cli/apptool.mjs` for

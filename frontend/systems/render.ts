@@ -123,20 +123,27 @@ export function registerRender(system: Registry) {
       const focusable = item as (Element & { focus?: (options?: FocusOptions) => void }) | null;
       if (typeof focusable?.focus === 'function') focusable.focus({ preventScroll: true });
     };
+    /** One frame of paint budget (60fps). Flushes above it count as
+     *  `Render.flush.overBudget` — the number a WebGPU swap must drive to 0. */
+    const FRAME_BUDGET_MS = 16.7;
     const flushDirty = () => {
       const t0 = performance.now();
       flushes++;
-      const scopes = [...dirty];
+      const perfLog = ctx.flags.isOn('perf');
+      const scopes = perfLog ? [...dirty].join(',') : '';
       const trigger = lastMarkEvent || 'unknown';
       const hasNodes = dirty.has('nodes') || dirty.has('nodes.visual');
-      const kind = hasNodes ? (fullNodes ? 'FULL' : `PATCH(${[...dirtyItems].map(([k]) => k).join(',')})`) + (dirty.has('nodes') ? '' : '△') :
+      const kind = !perfLog ? '' : hasNodes ? (fullNodes ? 'FULL' : `PATCH(${[...dirtyItems].map(([k]) => k).join(',')})`) + (dirty.has('nodes') ? '' : '△') :
         dirty.has('camera') ? 'CAMERA' : 'OUTLINE';
-      const now = t0;
-      const since = lastFlushAt ? `${(now - lastFlushAt).toFixed(1)}ms` : '-';
-      lastFlushAt = now;
+      // Gap since the previous flush = how long the scheduler sat idle. Sampled
+      // so tests/perf modal can see idle cadence next to flush cost.
+      const gap = lastFlushAt ? t0 - lastFlushAt : 0;
+      const since = lastFlushAt ? `${gap.toFixed(1)}ms` : '-';
+      lastFlushAt = t0;
       lastMarkEvent = '';
       ctx.perf.count('Render.flush');
       ctx.perf.sample('Render.flush.dirtyScopes', dirty.size);
+      if (gap > 0) ctx.perf.sample('Render.flush.gapMs', gap);
       if (hasNodes) {
         ctx.perf.count('Render.flush.nodes');
         ctx.perf.sample('Render.flush.refs', dirtyItems.size);
@@ -152,14 +159,20 @@ export function registerRender(system: Registry) {
       dirty.clear();
       dirtyItems.clear();
       fullNodes = false;
+      const facts = markCount;
       markCount = 0;
       scheduledRender = false;
       const elapsed = performance.now() - t0;
-      const domNow = contexts.places.el(Places.Stage)?.querySelectorAll('*').length ?? 0;
-      const domDelta = lastDOMCount ? (domNow > lastDOMCount ? `+${domNow - lastDOMCount}` : `${domNow - lastDOMCount}`) : '';
-      lastDOMCount = domNow;
+      ctx.perf.sample('Render.flush.ms', elapsed);
+      if (elapsed > FRAME_BUDGET_MS) ctx.perf.count('Render.flush.overBudget');
       queueMicrotask(focusPendingItem);
-      if (ctx.flags.isOn('perf')) console.debug(`[render] #${flushes} ${kind} dirty=[${scopes}] trig="${trigger}" facts=${markCount} dom=${domNow}(${domDelta}) +${since} took=${elapsed.toFixed(1)}ms`);
+      // DOM census is O(subtree) — only pay for it when the perf flag is on.
+      if (perfLog) {
+        const domNow = contexts.places.el(Places.Stage)?.querySelectorAll('*').length ?? 0;
+        const domDelta = lastDOMCount ? (domNow > lastDOMCount ? `+${domNow - lastDOMCount}` : `${domNow - lastDOMCount}`) : '';
+        lastDOMCount = domNow;
+        console.debug(`[render] #${flushes} ${kind} dirty=[${scopes}] trig="${trigger}" facts=${facts} dom=${domNow}(${domDelta}) +${since} took=${elapsed.toFixed(1)}ms`);
+      }
     };
     const mark = (...scopes: RenderScope[]) => {
       scopes.forEach(s => dirty.add(s));

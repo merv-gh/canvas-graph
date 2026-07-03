@@ -6,7 +6,7 @@ Event-driven, plugin-structured TypeScript; the architecture is judged by how
 cheaply it can be regrouped and how easily a bug can be found, reproduced, and
 fixed — by a human *or* a local model.
 
-> v1 (a single-file prototype) has been removed. The app is `frontend/`, served at root.
+app is `frontend/`, served at root.
 
 ## Quickstart
 

@@ -19,3 +19,4 @@ dx/STOP
 dist-lib/graph-viewer.js
 mermaid.txt
 dx/bench
+dx/cli/preview-ws/frontend/*

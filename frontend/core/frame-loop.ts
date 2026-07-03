@@ -21,7 +21,8 @@ export function createFrameLoop(): FrameLoop {
     scheduled = false;
     const gap = lastFlush ? timestamp - lastFlush : 0;
     lastFlush = timestamp;
-    if (gap > 50) console.debug(`[frameLoop] gap=${gap.toFixed(1)}ms queue=${batch.length} [${batch.map(b => b.id).join(',')}]`);
+    if (gap > 50) 
+      console.debug(`[frameLoop] gap=${gap.toFixed(1)}ms queue=${batch.length} [${batch.map(b => b.id).join(',')}]`);
     for (const { id, callback } of batch) {
       try { callback(timestamp); } catch (e) {
         console.error(`[frameLoop] ${id} threw:`, e);
