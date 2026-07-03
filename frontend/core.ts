@@ -60,7 +60,7 @@ export { semanticTitle, mergeSemantics, hasCompleteSemantics, hasFailurePlan, ty
 export type Contexts = ReturnType<typeof createContexts>;
 export type Models = ReturnType<typeof createModelRegistry>;
 export type ModelCtx = { graphs: GraphStore };
-export type RenderApi = { flushes(): number; lastTrigger(): string };
+export type RenderApi = { flushes(): number; lastTrigger(): string; factsPerFrame(): number };
 export type DxApi = { run(): DxIssue[] };
 export type AppCtx = {
   bus: Bus;

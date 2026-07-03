@@ -212,7 +212,7 @@ export type DxIssue = { level: 'error' | 'warn'; rule: string; message: string }
 // Redraw convention
 // ---------------------------------------------------------------------------
 
-export type RedrawScope = 'nodes' | 'outline' | 'both' | 'camera';
+export type RedrawScope = 'nodes' | 'outline' | 'both' | 'camera' | 'nodes.visual';
 
 // ---------------------------------------------------------------------------
 // Command framework

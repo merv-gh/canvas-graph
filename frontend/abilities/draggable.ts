@@ -28,9 +28,36 @@ export const draggable = <T extends Positioned>() => ability<T>('draggable', [ac
 })]);
 
 export function registerDraggable(system: Registry) {
-  system('ability.draggable', ({ on, emit, contexts, graphs, frameLoop }) => {
+  system('ability.draggable', ({ on, emit, contexts, graphs, perf }) => {
     let drag: { ref: ItemRef; pointer: Position; start: Position } | null = null;
+    // Only the last pointer position matters per frame (commands.ts COALESCE
+    // batching ensures drag.item.move fires at most once per rAF).  We apply
+    // the update inline — no frameLoop schedule — so the render-stage draw
+    // runs synchronously and we save an extra rAF cycle vs. scheduling a
+    // separate drag.commit callback.
     let pending: Position | null = null;
+
+    const applyMove = () => {
+      const d = drag;
+      const p = pending;
+      if (!d || !p) return;
+      pending = null;
+      const t0 = perf.enabled() ? performance.now() : 0;
+      const pointer = contexts.view.clientToSpace(Places.Stage, p);
+      const Position = { x: d.start.x + pointer.x - d.pointer.x, y: d.start.y + pointer.y - d.pointer.y };
+      // Silent store write — no item.update, no storage handler dispatch.
+      graphs.current.updateNode(d.ref.id, { Position });
+      // Emit the fact to drive the normal render path (mark → frameLoop →
+      // flushDirty → debug log).  Named listeners (present, node-visuals,
+      // node-autosize) are cheap: present is a no-op unless active,
+      // node-visuals defers to microtask, node-autosize skips Position-only.
+      const gid = graphs.current.id;
+      emit('graph.node.updated', { graphId: gid, id: d.ref.id, patch: { Position } });
+      if (perf.enabled()) {
+        perf.count('Drag.move');
+        perf.sample('Drag.move.ms', performance.now() - t0);
+      }
+    };
 
     contexts.commands.register([
       {
@@ -62,24 +89,16 @@ export function registerDraggable(system: Registry) {
     on('drag.item.move', ({ x, y }) => {
       if (!drag) return;
       pending = { x, y };
-      frameLoop.schedule('drag.commit', () => {
-        if (!drag || !pending) return;
-        const pointer = contexts.view.clientToSpace(Places.Stage, pending);
-        pending = null;
-        const Position = { x: drag.start.x + pointer.x - drag.pointer.x, y: drag.start.y + pointer.y - drag.pointer.y };
-        emit('item.update', { ref: drag.ref, patch: { Position } });
-        emit('drag.item.moved', { ref: drag.ref });
-      }, 10);
+      applyMove();
     });
     on('drag.item.end', () => {
-      if (pending && drag) {
-        const pointer = contexts.view.clientToSpace(Places.Stage, pending);
-        pending = null;
-        const Position = { x: drag.start.x + pointer.x - drag.pointer.x, y: drag.start.y + pointer.y - drag.pointer.y };
-        emit('item.update', { ref: drag.ref, patch: { Position } });
-        emit('drag.item.moved', { ref: drag.ref });
+      const d = drag;
+      if (pending && d) applyMove();
+      // Single item.update on drop — fires facts, syncs storage / outline / hierarchy.
+      if (d) {
+        const node = graphs.current.getNode(d.ref.id) as Positioned | undefined;
+        if (node?.Position) emit('item.update', { ref: d.ref, patch: { Position: node.Position } });
       }
-      frameLoop.cancel('drag.commit');
       drag = null;
       pending = null;
     });

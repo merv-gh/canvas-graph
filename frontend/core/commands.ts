@@ -144,7 +144,7 @@ export function commandsContext(bus: Bus, isFlagOn: (origin?: string) => boolean
  *  eliminating wasted command matching on events whose intermediate results
  *  would be overwritten before the next paint.  `[data-command]` button clicks
  *  are excluded — toolbar buttons dispatch synchronously for instant feedback. */
-export function inputRouter(commands: ReturnType<typeof commandsContext>, perf?: PerfApi, frameLoop?: FrameLoop) {
+export function inputRouter(commands: ReturnType<typeof commandsContext>, perf?: PerfApi, frameLoop?: FrameLoop, counters?: { events: number; commands: number }) {
   // Events safe to coalesce: only the latest per type matters.  pointerdown /
   // pointerup must stay synchronous so drag/marquee start/end pair correctly.
   const COALESCE = new Set(['wheel', 'pointermove', 'click', 'dblclick']);
@@ -163,6 +163,7 @@ export function inputRouter(commands: ReturnType<typeof commandsContext>, perf?:
         const matched: string[] = [];
         const runCommand = (id: string, target: Element) => {
           matched.push(id);
+          if (counters) counters.commands++;
           const run = () => commands.run(id, { event, target });
           return perf?.enabled() ? perf.measure(`Command.run.${id}`, run) : run();
         };
@@ -215,6 +216,7 @@ export function inputRouter(commands: ReturnType<typeof commandsContext>, perf?:
       };
       const stageSelector = `[data-place="${Places.Stage}"]`;
       const handleEvent = (event: Event) => {
+        if (counters) counters.events++;
         if (frameLoop && COALESCE.has(event.type)) {
           if (event.type === 'wheel') {
             const target = event.target instanceof Element ? event.target : null;

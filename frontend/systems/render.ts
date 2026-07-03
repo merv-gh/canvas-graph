@@ -77,7 +77,7 @@ export function registerRender(system: Registry) {
       }
     });
 
-    type RenderScope = 'nodes' | 'outline' | 'camera';
+    type RenderScope = 'nodes' | 'nodes.visual' | 'outline' | 'camera';
     const dirty = new Set<RenderScope>();
     // Patch-render bookkeeping: refs changed this frame, and a flag for any
     // change we can't localize to specific node/edge ids (→ full rebuild).
@@ -87,15 +87,24 @@ export function registerRender(system: Registry) {
      *  Anything else (containers, graph switch, selection sets, layout) returns
      *  null → the frame falls back to a full rebuild. */
     const factItemRef = (name: string, data: unknown): ItemRef | null => {
-      const id = (data as { id?: string } | undefined)?.id;
+      const d = data as Record<string, unknown> | undefined;
+      if (!d) return null;
+      // Direct ItemRef payload (focus.item.focused, selection.item.selected).
+      if (d.kind && d.id) return d as ItemRef;
+      const id = typeof d.id === 'string' ? d.id : undefined;
       if (!id) return null;
       if (name.startsWith('graph.node.')) return { kind: 'node', id };
       if (name.startsWith('graph.edge.')) return { kind: 'edge', id };
+      // Events with id + namespace-implied kind (focus.node.focused, selection.node.selected, …).
+      if (name.includes('.node.')) return { kind: 'node', id };
+      if (name.includes('.edge.')) return { kind: 'edge', id };
       return null;
     };
     let flushes = 0;
     let scheduledRender = false;
     let lastMarkEvent = '';
+    let lastFlushAt = 0;
+    let markCount = 0;
     let pendingFocusRef: ItemRef | null = null;
     let pendingBlur = false;
     const focusPendingItem = () => {
@@ -117,13 +126,18 @@ export function registerRender(system: Registry) {
       flushes++;
       const scopes = [...dirty];
       const trigger = lastMarkEvent || 'unknown';
+      const hasNodes = dirty.has('nodes') || dirty.has('nodes.visual');
+      const kind = hasNodes ? (fullNodes ? 'FULL' : `PATCH(${[...dirtyItems].map(([k]) => k).join(',')})`) + (dirty.has('nodes') ? '' : '△') :
+        dirty.has('camera') ? 'CAMERA' : 'OUTLINE';
+      const now = performance.now();
+      const since = lastFlushAt ? `${(now - lastFlushAt).toFixed(1)}ms` : '-';
+      lastFlushAt = now;
       ctx.perf.count('Render.flush');
       ctx.perf.sample('Render.flush.dirtyScopes', dirty.size);
-      if (ctx.flags.isOn('perf')) console.debug(`[render] #${flushes} dirty=[${scopes}] trigger="${trigger}" full=${fullNodes} refs=${dirtyItems.size}`);
-      if (scopes.length === 0) console.warn(`[render] #${flushes} NO-OP flush — dirty set empty, trigger was "${trigger}"`);
+      if (ctx.flags.isOn('perf')) console.debug(`[render] #${flushes} ${kind} dirty=[${scopes}] trig="${trigger}" facts=${markCount} +${since}`);
       // A full stage draw already re-applies the camera, so only emit the
       // camera-only path when the nodes scope isn't also dirty this frame.
-      if (dirty.has('nodes')) {
+      if (hasNodes) {
         ctx.perf.count('Render.flush.nodes');
         ctx.perf.sample('Render.flush.refs', dirtyItems.size);
         emit('render.stage.draw', { full: fullNodes, refs: [...dirtyItems.values()] });
@@ -138,27 +152,37 @@ export function registerRender(system: Registry) {
       dirty.clear();
       dirtyItems.clear();
       fullNodes = false;
+      markCount = 0;
       scheduledRender = false;
       queueMicrotask(focusPendingItem);
     };
     const mark = (...scopes: RenderScope[]) => {
       scopes.forEach(s => dirty.add(s));
+      markCount++;
       if (scheduledRender) return;
       scheduledRender = true;
       frameLoop.schedule('render.flush', flushDirty, 20);
     };
     const applyScope = (scope: RedrawScope) =>
-      scope === 'both' ? mark('nodes', 'outline') : mark(scope as RenderScope);
+      scope === 'both' ? mark('nodes', 'outline') :
+      scope === 'nodes.visual' ? mark('nodes.visual') :
+      mark(scope as RenderScope);
     const scopeForEvent = (name: string, data: unknown): RedrawScope | null => {
       if (name === 'graph.node.updated') {
         const patch = (data as { patch?: Record<string, unknown> } | undefined)?.patch;
         if (patch && !('Label' in patch)) return 'nodes';
       }
+      // .changed suffix events that are purely decoration / visual state —
+      // no node data (Position, Size, Label) changed.
+      if (name === 'selection.changed' || name === 'decoration.changed') return 'nodes.visual';
       return factScope(name);
     };
-    ctx.expose('render', { flushes: () => flushes, lastTrigger: () => lastMarkEvent });
+    ctx.expose('render', { flushes: () => flushes, lastTrigger: () => lastMarkEvent, factsPerFrame: () => markCount });
     on('app.start', () => { lastMarkEvent = 'app.start'; mark('nodes'); });
     on('focus.item.focused', ref => {
+      if (!ref && pendingFocusRef) {
+        dirtyItems.set(`${pendingFocusRef.kind}:${pendingFocusRef.id}`, pendingFocusRef);
+      }
       pendingFocusRef = ref;
       if (!ref) pendingBlur = true;
     });
@@ -167,10 +191,21 @@ export function registerRender(system: Registry) {
       if (!scope) return;
       lastMarkEvent = name;
       applyScope(scope);
-      if (scope === 'nodes' || scope === 'both') {
+      if (scope === 'nodes' || scope === 'nodes.visual' || scope === 'both') {
         const ref = factItemRef(name, data);
-        if (ref) dirtyItems.set(`${ref.kind}:${ref.id}`, ref);
-        else fullNodes = true; // change we can't localize → rebuild all
+        if (ref) { dirtyItems.set(`${ref.kind}:${ref.id}`, ref); }
+        else if (name === 'decoration.changed') { fullNodes = true; }
+        else if (name === 'selection.changed') {
+          // Carries { refs: ItemRef[] } — extract individual refs.
+          const refs = (data as { refs?: ItemRef[] } | undefined)?.refs;
+          if (refs) refs.forEach(r => dirtyItems.set(`${r.kind}:${r.id}`, r));
+          else fullNodes = true;
+        }
+        else {
+          const d2 = data as { id?: unknown } | null;
+          const isNullClear = (name.startsWith('focus.') || name.startsWith('selection.')) && (d2 === null || d2?.id === null);
+          if (!isNullClear) fullNodes = true;
+        }
       }
     });
   }, { requires: ['input'] });

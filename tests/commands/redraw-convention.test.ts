@@ -10,8 +10,8 @@ describe('frontend redraw suffix convention', () => {
     expect(factScope('graph.node.updated')).toBe('both');
     expect(factScope('graph.node.deleted')).toBe('both');
     expect(factScope('graph.switched')).toBe('both');
-    expect(factScope('selection.node.selected')).toBe('both');
-    expect(factScope('focus.node.focused')).toBe('both');
+    expect(factScope('selection.node.selected')).toBe('nodes.visual');
+    expect(factScope('focus.node.focused')).toBe('nodes.visual');
     // Camera-only: pan/zoom move the layer transform in place, no DOM rebuild.
     expect(factScope('view.changed')).toBe('camera');
     expect(factScope('graph.node.create')).toBeNull();
