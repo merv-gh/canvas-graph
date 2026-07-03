@@ -102,9 +102,13 @@ export function registerRenderStage(system: Registry) {
     // Last-drawn signature per element (everything but position). Lets a patch
     // take the in-place `reposition` fast path when only the position moved.
     const sigCache = new Map<string, string>();
-    const cacheSig = (k: string, def: EntityDef<unknown>, item: unknown) => {
+    const modeKey = (ref: ItemRef) =>
+      contexts.decorations.modes.for(ref).map(m => m.mode).sort().join(',');
+    const cacheSig = (k: string, def: EntityDef<unknown>, item: unknown, ref?: ItemRef) => {
       const sig = def.render?.signature?.(item);
-      if (sig === undefined) sigCache.delete(k); else sigCache.set(k, sig);
+      const modes = ref ? `|modes:${modeKey(ref)}` : '';
+      if (sig !== undefined) sigCache.set(k, sig + modes);
+      else sigCache.delete(k);
     };
     const keyOf = (ref: ItemRef) => `${ref.kind}:${ref.id}:${(ref.parent ?? []).join('/')}`;
     const refOf = (kind: string, item: unknown): ItemRef | null => {
@@ -201,7 +205,7 @@ export function registerRenderStage(system: Registry) {
           stableZ(ref, el);
           targetLayer(def.render!).append(el);
           els.set(k, el);
-          cacheSig(k, def, item);
+          cacheSig(k, def, item, ref);
           inserted++;
         }
       });
@@ -228,9 +232,13 @@ export function registerRenderStage(system: Registry) {
       if (!renderer || !item || hidden) { existing?.remove(); els.delete(k); sigCache.delete(k); return; }
       // Fast path: the element exists and nothing but its position changed →
       // move it in place (no rebuild, keeps identity so CSS can ease the move).
-      if (existing && renderer.reposition && renderer.signature && renderer.signature(item) === sigCache.get(k)) {
-        renderer.reposition(existing, item);
-        return;
+      if (existing && renderer.reposition && renderer.signature) {
+        const dataSig = renderer.signature(item);
+        const fullSig = dataSig + `|modes:${modeKey(ref)}`;
+        if (fullSig === sigCache.get(k)) {
+          renderer.reposition(existing, item);
+          return;
+        }
       }
       const fresh = ctx.perf.measure(`Render.entity.${ref.kind}.draw`, () =>
         renderer.draw(item, renderCtxFor(entityDef!, item)) as HTMLElement | null,
@@ -240,7 +248,7 @@ export function registerRenderStage(system: Registry) {
       if (existing) existing.replaceWith(fresh);
       else targetLayer(renderer).append(fresh);
       els.set(k, fresh);
-      cacheSig(k, entityDef!, item);
+      cacheSig(k, entityDef!, item, ref);
     };
 
     /** Patch the changed refs (+ edges incident to any moved node, whose paths

@@ -34,7 +34,7 @@ declare module '../types' {
     'graph.node.create': NodeDraft & CreateHints;
     'graph.node.created': { graphId: Id; id: Id; hints?: CreateHints };
     'graph.node.update': { id: Id; patch: NodePatch };
-    'graph.node.updated': { graphId: Id; id: Id; patch?: NodePatch };
+    'graph.node.updated': { graphId: Id; id: Id; patch?: NodePatch; visual?: boolean };
     'graph.node.delete': { id: Id };
     'graph.node.deleted': { graphId: Id; id: Id };
     'graph.edge.create': EdgeDraft;

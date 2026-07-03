@@ -31,11 +31,9 @@ export function registerDraggable(system: Registry) {
   system('ability.draggable', ({ on, emit, contexts, graphs, perf }) => {
     let drag: { ref: ItemRef; pointer: Position; start: Position } | null = null;
     // Only the last pointer position matters per frame (commands.ts COALESCE
-    // batching ensures drag.item.move fires at most once per rAF).  We apply
-    // the update inline — no frameLoop schedule — so the render-stage draw
-    // runs synchronously and we save an extra rAF cycle vs. scheduling a
-    // separate drag.commit callback.
+    // batching ensures drag.item.move fires at most once per rAF).
     let pending: Position | null = null;
+    let captured: { el: Element; id: number } | null = null;
 
     const applyMove = () => {
       const d = drag;
@@ -47,12 +45,8 @@ export function registerDraggable(system: Registry) {
       const Position = { x: d.start.x + pointer.x - d.pointer.x, y: d.start.y + pointer.y - d.pointer.y };
       // Silent store write — no item.update, no storage handler dispatch.
       graphs.current.updateNode(d.ref.id, { Position });
-      // Emit the fact to drive the normal render path (mark → frameLoop →
-      // flushDirty → debug log).  Named listeners (present, node-visuals,
-      // node-autosize) are cheap: present is a no-op unless active,
-      // node-visuals defers to microtask, node-autosize skips Position-only.
       const gid = graphs.current.id;
-      emit('graph.node.updated', { graphId: gid, id: d.ref.id, patch: { Position } });
+      emit('graph.node.updated', { graphId: gid, id: d.ref.id, patch: { Position }, visual: true });
       if (perf.enabled()) {
         perf.count('Drag.move');
         perf.sample('Drag.move.ms', performance.now() - t0);
@@ -67,8 +61,15 @@ export function registerDraggable(system: Registry) {
         hidden: true,
         input: { on: 'pointerdown', selector: '[data-drag-handle]', when: event => !(event.target as Element).closest('[data-command]'), prevent: true },
         payload: ({ event, target }) => {
+          const e = event as PointerEvent;
+          // Pointer capture keeps pointermove firing even after the pointer
+          // leaves the handle element — prevents event starvation at high speed.
+          if (target instanceof Element && typeof (target as HTMLElement).setPointerCapture === 'function') {
+            (target as HTMLElement).setPointerCapture(e.pointerId);
+            captured = { el: target, id: e.pointerId };
+          }
           const ref = itemRefFrom(target);
-          return ref ? { ref, x: (event as PointerEvent).clientX, y: (event as PointerEvent).clientY } : undefined;
+          return ref ? { ref, x: e.clientX, y: e.clientY } : undefined;
         },
       },
       {
@@ -94,6 +95,11 @@ export function registerDraggable(system: Registry) {
     on('drag.item.end', () => {
       const d = drag;
       if (pending && d) applyMove();
+      // Release pointer capture.
+      if (captured) {
+        try { (captured.el as HTMLElement).releasePointerCapture?.(captured.id); } catch { /* already released */ }
+        captured = null;
+      }
       // Single item.update on drop — fires facts, syncs storage / outline / hierarchy.
       if (d) {
         const node = graphs.current.getNode(d.ref.id) as Positioned | undefined;

@@ -11,6 +11,7 @@ type QueueItem = { callback: FrameCallback; priority: number };
 export function createFrameLoop(): FrameLoop {
   const queue = new Map<string, QueueItem>();
   let scheduled = false;
+  let lastFlush = 0;
 
   const flush = (timestamp: DOMHighResTimeStamp) => {
     const batch = [...queue.entries()]
@@ -18,8 +19,13 @@ export function createFrameLoop(): FrameLoop {
       .map(([id, item]) => ({ id, ...item }));
     queue.clear();
     scheduled = false;
-    for (const { callback } of batch) {
-      callback(timestamp);
+    const gap = lastFlush ? timestamp - lastFlush : 0;
+    lastFlush = timestamp;
+    if (gap > 50) console.debug(`[frameLoop] gap=${gap.toFixed(1)}ms queue=${batch.length} [${batch.map(b => b.id).join(',')}]`);
+    for (const { id, callback } of batch) {
+      try { callback(timestamp); } catch (e) {
+        console.error(`[frameLoop] ${id} threw:`, e);
+      }
     }
     if (queue.size > 0) {
       scheduled = true;

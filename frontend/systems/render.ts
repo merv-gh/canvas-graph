@@ -105,6 +105,7 @@ export function registerRender(system: Registry) {
     let lastMarkEvent = '';
     let lastFlushAt = 0;
     let markCount = 0;
+    let lastDOMCount = 0;
     let pendingFocusRef: ItemRef | null = null;
     let pendingBlur = false;
     const focusPendingItem = () => {
@@ -123,20 +124,19 @@ export function registerRender(system: Registry) {
       if (typeof focusable?.focus === 'function') focusable.focus({ preventScroll: true });
     };
     const flushDirty = () => {
+      const t0 = performance.now();
       flushes++;
       const scopes = [...dirty];
       const trigger = lastMarkEvent || 'unknown';
       const hasNodes = dirty.has('nodes') || dirty.has('nodes.visual');
       const kind = hasNodes ? (fullNodes ? 'FULL' : `PATCH(${[...dirtyItems].map(([k]) => k).join(',')})`) + (dirty.has('nodes') ? '' : '△') :
         dirty.has('camera') ? 'CAMERA' : 'OUTLINE';
-      const now = performance.now();
+      const now = t0;
       const since = lastFlushAt ? `${(now - lastFlushAt).toFixed(1)}ms` : '-';
       lastFlushAt = now;
+      lastMarkEvent = '';
       ctx.perf.count('Render.flush');
       ctx.perf.sample('Render.flush.dirtyScopes', dirty.size);
-      if (ctx.flags.isOn('perf')) console.debug(`[render] #${flushes} ${kind} dirty=[${scopes}] trig="${trigger}" facts=${markCount} +${since}`);
-      // A full stage draw already re-applies the camera, so only emit the
-      // camera-only path when the nodes scope isn't also dirty this frame.
       if (hasNodes) {
         ctx.perf.count('Render.flush.nodes');
         ctx.perf.sample('Render.flush.refs', dirtyItems.size);
@@ -154,7 +154,12 @@ export function registerRender(system: Registry) {
       fullNodes = false;
       markCount = 0;
       scheduledRender = false;
+      const elapsed = performance.now() - t0;
+      const domNow = contexts.places.el(Places.Stage)?.querySelectorAll('*').length ?? 0;
+      const domDelta = lastDOMCount ? (domNow > lastDOMCount ? `+${domNow - lastDOMCount}` : `${domNow - lastDOMCount}`) : '';
+      lastDOMCount = domNow;
       queueMicrotask(focusPendingItem);
+      if (ctx.flags.isOn('perf')) console.debug(`[render] #${flushes} ${kind} dirty=[${scopes}] trig="${trigger}" facts=${markCount} dom=${domNow}(${domDelta}) +${since} took=${elapsed.toFixed(1)}ms`);
     };
     const mark = (...scopes: RenderScope[]) => {
       scopes.forEach(s => dirty.add(s));
@@ -169,8 +174,8 @@ export function registerRender(system: Registry) {
       mark(scope as RenderScope);
     const scopeForEvent = (name: string, data: unknown): RedrawScope | null => {
       if (name === 'graph.node.updated') {
-        const patch = (data as { patch?: Record<string, unknown> } | undefined)?.patch;
-        if (patch && !('Label' in patch)) return 'nodes';
+        const d = data as { patch?: Record<string, unknown>; visual?: boolean } | undefined;
+        if (d?.patch && !('Label' in d.patch)) return d.visual ? 'nodes.visual' : 'nodes';
       }
       // .changed suffix events that are purely decoration / visual state —
       // no node data (Position, Size, Label) changed.
@@ -194,7 +199,7 @@ export function registerRender(system: Registry) {
       if (scope === 'nodes' || scope === 'nodes.visual' || scope === 'both') {
         const ref = factItemRef(name, data);
         if (ref) { dirtyItems.set(`${ref.kind}:${ref.id}`, ref); }
-        else if (name === 'decoration.changed') { fullNodes = true; }
+        else if (name === 'decoration.changed') { /* modes included in sigCache now — PATCH handles it */ }
         else if (name === 'selection.changed') {
           // Carries { refs: ItemRef[] } — extract individual refs.
           const refs = (data as { refs?: ItemRef[] } | undefined)?.refs;
