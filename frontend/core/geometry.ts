@@ -26,3 +26,21 @@ export const expandRect = (r: Rect, pad: number, topExtra = 0): Rect =>
 
 /** Center of a rect. */
 export const rectCenter = (r: Rect): Position => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
+
+/** Shrink a segment endpoint to the target rect's border, so an arrowhead
+ *  lands outside the card rather than under it. Treats the target as an
+ *  axis-aligned rect centered on `rectCenter` with half-dims `half`.
+ *  Shared by the SVG edge renderer and the GPU scene builder. */
+export const intersectRectBoundary = (
+  outside: Position,
+  rectCenter: Position,
+  half: { w: number; h: number },
+): Position => {
+  const { x: cx, y: cy } = rectCenter;
+  const dx = outside.x - cx, dy = outside.y - cy;
+  if (dx === 0 && dy === 0) return { x: cx, y: cy };
+  const tx = dx === 0 ? Infinity : Math.abs(half.w / dx);
+  const ty = dy === 0 ? Infinity : Math.abs(half.h / dy);
+  const t = Math.min(tx, ty);
+  return { x: cx + dx * t, y: cy + dy * t };
+};

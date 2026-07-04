@@ -6,6 +6,8 @@
     "dx": "node dx/cli/dx.mjs",
     "dev": "node dx/cli/dev.mjs",
     "dev:frontend": "vite frontend --host 127.0.0.1 --port 5174 --strictPort",
+    "build": "vite build frontend --base ./",
+    "preview:build": "vite preview frontend",
     "build:lib": "vite build --config vite.lib.config.ts",
     "test": "npm run test:commands:coverage && npm run test:browser",
     "test:browser": "playwright test",
@@ -21,6 +23,7 @@
   "devDependencies": {
     "@playwright/test": "^1.44.0",
     "@vitest/coverage-v8": "^4.1.8",
+    "@webgpu/types": "^0.1.71",
     "jsdom": "^27.0.1",
     "pngjs": "^7.0.0",
     "typescript": "^5.8.3",

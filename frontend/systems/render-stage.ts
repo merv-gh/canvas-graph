@@ -236,7 +236,8 @@ export function registerRenderStage(system: Registry) {
         const dataSig = renderer.signature(item);
         const fullSig = dataSig + `|modes:${modeKey(ref)}`;
         if (fullSig === sigCache.get(k)) {
-          renderer.reposition(existing, item);
+          ctx.perf.count('Render.stage.reposition');
+          renderer.reposition(existing, item, renderCtxFor(entityDef!, item));
           return;
         }
       }

@@ -1,5 +1,7 @@
 import type { GraphStore } from './model';
 import { affordancesContext } from './core/affordances';
+import { eventBus, type BusOriginIndex } from './core/bus';
+export type { BusOriginIndex, InstrumentedBus } from './core/bus';
 import { cancellationContext } from './core/cancellation';
 import { commandsContext, inputRouter } from './core/commands';
 import { decorationsContext } from './core/decorations';
@@ -18,7 +20,6 @@ import { createFrameLoop, type FrameLoop } from './core/frame-loop';
 import { templateContext } from './core/templates';
 import { viewContext } from './core/view';
 import {
-  type AnyEvent,
   type AppEvents,
   type Bus,
   type CommandSpec,
@@ -114,112 +115,6 @@ export const systemOf = (id: string) => id.split('.')[0] || 'app';
 
 export const uiValue = <T,>(value: UiValue<T> | undefined, item: T, fallback = '') =>
   typeof value === 'function' ? value(item) : value ?? fallback;
-
-export type BusOriginIndex = {
-  /** Origins that subscribed to `name` at least once and haven't fully torn down. */
-  _subscribersOf(name: string): string[];
-  /** Origins that emitted `name` at least once this session. */
-  _emittersOf(name: string): string[];
-  /** Event names this origin still subscribes to. */
-  _subscriptionsOf(origin: string): string[];
-  /** Event names this origin has emitted at least once. */
-  _emissionsOf(origin: string): string[];
-  /** Record a subscribe / unsubscribe. Used by registry.start's scopedBus. */
-  _trackSubscribe(name: string, origin: string): void;
-  _untrackSubscribe(name: string, origin: string): void;
-  /** Record an emit. Used by registry.start's scopedBus and SystemCtx.emit/forward. */
-  _trackEmit(name: string, origin: string): void;
-};
-type InstrumentedBus = Bus & BusOriginIndex & { _subscribed: Set<string>; _emitted: Set<string> };
-function eventBus(perf?: PerfApi): InstrumentedBus {
-  const listeners = new Map<EventName, ((data: unknown, event: AnyEvent) => void)[]>();
-  const any: ((event: AnyEvent) => void)[] = [];
-  const listenerCounts = new Map<string, number>();
-  const subscribed = new Set<string>();
-  const emitted = new Set<string>();
-  const subscribersOf = new Map<string, Map<string, number>>();
-  const subscriptionsOf = new Map<string, Set<string>>();
-  const emittersOf = new Map<string, Set<string>>();
-  const emissionsOf = new Map<string, Set<string>>();
-  const addSubscribed = (name: string) => {
-    listenerCounts.set(name, (listenerCounts.get(name) ?? 0) + 1);
-    subscribed.add(name);
-  };
-  const removeSubscribed = (name: string) => {
-    const next = (listenerCounts.get(name) ?? 0) - 1;
-    if (next > 0) listenerCounts.set(name, next);
-    else { listenerCounts.delete(name); subscribed.delete(name); }
-  };
-  const remove = <T,>(list: T[], item: T) => {
-    const index = list.indexOf(item);
-    if (index >= 0) list.splice(index, 1);
-  };
-  const dispatch = (name: EventName, data: unknown) => {
-    emitted.add(name);
-    const event = { name, data, at: performance.now() } as AnyEvent;
-    perf?.count(`Bus.emit.${String(name)}`);
-    const fireAny = () => [...any].forEach(fn => fn(event));
-    const fireNamed = () => [...(listeners.get(name) || [])].forEach(fn => fn(event.data, event));
-    if (perf?.enabled()) {
-      perf.measure(`Bus.any.${String(name)}`, fireAny);
-      perf.measure(`Bus.listeners.${String(name)}`, fireNamed);
-    } else {
-      fireAny();
-      fireNamed();
-    }
-  };
-  return {
-    on(name, fn) {
-      let active = true;
-      const wrapped = fn as (data: unknown, event: AnyEvent) => void;
-      addSubscribed(name);
-      (listeners.get(name) || listeners.set(name, []).get(name)!).push(wrapped);
-      return () => {
-        if (!active) return;
-        active = false;
-        remove(listeners.get(name) ?? [], wrapped);
-        removeSubscribed(name);
-      };
-    },
-    onAny(fn) {
-      let active = true;
-      any.push(fn);
-      return () => {
-        if (!active) return;
-        active = false;
-        remove(any, fn);
-      };
-    },
-    emit(name, ...args) { dispatch(name, args[0]); },
-    forward(name, data) { dispatch(name, data); },
-    _subscribed: subscribed,
-    _emitted: emitted,
-    _subscribersOf: (name) => [...(subscribersOf.get(name)?.keys() ?? [])],
-    _emittersOf: (name) => [...(emittersOf.get(name) ?? [])],
-    _subscriptionsOf: (origin) => [...(subscriptionsOf.get(origin) ?? [])],
-    _emissionsOf: (origin) => [...(emissionsOf.get(origin) ?? [])],
-    _trackSubscribe(name, origin) {
-      const counts = subscribersOf.get(name) ?? subscribersOf.set(name, new Map()).get(name)!;
-      counts.set(origin, (counts.get(origin) ?? 0) + 1);
-      (subscriptionsOf.get(origin) ?? subscriptionsOf.set(origin, new Set()).get(origin)!).add(name);
-    },
-    _untrackSubscribe(name, origin) {
-      const counts = subscribersOf.get(name);
-      if (!counts) return;
-      const next = (counts.get(origin) ?? 0) - 1;
-      if (next > 0) { counts.set(origin, next); return; }
-      counts.delete(origin);
-      if (!counts.size) subscribersOf.delete(name);
-      const set = subscriptionsOf.get(origin);
-      set?.delete(name);
-      if (set && !set.size) subscriptionsOf.delete(origin);
-    },
-    _trackEmit(name, origin) {
-      (emittersOf.get(name) ?? emittersOf.set(name, new Set()).get(name)!).add(origin);
-      (emissionsOf.get(origin) ?? emissionsOf.set(origin, new Set()).get(origin)!).add(name);
-    },
-  };
-}
 
 type OriginScoped = { unregisterOrigin(origin: string): void };
 
@@ -389,7 +284,7 @@ export function createAppContext(
   const bus = eventBus(perf);
   const flags = createFlags(bus, initialFlags, io);
   const selection = createSelectionStore(graphs, bus);
-  const frameLoop = createFrameLoop();
+  const frameLoop = createFrameLoop(() => perf.enabled());
   return {
     bus, graphs, flags, selection, io, perf,
     frameLoop,

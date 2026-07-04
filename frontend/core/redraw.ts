@@ -15,3 +15,18 @@ export const factScope = (name: string): RedrawScope | null => {
   }
   return null;
 };
+
+/** Full event→scope classification, including the data-dependent special cases
+ *  (visual-only node patches, pure-decoration set changes). The ONLY home for
+ *  redraw-scope logic — the render scheduler calls this and nothing else, so a
+ *  new special case is one edit here, not a second heuristic in render.ts. */
+export const scopeForEvent = (name: string, data: unknown): RedrawScope | null => {
+  if (name === 'graph.node.updated') {
+    const d = data as { patch?: Record<string, unknown>; visual?: boolean } | undefined;
+    if (d?.patch && !('Label' in d.patch)) return d.visual ? 'nodes.visual' : 'nodes';
+  }
+  // .changed events that are purely decoration / visual state — no node data
+  // (Position, Size, Label) moved.
+  if (name === 'selection.changed' || name === 'decoration.changed') return 'nodes.visual';
+  return factScope(name);
+};

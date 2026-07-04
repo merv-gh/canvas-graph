@@ -2,6 +2,7 @@ export const STORAGE_KEYS = {
   shortcuts: 'frontend.shortcuts',
   flags: 'frontend.flags',
   disabledCommands: 'frontend.commands.disabled',
+  graphs: 'frontend.graphs',
 } as const;
 
 /** Swap point between localStorage, memory, IndexedDB, HTTP, etc. */

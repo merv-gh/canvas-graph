@@ -1,4 +1,5 @@
 import { clamp, semanticTitle } from '../core';
+import { intersectRectBoundary } from '../core/geometry';
 import { renderMarkdown } from '../core/markdown';
 import { collapsible, configurable, draggable, editable, nudgeable, selectable } from '../abilities';
 import type { DataScale, EdgeKind, Graph, GraphEdge, GraphNode, NodeEntity, EdgePatch, NodePatch, NodeType } from './graph';
@@ -63,19 +64,6 @@ export const graphEntity: EntityDef<Graph> = entityDef<Graph>('graph', {
   labelOf: graph => graph.id,
   abilities: [],
 });
-
-/** Shrink the line endpoint to the target rect's border so the arrowhead lands
- *  outside the card, not inside it. Treats the target as an axis-aligned
- *  rectangle centered on `(cx, cy)` with half-dims `(hw, hh)`. */
-const intersectRectBoundary = (outside: { x: number; y: number }, rectCenter: { x: number; y: number }, half: { w: number; h: number }) => {
-  const { x: cx, y: cy } = rectCenter;
-  const dx = outside.x - cx, dy = outside.y - cy;
-  if (dx === 0 && dy === 0) return { x: cx, y: cy };
-  const tx = dx === 0 ? Infinity : Math.abs(half.w / dx);
-  const ty = dy === 0 ? Infinity : Math.abs(half.h / dy);
-  const t = Math.min(tx, ty);
-  return { x: cx + dx * t, y: cy + dy * t };
-};
 
 /** Compute the visible endpoint for an edge anchor: if the node is inside a
  *  Collapsed container, the endpoint snaps to the outermost collapsed
@@ -154,41 +142,73 @@ const edgeRenderer: EntityRenderer<GraphEdge> = {
     if (label) {
       const lines = label.split(/\r?\n/);
       const lineH = 14;
-      // Offset the label to the RIGHT of the travel direction (from→to) so it
-      // clears the line and bidirectional pairs don't stack on the same point.
-      // Right-normal in screen space (y-down): rotate the direction +90° → (-dy, dx).
-      const dx = to.center.x - from.center.x, dy = to.center.y - from.center.y;
-      const len = Math.hypot(dx, dy) || 1;
-      const blockH = lines.length * lineH;
-      const off = blockH / 2 + 8;
-      const nx = (-dy / len) * off, ny = (dx / len) * off;
-      const midX = (from.center.x + to.center.x) / 2 + nx;
-      const midY = (from.center.y + to.center.y) / 2 + ny;
-      // Center the block on the offset anchor (top line lifted by half the block).
-      const startY = midY - ((lines.length - 1) * lineH) / 2 - 4;
+      // Label content is built in LOCAL coords around (0,0) inside a translated
+      // wrapper group — reposition then only rewrites the wrapper's transform.
+      const wrap = svg('g', { class: 'edge-label-wrap', transform: labelTransform(from.center, to.center, lines.length, lineH) });
+      // Center the block on the anchor (top line lifted by half the block).
+      const startY = -((lines.length - 1) * lineH) / 2 - 4;
       // Opaque backdrop so the text stays legible where the label crosses an edge
       // — sized from the text metrics (graph units, so it scales with the label).
       const charW = 6.6, padX = 4, padY = 2;
       const boxW = Math.max(...lines.map(l => l.length)) * charW + padX * 2;
       const boxH = (lines.length - 1) * lineH + 12 + padY * 2;
-      const bg = svg('rect', {
-        class: 'edge-label-bg', x: midX - boxW / 2, y: startY - 9 - padY, width: boxW, height: boxH, rx: 3,
-      });
-      g.append(bg);
+      wrap.append(svg('rect', {
+        class: 'edge-label-bg', x: -boxW / 2, y: startY - 9 - padY, width: boxW, height: boxH, rx: 3,
+      }));
       const text = svg('text', { class: `edge-label edge-kind-${edgeKind}`, 'text-anchor': 'middle', 'font-size': 11 });
       lines.forEach((line, i) => {
-        const tspan = svg('tspan', { x: midX, y: startY + i * lineH });
+        const tspan = svg('tspan', { x: 0, y: startY + i * lineH });
         tspan.textContent = line;
         text.append(tspan);
       });
       // Backdrop then text → text always paints on top of its own edge line.
-      g.append(text);
+      wrap.append(text);
+      g.append(wrap);
     }
     return g;
   },
-  signature(edge) {
-    return `${edge.From}->${edge.To}|${edge.Label?.text ?? ''}|${edge.EdgeKind ?? ''}|${edge.LatencyMs ?? ''}|${edge.ThroughputRps ?? ''}|${edge.PayloadKb ?? ''}|${edge.Purpose ?? ''}|${edge.Assumptions ?? ''}|${edge.Limits ?? ''}|${edge.WhatThen ?? ''}|${edge.Observability ?? ''}|${edge.FailureMode ?? ''}|${edge.DataScale ?? ''}|${edge.FreshnessMs ?? ''}`;
+  /** Endpoint move (drag / nudge / cascade) — rewrite line coordinates and the
+   *  label wrapper's transform on the EXISTING SVG group instead of rebuilding
+   *  it. Uses the same endpoint resolution as draw (incl. collapsed-container
+   *  substitution), so the fast path can't drift from the slow one. */
+  reposition(el, edge, ctx) {
+    const from = resolveEndpoint({ kind: 'node', id: edge.From }, ctx);
+    const to = resolveEndpoint({ kind: 'node', id: edge.To }, ctx);
+    // Degenerate (missing / same collapsed ancestor): leave the element — the
+    // next non-position change full-draws it into the right shape.
+    if (!from || !to || (from.ref.kind === to.ref.kind && from.ref.id === to.ref.id)) return;
+    const tipAtTarget = intersectRectBoundary(from.center, to.center, to.half);
+    const tipAtSource = intersectRectBoundary(to.center, from.center, from.half);
+    const setLine = (selector: string, x1: number, y1: number, x2: number, y2: number) => {
+      const lineEl = el.querySelector(selector);
+      if (!lineEl) return;
+      lineEl.setAttribute('x1', String(x1));
+      lineEl.setAttribute('y1', String(y1));
+      lineEl.setAttribute('x2', String(x2));
+      lineEl.setAttribute('y2', String(y2));
+    };
+    setLine('.edge-hit', from.center.x, from.center.y, to.center.x, to.center.y);
+    setLine('.edge-line', tipAtSource.x, tipAtSource.y, tipAtTarget.x, tipAtTarget.y);
+    const wrap = el.querySelector('.edge-label-wrap');
+    if (wrap) {
+      const lineCount = wrap.querySelectorAll('tspan').length || 1;
+      wrap.setAttribute('transform', labelTransform(from.center, to.center, lineCount, 14));
+    }
   },
+  signature(edge) {
+    return `v${edge.visualVersion}`;
+  },
+};
+
+/** Anchor transform for an edge label: midpoint pushed to the RIGHT of the
+ *  from→to direction so the block clears the line and bidirectional pairs
+ *  don't stack. Right-normal in screen space (y-down): (-dy, dx). */
+const labelTransform = (from: { x: number; y: number }, to: { x: number; y: number }, lineCount: number, lineH: number) => {
+  const dx = to.x - from.x, dy = to.y - from.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const off = (lineCount * lineH) / 2 + 8;
+  const nx = (-dy / len) * off, ny = (dx / len) * off;
+  return `translate(${(from.x + to.x) / 2 + nx}, ${(from.y + to.y) / 2 + ny})`;
 };
 
 export const edgeEntity: EntityDef<GraphEdge, EdgePatch> = entityDef<GraphEdge, EdgePatch>('edge', {
@@ -316,10 +336,11 @@ const nodeRenderer: EntityRenderer<GraphNode> = {
     (el as HTMLElement).style.left = `${pos.x}px`;
     (el as HTMLElement).style.top = `${pos.y}px`;
   },
-  /** Everything the drawn node depends on *except* position. Unchanged ⇒ the
-   *  stage takes the cheap `reposition` path instead of a full redraw. */
+  /** Everything the drawn node depends on *except* position, as one integer:
+   *  Graph.updateNode bumps `visualVersion` on any non-Position change, so an
+   *  unchanged version ⇒ the stage takes the cheap `reposition` path. */
   signature(node) {
-    return `${node.NodeType ?? 'text'}|${node.Size.w}x${node.Size.h}|${node.Label.text}|${node.Description ?? ''}|${node.ComputeMs ?? ''}|${node.ExpectedRps ?? ''}|${node.LatencyMs ?? ''}|${node.Purpose ?? ''}|${node.Assumptions ?? ''}|${node.Limits ?? ''}|${node.WhatThen ?? ''}|${node.Observability ?? ''}|${node.FailureMode ?? ''}|${node.DataScale ?? ''}|${node.FreshnessMs ?? ''}`;
+    return `v${node.visualVersion}`;
   },
 };
 

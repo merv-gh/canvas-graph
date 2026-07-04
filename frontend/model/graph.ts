@@ -69,6 +69,10 @@ const parentKey = (parent?: Id[]) => JSON.stringify(parent ?? []);
 
 export class GraphNode implements NodeEntity {
   kind = 'node' as const;
+  /** Bumped by Graph.updateNode on any non-Position change. Renderer signatures
+   *  compare this single integer instead of concatenating every visual field —
+   *  O(1) instead of O(fields) string work per patch check. */
+  visualVersion = 0;
   Label: Label;
   Size: Size;
   Position?: Position;
@@ -108,6 +112,9 @@ export class GraphNode implements NodeEntity {
 
 export class GraphEdge implements EdgeEntity {
   kind = 'edge' as const;
+  /** Bumped by Graph.updateEdge on any change (edges carry no position of their
+   *  own — endpoint moves are the node's business, handled by reposition). */
+  visualVersion = 0;
   Label?: Label;
   EdgeKind?: EdgeKind;
   LatencyMs?: number;
@@ -164,11 +171,16 @@ export class Graph {
   // Buckets node ids by their position cell so the renderer can ask "which
   // nodes fall in this viewport rect" in O(cells + hits) instead of scanning
   // every node each pan/zoom frame. Maintained on create/move/delete.
+  // Keys are packed integers (cell coords offset to positive, 16 bits each →
+  // ±32k cells = ±8.4M graph units) — no string alloc per index/lookup.
   private static readonly CELL = 256;
-  private grid = new Map<string, Set<Id>>();
-  private nodeCell = new Map<Id, string>();
+  private grid = new Map<number, Set<Id>>();
+  private nodeCell = new Map<Id, number>();
+  private static packCell(cx: number, cy: number) {
+    return (cx + 0x8000) * 0x10000 + (cy + 0x8000);
+  }
   private cellKey(x: number, y: number) {
-    return `${Math.floor(x / Graph.CELL)},${Math.floor(y / Graph.CELL)}`;
+    return Graph.packCell(Math.floor(x / Graph.CELL), Math.floor(y / Graph.CELL));
   }
   private indexNode(node: GraphNode) {
     const p = node.Position;
@@ -193,7 +205,7 @@ export class Graph {
     const out: Id[] = [];
     for (let cx = x0; cx <= x1; cx++) {
       for (let cy = y0; cy <= y1; cy++) {
-        this.grid.get(`${cx},${cy}`)?.forEach(id => out.push(id));
+        this.grid.get(Graph.packCell(cx, cy))?.forEach(id => out.push(id));
       }
     }
     return out;
@@ -271,6 +283,7 @@ export class Graph {
     const reindex = 'From' in patch || 'To' in patch;
     if (reindex) this.removeAdj(edge);
     Object.assign(edge, patch);
+    edge.visualVersion++;
     if (reindex) this.addAdj(edge);
     return true;
   }
@@ -308,6 +321,9 @@ export class Graph {
     // In-place mutation keeps the same object identity, so the cached nodes()
     // array stays valid — no invalidation needed.
     Object.assign(node, patch);
+    for (const key in patch) {
+      if (key !== 'Position') { node.visualVersion++; break; }
+    }
     if ('Position' in patch) this.indexNode(node); // moved → re-bucket
     return true;
   }

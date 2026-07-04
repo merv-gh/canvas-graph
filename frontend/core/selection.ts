@@ -66,6 +66,9 @@ export function createSelectionStore(graphs: GraphStore, bus: Bus): SelectionSto
   };
   bus.on('graph.node.deleted', ({ graphId, id }) => clearDeleted(graphId, nodeRef(id)));
   bus.on('graph.edge.deleted', ({ graphId, id }) => clearDeleted(graphId, edgeRef(id)));
+  // Deleting a graph drops its selection/focus entries — the maps otherwise
+  // outlive the graph (slow leak across many graph create/delete cycles).
+  bus.on('graph.deleted', ({ id }) => { sel.delete(id); foc.delete(id); });
 
   const node = (ref: ItemRef | null, graphId?: Id) => {
     if (!ref || ref.kind !== 'node') return undefined;

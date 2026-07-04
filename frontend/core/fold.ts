@@ -51,5 +51,15 @@ export function foldContext(bus: Bus, io: IoApi): FoldStore {
     bus.emit('fold.changed', { id, open });
   };
   const toggle = (id: string, defaultOpen = true) => set(id, !isOpen(id, defaultOpen));
+  // Item-fold ids embed the graph id (`fold:<graphId>:…`) — drop them when the
+  // graph goes, or the persisted map accretes dead keys forever. One synthetic
+  // fold.changed lets the io system persist the pruned map.
+  bus.on('graph.deleted', ({ id }) => {
+    const prefix = `fold:${id}:`;
+    const dead = Object.keys(state).filter(key => key.startsWith(prefix));
+    if (!dead.length) return;
+    dead.forEach(key => { delete state[key]; });
+    bus.emit('fold.changed', { id: prefix, open: true });
+  });
   return { isOpen, folded: (id) => !isOpen(id, true), set, toggle, all: () => ({ ...state }) };
 }

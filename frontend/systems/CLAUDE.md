@@ -2,6 +2,7 @@
 
 - `render.ts` — shell mount, named places, slot flush, RAF redraw scheduler (facts → dirty scopes). Not the painter.
 - `render-stage.ts` — stage painter: iterates `model.entities()` renderers, overlays, empty state, culling.
+- `render-stage-gpu.ts` — WebGPU stage painter for huge graphs (10k+): instanced node cards / edges / arrows, no text (nav mode). Dormant until `render.gpu.toggle`; hot-swaps `render.stage` via `flag.toggle`, auto-resumes on boot, `app.gpuStage.probe()` reads pixels back. CPU side in `core/gpu-scene.ts` (pure, tested).
 - `outline.ts` — left-pane tree. **Unregistered** (removed from `index.ts` for release); file kept for its type augmentations + possible revival.
 - `main.ts` — zen mode only (`\`, fold id `shell.zen`); toolbar chrome lives in `tool-panel.ts`.
 - `share.ts` — graph share/import: `?g=` (compressed, `~`-prefixed) round-trip codec, `?in=` + paste mermaid import (incl. mermaid.live `pako:` links), `graph.share.copy` / `graph.import.mermaid`.

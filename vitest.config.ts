@@ -13,6 +13,10 @@ export default defineConfig({
         'frontend/app.ts',
         'frontend/systems/system-design.ts',
         'frontend/systems/varflow.ts',
+        // WebGPU device plumbing — needs a real GPU; jsdom has no navigator.gpu.
+        // The CPU side (core/gpu-scene.ts) stays covered; the device path is
+        // verified in-browser via `app.gpuStage.probe()` pixel readback.
+        'frontend/systems/render-stage-gpu.ts',
         'frontend/types.ts',
       ],
       reporter: ['text', 'json-summary', 'html'],

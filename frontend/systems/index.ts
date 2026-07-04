@@ -29,6 +29,7 @@ import { registerPerfPanel } from './perf-panel';
 import { registerPresent } from './present';
 import { registerRender } from './render';
 import { registerRenderStage } from './render-stage';
+import { registerRenderStageGpu } from './render-stage-gpu';
 import { registerScenario } from './scenario';
 import { registerShare } from './share';
 import { registerTextLayout } from './text-layout';
@@ -41,6 +42,7 @@ export function registerSystems(system: Registry) {
   registerRender(system);
   registerDarkTheme(system);
   registerRenderStage(system);
+  registerRenderStageGpu(system);
   registerTextLayout(system);
   registerInput(system);
   registerIo(system);

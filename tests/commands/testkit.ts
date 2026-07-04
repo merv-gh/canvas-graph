@@ -19,8 +19,9 @@ const html = readFileSync(resolve(process.cwd(), 'frontend/index.html'), 'utf8')
   .replace(/<script\b[^>]*><\/script>/g, '');
 
 /** Flag overrides only. Registry declares each system/ability/feature ON at boot,
- *  so an empty object boots everything. Pass `{ render: false }` to disable. */
-export function bootApp(flags: FeatureFlags = {}) {
+ *  so an empty object boots everything. Pass `{ render: false }` to disable.
+ *  Pass a shared `io` to simulate persistence across two boots. */
+export function bootApp(flags: FeatureFlags = {}, io: ReturnType<typeof memoryIo> = memoryIo()) {
   if (!globalThis.requestAnimationFrame) {
     globalThis.requestAnimationFrame = callback => setTimeout(() => callback(performance.now()), 0) as unknown as number;
     globalThis.cancelAnimationFrame = id => clearTimeout(id);
@@ -31,7 +32,6 @@ export function bootApp(flags: FeatureFlags = {}) {
   registerSystems(withKind(plugins, 'system'));
   registerAbilitySystems(withKind(plugins, 'ability'));
   registerFeatures(withKind(plugins, 'feature'));
-  const io = memoryIo();
   const ctx = createAppContext(graphStore(), appModel, flags, io);
   installRuntimeFeatureManager(ctx, plugins);
   plugins.start(ctx);
@@ -57,6 +57,40 @@ export const settle = async () => {
 
 export const runCommand = (ctx: AppCtx, id: string, source: CommandSource = {}) =>
   ctx.contexts.commands.run(id, source);
+
+/** Deterministic synthetic CPG-style snapshot: `count` nodes in clustered
+ *  grid layout (30-node clusters ≈ microservices), ~`edgesPerNode` edges wired
+ *  mostly intra-cluster with some cross-cluster calls. Used by the 10k scale
+ *  probes and browser perf runs — same shape everywhere. */
+export const syntheticSnapshot = (count: number, edgesPerNode = 1.5) => {
+  const CLUSTER = 30;
+  const types = ['service', 'database', 'cache', 'kafka', 'gateway', 'text'] as const;
+  const nodes = Array.from({ length: count }, (_, i) => {
+    const cluster = Math.floor(i / CLUSTER);
+    const inCluster = i % CLUSTER;
+    const clusterCol = cluster % 20, clusterRow = Math.floor(cluster / 20);
+    return {
+      id: `e${i + 1}`,
+      Label: { text: `svc-${cluster}-${inCluster}` },
+      NodeType: types[i % types.length] as string,
+      Position: {
+        x: clusterCol * 1400 + (inCluster % 6) * 200,
+        y: clusterRow * 1200 + Math.floor(inCluster / 6) * 160,
+      },
+      Size: { w: 150, h: 64 },
+    };
+  });
+  const edgeCount = Math.floor(count * edgesPerNode);
+  const edges = Array.from({ length: edgeCount }, (_, i) => {
+    const from = (i * 7919) % count;              // spread deterministically
+    const sameCluster = i % 4 !== 0;              // 75% intra-cluster
+    const to = sameCluster
+      ? Math.floor(from / CLUSTER) * CLUSTER + ((from + 1 + (i % (CLUSTER - 1))) % CLUSTER)
+      : (from + CLUSTER + (i % (count - CLUSTER))) % count;
+    return { id: `r${i + 1}`, From: `e${from + 1}`, To: `e${Math.min(to, count - 1) + 1}`, EdgeKind: 'sync' as const };
+  }).filter(e => e.From !== e.To);
+  return { nodes, edges };
+};
 
 export type PerfTraceReport = {
   /** JS heap delta start→stop in bytes. Node heap is noisy without a forced GC —

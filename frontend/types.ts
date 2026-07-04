@@ -468,8 +468,11 @@ export type EntityRenderer<T = unknown> = {
    *  item sits (drag / arrow-nudge — the common interactive case), the renderer
    *  moves the EXISTING element instead of being torn down and rebuilt. Keeping
    *  the same DOM node is what lets CSS transitions ease the move (and it's far
-   *  cheaper). The stage only takes this path when `signature` is unchanged. */
-  reposition?(el: Element, item: T): void;
+   *  cheaper). The stage only takes this path when `signature` is unchanged.
+   *  `ctx` gives repositioners that depend on OTHER items' geometry (edges
+   *  following their endpoints, collapsed-ancestor substitution) the same
+   *  resolution powers as `draw`. */
+  reposition?(el: Element, item: T, ctx: EntityRenderCtx): void;
   /** Cheap hash of everything that affects the rendered output *except* position.
    *  When it's unchanged between two updates of the same item, the stage uses
    *  `reposition` instead of a full redraw. Omit (or omit `reposition`) to always

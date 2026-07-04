@@ -4,11 +4,14 @@ export type FrameLoop = {
   schedule(id: string, callback: FrameCallback, priority?: number): void;
   cancel(id: string): void;
   hasPending(): boolean;
+  /** Run the pending queue NOW instead of waiting for rAF. For tests, tools,
+   *  and throttled/hidden pages where rAF may be frozen for seconds. */
+  flushNow(): void;
 };
 
 type QueueItem = { callback: FrameCallback; priority: number };
 
-export function createFrameLoop(): FrameLoop {
+export function createFrameLoop(debugLog: () => boolean = () => false): FrameLoop {
   const queue = new Map<string, QueueItem>();
   let scheduled = false;
   let lastFlush = 0;
@@ -21,7 +24,9 @@ export function createFrameLoop(): FrameLoop {
     scheduled = false;
     const gap = lastFlush ? timestamp - lastFlush : 0;
     lastFlush = timestamp;
-    if (gap > 50) 
+    // Gated: background tabs legitimately gap for minutes (rAF throttling) —
+    // unconditional logging turned that into console spam for every user.
+    if (gap > 50 && debugLog())
       console.debug(`[frameLoop] gap=${gap.toFixed(1)}ms queue=${batch.length} [${batch.map(b => b.id).join(',')}]`);
     for (const { id, callback } of batch) {
       try { callback(timestamp); } catch (e) {
@@ -47,6 +52,11 @@ export function createFrameLoop(): FrameLoop {
     },
     hasPending() {
       return queue.size > 0;
+    },
+    flushNow() {
+      if (!queue.size) return;
+      scheduled = false; // a frozen rAF firing later just runs an empty pass
+      flush(performance.now());
     },
   };
 }

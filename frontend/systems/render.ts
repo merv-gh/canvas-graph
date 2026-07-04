@@ -1,4 +1,5 @@
-import { factScope, itemParentAttr, type Registry } from '../core';
+import { itemParentAttr, type Registry } from '../core';
+import { scopeForEvent } from '../core/redraw';
 import { mountRoot } from '../core/mount';
 import { Places } from '../types';
 import type { ItemRef, Place, RedrawScope, Renderable } from '../types';
@@ -129,7 +130,10 @@ export function registerRender(system: Registry) {
     const flushDirty = () => {
       const t0 = performance.now();
       flushes++;
-      const perfLog = ctx.flags.isOn('perf');
+      // NOT flags.isOn('perf') — undeclared flags read as ON (isOn is
+      // `!== false`), which turned this log on for everyone. perf.enabled()
+      // is the real knob (?perf=1 / PERF=1 / perf flag at boot).
+      const perfLog = ctx.perf.enabled();
       const scopes = perfLog ? [...dirty].join(',') : '';
       const trigger = lastMarkEvent || 'unknown';
       const hasNodes = dirty.has('nodes') || dirty.has('nodes.visual');
@@ -185,16 +189,6 @@ export function registerRender(system: Registry) {
       scope === 'both' ? mark('nodes', 'outline') :
       scope === 'nodes.visual' ? mark('nodes.visual') :
       mark(scope as RenderScope);
-    const scopeForEvent = (name: string, data: unknown): RedrawScope | null => {
-      if (name === 'graph.node.updated') {
-        const d = data as { patch?: Record<string, unknown>; visual?: boolean } | undefined;
-        if (d?.patch && !('Label' in d.patch)) return d.visual ? 'nodes.visual' : 'nodes';
-      }
-      // .changed suffix events that are purely decoration / visual state —
-      // no node data (Position, Size, Label) changed.
-      if (name === 'selection.changed' || name === 'decoration.changed') return 'nodes.visual';
-      return factScope(name);
-    };
     ctx.expose('render', { flushes: () => flushes, lastTrigger: () => lastMarkEvent, factsPerFrame: () => markCount });
     on('app.start', () => { lastMarkEvent = 'app.start'; mark('nodes'); });
     on('focus.item.focused', ref => {
