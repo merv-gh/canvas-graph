@@ -1,4 +1,6 @@
 node_modules/
+.DS_Store
+.projections/
 test-results/
 playwright-report/
 coverage/

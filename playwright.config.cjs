@@ -20,7 +20,9 @@ module.exports = defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev',
+    // Browser tests need the app only. The default dev command also starts DX
+    // projection watchers, which compete with timing-sensitive test processes.
+    command: 'npm run dev:frontend',
     url: 'http://127.0.0.1:5174',
     reuseExistingServer: !process.env.CI,
     stdout: 'pipe',

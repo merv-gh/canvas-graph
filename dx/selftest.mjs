@@ -121,7 +121,9 @@ ok('gen_test: source runs green when asserting current behavior', () => {
   try {
     execFileSync('npx', ['vitest', 'run', '--reporter=dot', 'tests/commands/dx/_selftest-gen.test.ts'], { cwd: REPO, timeout: 120000, stdio: 'pipe' });
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    // This directory can contain active model-authored tests and tracked layout
+    // fixtures. Remove only the file owned by this check.
+    rmSync(file, { force: true });
   }
 });
 ok('gen_test: normalizes command-spec path shorthand', () => {
@@ -198,9 +200,9 @@ ok('projection: commands and flows expose focused architecture views', () => {
   assert(flowsView.includes('handlers: frontend/systems/graph.ts'), flowsView);
   const appStartFlow = execFileSync(process.execPath, ['dx/projections/projections.mjs', 'show', 'flows', 'app.start'], { cwd: REPO, encoding: 'utf8' });
   assert(appStartFlow.includes('frontend/systems/tool-panel.ts') && appStartFlow.includes('via drawPanels()'), appStartFlow);
-  const concept = execFileSync(process.execPath, ['dx/projections/projections.mjs', 'concept', 'top panel collapse'], { cwd: REPO, encoding: 'utf8' });
-  assert(concept.includes('view.top.toggle'), concept);
-  assert(concept.includes('topFolded: shell.top'), concept);
+  const concept = execFileSync(process.execPath, ['dx/projections/projections.mjs', 'concept', 'zen panel'], { cwd: REPO, encoding: 'utf8' });
+  assert(concept.includes('view.zen'), concept);
+  assert(concept.includes('zen: shell.zen -> data-zen'), concept);
 });
 
 ok('projection: commands view is a compilable array and round-trips clean', () => {

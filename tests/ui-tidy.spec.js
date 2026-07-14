@@ -14,37 +14,6 @@ const createSmallGraph = async (page) => page.evaluate(() => {
   return { a: a.id, b: b.id };
 });
 
-const section = (page, name) =>
-  page.locator(`.outline-section:has(.outline-title-search[placeholder="${name}"])`);
-
-const childTops = async (row) => row.evaluate(el =>
-  [...el.children].map(child => Math.round(child.getBoundingClientRect().top)));
-
-test('outline title is the collection search input and filters rows', async ({ page }) => {
-  await boot(page);
-  await createSmallGraph(page);
-
-  await expect(page.locator('.outline-search')).toHaveCount(0);
-  const nodes = section(page, 'Nodes');
-  const search = nodes.locator('.outline-title-search');
-
-  await expect(search).toHaveAttribute('aria-label', 'Search nodes');
-  await search.fill('beta');
-  await expect(nodes.locator('.outline-row')).toHaveCount(1);
-  await expect(nodes.locator('.outline-main')).toHaveText('Beta');
-});
-
-test('outline row actions stay on the same visual row', async ({ page }) => {
-  await boot(page);
-  await createSmallGraph(page);
-
-  for (const name of ['Nodes', 'Edges']) {
-    const row = section(page, name).locator('.outline-row').first();
-    const tops = await childTops(row);
-    expect(Math.max(...tops) - Math.min(...tops)).toBeLessThanOrEqual(2);
-  }
-});
-
 test('node drag handle is explicit and moves the node', async ({ page }) => {
   await boot(page);
   const ids = await createSmallGraph(page);

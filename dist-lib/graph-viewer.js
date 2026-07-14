@@ -1,10 +1,10 @@
 var GraphViewer = (function(exports) {
 	Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 	//#region frontend/styles.css?inline
-	var styles_default = "/* Design tokens. Names mirror Tailwind's neutral-* / blue-* so migration is a search-and-replace.\n   Anything visual should derive from these — DO NOT hardcode colors below. */\n:root {\n  --bg: rgb(250, 250, 249);\n  --panel: #ffffff;\n  --panel-2: #f5f5f4;\n  --ink: #1c1c1c;\n  --text-muted: #6b7280;\n  --line: #e5e5e3;\n  --line-strong: #d4d4d2;\n  --accent: rgb(37, 99, 235);\n  --accent-soft: rgba(37, 99, 235, .08);\n  --edge: #4b5563;\n  --danger: #dc2626;\n  --danger-soft: rgba(220, 38, 38, .06);\n  --shadow-sm: 0 1px 2px rgba(0,0,0,.04);\n  --shadow-md: 0 6px 18px rgba(0,0,0,.06);\n  --radius: 6px;\n  --radius-lg: 10px;\n\n  /* Spacing scale — 8px rhythm */\n  --space-1: 4px;\n  --space-2: 8px;\n  --space-3: 12px;\n  --space-4: 16px;\n  --space-5: 24px;\n  --space-6: 32px;\n\n  /* Animation tokens */\n  --duration-fast: .12s;\n  --duration-normal: .18s;\n  --duration-slow: .25s;\n  --ease-default: ease-out;\n\n  /* Semantic aliases */\n  --border: var(--line);\n\n  color-scheme: light dark;\n}\n\n/* Auto dark from OS preference (no explicit theme choice yet) */\n@media (prefers-color-scheme: dark) {\n  :root:not([data-theme]) {\n    --bg: rgb(17, 17, 16);\n    --panel: #1c1c1b;\n    --panel-2: #282826;\n    --ink: #eeedec;\n    --text-muted: #8b919a;\n    --line: #333331;\n    --line-strong: #444442;\n    --accent: rgb(96, 148, 248);\n    --accent-soft: rgba(96,148,248,.12);\n    --edge: #8b919a;\n    --danger: #f87171;\n    --danger-soft: rgba(248,113,113,.10);\n    --shadow-sm: 0 1px 2px rgba(0,0,0,.25);\n    --shadow-md: 0 6px 18px rgba(0,0,0,.35);\n  }\n}\n\n/* Explicit dark (JS toggle wins over media query via specificity on .shell) */\n.shell[data-theme=\"dark\"] {\n  --bg: rgb(17, 17, 16);\n  --panel: #1c1c1b;\n  --panel-2: #282826;\n  --ink: #eeedec;\n  --text-muted: #8b919a;\n  --line: #333331;\n  --line-strong: #444442;\n  --accent: rgb(96, 148, 248);\n  --accent-soft: rgba(96,148,248,.12);\n  --edge: #8b919a;\n  --danger: #f87171;\n  --danger-soft: rgba(248,113,113,.10);\n  --shadow-sm: 0 1px 2px rgba(0,0,0,.25);\n  --shadow-md: 0 6px 18px rgba(0,0,0,.35);\n}\n\n/* Explicit light (when OS is dark but user chose light) */\n.shell[data-theme=\"light\"] {\n  --bg: rgb(250, 250, 249);\n  --panel: #ffffff;\n  --panel-2: #f5f5f4;\n  --ink: #1c1c1c;\n  --text-muted: #6b7280;\n  --line: #e5e5e3;\n  --line-strong: #d4d4d2;\n  --accent: rgb(37, 99, 235);\n  --accent-soft: rgba(37,99,235,.08);\n  --edge: #4b5563;\n  --danger: #dc2626;\n  --danger-soft: rgba(220,38,38,.06);\n  --shadow-sm: 0 1px 2px rgba(0,0,0,.04);\n  --shadow-md: 0 6px 18px rgba(0,0,0,.06);\n}\n\n/* Dark-mode overrides for hardcoded light color-mix() values */\n.shell[data-theme=\"dark\"] .node-type-square {\n  background: color-mix(in srgb, var(--panel) 88%, #1e3a5f);\n}\n.shell[data-theme=\"dark\"] .node-type-circle {\n  background: color-mix(in srgb, var(--panel) 86%, #1a3a2a);\n}\n.shell[data-theme=\"dark\"] .tool-panel {\n  background: color-mix(in srgb, var(--panel) 94%, transparent);\n}\n.shell[data-theme=\"dark\"] .backdrop {\n  background: rgba(0,0,0,.45);\n}\n.shell[data-theme=\"dark\"] .container {\n  background: rgba(255,255,255,.02);\n}\n.shell[data-theme=\"dark\"] .container:hover {\n  background: rgba(96,148,248,.06);\n}\n.shell[data-theme=\"dark\"] .container.selected {\n  background: rgba(96,148,248,.08);\n}\n.shell[data-theme=\"dark\"] .container.manual {\n  background: rgba(96,148,248,.06);\n}\n.shell[data-theme=\"dark\"] .scenario-hud {\n  background: var(--ink);\n  color: var(--bg);\n}\n\n* { box-sizing: border-box; }\n\n/* Consistent focus ring across all interactive elements.\n   Keep :focus on inputs that auto-focus on modal open (palette, form fields). */\n*:focus-visible {\n  outline: 2px solid var(--accent);\n  outline-offset: 2px;\n}\n\n/* Reduced motion — respect OS preference */\n@media (prefers-reduced-motion: reduce) {\n  *, *::before, *::after {\n    animation-duration: 0.01ms !important;\n    transition-duration: 0.01ms !important;\n  }\n}\n\nbody { margin: 0; min-height: 100vh; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, sans-serif; }\n\n/* --- Keyframes --- */\n@keyframes node-enter {\n  from { opacity: 0; transform: translate(-50%, -50%) scale(0.85); }\n}\n@keyframes modal-enter {\n  from { opacity: 0; }\n}\n@keyframes modal-slide {\n  from { opacity: 0; transform: translateX(-50%) translateY(-6px); }\n}\n\n/* Buttons: ghost by default. Visible only on hover/focus. Borders disappear; weight comes from text.\n   Add .primary for accent treatment; .icon for square icon-only buttons. */\nbutton {\n  border: 1px solid transparent;\n  background: transparent;\n  color: var(--ink);\n  border-radius: var(--radius);\n  padding: 5px 10px;\n  font: inherit;\n  cursor: pointer;\n  line-height: 1.2;\n  transition: background-color var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);\n}\nbutton:hover { background: var(--panel-2); }\nbutton.primary { color: var(--accent); }\nbutton.primary:hover { background: var(--accent-soft); }\nbutton.danger { color: var(--danger); }\nbutton.danger:hover { background: var(--danger-soft); }\nbutton.icon { padding: 4px 7px; min-width: 26px; color: var(--text-muted); }\nbutton.icon:hover { color: var(--ink); }\n\n.shell { display: grid; grid-template: 0 1fr / 1fr; height: 100vh; transition: grid-template-rows var(--duration-fast) var(--ease-default); }\n.shell[data-top-folded=\"true\"] { grid-template-rows: 0 1fr; }\n.shell[data-top-folded=\"true\"] .top { display: none; }\n/* Zen mode — distraction-free canvas. Every floating tool panel fades to\n * semi-transparent (still there, just quiet) and stays that way until an\n * explicit exit (`\\` or Escape); hover a panel to bring it back to full.\n * Clean screenshots without losing the controls entirely. */\n.shell[data-zen=\"true\"] { grid-template: 0 1fr / 1fr; }\n.shell[data-zen=\"true\"] .top { display: none; }\n.shell[data-zen=\"true\"] .tool-panel {\n  opacity: 0.12;\n  transition: opacity var(--duration-fast) var(--ease-default);\n}\n.shell[data-zen=\"true\"] .tool-panel:hover { opacity: 1; }\n.hamburger { font-size: 16px; line-height: 1; padding: 2px 8px; margin-right: 4px; }\n\n/* --- Debug toolbar group --- */\n.toolbar button[data-command^=\"debug.\"] { font-size: 12px; padding: 4px 8px; }\n.toolbar button[data-command=\"debug.record.start\"] { color: var(--danger); }\n.toolbar button[data-command=\"debug.record.start\"]:hover { background: var(--danger-soft); }\n.toolbar button[data-command=\"debug.assert.open\"] { color: var(--accent); }\n\n/* --- Assert modal split layout --- */\n.debug-assert {\n  display: grid;\n  grid-template-columns: minmax(280px, 1fr) minmax(360px, 1.2fr);\n  gap: 14px;\n  width: min(1100px, calc(100vw - 80px));\n  height: min(640px, calc(100vh - 160px));\n}\n.debug-state { display: flex; flex-direction: column; gap: 8px; min-height: 0; }\n.debug-search {\n  padding: 6px 10px;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  background: var(--panel);\n  font: 12px ui-monospace, monospace;\n}\n.debug-search:focus-visible { outline: 2px solid var(--accent); border-color: var(--accent); }\n.debug-tree {\n  flex: 1;\n  overflow: auto;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  background: var(--panel);\n  padding: 6px 4px;\n  font: 12px ui-monospace, monospace;\n}\n.debug-tree-row {\n  display: flex; align-items: center; gap: 6px;\n  padding: 2px 6px;\n  border-radius: 4px;\n}\n.debug-tree-row:hover { background: var(--panel-2); }\n.debug-tree-row[class*=\"depth-\"] { padding-left: calc(6px + var(--depth, 0) * 10px); }\n.debug-tree-row.depth-1 { padding-left: 16px; }\n.debug-tree-row.depth-2 { padding-left: 26px; }\n.debug-tree-row.depth-3 { padding-left: 36px; }\n.debug-tree-row.depth-4 { padding-left: 46px; }\n.debug-tree-row.depth-5 { padding-left: 56px; }\n.debug-tree-row.depth-6 { padding-left: 66px; }\n.debug-tree-row.depth-7 { padding-left: 76px; }\n.debug-tree-row.depth-8 { padding-left: 86px; }\n.debug-tree-row.depth-9 { padding-left: 96px; }\n.debug-tree-label { color: var(--text-muted); min-width: 80px; }\n.debug-tree-summary { color: var(--text-muted); opacity: 0.7; }\n.debug-tree-value {\n  border: 1px solid transparent;\n  background: transparent;\n  padding: 1px 6px;\n  border-radius: 4px;\n  color: var(--ink);\n  font: 12px ui-monospace, monospace;\n  cursor: pointer;\n  text-align: left;\n}\n.debug-tree-value:hover { border-color: var(--accent); background: var(--accent-soft); }\n.debug-tree-array { color: var(--accent); }\n.debug-tree-empty {\n  padding: 14px;\n  color: var(--text-muted);\n  text-align: center;\n}\n\n/* --- Test panel --- */\n.debug-test { display: flex; flex-direction: column; gap: 8px; min-height: 0; }\n.debug-test-head { display: flex; align-items: center; justify-content: space-between; }\n.debug-code {\n  flex: 1;\n  font: 12px/1.5 ui-monospace, monospace;\n  background: var(--panel);\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  padding: 10px;\n  resize: none;\n  white-space: pre;\n  overflow: auto;\n  color: var(--ink);\n}\n.debug-code:focus-visible { border-color: var(--accent); outline: 2px solid var(--accent); }\n.debug-actions { display: flex; gap: 6px; }\n.debug-actions button { border: 1px solid var(--line); padding: 5px 12px; }\n.debug-actions button.primary { border-color: var(--accent); color: var(--accent); }\n\n/* --- Replay modal --- */\n.debug-replay { display: flex; flex-direction: column; gap: 10px; min-width: 560px; }\n.debug-replay-hint { margin: 0; color: var(--text-muted); font-size: 12.5px; }\n.debug-replay textarea {\n  min-height: 320px;\n  resize: vertical;\n  font: 12px/1.4 ui-monospace, monospace;\n  background: var(--panel);\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  padding: 10px;\n}\n.top {\n  grid-column: 1 / -1;\n  grid-row: 1;\n  display: none;\n}\n.toolbar { display: flex; align-items: center; gap: 2px; width: 100%; }\n.toolbar button { white-space: nowrap; font-size: 13px; }\n.toolbar-spacer { flex: 1; }\n.toolbar-start, .toolbar-end { display: flex; align-items: center; gap: 2px; }\n/* Related actions cluster into a group with a light divider between clusters,\n   so \"graph editing\" and \"layout\" read as distinct units in the top bar. */\n.tool-group { display: flex; align-items: center; gap: 2px; padding-right: 6px; margin-right: 4px; border-right: 1px solid var(--line); }\n.tool-group:last-child { border-right: 0; padding-right: 0; margin-right: 0; }\n.toolbar-end button[data-command=\"palette.open\"] { font-size: 15px; padding: 3px 8px; }\n\n\n/* Left panel — floating tool-panel positioned over the stage with screen-edge\n   margins. Not a grid column, so flushing it doesn't destroy stage content. */\n.left {\n  position: absolute;\n  left: var(--space-3);\n  top: var(--space-3);\n  bottom: var(--space-3);\n  width: 260px;\n  max-height: calc(100vh - var(--space-6));\n  z-index: 10;\n  overflow: hidden;\n  pointer-events: auto;\n}\n.left[data-outline-folded=\"true\"] {\n  width: auto;\n  min-width: 42px;\n}\n/* The outline-panel wrapper lives inside .left — the place slot is the raw\n   .left element; the tool-panel chrome (header, body, fold button) is the\n   outline's own renderable. */\n.outline-panel {\n  display: flex;\n  flex-direction: column;\n  height: 100%;\n  background: var(--panel);\n  border: 1px solid var(--line);\n  border-radius: var(--radius-lg);\n  box-shadow: var(--shadow-sm);\n}\n.outline-panel-head {\n  display: flex;\n  align-items: center;\n  gap: var(--space-1);\n  padding: var(--space-2) var(--space-3);\n  border-bottom: 1px solid var(--line);\n  flex: 0 0 auto;\n}\n.outline-panel-body {\n  flex: 1 1 auto;\n  overflow: auto;\n  padding: var(--space-2);\n}\n.outline-panel[data-outline-folded=\"true\"] .outline-panel-body { display: none; }\n.outline-panel[data-outline-folded=\"true\"] .outline-panel-head { border-bottom: 0; }\n\n.stage {\n  grid-column: 1;\n  grid-row: 2;\n  --grid-size: 32px;\n  --grid-x: 0px;\n  --grid-y: 0px;\n  position: relative;\n  overflow: hidden;\n  background-color: var(--bg);\n  background-image: radial-gradient(circle, var(--line) .5px, transparent .5px);\n  background-size: var(--grid-size);\n  cursor: grab;\n  touch-action: none;\n}\n.stage.panning { cursor: grabbing; }\n.tool-panel {\n  position: absolute;\n  z-index: 12;\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  max-width: min(920px, calc(100% - 24px));\n  min-height: 34px;\n  padding: 4px;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  background: color-mix(in srgb, var(--panel) 94%, transparent);\n  box-shadow: var(--shadow-sm);\n  pointer-events: auto;\n}\n.tool-panel[data-collapsed=\"true\"] {\n  width: auto;\n  min-width: 62px;\n}\n.tool-panel-head {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  flex: 0 0 auto;\n  border-right: 1px solid var(--line);\n  padding-right: 4px;\n}\n.tool-panel[data-collapsed=\"true\"] .tool-panel-head {\n  border-right: 0;\n  padding-right: 0;\n}\n.tool-panel-drag,\n.tool-panel-collapse {\n  min-width: 24px;\n  padding: 3px 6px;\n  color: var(--text-muted);\n}\n.tool-panel-drag { cursor: grab; }\n.tool-panel-drag:active { cursor: grabbing; }\n.tool-panel .toolbar {\n  min-width: 0;\n  overflow: auto hidden;\n  scrollbar-width: none;\n}\n.tool-panel .toolbar::-webkit-scrollbar { display: none; }\n/* Resting position for panels the user has not dragged (drag sets inline left/top). */\n.tool-panel[data-anchor=\"top-left\"] { left: 12px; top: 12px; }\n.tool-panel[data-anchor=\"top-center\"] { left: 50%; top: 12px; transform: translateX(-50%); }\n.tool-panel[data-anchor=\"top-right\"] { right: 12px; top: 12px; }\n.tool-panel[data-anchor=\"middle-right\"] { right: 12px; top: 50%; transform: translateY(-50%); }\n.tool-panel[data-anchor=\"bottom-left\"] { left: 12px; bottom: 12px; }\n.tool-panel[data-anchor=\"bottom-right\"] { right: 12px; bottom: 12px; }\n\n/* Outline panel — sits on the left side like the old aside, but as a floating\n   tool-panel with screen-edge margins. Scrolls internally; collapses via its\n   own fold button in the header. */\n.outline-panel {\n  position: absolute;\n  left: var(--space-3);\n  top: var(--space-3);\n  bottom: var(--space-3);\n  width: 260px;\n  max-height: calc(100vh - var(--space-6));\n  display: flex;\n  flex-direction: column;\n  background: var(--panel);\n  border: 1px solid var(--line);\n  border-radius: var(--radius-lg);\n  box-shadow: var(--shadow-sm);\n  z-index: 10;\n  overflow: hidden;\n}\n.outline-panel-head {\n  display: flex;\n  align-items: center;\n  gap: var(--space-1);\n  padding: var(--space-2) var(--space-3);\n  border-bottom: 1px solid var(--line);\n  flex: 0 0 auto;\n}\n.outline-panel-body {\n  flex: 1 1 auto;\n  overflow: auto;\n  padding: var(--space-2);\n}\n.outline-panel[data-outline-folded=\"true\"] {\n  width: auto;\n  min-width: 42px;\n}\n.outline-panel[data-outline-folded=\"true\"] .outline-panel-body { display: none; }\n.outline-panel[data-outline-folded=\"true\"] .outline-panel-head { border-bottom: 0; }\n/* Stack panels lay their buttons in a column under the drag/collapse head. */\n.tool-panel-stack { flex-direction: column; align-items: stretch; }\n.tool-panel-stack .tool-panel-head { border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 4px; justify-content: flex-end; }\n.tool-panel-stack[data-collapsed=\"true\"] .tool-panel-head { border-bottom: 0; padding: 0; }\n.tool-panel-body { display: flex; gap: 4px; }\n.tool-panel-stack .tool-panel-body { flex-direction: column; }\n.tool-panel[data-panel-id=\"system-design\"] {\n  width: 140px;\n  max-width: 140px;\n}\n.tool-panel[data-panel-id=\"system-design\"] .tool-panel-body {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 4px;\n}\n.design-palette-button {\n  min-width: 0;\n  height: 28px;\n  padding: 0 5px;\n  border: 1px solid var(--line);\n  background: var(--panel);\n  font-size: 11px;\n  white-space: nowrap;\n}\n.design-palette-button:hover { border-color: var(--accent); }\n.design-node-database { color: #0369a1; }\n.design-node-kafka { color: #7c3aed; }\n.design-node-service { color: #0f766e; }\n.design-node-index { color: #b45309; }\n.design-node-user-input { color: #be123c; }\n.design-node-gateway { color: #4338ca; }\n.design-node-cache { color: #15803d; }\n.design-node-rate-limit { color: #dc2626; }\n.design-node-circuit-breaker { color: #7c2d12; }\n.design-edge-async { border-style: dashed; }\n.design-edge-read { color: #0369a1; }\n.design-edge-write { color: #b45309; }\n.node-type-panel {\n  gap: 3px;\n  max-width: none;\n}\n.node-type-button {\n  min-width: 44px;\n  height: 26px;\n  padding: 0 8px;\n  border-radius: 5px;\n  font-size: 12px;\n}\n.node-type-button.active {\n  background: var(--accent);\n  border-color: var(--accent);\n  color: white;\n}\n.keyboard-capture {\n  position: fixed;\n  width: 1px;\n  height: 1px;\n  opacity: 0;\n  pointer-events: none;\n}\n.stage::before {\n  content: \"\";\n  position: absolute;\n  inset: 0;\n  background-image:\n    linear-gradient(var(--line) 1px, transparent 1px),\n    linear-gradient(90deg, var(--line) 1px, transparent 1px);\n  background-position: var(--grid-x) var(--grid-y);\n  background-size: var(--grid-size) var(--grid-size);\n  opacity: .35;\n}\n\n/* Nodes: lighter card with subtle border and a small drop shadow only on hover/selected. */\n.nodes { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; }\n.edges { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }\n.edges line { vector-effect: non-scaling-stroke; }\n.edges .edge-hit { stroke: var(--ink); stroke-opacity: .001; stroke-width: 14px; opacity: 1; pointer-events: stroke; cursor: pointer; }\n.edges .edge-hit:focus, .edges .edge-hit:focus-visible { outline: none; }\n.edges .edge-line { stroke: var(--edge); stroke-width: 2px; opacity: .9; pointer-events: none; }\n.edges .edge-line.selected { stroke: var(--accent); stroke-width: 2px; }\n.edges .edge-line.focused { stroke: var(--accent); stroke-dasharray: 4 3; }\n.edges .edge-line.edge-kind-read { stroke: #0369a1; }\n.edges .edge-line.edge-kind-write { stroke: #b45309; }\n.edges .edge-line.edge-kind-sync { stroke: #4b5563; }\n.edges .edge-line.edge-kind-async { stroke: #7c3aed; stroke-dasharray: 7 5; }\n.edges #edge-arrow path { fill: var(--edge); }\n.edges .edge-label { fill: var(--text-muted); font: 11px ui-monospace, monospace; }\n.edges .edge-label.edge-kind-read { fill: #0369a1; }\n.edges .edge-label.edge-kind-write { fill: #92400e; }\n.edges .edge-label.edge-kind-async { fill: #6d28d9; }\n.item-overlays { position: absolute; inset: 0; pointer-events: none; z-index: 5; }\n.item-overlay {\n  position: absolute;\n  transform: translate(-50%, -140%);\n  padding: 1px 5px;\n  border: 1px solid var(--accent);\n  border-radius: 4px;\n  background: var(--panel);\n  color: var(--ink);\n  box-shadow: var(--shadow-sm);\n  font: 11px ui-monospace, monospace;\n  white-space: nowrap;\n}\n.item-overlay.jump-letter,\n.item-overlay.picker-letter {\n  font-weight: 600;\n  background: var(--accent);\n  color: white;\n  letter-spacing: .05em;\n  text-transform: uppercase;\n}\n.picker-prompt {\n  position: absolute;\n  top: 16px;\n  left: 50%;\n  transform: translateX(-50%);\n  z-index: 6;\n  padding: 6px 14px;\n  border-radius: var(--radius);\n  background: var(--panel);\n  border: 1px solid var(--accent);\n  box-shadow: var(--shadow-md);\n  font: 13px system-ui, sans-serif;\n  pointer-events: none;\n}\n.picker-prompt em { color: var(--text-muted); font-style: normal; }\n.node {\n  position: absolute;\n  min-width: 96px;\n  min-height: 36px;\n  transform: translate(-50%, -50%);\n  border: 1px solid var(--line-strong);\n  border-radius: var(--radius);\n  background: var(--panel);\n  box-shadow: var(--shadow-sm);\n  user-select: none;\n  touch-action: none;\n  cursor: pointer;\n  display: flex;\n  flex-direction: column;\n  justify-content: center;\n  transition: box-shadow var(--duration-normal) var(--ease-default),\n              border-color var(--duration-normal) var(--ease-default),\n              min-height var(--duration-fast) var(--ease-default),\n              left var(--duration-fast) var(--ease-default),\n              top var(--duration-fast) var(--ease-default);;\n}\n.node:hover {\n  border-color: var(--accent);\n  box-shadow: var(--shadow-sm), 0 0 0 1px rgba(37, 99, 235, .08);\n}\n/* Keyboard nudge eases via the left/top transition above. A pointer-drag must\n   track the cursor 1:1, so the stage drops the easing while dragging. */\n.stage.dragging .node { cursor: grabbing; transition: box-shadow var(--duration-normal) var(--ease-default), border-color var(--duration-normal) var(--ease-default); }\n.node-type-square {\n  border-radius: 6px;\n  background: color-mix(in srgb, var(--panel) 88%, #e0f2fe);\n}\n.node-type-circle {\n  border-radius: 999px;\n  background: color-mix(in srgb, var(--panel) 86%, #dcfce7);\n}\n.node-type-circle .node-title,\n.node-type-circle .node-body {\n  padding-left: 18px;\n  padding-right: 18px;\n}\n.node-type-service { border-color: color-mix(in srgb, #0f766e 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 86%, #ccfbf1); }\n.node-type-database { border-color: color-mix(in srgb, #0369a1 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 86%, #e0f2fe); }\n.node-type-kafka { border-color: color-mix(in srgb, #7c3aed 42%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 87%, #ede9fe); }\n.node-type-index { border-color: color-mix(in srgb, #b45309 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 86%, #fef3c7); }\n.node-type-user-input { border-color: color-mix(in srgb, #be123c 42%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 88%, #ffe4e6); }\n.node-type-gateway { border-color: color-mix(in srgb, #4338ca 42%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 88%, #e0e7ff); }\n.node-type-cache { border-color: color-mix(in srgb, #15803d 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 86%, #dcfce7); }\n.node-type-rate-limit { border-color: color-mix(in srgb, #dc2626 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 88%, #fee2e2); }\n.node-type-circuit-breaker { border-color: color-mix(in srgb, #7c2d12 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 88%, #ffedd5); }\n.node.semantic-big-data {\n  box-shadow: inset 0 0 0 2px color-mix(in srgb, #b45309 38%, transparent), var(--shadow-sm);\n}\n.node.semantic-big-data .node-kicker::after {\n  content: \"big data\";\n  padding: 1px 4px;\n  border-radius: 4px;\n  background: color-mix(in srgb, #f59e0b 22%, transparent);\n  color: #92400e;\n  font: 700 9px/1 ui-monospace, monospace;\n  text-transform: uppercase;\n}\n.node.semantic-stale-risk .node-title::after {\n  content: \" stale\";\n  margin-left: 4px;\n  color: #b45309;\n  font: 700 10px/1 ui-monospace, monospace;\n  text-transform: uppercase;\n}\n\n/* Containers paint behind nodes (EntityDef.order = -10). Dashed border + label\n   in the corner so the grouping reads at a glance without competing with nodes. */\n.container {\n  position: absolute;\n  transform: translate(-50%, -50%);\n  border: 1px dashed var(--line-strong);\n  border-radius: var(--radius-lg);\n  background: rgba(0, 0, 0, .02);\n  box-shadow: none;\n  user-select: none;\n  pointer-events: auto;\n  transition: width var(--duration-normal) var(--ease-default),\n              height var(--duration-normal) var(--ease-default),\n              border-radius var(--duration-normal) var(--ease-default),\n              background var(--duration-normal) var(--ease-default),\n              border-color var(--duration-fast) var(--ease-default);\n}\n.container:hover { border-color: var(--accent); background: rgba(37, 99, 235, .03); }\n.container.selected { border-color: var(--accent); background: rgba(37, 99, 235, .05); }\n.container.focused { outline: 2px solid var(--accent); outline-offset: 2px; }\n/* Collapsed: a solid badge that sits ABOVE nodes/edges so it reads like a chip,\n   not a faint backdrop. Children are skipped by the renderer so the rect shrinks\n   to COLLAPSED_SIZE and the label centers inside. */\n.container.collapsed {\n  border-style: solid;\n  background: var(--panel);\n  box-shadow: var(--shadow-sm);\n  z-index: 2;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n}\n.container.collapsed .container-label {\n  position: static;\n  padding: 0 10px;\n  background: transparent;\n  color: var(--ink);\n  font: 600 12px/1 system-ui, sans-serif;\n  text-transform: none;\n  letter-spacing: 0;\n}\n.container.collapsed .container-resize { display: none; }\n.container-label {\n  position: absolute;\n  top: -10px;\n  left: 8px;\n  padding: 0 6px;\n  background: var(--bg);\n  color: var(--text-muted);\n  font: 600 10px/1 ui-monospace, monospace;\n  text-transform: uppercase;\n  letter-spacing: .5px;\n}\n.container-label.editing {\n  outline: none;\n  background: var(--panel);\n  color: var(--ink);\n  border-radius: 2px;\n}\n.container-sections {\n  position: absolute;\n  inset: 16px 10px 10px;\n  display: flex;\n  flex-direction: column;\n  pointer-events: none;\n}\n.container-sections[data-axis=\"columns\"] {\n  flex-direction: row;\n}\n.container-section {\n  position: relative;\n  flex: 1 1 0;\n  min-width: 0;\n  min-height: 0;\n  border-top: 1px dashed color-mix(in srgb, var(--line-strong) 70%, transparent);\n}\n.container-section:first-child { border-top: 0; }\n.container-sections[data-axis=\"columns\"] .container-section {\n  border-top: 0;\n  border-left: 1px dashed color-mix(in srgb, var(--line-strong) 70%, transparent);\n}\n.container-sections[data-axis=\"columns\"] .container-section:first-child { border-left: 0; }\n.container-section span {\n  position: absolute;\n  top: 4px;\n  left: 6px;\n  padding: 0 4px;\n  border-radius: 3px;\n  background: color-mix(in srgb, var(--bg) 88%, transparent);\n  color: var(--text-muted);\n  font: 600 10px/1.2 ui-monospace, monospace;\n  pointer-events: auto;\n  cursor: text;\n}\n.container-section span.editing {\n  outline: 2px solid var(--accent);\n  outline-offset: 1px;\n  background: var(--panel);\n  color: var(--ink);\n}\n.container-section-divider {\n  flex: 0 0 8px;\n  align-self: stretch;\n  border: 0;\n  padding: 0;\n  background: transparent;\n  cursor: row-resize;\n  pointer-events: auto;\n  position: relative;\n}\n.container-sections[data-axis=\"columns\"] .container-section-divider { cursor: col-resize; }\n.container-section-divider::before {\n  content: \"\";\n  position: absolute;\n  inset: 3px 0;\n  border-radius: 999px;\n  background: transparent;\n}\n.container-sections[data-axis=\"columns\"] .container-section-divider::before { inset: 0 3px; }\n.container-section-divider:hover::before,\n.container-section-divider:focus-visible::before {\n  background: var(--accent-soft);\n}\n/* Resize handle — bottom-right corner. Visible only on hover/selected/focused. */\n.container-resize {\n  position: absolute;\n  right: -6px;\n  bottom: -6px;\n  width: 14px;\n  height: 14px;\n  border-right: 2px solid var(--line-strong);\n  border-bottom: 2px solid var(--line-strong);\n  cursor: nwse-resize;\n  opacity: 0;\n  transition: opacity .12s, border-color .12s;\n}\n.container:hover .container-resize,\n.container.selected .container-resize,\n.container.focused .container-resize { opacity: 1; }\n.container-resize:hover { border-color: var(--accent); }\n.container.manual { background: rgba(37, 99, 235, .03); }\n.node:hover { box-shadow: var(--shadow-md); border-color: var(--accent); }\n.node.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft), var(--shadow-md); }\n.node.focused { outline: 2px solid var(--accent); outline-offset: 2px; }\n/* Toolbar sits above the selected node in screen-space — separate from the\n   node template so the node body stays free of chrome. */\n.node-toolbar {\n  position: absolute;\n  transform: translate(-50%, calc(-100% - 6px));\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  padding: 3px 5px;\n  border: 1px solid var(--line-strong);\n  border-radius: var(--radius);\n  background: var(--panel);\n  box-shadow: var(--shadow-md);\n  z-index: 4;\n  pointer-events: auto;\n  user-select: none;\n}\n.node-toolbar .node-drag-handle {\n  width: 14px;\n  color: var(--text-muted);\n  cursor: grab;\n  line-height: 1;\n  text-align: center;\n  font-size: 11px;\n}\n.node-toolbar .node-drag-handle:hover { color: var(--ink); }\n.node-action, .node-toggle, .node-config {\n  width: 20px; height: 20px;\n  padding: 0;\n  border: 0; background: transparent;\n  border-radius: 4px;\n  color: var(--text-muted);\n  line-height: 1;\n}\n.node-action:hover, .node-toggle:hover, .node-config:hover { background: var(--panel-2); color: var(--ink); }\n.node-context-actions { font-weight: 700; }\n.node-title {\n  flex: 1; font-weight: 600;\n  font-size: 13px;\n  min-width: 0;\n  padding: var(--space-2) var(--space-3);\n  white-space: pre-line;\n  line-height: 1.3;\n  color: var(--ink);\n  text-align: center;\n}\n.node-kicker {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 6px;\n  min-height: 20px;\n  padding: 6px 8px 0;\n  font: 10px/1.2 ui-monospace, monospace;\n  color: var(--text-muted);\n}\n.node-type-label {\n  font-weight: 700;\n  text-transform: uppercase;\n}\n.node-metrics {\n  min-width: 0;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.node-metrics:empty { display: none; }\n/* Edit mode visual cue — applied only when editable's handler enters the mode.\n   Stays out of the default state so a normal click doesn't suggest editability. */\n.node-title.editing {\n  outline: 2px solid var(--accent);\n  outline-offset: 1px;\n  border-radius: 3px;\n  background: var(--panel);\n  cursor: text;\n}\n.node-body { padding: 0 var(--space-3) var(--space-2); color: var(--text-muted); font-size: 12px; }\n.node-description {\n  display: grid;\n  gap: 3px;\n  max-height: 92px;\n  overflow: hidden;\n  line-height: 1.25;\n  text-align: left;\n}\n.node-description p,\n.node-description h4,\n.node-description ul { margin: 0; }\n.node-description h4 { font-size: 11px; color: var(--ink); }\n.node-description ul { padding-left: 16px; }\n.node-description code {\n  padding: 0 3px;\n  border-radius: 3px;\n  background: var(--panel-2);\n  color: var(--ink);\n}\n.node-description a { color: var(--accent); }\n/* Nodes without descriptions stay title-only; ids are data attrs, not visual noise. */\n.node:not(.has-description) .node-body { display: none; }\n.node.collapsed .node-body { display: none; }\n\n.design-hints {\n  position: absolute;\n  right: 116px;\n  bottom: 12px;\n  z-index: 11;\n  width: min(360px, calc(100vw - 392px));\n  max-height: min(42vh, 360px);\n  overflow: auto;\n  display: grid;\n  gap: 6px;\n  padding: 10px;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  background: color-mix(in srgb, var(--panel) 95%, transparent);\n  box-shadow: var(--shadow-sm);\n  pointer-events: auto;\n}\n.design-hints-title {\n  font-size: 11px;\n  font-weight: 700;\n  text-transform: uppercase;\n  color: var(--text-muted);\n}\n.design-observation {\n  display: grid;\n  gap: 2px;\n  padding-left: 8px;\n  border-left: 3px solid var(--line-strong);\n}\n.design-observation strong {\n  font-size: 12px;\n  line-height: 1.25;\n}\n.design-observation span {\n  color: var(--text-muted);\n  font-size: 11.5px;\n  line-height: 1.3;\n}\n.design-observation-action {\n  justify-self: start;\n  min-height: 22px;\n  padding: 2px 7px;\n  border: 1px solid var(--line);\n  background: var(--panel);\n  color: var(--accent);\n  font-size: 11px;\n}\n.design-observation-action:hover {\n  border-color: var(--accent);\n  background: var(--accent-soft);\n}\n.design-observation.warn { border-left-color: #d97706; }\n.design-observation.error { border-left-color: var(--danger); }\n.design-observation.info { border-left-color: var(--accent); }\n\n.design-presentation {\n  position: absolute;\n  left: 50%;\n  top: 54px;\n  z-index: 13;\n  width: min(520px, calc(100vw - 220px));\n  transform: translateX(-50%);\n  display: grid;\n  gap: 8px;\n  padding: 12px;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  background: color-mix(in srgb, var(--panel) 96%, transparent);\n  box-shadow: var(--shadow-md);\n  pointer-events: auto;\n}\n.design-presentation-kicker {\n  color: var(--text-muted);\n  font: 700 10px/1.2 ui-monospace, monospace;\n  text-transform: uppercase;\n}\n.design-presentation strong {\n  font-size: 14px;\n  line-height: 1.25;\n}\n.design-presentation p {\n  margin: 0;\n  color: var(--text-muted);\n  font-size: 12px;\n  line-height: 1.35;\n}\n.design-presentation-actions {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n}\n.design-presentation-actions button {\n  min-height: 26px;\n  padding: 3px 9px;\n  border: 1px solid var(--line);\n  background: var(--panel);\n  font-size: 12px;\n}\n.design-presentation-actions button.primary {\n  border-color: var(--accent);\n  background: var(--accent-soft);\n  color: var(--accent);\n}\n.design-presentation-actions button:disabled {\n  opacity: .45;\n  cursor: default;\n}\n\n/* Side panel typography */\n.panel-title {\n  margin: 0;\n  font-size: 11px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: .08em;\n  color: var(--text-muted);\n}\n\n/* Event log: text rhythm, no card chrome. */\n.log { display: grid; gap: 1px; font: 11.5px/1.4 ui-monospace, monospace; margin-bottom: 18px; }\n.log .panel-title { margin-bottom: 6px; }\n.log-row {\n  padding: 2px 8px;\n  border-left: 2px solid var(--line-strong);\n  color: var(--text-muted);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.log-row:first-of-type { color: var(--ink); border-left-color: var(--accent); }\n\n/* Outline: each collection is a section. Rows are text; affordances appear on hover. */\n.outline { display: grid; gap: var(--space-4); margin-bottom: 14px; }\n.outline-section { display: grid; gap: 6px; }\n.outline-section.folded { gap: 0; }\n.outline-fold {\n  min-width: 22px;\n  padding: 3px 4px;\n  color: var(--text-muted);\n  font-size: 11px;\n  line-height: 1;\n}\n.outline-fold:hover { color: var(--ink); }\n.outline-head {\n  display: flex; align-items: center; justify-content: space-between;\n  gap: 6px;\n  margin-bottom: 2px;\n}\n.outline-title-search {\n  flex: 1;\n  min-width: 0;\n  border: 1px solid transparent;\n  background: transparent;\n  border-radius: var(--radius);\n  padding: 4px 6px;\n  font-size: 11px;\n  font-weight: 600;\n  line-height: 1.35;\n  color: var(--text-muted);\n  text-align: left;\n  text-transform: uppercase;\n  letter-spacing: .08em;\n}\n.outline-title-search:hover { background: var(--panel); }\n.outline-title-search:focus {\n  background: var(--panel);\n  border-color: var(--line);\n  color: var(--ink);\n  text-transform: none;\n  letter-spacing: 0;\n}\n.outline-title-search::placeholder { color: var(--text-muted); opacity: 1; }\n.outline-list { display: grid; gap: 1px; }\n.outline-item { display: grid; gap: 1px; }\n/* Nested children indent under their parent with a guide rail. */\n.outline-children {\n  display: grid;\n  gap: 1px;\n  margin-left: 11px;\n  padding-left: 6px;\n  border-left: 1px solid var(--border);\n}\n/* Keep leaf rows (no fold toggle) aligned with foldable rows. Stretch so the\n * empty cell's box spans the row height — its top matches sibling controls. */\n.outline-fold-spacer { align-self: stretch; min-width: 22px; }\n.outline-row {\n  display: grid;\n  grid-template-columns: auto minmax(0, 1fr) auto auto;\n  align-items: center;\n  gap: 4px;\n  border-radius: var(--radius);\n}\n.outline-row:hover { background: var(--panel); }\n.outline-main {\n  background: transparent;\n  border: 0;\n  padding: 5px 8px;\n  font-size: 13px;\n  color: var(--ink);\n  overflow: hidden;\n  text-align: left;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.outline-main:hover { background: transparent; }\n.outline-row .icon-button { opacity: 0; }\n.outline-row:hover .icon-button { opacity: 1; }\n.icon-button {\n  min-width: 22px;\n  padding: 3px 6px;\n  border: 0;\n  background: transparent;\n  color: var(--text-muted);\n  border-radius: 4px;\n}\n.icon-button:hover { background: var(--panel-2); color: var(--ink); }\n\n/* Empty state. Text-only. Dashed border only on stage for \"drop hint\" feel. */\n.empty {\n  display: grid; gap: 4px;\n  padding: 10px 12px;\n  color: var(--text-muted);\n  background: transparent;\n  text-align: center;\n}\n.empty-title { font-weight: 500; color: var(--ink); font-size: 13px; }\n.empty-hint { font-size: 12px; }\n.empty kbd {\n  font-family: ui-monospace, monospace; font-size: 11px;\n  background: var(--panel); border: 1px solid var(--line); border-radius: 3px;\n  padding: 0 5px; margin: 0 2px;\n}\n.stage .empty {\n  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);\n  min-width: 240px;\n  border: 1px dashed var(--line-strong); border-radius: var(--radius-lg);\n  padding: 16px 20px;\n  background: var(--bg);\n}\n\n/* Modal — keeps weight on purpose: it's a focal surface. */\n.modal-slot { position: fixed; inset: 0; z-index: 50; pointer-events: none; }\n.modal-layer { position: absolute; inset: 0; pointer-events: auto; animation: modal-enter var(--duration-fast) var(--ease-default); }\n.backdrop { position: absolute; inset: 0; background: rgba(28,28,28,.18); }\n.modal {\n  position: absolute;\n  top: 64px;\n  left: 50%;\n  transform: translateX(-50%);\n  width: min(420px, calc(100vw - 32px));\n  background: var(--panel);\n  border: 1px solid var(--line);\n  border-radius: var(--radius-lg);\n  box-shadow: var(--shadow-md);\n  overflow: hidden;\n  animation: modal-slide var(--duration-normal) var(--ease-default);\n}\n.modal-head {\n  display: flex; justify-content: space-between; align-items: center;\n  padding: var(--space-2) var(--space-4);\n  border-bottom: 1px solid var(--line);\n  font-weight: 600;\n}\n.modal-body { padding: var(--space-3); display: grid; gap: var(--space-2); }\n.modal-layer[data-visual=\"command\"] .modal { width: min(520px, calc(100vw - 32px)); }\n.modal-layer[data-visual=\"properties\"] .modal { width: min(360px, calc(100vw - 32px)); }\n.modal-layer[data-visual=\"perf\"] .modal { width: min(1100px, calc(100vw - 32px)); }\n.modal-layer[data-visual=\"perf\"] .modal-body { max-height: calc(100vh - 150px); overflow: auto; }\n\n.palette-search {\n  width: 100%;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  padding: 7px 10px;\n  font: inherit;\n}\n.palette-search:focus { outline: 2px solid var(--accent); outline-offset: 2px; border-color: transparent; }\n.palette { display: grid; gap: 10px; }\n.command-list, .help-list {\n  display: grid; gap: 14px;\n  max-height: min(60vh, 520px); overflow: auto;\n}\n.command-section { display: grid; gap: 4px; }\n.command-section h3 {\n  margin: 0 0 2px;\n  color: var(--text-muted);\n  font-size: 11px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: .06em;\n}\n.command-section > [data-slot=\"rows\"] { display: grid; gap: 1px; }\n\n/* Command rows: ghost list, full-width, hover treatment. */\n.command-row, .help-row {\n  width: 100%;\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  gap: 12px;\n  text-align: left;\n  background: transparent;\n  border: 0;\n  border-radius: var(--radius);\n  padding: 6px 10px;\n  color: var(--ink);\n}\n.command-row:hover { background: var(--accent-soft); }\n/* Arrow-key highlight — the row Enter will run. */\n.command-row.is-selected { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }\n.command-row span, .help-row span { display: grid; gap: 1px; min-width: 0; }\n.command-row small, .help-row small { color: var(--text-muted); font: 11px ui-monospace, monospace; }\n.command-row kbd {\n  border: 1px solid var(--line);\n  background: var(--panel);\n  border-radius: 4px;\n  padding: 1px 5px;\n  color: var(--text-muted);\n  font: 11px ui-monospace, monospace;\n}\n.help-row { padding: 5px 10px; }\n.help-row input {\n  width: 84px;\n  border: 1px solid var(--line);\n  border-radius: 4px;\n  padding: 4px 6px;\n  font: 12px ui-monospace, monospace;\n  background: var(--panel);\n}\n.perf-panel { display: grid; gap: 12px; min-width: 0; }\n.perf-actions { display: flex; gap: 6px; justify-content: flex-end; }\n.perf-actions button { border: 1px solid var(--line); }\n.perf-summary {\n  display: grid;\n  grid-template-columns: repeat(4, minmax(0, 1fr));\n  gap: 8px;\n}\n.perf-summary-item {\n  display: grid;\n  gap: 2px;\n  min-width: 0;\n  padding: 8px 10px;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  background: var(--panel-2);\n}\n.perf-summary-item span { color: var(--text-muted); font-size: 11px; }\n.perf-summary-item b { font: 16px ui-monospace, monospace; }\n.perf-panel details {\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  overflow: hidden;\n}\n.perf-panel summary {\n  cursor: pointer;\n  padding: 7px 10px;\n  background: var(--panel-2);\n  font-weight: 600;\n}\n.perf-table-wrap { max-height: 300px; overflow: auto; }\n.perf-table {\n  width: 100%;\n  border-collapse: collapse;\n  font: 11px/1.35 ui-monospace, monospace;\n}\n.perf-table th,\n.perf-table td {\n  padding: 4px 7px;\n  border-top: 1px solid var(--line);\n  text-align: left;\n  vertical-align: top;\n}\n.perf-table th {\n  position: sticky;\n  top: 0;\n  background: var(--panel);\n  color: var(--text-muted);\n  z-index: 1;\n  cursor: pointer;\n  user-select: none;\n}\n.perf-table th.is-sorted { color: var(--text); }\n.perf-table td:nth-child(n+3) { white-space: nowrap; }\n.perf-table td:last-child { white-space: normal; }\n.perf-bar {\n  display: block;\n  width: 120px;\n  height: 8px;\n  margin-top: 3px;\n  border-radius: 999px;\n  background: var(--line);\n  overflow: hidden;\n}\n.perf-bar span {\n  display: block;\n  height: 100%;\n  background: var(--accent);\n}\n.perf-export {\n  box-sizing: border-box;\n  width: 100%;\n  min-height: 180px;\n  resize: vertical;\n  padding: 8px;\n  border: 0;\n  background: var(--panel);\n  color: var(--text);\n  font: 11px/1.4 ui-monospace, monospace;\n}\n.help-row.has-conflict { background: var(--danger-soft); }\n.flag-row { cursor: pointer; }\n.flag-row input.flag-toggle {\n  width: 16px;\n  height: 16px;\n  margin: 0;\n  padding: 0;\n  accent-color: var(--accent);\n}\n.shortcut-edit.is-conflict { border-color: var(--danger) !important; color: var(--danger); }\n.editable-inline { border: 1px solid transparent !important; background: transparent !important; }\n.editable-inline:hover { background: var(--panel-2) !important; }\n.editable-inline:focus { background: var(--panel) !important; outline: 2px solid var(--accent); }\n.shortcut-edit.is-conflict:focus { outline-color: var(--danger); }\n\n/* Property modal */\n.properties { display: grid; gap: 10px; }\n.properties [data-slot=\"fields\"] { display: grid; gap: 10px; }\n.property-group {\n  margin-top: 2px;\n  color: var(--text-muted);\n  font-size: 11px;\n  font-weight: 700;\n  text-transform: uppercase;\n}\n.properties label {\n  display: grid; gap: 4px;\n  color: var(--text-muted);\n  font-size: 11px;\n  text-transform: uppercase;\n  letter-spacing: .05em;\n}\n.properties input,\n.properties textarea,\n.properties select {\n  width: 100%;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  padding: 6px 8px;\n  color: var(--ink);\n  background: var(--panel);\n  font: 13px system-ui, sans-serif;\n  text-transform: none;\n  letter-spacing: normal;\n}\n.properties textarea {\n  resize: vertical;\n  min-height: 78px;\n  line-height: 1.4;\n}\n\n.properties input.editable-inline {\n  border-bottom: 1px dashed var(--line-strong);\n}\n.properties input:focus,\n.properties textarea:focus,\n.properties select:focus { outline: 2px solid var(--accent); outline-offset: 2px; border-color: transparent; }\n.properties .check-row {\n  display: flex; align-items: center; gap: 8px;\n  color: var(--ink);\n  font-size: 13px;\n  text-transform: none;\n  letter-spacing: normal;\n}\n.properties .check-row input { width: auto; }\n.form-actions { display: flex; justify-content: flex-end; padding-top: 2px; }\n.form-error { min-height: 16px; color: var(--danger); font-size: 12px; }\n.property-group {\n  font-size: 11px;\n  text-transform: uppercase;\n  letter-spacing: .08em;\n  color: var(--text-muted);\n  padding-top: 6px;\n  margin-top: 4px;\n  border-top: 1px solid var(--line);\n}\n.context-actions {\n  display: grid;\n  gap: 8px;\n}\n.context-action-row {\n  display: flex;\n  gap: 6px;\n  flex-wrap: wrap;\n}\n.context-action {\n  width: 100%;\n  justify-content: flex-start;\n}\n.context-action-row .context-action {\n  width: auto;\n}\n.context-action-heading {\n  margin-top: 4px;\n  color: var(--text-muted);\n  font-size: 11px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: .05em;\n}\n\n/* --- Scenario player HUD (presentation / fix-demo overlay) --- */\n.scenario-hud {\n  position: fixed;\n  left: 50%;\n  bottom: 24px;\n  transform: translateX(-50%);\n  z-index: 1000;\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  max-width: 80vw;\n  padding: 8px 16px;\n  border-radius: 999px;\n  background: var(--ink, #1a1a1a);\n  color: var(--bg, #fff);\n  font: 600 13px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;\n  box-shadow: 0 6px 24px rgba(0, 0, 0, .28);\n  pointer-events: none;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  /* animation: scenario-pop .18s ease; */\n}\n.scenario-hud.done { background: var(--ok, #1a7f4b); }\n@keyframes scenario-pop { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translateX(-50%); } }\n\n/* ============================================================================\n   varflow viewer — file-projections graph mode (.varflow)\n   Warm \"paper\" palette ported from file-projections src/ui/app.css, plus a\n   read-only chrome: the canvas is for *reading* a program graph, so the node\n   editor, node-type palette, system-design observations, and outline sidebar\n   are hidden. Zoom/Fit stays. Scoped under .varflow so the editor is\n   untouched when the app boots normally.\n   ============================================================================ */\n.varflow {\n  --bg: #ebe7dd;\n  --panel: #f4f0e8;\n  --panel-2: #e2ddd2;\n  --ink: #25231f;\n  --text-muted: #746b5d;\n  --line: #cec6b8;\n  --line-strong: #b8ae9c;\n  --accent: #3f6f9f;\n  --accent-soft: rgba(63, 111, 159, .10);\n  --edge: #8a7f6d;\n  --danger: #b54848;\n  --danger-soft: rgba(181, 72, 72, .08);\n  --shadow-sm: 0 1px 2px rgba(70, 55, 30, .06);\n  --shadow-md: 0 6px 18px rgba(70, 55, 30, .10);\n  color-scheme: light;\n}\n/* Hide editor affordances not applicable to a read-only program-graph view. */\n.varflow [data-panel-id=\"top\"],\n.varflow [data-panel-id=\"system-design\"],\n.varflow .design-hints,\n.varflow .node-type-panel,\n.varflow .item-toolbar,\n.varflow .left { display: none !important; }\n/* Reclaim the sidebar column so the stage spans the full width. */\n.varflow .shell { grid-template-columns: 1fr !important; }\n.varflow .stage { grid-column: 1 / -1 !important; }\n/* Program-graph reading mode: calm rectangular cards, left-aligned labels,\n   effect/type shown by a restrained accent rail instead of loud fill colors. */\n.varflow .node {\n  justify-content: flex-start;\n  border-radius: 5px;\n  border-color: color-mix(in srgb, var(--line-strong) 82%, transparent);\n  background: color-mix(in srgb, #fbf8f0 92%, var(--panel));\n  box-shadow: 0 1px 2px rgba(70, 55, 30, .05);\n  overflow: hidden;\n}\n.varflow .node::before {\n  content: \"\";\n  position: absolute;\n  inset: 0 auto 0 0;\n  width: 4px;\n  background: var(--line-strong);\n}\n.varflow .node-type-gateway::before { background: #3f6f9f; }\n.varflow .node-type-service::before { background: #24784f; }\n.varflow .node-type-database::before { background: #b07a2b; }\n.varflow .node-type-index::before { background: #b54848; }\n.varflow .node-type-square::before { background: #8a7f6d; }\n.varflow .node-type-gateway,\n.varflow .node-type-service,\n.varflow .node-type-database,\n.varflow .node-type-index,\n.varflow .node-type-square {\n  background: color-mix(in srgb, #fbf8f0 94%, var(--panel));\n}\n.varflow .node-kicker {\n  min-height: 18px;\n  padding: 6px 10px 0 14px;\n}\n.varflow .node-title {\n  padding: 3px 10px 6px 14px;\n  text-align: left;\n  font-family: ui-monospace, Menlo, monospace;\n  font-size: 12.5px;\n  line-height: 1.25;\n  word-break: break-word;\n}\n.varflow .node-type-label {\n  letter-spacing: .04em;\n  font-size: 9px;\n}\n.varflow .node-body {\n  padding: 0 10px 8px 14px;\n}\n.varflow .node-description {\n  max-height: 34px;\n  font-size: 10.5px;\n  line-height: 1.25;\n}\n.varflow .edge-line {\n  opacity: .72;\n}\n.varflow .edge-line.edge-kind-async {\n  stroke: #6f4fb0;\n}\n.varflow .edge-label {\n  paint-order: stroke;\n  stroke: #fbf8f0;\n  stroke-width: 5px;\n  stroke-linejoin: round;\n  font-size: 10px;\n}\n.varflow .container {\n  border-style: solid;\n  border-color: color-mix(in srgb, var(--line-strong) 70%, transparent);\n  background: rgba(244, 240, 232, .34);\n  pointer-events: none;\n}\n.varflow .container-label {\n  top: -9px;\n  left: 10px;\n  background: #ebe7dd;\n  color: color-mix(in srgb, var(--text-muted) 82%, var(--ink));\n  letter-spacing: .04em;\n}\n.varflow .tool-panel[data-panel-id=\"zoom\"] {\n  max-width: calc(100% - 24px);\n  overflow: hidden;\n}\n@media (max-width: 700px) {\n  .varflow .tool-panel[data-panel-id=\"zoom\"] {\n    right: 8px;\n    bottom: 8px;\n  }\n  .varflow .node-title {\n    font-size: 12px;\n  }\n}\n";
+	var styles_default = "/* Design tokens. Names mirror Tailwind's neutral-* / blue-* so migration is a search-and-replace.\n   Anything visual should derive from these — DO NOT hardcode colors below. */\n:root {\n  --bg: rgb(250, 250, 249);\n  --panel: #ffffff;\n  --panel-2: #f5f5f4;\n  --ink: #1c1c1c;\n  --text-muted: #6b7280;\n  --line: #e5e5e3;\n  --line-strong: #d4d4d2;\n  --accent: rgb(37, 99, 235);\n  --accent-soft: rgba(37, 99, 235, .08);\n  --edge: #4b5563;\n  --danger: #dc2626;\n  --danger-soft: rgba(220, 38, 38, .06);\n  --shadow-sm: 0 1px 2px rgba(0,0,0,.04);\n  --shadow-md: 0 6px 18px rgba(0,0,0,.06);\n  --radius: 6px;\n  --radius-lg: 10px;\n\n  /* Spacing scale — 8px rhythm */\n  --space-1: 4px;\n  --space-2: 8px;\n  --space-3: 12px;\n  --space-4: 16px;\n  --space-5: 24px;\n  --space-6: 32px;\n\n  /* Animation tokens */\n  --duration-fast: .12s;\n  --duration-normal: .18s;\n  --duration-slow: .25s;\n  --ease-default: ease-out;\n\n  /* Semantic aliases */\n  --border: var(--line);\n\n  color-scheme: light dark;\n}\n\n/* Auto dark from OS preference (no explicit theme choice yet) */\n@media (prefers-color-scheme: dark) {\n  :root:not([data-theme]) {\n    --bg: rgb(17, 17, 16);\n    --panel: #1c1c1b;\n    --panel-2: #282826;\n    --ink: #eeedec;\n    --text-muted: #8b919a;\n    --line: #333331;\n    --line-strong: #444442;\n    --accent: rgb(96, 148, 248);\n    --accent-soft: rgba(96,148,248,.12);\n    --edge: #8b919a;\n    --danger: #f87171;\n    --danger-soft: rgba(248,113,113,.10);\n    --shadow-sm: 0 1px 2px rgba(0,0,0,.25);\n    --shadow-md: 0 6px 18px rgba(0,0,0,.35);\n  }\n}\n\n/* Explicit dark (JS toggle wins over media query via specificity on .shell) */\n.shell[data-theme=\"dark\"] {\n  --bg: rgb(17, 17, 16);\n  --panel: #1c1c1b;\n  --panel-2: #282826;\n  --ink: #eeedec;\n  --text-muted: #8b919a;\n  --line: #333331;\n  --line-strong: #444442;\n  --accent: rgb(96, 148, 248);\n  --accent-soft: rgba(96,148,248,.12);\n  --edge: #8b919a;\n  --danger: #f87171;\n  --danger-soft: rgba(248,113,113,.10);\n  --shadow-sm: 0 1px 2px rgba(0,0,0,.25);\n  --shadow-md: 0 6px 18px rgba(0,0,0,.35);\n}\n\n/* Explicit light (when OS is dark but user chose light) */\n.shell[data-theme=\"light\"] {\n  --bg: rgb(250, 250, 249);\n  --panel: #ffffff;\n  --panel-2: #f5f5f4;\n  --ink: #1c1c1c;\n  --text-muted: #6b7280;\n  --line: #e5e5e3;\n  --line-strong: #d4d4d2;\n  --accent: rgb(37, 99, 235);\n  --accent-soft: rgba(37,99,235,.08);\n  --edge: #4b5563;\n  --danger: #dc2626;\n  --danger-soft: rgba(220,38,38,.06);\n  --shadow-sm: 0 1px 2px rgba(0,0,0,.04);\n  --shadow-md: 0 6px 18px rgba(0,0,0,.06);\n}\n\n/* Dark-mode overrides for hardcoded light color-mix() values */\n.shell[data-theme=\"dark\"] .node-type-square {\n  background: color-mix(in srgb, var(--panel) 88%, #1e3a5f);\n}\n.shell[data-theme=\"dark\"] .node-type-circle {\n  background: color-mix(in srgb, var(--panel) 86%, #1a3a2a);\n}\n.shell[data-theme=\"dark\"] .tool-panel {\n  background: color-mix(in srgb, var(--panel) 94%, transparent);\n}\n.shell[data-theme=\"dark\"] .backdrop {\n  background: rgba(0,0,0,.45);\n}\n.shell[data-theme=\"dark\"] .container {\n  background: rgba(255,255,255,.02);\n}\n.shell[data-theme=\"dark\"] .container:hover {\n  background: rgba(96,148,248,.06);\n}\n.shell[data-theme=\"dark\"] .container.selected {\n  background: rgba(96,148,248,.08);\n}\n.shell[data-theme=\"dark\"] .container.manual {\n  background: rgba(96,148,248,.06);\n}\n.shell[data-theme=\"dark\"] .scenario-hud {\n  background: var(--ink);\n  color: var(--bg);\n}\n\n* { box-sizing: border-box; }\n\n/* Consistent focus ring across all interactive elements.\n   Keep :focus on inputs that auto-focus on modal open (palette, form fields). */\n*:focus-visible {\n  outline: 2px solid var(--accent);\n  outline-offset: 2px;\n}\n\n/* Reduced motion — respect OS preference */\n@media (prefers-reduced-motion: reduce) {\n  *, *::before, *::after {\n    animation-duration: 0.01ms !important;\n    transition-duration: 0.01ms !important;\n  }\n}\n\nbody { margin: 0; min-height: 100vh; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, sans-serif; }\n\n/* --- Keyframes --- */\n@keyframes node-enter {\n  from { opacity: 0; transform: translate(-50%, -50%) scale(0.85); }\n}\n@keyframes modal-enter {\n  from { opacity: 0; }\n}\n@keyframes modal-slide {\n  from { opacity: 0; transform: translateX(-50%) translateY(-6px); }\n}\n\n/* Buttons: ghost by default. Visible only on hover/focus. Borders disappear; weight comes from text.\n   Add .primary for accent treatment; .icon for square icon-only buttons. */\nbutton {\n  border: 1px solid transparent;\n  background: transparent;\n  color: var(--ink);\n  border-radius: var(--radius);\n  padding: 5px 10px;\n  font: inherit;\n  cursor: pointer;\n  line-height: 1.2;\n  transition: background-color var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);\n}\nbutton:hover { background: var(--panel-2); }\nbutton.primary { color: var(--accent); }\nbutton.primary:hover { background: var(--accent-soft); }\nbutton.danger { color: var(--danger); }\nbutton.danger:hover { background: var(--danger-soft); }\nbutton.icon { padding: 4px 7px; min-width: 26px; color: var(--text-muted); }\nbutton.icon:hover { color: var(--ink); }\n\n.shell { display: grid; grid-template: 0 1fr / 1fr; height: 100vh; transition: grid-template-rows var(--duration-fast) var(--ease-default); }\n.shell[data-top-folded=\"true\"] { grid-template-rows: 0 1fr; }\n.shell[data-top-folded=\"true\"] .top { display: none; }\n/* Zen mode — distraction-free canvas. Every floating tool panel fades to\n * semi-transparent (still there, just quiet) and stays that way until an\n * explicit exit (`\\` or Escape); hover a panel to bring it back to full.\n * Clean screenshots without losing the controls entirely. */\n.shell[data-zen=\"true\"] { grid-template: 0 1fr / 1fr; }\n.shell[data-zen=\"true\"] .top { display: none; }\n.shell[data-zen=\"true\"] .tool-panel {\n  opacity: 0.12;\n  transition: opacity var(--duration-fast) var(--ease-default);\n}\n.shell[data-zen=\"true\"] .tool-panel:hover { opacity: 1; }\n.hamburger { font-size: 16px; line-height: 1; padding: 2px 8px; margin-right: 4px; }\n\n/* --- Debug toolbar group --- */\n.toolbar button[data-command^=\"debug.\"] { font-size: 12px; padding: 4px 8px; }\n.toolbar button[data-command=\"debug.record.start\"] { color: var(--danger); }\n.toolbar button[data-command=\"debug.record.start\"]:hover { background: var(--danger-soft); }\n.toolbar button[data-command=\"debug.assert.open\"] { color: var(--accent); }\n\n/* --- Assert modal split layout --- */\n.debug-assert {\n  display: grid;\n  grid-template-columns: minmax(280px, 1fr) minmax(360px, 1.2fr);\n  gap: 14px;\n  width: min(1100px, calc(100vw - 80px));\n  height: min(640px, calc(100vh - 160px));\n}\n.debug-state { display: flex; flex-direction: column; gap: 8px; min-height: 0; }\n.debug-search {\n  padding: 6px 10px;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  background: var(--panel);\n  font: 12px ui-monospace, monospace;\n}\n.debug-search:focus-visible { outline: 2px solid var(--accent); border-color: var(--accent); }\n.debug-tree {\n  flex: 1;\n  overflow: auto;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  background: var(--panel);\n  padding: 6px 4px;\n  font: 12px ui-monospace, monospace;\n}\n.debug-tree-row {\n  display: flex; align-items: center; gap: 6px;\n  padding: 2px 6px;\n  border-radius: 4px;\n}\n.debug-tree-row:hover { background: var(--panel-2); }\n.debug-tree-row[class*=\"depth-\"] { padding-left: calc(6px + var(--depth, 0) * 10px); }\n.debug-tree-row.depth-1 { padding-left: 16px; }\n.debug-tree-row.depth-2 { padding-left: 26px; }\n.debug-tree-row.depth-3 { padding-left: 36px; }\n.debug-tree-row.depth-4 { padding-left: 46px; }\n.debug-tree-row.depth-5 { padding-left: 56px; }\n.debug-tree-row.depth-6 { padding-left: 66px; }\n.debug-tree-row.depth-7 { padding-left: 76px; }\n.debug-tree-row.depth-8 { padding-left: 86px; }\n.debug-tree-row.depth-9 { padding-left: 96px; }\n.debug-tree-label { color: var(--text-muted); min-width: 80px; }\n.debug-tree-summary { color: var(--text-muted); opacity: 0.7; }\n.debug-tree-value {\n  border: 1px solid transparent;\n  background: transparent;\n  padding: 1px 6px;\n  border-radius: 4px;\n  color: var(--ink);\n  font: 12px ui-monospace, monospace;\n  cursor: pointer;\n  text-align: left;\n}\n.debug-tree-value:hover { border-color: var(--accent); background: var(--accent-soft); }\n.debug-tree-array { color: var(--accent); }\n.debug-tree-empty {\n  padding: 14px;\n  color: var(--text-muted);\n  text-align: center;\n}\n\n/* --- Test panel --- */\n.debug-test { display: flex; flex-direction: column; gap: 8px; min-height: 0; }\n.debug-test-head { display: flex; align-items: center; justify-content: space-between; }\n.debug-code {\n  flex: 1;\n  font: 12px/1.5 ui-monospace, monospace;\n  background: var(--panel);\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  padding: 10px;\n  resize: none;\n  white-space: pre;\n  overflow: auto;\n  color: var(--ink);\n}\n.debug-code:focus-visible { border-color: var(--accent); outline: 2px solid var(--accent); }\n.debug-actions { display: flex; gap: 6px; }\n.debug-actions button { border: 1px solid var(--line); padding: 5px 12px; }\n.debug-actions button.primary { border-color: var(--accent); color: var(--accent); }\n\n/* --- Replay modal --- */\n.debug-replay { display: flex; flex-direction: column; gap: 10px; min-width: 560px; }\n.debug-replay-hint { margin: 0; color: var(--text-muted); font-size: 12.5px; }\n.debug-replay textarea {\n  min-height: 320px;\n  resize: vertical;\n  font: 12px/1.4 ui-monospace, monospace;\n  background: var(--panel);\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  padding: 10px;\n}\n.top {\n  grid-column: 1 / -1;\n  grid-row: 1;\n  display: none;\n}\n.toolbar { display: flex; align-items: center; gap: 2px; width: 100%; }\n.toolbar button { white-space: nowrap; font-size: 13px; }\n.toolbar-spacer { flex: 1; }\n.toolbar-start, .toolbar-end { display: flex; align-items: center; gap: 2px; }\n/* Related actions cluster into a group with a light divider between clusters,\n   so \"graph editing\" and \"layout\" read as distinct units in the top bar. */\n.tool-group { display: flex; align-items: center; gap: 2px; padding-right: 6px; margin-right: 4px; border-right: 1px solid var(--line); }\n.tool-group:last-child { border-right: 0; padding-right: 0; margin-right: 0; }\n.toolbar-end button[data-command=\"palette.open\"] { font-size: 15px; padding: 3px 8px; }\n\n\n/* Left panel — floating tool-panel positioned over the stage with screen-edge\n   margins. Not a grid column, so flushing it doesn't destroy stage content. */\n/* With outline/log unregistered the left place is empty — collapse it so fit-to-\n * view doesn't reserve a phantom 260px and skew the graph to the right. */\n.left:empty { display: none; }\n.left {\n  position: absolute;\n  left: var(--space-3);\n  top: var(--space-3);\n  bottom: var(--space-3);\n  width: 260px;\n  max-height: calc(100vh - var(--space-6));\n  z-index: 10;\n  overflow: hidden;\n  pointer-events: auto;\n}\n.left[data-outline-folded=\"true\"] {\n  width: auto;\n  min-width: 42px;\n}\n/* The outline-panel wrapper lives inside .left — the place slot is the raw\n   .left element; the tool-panel chrome (header, body, fold button) is the\n   outline's own renderable. */\n.outline-panel {\n  display: flex;\n  flex-direction: column;\n  height: 100%;\n  background: var(--panel);\n  border: 1px solid var(--line);\n  border-radius: var(--radius-lg);\n  box-shadow: var(--shadow-sm);\n}\n.outline-panel-head {\n  display: flex;\n  align-items: center;\n  gap: var(--space-1);\n  padding: var(--space-2) var(--space-3);\n  border-bottom: 1px solid var(--line);\n  flex: 0 0 auto;\n}\n.outline-panel-body {\n  flex: 1 1 auto;\n  overflow: auto;\n  padding: var(--space-2);\n}\n.outline-panel[data-outline-folded=\"true\"] .outline-panel-body { display: none; }\n.outline-panel[data-outline-folded=\"true\"] .outline-panel-head { border-bottom: 0; }\n\n.stage {\n  grid-column: 1;\n  grid-row: 2;\n  --grid-size: 32px;\n  --grid-x: 0px;\n  --grid-y: 0px;\n  position: relative;\n  overflow: hidden;\n  background-color: var(--bg);\n  background-image: radial-gradient(circle, var(--line) .5px, transparent .5px);\n  background-size: var(--grid-size);\n  cursor: grab;\n  touch-action: none;\n}\n.stage.panning { cursor: grabbing; }\n.tool-panel {\n  position: absolute;\n  z-index: 12;\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  max-width: min(920px, calc(100% - 24px));\n  min-height: 34px;\n  padding: 4px;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  background: color-mix(in srgb, var(--panel) 94%, transparent);\n  box-shadow: var(--shadow-sm);\n  pointer-events: auto;\n}\n.tool-panel[data-collapsed=\"true\"] {\n  width: auto;\n  min-width: 62px;\n}\n.tool-panel-head {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  flex: 0 0 auto;\n  border-right: 1px solid var(--line);\n  padding-right: 4px;\n}\n.tool-panel[data-collapsed=\"true\"] .tool-panel-head {\n  border-right: 0;\n  padding-right: 0;\n}\n.tool-panel-drag,\n.tool-panel-collapse {\n  min-width: 24px;\n  padding: 3px 6px;\n  color: var(--text-muted);\n}\n.tool-panel-drag { cursor: grab; }\n.tool-panel-drag:active { cursor: grabbing; }\n.tool-panel .toolbar {\n  min-width: 0;\n  overflow: auto hidden;\n  scrollbar-width: none;\n}\n.tool-panel .toolbar::-webkit-scrollbar { display: none; }\n/* Resting position for panels the user has not dragged (drag sets inline left/top). */\n.tool-panel[data-anchor=\"top-left\"] { left: 12px; top: 12px; }\n.tool-panel[data-anchor=\"top-center\"] { left: 50%; top: 12px; transform: translateX(-50%); }\n.tool-panel[data-anchor=\"top-right\"] { right: 12px; top: 12px; }\n.tool-panel[data-anchor=\"middle-right\"] { right: 12px; top: 50%; transform: translateY(-50%); }\n.tool-panel[data-anchor=\"bottom-left\"] { left: 12px; bottom: 12px; }\n.tool-panel[data-anchor=\"bottom-right\"] { right: 12px; bottom: 12px; }\n\n/* Outline panel — sits on the left side like the old aside, but as a floating\n   tool-panel with screen-edge margins. Scrolls internally; collapses via its\n   own fold button in the header. */\n.outline-panel {\n  position: absolute;\n  left: var(--space-3);\n  top: var(--space-3);\n  bottom: var(--space-3);\n  width: 260px;\n  max-height: calc(100vh - var(--space-6));\n  display: flex;\n  flex-direction: column;\n  background: var(--panel);\n  border: 1px solid var(--line);\n  border-radius: var(--radius-lg);\n  box-shadow: var(--shadow-sm);\n  z-index: 10;\n  overflow: hidden;\n}\n.outline-panel-head {\n  display: flex;\n  align-items: center;\n  gap: var(--space-1);\n  padding: var(--space-2) var(--space-3);\n  border-bottom: 1px solid var(--line);\n  flex: 0 0 auto;\n}\n.outline-panel-body {\n  flex: 1 1 auto;\n  overflow: auto;\n  padding: var(--space-2);\n}\n.outline-panel[data-outline-folded=\"true\"] {\n  width: auto;\n  min-width: 42px;\n}\n.outline-panel[data-outline-folded=\"true\"] .outline-panel-body { display: none; }\n.outline-panel[data-outline-folded=\"true\"] .outline-panel-head { border-bottom: 0; }\n/* Stack panels lay their buttons in a column under the drag/collapse head. */\n.tool-panel-stack { flex-direction: column; align-items: stretch; }\n.tool-panel-stack .tool-panel-head { border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 4px; justify-content: flex-end; }\n.tool-panel-stack[data-collapsed=\"true\"] .tool-panel-head { border-bottom: 0; padding: 0; }\n.tool-panel-body { display: flex; gap: 4px; }\n.tool-panel-stack .tool-panel-body { flex-direction: column; }\n.tool-panel[data-panel-id=\"system-design\"] {\n  width: 140px;\n  max-width: 140px;\n}\n.tool-panel[data-panel-id=\"system-design\"] .tool-panel-body {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 4px;\n}\n.design-palette-button {\n  min-width: 0;\n  height: 28px;\n  padding: 0 5px;\n  border: 1px solid var(--line);\n  background: var(--panel);\n  font-size: 11px;\n  white-space: nowrap;\n}\n.design-palette-button:hover { border-color: var(--accent); }\n.design-node-database { color: #0369a1; }\n.design-node-kafka { color: #7c3aed; }\n.design-node-service { color: #0f766e; }\n.design-node-index { color: #b45309; }\n.design-node-user-input { color: #be123c; }\n.design-node-gateway { color: #4338ca; }\n.design-node-cache { color: #15803d; }\n.design-node-rate-limit { color: #dc2626; }\n.design-node-circuit-breaker { color: #7c2d12; }\n.design-edge-async { border-style: dashed; }\n.design-edge-read { color: #0369a1; }\n.design-edge-write { color: #b45309; }\n.node-type-panel {\n  gap: 3px;\n  max-width: none;\n}\n.node-type-button {\n  min-width: 44px;\n  height: 26px;\n  padding: 0 8px;\n  border-radius: 5px;\n  font-size: 12px;\n}\n.node-type-button.active {\n  background: var(--accent);\n  border-color: var(--accent);\n  color: white;\n}\n.keyboard-capture {\n  position: fixed;\n  width: 1px;\n  height: 1px;\n  opacity: 0;\n  pointer-events: none;\n}\n.stage::before {\n  content: \"\";\n  position: absolute;\n  inset: 0;\n  background-image:\n    linear-gradient(var(--line) 1px, transparent 1px),\n    linear-gradient(90deg, var(--line) 1px, transparent 1px);\n  background-position: var(--grid-x) var(--grid-y);\n  background-size: var(--grid-size) var(--grid-size);\n  opacity: .35;\n}\n\n/* Nodes: lighter card with subtle border and a small drop shadow only on hover/selected. */\n.nodes { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; }\n.edges { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }\n.edges line { vector-effect: non-scaling-stroke; }\n.edges .edge-hit { stroke: var(--ink); stroke-opacity: .001; stroke-width: 14px; opacity: 1; pointer-events: stroke; cursor: pointer; }\n.edges .edge-hit:focus, .edges .edge-hit:focus-visible { outline: none; }\n.edges .edge-line { stroke: var(--edge); stroke-width: 2px; opacity: .9; pointer-events: none; }\n.edges .edge-line.selected { stroke: var(--accent); stroke-width: 2px; }\n.edges .edge-line.focused { stroke: var(--accent); stroke-dasharray: 4 3; }\n.edges .edge-line.edge-kind-read { stroke: #0369a1; }\n.edges .edge-line.edge-kind-write { stroke: #b45309; }\n.edges .edge-line.edge-kind-sync { stroke: #4b5563; }\n.edges .edge-line.edge-kind-async { stroke: #7c3aed; stroke-dasharray: 7 5; }\n.edges #edge-arrow path { fill: var(--edge); }\n/* font-size lives in graph units (set as an SVG attribute in the renderer), not\n * screen px — so the label scales with the geometry it annotates and its offset\n * from the line stays constant at every zoom (no swim/dance). */\n/* Opaque backdrop behind each edge label so text stays clear where it crosses a\n * line; the text is appended after it, so it always paints on top of its edge. */\n.edges .edge-label-bg { fill: var(--bg); opacity: 0.92; }\n.edges .edge-label { fill: var(--text-muted); font-family: ui-monospace, monospace; }\n.edges .edge-label.edge-kind-read { fill: #0369a1; }\n.edges .edge-label.edge-kind-write { fill: #92400e; }\n.edges .edge-label.edge-kind-async { fill: #6d28d9; }\n.item-overlays { position: absolute; inset: 0; pointer-events: none; z-index: 5; }\n.item-overlay {\n  position: absolute;\n  transform: translate(-50%, -140%);\n  padding: 1px 5px;\n  border: 1px solid var(--accent);\n  border-radius: 4px;\n  background: var(--panel);\n  color: var(--ink);\n  box-shadow: var(--shadow-sm);\n  font: 11px ui-monospace, monospace;\n  white-space: nowrap;\n}\n.item-overlay.jump-letter,\n.item-overlay.picker-letter {\n  font-weight: 600;\n  background: var(--accent);\n  color: white;\n  letter-spacing: .05em;\n  text-transform: uppercase;\n}\n.picker-prompt {\n  position: absolute;\n  top: 16px;\n  left: 50%;\n  transform: translateX(-50%);\n  z-index: 6;\n  padding: 6px 14px;\n  border-radius: var(--radius);\n  background: var(--panel);\n  border: 1px solid var(--accent);\n  box-shadow: var(--shadow-md);\n  font: 13px system-ui, sans-serif;\n  pointer-events: none;\n}\n.picker-prompt em { color: var(--text-muted); font-style: normal; }\n.node {\n  position: absolute;\n  min-width: 96px;\n  min-height: 36px;\n  transform: translate(-50%, -50%);\n  border: 1px solid var(--line-strong);\n  border-radius: var(--radius);\n  background: var(--panel);\n  box-shadow: var(--shadow-sm);\n  user-select: none;\n  touch-action: none;\n  cursor: pointer;\n  display: flex;\n  flex-direction: column;\n  justify-content: center;\n  transition: box-shadow var(--duration-normal) var(--ease-default),\n              border-color var(--duration-normal) var(--ease-default),\n              min-height var(--duration-fast) var(--ease-default),\n              left var(--duration-fast) var(--ease-default),\n              top var(--duration-fast) var(--ease-default);;\n}\n.node:hover {\n  border-color: var(--accent);\n  box-shadow: var(--shadow-sm), 0 0 0 1px rgba(37, 99, 235, .08);\n}\n/* Keyboard nudge eases via the left/top transition above. A pointer-drag must\n   track the cursor 1:1, so the stage drops the easing while dragging. */\n.stage.dragging .node { cursor: grabbing; transition: box-shadow var(--duration-normal) var(--ease-default), border-color var(--duration-normal) var(--ease-default); }\n.node-type-square {\n  border-radius: 6px;\n  background: color-mix(in srgb, var(--panel) 88%, #e0f2fe);\n}\n.node-type-circle {\n  border-radius: 999px;\n  background: color-mix(in srgb, var(--panel) 86%, #dcfce7);\n}\n.node-type-circle .node-title,\n.node-type-circle .node-body {\n  padding-left: 18px;\n  padding-right: 18px;\n}\n.node-type-service { border-color: color-mix(in srgb, #0f766e 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 86%, #ccfbf1); }\n.node-type-database { border-color: color-mix(in srgb, #0369a1 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 86%, #e0f2fe); }\n.node-type-kafka { border-color: color-mix(in srgb, #7c3aed 42%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 87%, #ede9fe); }\n.node-type-index { border-color: color-mix(in srgb, #b45309 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 86%, #fef3c7); }\n.node-type-user-input { border-color: color-mix(in srgb, #be123c 42%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 88%, #ffe4e6); }\n.node-type-gateway { border-color: color-mix(in srgb, #4338ca 42%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 88%, #e0e7ff); }\n.node-type-cache { border-color: color-mix(in srgb, #15803d 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 86%, #dcfce7); }\n.node-type-rate-limit { border-color: color-mix(in srgb, #dc2626 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 88%, #fee2e2); }\n.node-type-circuit-breaker { border-color: color-mix(in srgb, #7c2d12 45%, var(--line-strong)); background: color-mix(in srgb, var(--panel) 88%, #ffedd5); }\n.node.semantic-big-data {\n  box-shadow: inset 0 0 0 2px color-mix(in srgb, #b45309 38%, transparent), var(--shadow-sm);\n}\n.node.semantic-big-data .node-kicker::after {\n  content: \"big data\";\n  padding: 1px 4px;\n  border-radius: 4px;\n  background: color-mix(in srgb, #f59e0b 22%, transparent);\n  color: #92400e;\n  font: 700 9px/1 ui-monospace, monospace;\n  text-transform: uppercase;\n}\n.node.semantic-stale-risk .node-title::after {\n  content: \" stale\";\n  margin-left: 4px;\n  color: #b45309;\n  font: 700 10px/1 ui-monospace, monospace;\n  text-transform: uppercase;\n}\n\n/* Containers paint behind nodes (EntityDef.order = -10). Dashed border + label\n   in the corner so the grouping reads at a glance without competing with nodes. */\n.container {\n  position: absolute;\n  transform: translate(-50%, -50%);\n  border: 1px dashed var(--line-strong);\n  border-radius: var(--radius-lg);\n  background: rgba(0, 0, 0, .02);\n  box-shadow: none;\n  user-select: none;\n  pointer-events: auto;\n  transition: width var(--duration-normal) var(--ease-default),\n              height var(--duration-normal) var(--ease-default),\n              border-radius var(--duration-normal) var(--ease-default),\n              background var(--duration-normal) var(--ease-default),\n              border-color var(--duration-fast) var(--ease-default);\n}\n.container:hover { border-color: var(--accent); background: rgba(37, 99, 235, .03); }\n.container.selected { border-color: var(--accent); background: rgba(37, 99, 235, .05); }\n.container.focused { outline: 2px solid var(--accent); outline-offset: 2px; }\n/* Collapsed: a solid badge that sits ABOVE nodes/edges so it reads like a chip,\n   not a faint backdrop. Children are skipped by the renderer so the rect shrinks\n   to COLLAPSED_SIZE and the label centers inside. */\n.container.collapsed {\n  border-style: solid;\n  background: var(--panel);\n  box-shadow: var(--shadow-sm);\n  z-index: 2;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n}\n.container.collapsed .container-label {\n  position: static;\n  padding: 0 10px;\n  background: transparent;\n  color: var(--ink);\n  font: 600 12px/1 system-ui, sans-serif;\n  text-transform: none;\n  letter-spacing: 0;\n}\n.container.collapsed .container-resize { display: none; }\n.container-label {\n  position: absolute;\n  top: -10px;\n  left: 8px;\n  padding: 0 6px;\n  background: var(--bg);\n  color: var(--text-muted);\n  font: 600 10px/1 ui-monospace, monospace;\n  text-transform: uppercase;\n  letter-spacing: .5px;\n}\n.container-label.editing {\n  outline: none;\n  background: var(--panel);\n  color: var(--ink);\n  border-radius: 2px;\n}\n.container-sections {\n  position: absolute;\n  inset: 16px 10px 10px;\n  display: flex;\n  flex-direction: column;\n  pointer-events: none;\n}\n.container-sections[data-axis=\"columns\"] {\n  flex-direction: row;\n}\n.container-section {\n  position: relative;\n  flex: 1 1 0;\n  min-width: 0;\n  min-height: 0;\n  border-top: 1px dashed color-mix(in srgb, var(--line-strong) 70%, transparent);\n}\n.container-section:first-child { border-top: 0; }\n.container-sections[data-axis=\"columns\"] .container-section {\n  border-top: 0;\n  border-left: 1px dashed color-mix(in srgb, var(--line-strong) 70%, transparent);\n}\n.container-sections[data-axis=\"columns\"] .container-section:first-child { border-left: 0; }\n.container-section span {\n  position: absolute;\n  top: 4px;\n  left: 6px;\n  padding: 0 4px;\n  border-radius: 3px;\n  background: color-mix(in srgb, var(--bg) 88%, transparent);\n  color: var(--text-muted);\n  font: 600 10px/1.2 ui-monospace, monospace;\n  pointer-events: auto;\n  cursor: text;\n}\n.container-section span.editing {\n  outline: 2px solid var(--accent);\n  outline-offset: 1px;\n  background: var(--panel);\n  color: var(--ink);\n}\n.container-section-divider {\n  flex: 0 0 8px;\n  align-self: stretch;\n  border: 0;\n  padding: 0;\n  background: transparent;\n  cursor: row-resize;\n  pointer-events: auto;\n  position: relative;\n}\n.container-sections[data-axis=\"columns\"] .container-section-divider { cursor: col-resize; }\n.container-section-divider::before {\n  content: \"\";\n  position: absolute;\n  inset: 3px 0;\n  border-radius: 999px;\n  background: transparent;\n}\n.container-sections[data-axis=\"columns\"] .container-section-divider::before { inset: 0 3px; }\n.container-section-divider:hover::before,\n.container-section-divider:focus-visible::before {\n  background: var(--accent-soft);\n}\n/* Resize handle — bottom-right corner. Visible only on hover/selected/focused. */\n.container-resize {\n  position: absolute;\n  right: -6px;\n  bottom: -6px;\n  width: 14px;\n  height: 14px;\n  border-right: 2px solid var(--line-strong);\n  border-bottom: 2px solid var(--line-strong);\n  cursor: nwse-resize;\n  opacity: 0;\n  transition: opacity .12s, border-color .12s;\n}\n.container:hover .container-resize,\n.container.selected .container-resize,\n.container.focused .container-resize { opacity: 1; }\n.container-resize:hover { border-color: var(--accent); }\n.container.manual { background: rgba(37, 99, 235, .03); }\n.node:hover { box-shadow: var(--shadow-md); border-color: var(--accent); }\n.node.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft), var(--shadow-md); }\n.node.focused { outline: 2px solid var(--accent); outline-offset: 2px; }\n/* Toolbar sits above the selected node in screen-space — separate from the\n   node template so the node body stays free of chrome. */\n.node-toolbar {\n  position: absolute;\n  transform: translate(-50%, calc(-100% - 6px));\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  padding: 3px 5px;\n  border: 1px solid var(--line-strong);\n  border-radius: var(--radius);\n  background: var(--panel);\n  box-shadow: var(--shadow-md);\n  z-index: 4;\n  pointer-events: auto;\n  user-select: none;\n}\n.node-toolbar .node-drag-handle {\n  width: 14px;\n  color: var(--text-muted);\n  cursor: grab;\n  line-height: 1;\n  text-align: center;\n  font-size: 11px;\n}\n.node-toolbar .node-drag-handle:hover { color: var(--ink); }\n.node-action, .node-toggle, .node-config {\n  width: 20px; height: 20px;\n  padding: 0;\n  border: 0; background: transparent;\n  border-radius: 4px;\n  color: var(--text-muted);\n  line-height: 1;\n}\n.node-action:hover, .node-toggle:hover, .node-config:hover { background: var(--panel-2); color: var(--ink); }\n.node-context-actions { font-weight: 700; }\n.node-title {\n  flex: 1; font-weight: 600;\n  font-size: 13px;\n  min-width: 0;\n  padding: var(--space-2) var(--space-3);\n  white-space: pre-line;\n  line-height: 1.3;\n  color: var(--ink);\n  text-align: center;\n}\n.node-kicker {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 6px;\n  min-height: 20px;\n  padding: 6px 8px 0;\n  font: 10px/1.2 ui-monospace, monospace;\n  color: var(--text-muted);\n}\n.node-type-label {\n  font-weight: 700;\n  text-transform: uppercase;\n}\n.node-metrics {\n  min-width: 0;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.node-metrics:empty { display: none; }\n/* Edit mode visual cue — applied only when editable's handler enters the mode.\n   Stays out of the default state so a normal click doesn't suggest editability. */\n.node-title.editing {\n  outline: 2px solid var(--accent);\n  outline-offset: 1px;\n  border-radius: 3px;\n  background: var(--panel);\n  cursor: text;\n}\n.node-body { padding: 0 var(--space-3) var(--space-2); color: var(--text-muted); font-size: 12px; }\n.node-description {\n  display: grid;\n  gap: 3px;\n  max-height: 92px;\n  overflow: hidden;\n  line-height: 1.25;\n  text-align: left;\n}\n.node-description p,\n.node-description h4,\n.node-description ul { margin: 0; }\n.node-description h4 { font-size: 11px; color: var(--ink); }\n.node-description ul { padding-left: 16px; }\n.node-description code {\n  padding: 0 3px;\n  border-radius: 3px;\n  background: var(--panel-2);\n  color: var(--ink);\n}\n.node-description a { color: var(--accent); }\n/* Nodes without descriptions stay title-only; ids are data attrs, not visual noise. */\n.node:not(.has-description) .node-body { display: none; }\n.node.collapsed .node-body { display: none; }\n\n.design-hints {\n  position: absolute;\n  right: 116px;\n  bottom: 12px;\n  z-index: 11;\n  width: min(360px, calc(100vw - 392px));\n  max-height: min(42vh, 360px);\n  overflow: auto;\n  display: grid;\n  gap: 6px;\n  padding: 10px;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  background: color-mix(in srgb, var(--panel) 95%, transparent);\n  box-shadow: var(--shadow-sm);\n  pointer-events: auto;\n}\n.design-hints-title {\n  font-size: 11px;\n  font-weight: 700;\n  text-transform: uppercase;\n  color: var(--text-muted);\n}\n.design-observation {\n  display: grid;\n  gap: 2px;\n  padding-left: 8px;\n  border-left: 3px solid var(--line-strong);\n}\n.design-observation strong {\n  font-size: 12px;\n  line-height: 1.25;\n}\n.design-observation span {\n  color: var(--text-muted);\n  font-size: 11.5px;\n  line-height: 1.3;\n}\n.design-observation-action {\n  justify-self: start;\n  min-height: 22px;\n  padding: 2px 7px;\n  border: 1px solid var(--line);\n  background: var(--panel);\n  color: var(--accent);\n  font-size: 11px;\n}\n.design-observation-action:hover {\n  border-color: var(--accent);\n  background: var(--accent-soft);\n}\n.design-observation.warn { border-left-color: #d97706; }\n.design-observation.error { border-left-color: var(--danger); }\n.design-observation.info { border-left-color: var(--accent); }\n\n.design-presentation {\n  position: absolute;\n  left: 50%;\n  top: 54px;\n  z-index: 13;\n  width: min(520px, calc(100vw - 220px));\n  transform: translateX(-50%);\n  display: grid;\n  gap: 8px;\n  padding: 12px;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  background: color-mix(in srgb, var(--panel) 96%, transparent);\n  box-shadow: var(--shadow-md);\n  pointer-events: auto;\n}\n.design-presentation-kicker {\n  color: var(--text-muted);\n  font: 700 10px/1.2 ui-monospace, monospace;\n  text-transform: uppercase;\n}\n.design-presentation strong {\n  font-size: 14px;\n  line-height: 1.25;\n}\n.design-presentation p {\n  margin: 0;\n  color: var(--text-muted);\n  font-size: 12px;\n  line-height: 1.35;\n}\n.design-presentation-actions {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n}\n.design-presentation-actions button {\n  min-height: 26px;\n  padding: 3px 9px;\n  border: 1px solid var(--line);\n  background: var(--panel);\n  font-size: 12px;\n}\n.design-presentation-actions button.primary {\n  border-color: var(--accent);\n  background: var(--accent-soft);\n  color: var(--accent);\n}\n.design-presentation-actions button:disabled {\n  opacity: .45;\n  cursor: default;\n}\n\n/* Side panel typography */\n.panel-title {\n  margin: 0;\n  font-size: 11px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: .08em;\n  color: var(--text-muted);\n}\n\n/* Event log: text rhythm, no card chrome. */\n.log { display: grid; gap: 1px; font: 11.5px/1.4 ui-monospace, monospace; margin-bottom: 18px; }\n.log .panel-title { margin-bottom: 6px; }\n.log-row {\n  padding: 2px 8px;\n  border-left: 2px solid var(--line-strong);\n  color: var(--text-muted);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.log-row:first-of-type { color: var(--ink); border-left-color: var(--accent); }\n\n/* Outline: each collection is a section. Rows are text; affordances appear on hover. */\n.outline { display: grid; gap: var(--space-4); margin-bottom: 14px; }\n.outline-section { display: grid; gap: 6px; }\n.outline-section.folded { gap: 0; }\n.outline-fold {\n  min-width: 22px;\n  padding: 3px 4px;\n  color: var(--text-muted);\n  font-size: 11px;\n  line-height: 1;\n}\n.outline-fold:hover { color: var(--ink); }\n.outline-head {\n  display: flex; align-items: center; justify-content: space-between;\n  gap: 6px;\n  margin-bottom: 2px;\n}\n.outline-title-search {\n  flex: 1;\n  min-width: 0;\n  border: 1px solid transparent;\n  background: transparent;\n  border-radius: var(--radius);\n  padding: 4px 6px;\n  font-size: 11px;\n  font-weight: 600;\n  line-height: 1.35;\n  color: var(--text-muted);\n  text-align: left;\n  text-transform: uppercase;\n  letter-spacing: .08em;\n}\n.outline-title-search:hover { background: var(--panel); }\n.outline-title-search:focus {\n  background: var(--panel);\n  border-color: var(--line);\n  color: var(--ink);\n  text-transform: none;\n  letter-spacing: 0;\n}\n.outline-title-search::placeholder { color: var(--text-muted); opacity: 1; }\n.outline-list { display: grid; gap: 1px; }\n.outline-item { display: grid; gap: 1px; }\n/* Nested children indent under their parent with a guide rail. */\n.outline-children {\n  display: grid;\n  gap: 1px;\n  margin-left: 11px;\n  padding-left: 6px;\n  border-left: 1px solid var(--border);\n}\n/* Keep leaf rows (no fold toggle) aligned with foldable rows. Stretch so the\n * empty cell's box spans the row height — its top matches sibling controls. */\n.outline-fold-spacer { align-self: stretch; min-width: 22px; }\n.outline-row {\n  display: grid;\n  grid-template-columns: auto minmax(0, 1fr) auto auto;\n  align-items: center;\n  gap: 4px;\n  border-radius: var(--radius);\n}\n.outline-row:hover { background: var(--panel); }\n.outline-main {\n  background: transparent;\n  border: 0;\n  padding: 5px 8px;\n  font-size: 13px;\n  color: var(--ink);\n  overflow: hidden;\n  text-align: left;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.outline-main:hover { background: transparent; }\n.outline-row .icon-button { opacity: 0; }\n.outline-row:hover .icon-button { opacity: 1; }\n.icon-button {\n  min-width: 22px;\n  padding: 3px 6px;\n  border: 0;\n  background: transparent;\n  color: var(--text-muted);\n  border-radius: 4px;\n}\n.icon-button:hover { background: var(--panel-2); color: var(--ink); }\n\n/* Empty state. Text-only. Dashed border only on stage for \"drop hint\" feel. */\n.empty {\n  display: grid; gap: 4px;\n  padding: 10px 12px;\n  color: var(--text-muted);\n  background: transparent;\n  text-align: center;\n}\n.empty-title { font-weight: 500; color: var(--ink); font-size: 13px; }\n.empty-hint { font-size: 12px; }\n.empty kbd {\n  font-family: ui-monospace, monospace; font-size: 11px;\n  background: var(--panel); border: 1px solid var(--line); border-radius: 3px;\n  padding: 0 5px; margin: 0 2px;\n}\n.stage .empty {\n  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);\n  min-width: 240px;\n  border: 1px dashed var(--line-strong); border-radius: var(--radius-lg);\n  padding: 16px 20px;\n  background: var(--bg);\n}\n\n/* Modal — keeps weight on purpose: it's a focal surface. */\n.modal-slot { position: fixed; inset: 0; z-index: 50; pointer-events: none; }\n.modal-layer { position: absolute; inset: 0; pointer-events: auto; animation: modal-enter var(--duration-fast) var(--ease-default); }\n.backdrop { position: absolute; inset: 0; background: rgba(28,28,28,.18); }\n.modal {\n  position: absolute;\n  top: 64px;\n  left: 50%;\n  transform: translateX(-50%);\n  width: min(420px, calc(100vw - 32px));\n  background: var(--panel);\n  border: 1px solid var(--line);\n  border-radius: var(--radius-lg);\n  box-shadow: var(--shadow-md);\n  overflow: hidden;\n  animation: modal-slide var(--duration-normal) var(--ease-default);\n}\n.modal-head {\n  display: flex; justify-content: space-between; align-items: center;\n  padding: var(--space-2) var(--space-4);\n  border-bottom: 1px solid var(--line);\n  font-weight: 600;\n}\n.modal-body { padding: var(--space-3); display: grid; gap: var(--space-2); }\n.modal-layer[data-visual=\"command\"] .modal { width: min(520px, calc(100vw - 32px)); }\n.modal-layer[data-visual=\"properties\"] .modal { width: min(360px, calc(100vw - 32px)); }\n.modal-layer[data-visual=\"perf\"] .modal { width: min(1100px, calc(100vw - 32px)); }\n.modal-layer[data-visual=\"perf\"] .modal-body { max-height: calc(100vh - 150px); overflow: auto; }\n\n.palette-search {\n  width: 100%;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  padding: 7px 10px;\n  font: inherit;\n}\n.palette-search:focus { outline: 2px solid var(--accent); outline-offset: 2px; border-color: transparent; }\n.palette { display: grid; gap: 10px; }\n.command-list, .help-list {\n  display: grid; gap: 14px;\n  max-height: min(60vh, 520px); overflow: auto;\n}\n.command-section { display: grid; gap: 4px; }\n.command-section h3 {\n  margin: 0 0 2px;\n  color: var(--text-muted);\n  font-size: 11px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: .06em;\n}\n.command-section > [data-slot=\"rows\"] { display: grid; gap: 1px; }\n\n/* Command rows: ghost list, full-width, hover treatment. */\n.command-row, .help-row {\n  width: 100%;\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  gap: 12px;\n  text-align: left;\n  background: transparent;\n  border: 0;\n  border-radius: var(--radius);\n  padding: 6px 10px;\n  color: var(--ink);\n}\n.command-row:hover { background: var(--accent-soft); }\n/* Arrow-key highlight — the row Enter will run. */\n.command-row.is-selected { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }\n.command-row span, .help-row span { display: grid; gap: 1px; min-width: 0; }\n.command-row small, .help-row small { color: var(--text-muted); font: 11px ui-monospace, monospace; }\n.command-row kbd {\n  border: 1px solid var(--line);\n  background: var(--panel);\n  border-radius: 4px;\n  padding: 1px 5px;\n  color: var(--text-muted);\n  font: 11px ui-monospace, monospace;\n}\n.help-row { padding: 5px 10px; }\n.help-row input {\n  width: 84px;\n  border: 1px solid var(--line);\n  border-radius: 4px;\n  padding: 4px 6px;\n  font: 12px ui-monospace, monospace;\n  background: var(--panel);\n}\n.perf-panel { display: grid; gap: 12px; min-width: 0; }\n.perf-actions { display: flex; gap: 6px; justify-content: flex-end; }\n.perf-actions button { border: 1px solid var(--line); }\n.perf-summary {\n  display: grid;\n  grid-template-columns: repeat(4, minmax(0, 1fr));\n  gap: 8px;\n}\n.perf-summary-item {\n  display: grid;\n  gap: 2px;\n  min-width: 0;\n  padding: 8px 10px;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  background: var(--panel-2);\n}\n.perf-summary-item span { color: var(--text-muted); font-size: 11px; }\n.perf-summary-item b { font: 16px ui-monospace, monospace; }\n.perf-panel details {\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  overflow: hidden;\n}\n.perf-panel summary {\n  cursor: pointer;\n  padding: 7px 10px;\n  background: var(--panel-2);\n  font-weight: 600;\n}\n.perf-table-wrap { max-height: 300px; overflow: auto; }\n.perf-table {\n  width: 100%;\n  border-collapse: collapse;\n  font: 11px/1.35 ui-monospace, monospace;\n}\n.perf-table th,\n.perf-table td {\n  padding: 4px 7px;\n  border-top: 1px solid var(--line);\n  text-align: left;\n  vertical-align: top;\n}\n.perf-table th {\n  position: sticky;\n  top: 0;\n  background: var(--panel);\n  color: var(--text-muted);\n  z-index: 1;\n  cursor: pointer;\n  user-select: none;\n}\n.perf-table th.is-sorted { color: var(--text); }\n.perf-table td:nth-child(n+3) { white-space: nowrap; }\n.perf-table td:last-child { white-space: normal; }\n.perf-bar {\n  display: block;\n  width: 120px;\n  height: 8px;\n  margin-top: 3px;\n  border-radius: 999px;\n  background: var(--line);\n  overflow: hidden;\n}\n.perf-bar span {\n  display: block;\n  height: 100%;\n  background: var(--accent);\n}\n.perf-export {\n  box-sizing: border-box;\n  width: 100%;\n  min-height: 180px;\n  resize: vertical;\n  padding: 8px;\n  border: 0;\n  background: var(--panel);\n  color: var(--text);\n  font: 11px/1.4 ui-monospace, monospace;\n}\n.help-row.has-conflict { background: var(--danger-soft); }\n.flag-row { cursor: pointer; }\n.flag-row input.flag-toggle {\n  width: 16px;\n  height: 16px;\n  margin: 0;\n  padding: 0;\n  accent-color: var(--accent);\n}\n.shortcut-edit.is-conflict { border-color: var(--danger) !important; color: var(--danger); }\n.editable-inline { border: 1px solid transparent !important; background: transparent !important; }\n.editable-inline:hover { background: var(--panel-2) !important; }\n.editable-inline:focus { background: var(--panel) !important; outline: 2px solid var(--accent); }\n.shortcut-edit.is-conflict:focus { outline-color: var(--danger); }\n\n/* Property modal */\n.properties { display: grid; gap: 10px; }\n.properties [data-slot=\"fields\"] { display: grid; gap: 10px; }\n.property-group {\n  margin-top: 2px;\n  color: var(--text-muted);\n  font-size: 11px;\n  font-weight: 700;\n  text-transform: uppercase;\n}\n.properties label {\n  display: grid; gap: 4px;\n  color: var(--text-muted);\n  font-size: 11px;\n  text-transform: uppercase;\n  letter-spacing: .05em;\n}\n.properties input,\n.properties textarea,\n.properties select {\n  width: 100%;\n  border: 1px solid var(--line);\n  border-radius: var(--radius);\n  padding: 6px 8px;\n  color: var(--ink);\n  background: var(--panel);\n  font: 13px system-ui, sans-serif;\n  text-transform: none;\n  letter-spacing: normal;\n}\n.properties textarea {\n  resize: vertical;\n  min-height: 78px;\n  line-height: 1.4;\n}\n\n.properties input.editable-inline {\n  border-bottom: 1px dashed var(--line-strong);\n}\n.properties input:focus,\n.properties textarea:focus,\n.properties select:focus { outline: 2px solid var(--accent); outline-offset: 2px; border-color: transparent; }\n.properties .check-row {\n  display: flex; align-items: center; gap: 8px;\n  color: var(--ink);\n  font-size: 13px;\n  text-transform: none;\n  letter-spacing: normal;\n}\n.properties .check-row input { width: auto; }\n.form-actions { display: flex; justify-content: flex-end; padding-top: 2px; }\n.form-error { min-height: 16px; color: var(--danger); font-size: 12px; }\n.property-group {\n  font-size: 11px;\n  text-transform: uppercase;\n  letter-spacing: .08em;\n  color: var(--text-muted);\n  padding-top: 6px;\n  margin-top: 4px;\n  border-top: 1px solid var(--line);\n}\n.context-actions {\n  display: grid;\n  gap: 8px;\n}\n.context-action-row {\n  display: flex;\n  gap: 6px;\n  flex-wrap: wrap;\n}\n.context-action {\n  width: 100%;\n  justify-content: flex-start;\n}\n.context-action-row .context-action {\n  width: auto;\n}\n.context-action-heading {\n  margin-top: 4px;\n  color: var(--text-muted);\n  font-size: 11px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: .05em;\n}\n\n/* --- Scenario player HUD (presentation / fix-demo overlay) --- */\n.scenario-hud {\n  position: fixed;\n  left: 50%;\n  bottom: 24px;\n  transform: translateX(-50%);\n  z-index: 1000;\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  max-width: 80vw;\n  padding: 8px 16px;\n  border-radius: 999px;\n  background: var(--ink, #1a1a1a);\n  color: var(--bg, #fff);\n  font: 600 13px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;\n  box-shadow: 0 6px 24px rgba(0, 0, 0, .28);\n  pointer-events: none;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  /* animation: scenario-pop .18s ease; */\n}\n.scenario-hud.done { background: var(--ok, #1a7f4b); }\n@keyframes scenario-pop { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translateX(-50%); } }\n\n/* ============================================================================\n   varflow viewer — file-projections graph mode (.varflow)\n   Warm \"paper\" palette ported from file-projections src/ui/app.css, plus a\n   read-only chrome: the canvas is for *reading* a program graph, so the node\n   editor, node-type palette, system-design observations, and outline sidebar\n   are hidden. Zoom/Fit stays. Scoped under .varflow so the editor is\n   untouched when the app boots normally.\n   ============================================================================ */\n.varflow {\n  --bg: #ebe7dd;\n  --panel: #f4f0e8;\n  --panel-2: #e2ddd2;\n  --ink: #25231f;\n  --text-muted: #746b5d;\n  --line: #cec6b8;\n  --line-strong: #b8ae9c;\n  --accent: #3f6f9f;\n  --accent-soft: rgba(63, 111, 159, .10);\n  --edge: #8a7f6d;\n  --danger: #b54848;\n  --danger-soft: rgba(181, 72, 72, .08);\n  --shadow-sm: 0 1px 2px rgba(70, 55, 30, .06);\n  --shadow-md: 0 6px 18px rgba(70, 55, 30, .10);\n  color-scheme: light;\n}\n/* Hide editor affordances not applicable to a read-only program-graph view. */\n.varflow [data-panel-id=\"top\"],\n.varflow [data-panel-id=\"system-design\"],\n.varflow .design-hints,\n.varflow .node-type-panel,\n.varflow .item-toolbar,\n.varflow .left { display: none !important; }\n/* Reclaim the sidebar column so the stage spans the full width. */\n.varflow .shell { grid-template-columns: 1fr !important; }\n.varflow .stage { grid-column: 1 / -1 !important; }\n/* Program-graph reading mode: calm rectangular cards, left-aligned labels,\n   effect/type shown by a restrained accent rail instead of loud fill colors. */\n.varflow .node {\n  justify-content: flex-start;\n  border-radius: 5px;\n  border-color: color-mix(in srgb, var(--line-strong) 82%, transparent);\n  background: color-mix(in srgb, #fbf8f0 92%, var(--panel));\n  box-shadow: 0 1px 2px rgba(70, 55, 30, .05);\n  overflow: hidden;\n}\n.varflow .node::before {\n  content: \"\";\n  position: absolute;\n  inset: 0 auto 0 0;\n  width: 4px;\n  background: var(--line-strong);\n}\n.varflow .node-type-gateway::before { background: #3f6f9f; }\n.varflow .node-type-service::before { background: #24784f; }\n.varflow .node-type-database::before { background: #b07a2b; }\n.varflow .node-type-index::before { background: #b54848; }\n.varflow .node-type-square::before { background: #8a7f6d; }\n.varflow .node-type-gateway,\n.varflow .node-type-service,\n.varflow .node-type-database,\n.varflow .node-type-index,\n.varflow .node-type-square {\n  background: color-mix(in srgb, #fbf8f0 94%, var(--panel));\n}\n.varflow .node-kicker {\n  min-height: 18px;\n  padding: 6px 10px 0 14px;\n}\n.varflow .node-title {\n  padding: 3px 10px 6px 14px;\n  text-align: left;\n  font-family: ui-monospace, Menlo, monospace;\n  font-size: 12.5px;\n  line-height: 1.25;\n  word-break: break-word;\n}\n.varflow .node-type-label {\n  letter-spacing: .04em;\n  font-size: 9px;\n}\n.varflow .node-body {\n  padding: 0 10px 8px 14px;\n}\n.varflow .node-description {\n  max-height: 34px;\n  font-size: 10.5px;\n  line-height: 1.25;\n}\n.varflow .edge-line {\n  opacity: .72;\n}\n.varflow .edge-line.edge-kind-async {\n  stroke: #6f4fb0;\n}\n.varflow .edge-label {\n  paint-order: stroke;\n  stroke: #fbf8f0;\n  stroke-width: 5px;\n  stroke-linejoin: round;\n  font-size: 10px;\n}\n.varflow .container {\n  border-style: solid;\n  border-color: color-mix(in srgb, var(--line-strong) 70%, transparent);\n  background: rgba(244, 240, 232, .34);\n  pointer-events: none;\n}\n.varflow .container-label {\n  top: -9px;\n  left: 10px;\n  background: #ebe7dd;\n  color: color-mix(in srgb, var(--text-muted) 82%, var(--ink));\n  letter-spacing: .04em;\n}\n.varflow .tool-panel[data-panel-id=\"zoom\"] {\n  max-width: calc(100% - 24px);\n  overflow: hidden;\n}\n@media (max-width: 700px) {\n  .varflow .tool-panel[data-panel-id=\"zoom\"] {\n    right: 8px;\n    bottom: 8px;\n  }\n  .varflow .node-title {\n    font-size: 12px;\n  }\n}\n\n/* --- Rubber-band rectangle selection --- */\n.select-marquee {\n  position: absolute;\n  z-index: 60;\n  pointer-events: none;\n  border: 1px solid var(--accent);\n  background: var(--accent-soft);\n  border-radius: 3px;\n}\n.stage.marquee-active { cursor: crosshair; }\n\n/* --- Framed presentation mode --- */\n/* A real sub-graph (model's own node/edge renderers, gridded, no panels) drawn\n * into the modal. Focus node centered, up-to-3 neighbours per side (3×3 compass),\n * big touch controls, mobile-first. Navigation swaps only the sub-graph layer, so\n * the modal frame never re-mounts (no flicker). */\n.shell[data-present=\"true\"] .tool-panel { display: none; }\n.modal[data-visual=\"present\"] { width: min(1000px, calc(100vw - 28px)); }\n\n.present-body { display: flex; flex-direction: column; gap: 12px; }\n.present-substage {\n  position: relative;\n  overflow: hidden;\n  height: min(62vh, 560px);\n  border-radius: 12px;\n  border: 1px solid var(--border);\n  --grid-size: 32px;\n  --grid-x: 0px;\n  --grid-y: 0px;\n  background-color: var(--bg);\n  background-image: radial-gradient(circle, var(--line) .5px, transparent .5px);\n  background-size: var(--grid-size);\n  background-position: var(--grid-x) var(--grid-y);\n}\n/* Cross-fade the lens on every navigation — the \"fluent jump\" between nodes. */\n.present-substage .nodes { animation: present-fade var(--duration-normal) var(--ease-default); }\n.present-substage .node { cursor: pointer; }\n.present-substage .present-focus-node { box-shadow: 0 0 0 2px var(--accent); }\n/* Content toggle: edge-labels mode hides node descriptions to keep the wiring legible. */\n.present-substage[data-mode=\"edges\"] .node-description { display: none; }\n@keyframes present-fade {\n  from { opacity: 0; transform: translateY(4px); }\n  to   { opacity: 1; transform: none; }\n}\n.present-ellipsis {\n  position: absolute;\n  transform: translate(-50%, -50%);\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  min-width: 40px;\n  height: 34px;\n  padding: 0 10px;\n  border-radius: 999px;\n  background: var(--panel-2);\n  border: 1px dashed var(--border);\n  color: var(--text-muted);\n  font-size: 13px;\n}\n\n.present-controls {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 10px;\n  flex-wrap: wrap;\n}\n.present-mode-toggle, .present-jump {\n  font-size: 13px;\n  padding: 9px 14px;\n  border-radius: 10px;\n}\n.present-mode-toggle { color: var(--accent); }\n.present-jump { color: var(--ink); background: var(--panel-2); border: 1px solid var(--border); }\n.present-jump:hover { border-color: var(--accent); color: var(--accent); }\n.present-pad {\n  display: grid;\n  grid-template-areas: \". up .\" \"left down right\";\n  grid-template-columns: repeat(3, auto);\n  gap: 8px;\n  justify-content: center;\n  align-items: center;\n}\n.present-nav {\n  width: 50px;\n  height: 50px;\n  font-size: 19px;\n  border-radius: 14px;\n  background: var(--panel-2);\n  border: 1px solid var(--border);\n  color: var(--ink);\n}\n.present-nav:disabled { opacity: 0.28; }\n.present-nav:not(:disabled):hover { border-color: var(--accent); color: var(--accent); }\n.present-nav-up { grid-area: up; }\n.present-nav-left { grid-area: left; }\n.present-nav-right { grid-area: right; }\n.present-nav-down { grid-area: down; }\n\n@media (max-width: 640px) {\n  .present-substage { height: min(56vh, 460px); }\n  .present-controls { justify-content: center; }\n  .present-nav { width: 46px; height: 46px; }\n}\n";
 	//#endregion
 	//#region frontend/index.html?raw
-	var frontend_default = "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>Graph Editor</title>\n  <link rel=\"stylesheet\" href=\"styles.css\">\n  <script type=\"module\" src=\"app.ts\"><\/script>\n</head>\n<body>\n  <div id=\"app\"></div>\n\n  <template id=\"tpl-shell\">\n    <section class=\"shell\">\n      <header class=\"top\" data-place=\"top\"></header>\n      <main class=\"stage\" data-place=\"stage\"></main>\n      <div class=\"left\" data-place=\"left\"></div>\n      <div class=\"modal-slot\" data-place=\"modal\"></div>\n    </section>\n  </template>\n\n  <template id=\"tpl-toolbar\">\n    <nav class=\"toolbar\" aria-label=\"App commands\">\n      <div class=\"toolbar-start\" data-slot=\"start\"></div>\n      <span class=\"toolbar-spacer\"></span>\n      <div class=\"toolbar-end\" data-slot=\"end\"></div>\n    </nav>\n  </template>\n\n  <template id=\"tpl-log\">\n    <section>\n      <h2 class=\"panel-title\">Event log</h2>\n      <div class=\"log\" data-slot=\"rows\"></div>\n    </section>\n  </template>\n\n  <template id=\"tpl-log-row\">\n    <div class=\"log-row\" data-text=\"name\"></div>\n  </template>\n\n  <template id=\"tpl-nodes\">\n    <div class=\"nodes\">\n      <svg class=\"edges\" data-slot=\"edges\" overflow=\"visible\" aria-hidden=\"true\">\n        <defs>\n          <!-- Directional arrowhead shared by every edge. `orient=\"auto\"` aligns\n               with the line direction; `markerUnits=\"userSpaceOnUse\"` keeps the\n               arrow size fixed in graph space, independent of stroke width. -->\n          <marker id=\"edge-arrow\" viewBox=\"0 0 12 12\" refX=\"11\" refY=\"6\"\n                  markerWidth=\"12\" markerHeight=\"12\" orient=\"auto\" markerUnits=\"userSpaceOnUse\">\n            <path d=\"M0,0 L12,6 L0,12 Z\" />\n          </marker>\n        </defs>\n      </svg>\n    </div>\n  </template>\n\n  <template id=\"tpl-empty\">\n    <div class=\"empty\" role=\"status\" aria-live=\"polite\">\n      <div class=\"empty-title\" data-text=\"title\"></div>\n      <div class=\"empty-hint\" data-slot=\"hint\"></div>\n    </div>\n  </template>\n\n  <template id=\"tpl-node\">\n    <article class=\"node\">\n  \n      <div class=\"node-title\" data-editable-title data-slot=\"title\" data-text=\"title\"></div>\n      <div class=\"node-body\">\n        <div class=\"node-description\" data-slot=\"description\"></div>\n      </div>\n    </article>\n  </template>\n\n  <template id=\"tpl-modal\">\n    <div class=\"modal-layer\">\n      <div class=\"backdrop\" data-command=\"modal.close\"></div>\n      <section class=\"modal\">\n        <div class=\"modal-head\">\n          <span data-text=\"title\"></span>\n          <button data-command=\"modal.close\">Close</button>\n        </div>\n        <div class=\"modal-body\" data-slot=\"body\"></div>\n      </section>\n    </div>\n  </template>\n\n  <template id=\"tpl-palette\">\n    <section class=\"palette\">\n      <input class=\"palette-search\" placeholder=\"Search commands\" autocomplete=\"off\" autofocus>\n      <div class=\"command-list\" data-slot=\"commands\"></div>\n    </section>\n  </template>\n\n  <template id=\"tpl-command-section\">\n    <section class=\"command-section\">\n      <h3 data-text=\"group\"></h3>\n      <div data-slot=\"rows\"></div>\n    </section>\n  </template>\n\n  <template id=\"tpl-command-row\">\n    <button class=\"command-row\">\n      <span><b data-text=\"label\"></b><small data-text=\"id\"></small></span>\n      <kbd data-text=\"shortcut\"></kbd>\n    </button>\n  </template>\n\n  <template id=\"tpl-help-row\">\n    <div class=\"help-row\">\n      <span><b data-text=\"label\"></b><small data-text=\"id\"></small></span>\n      <input class=\"shortcut-edit editable-inline\">\n    </div>\n  </template>\n\n  <template id=\"tpl-properties\">\n    <section class=\"properties\">\n      <div data-slot=\"fields\"></div>\n    </section>\n  </template>\n</body>\n</html>\n";
+	var frontend_default = "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <meta name=\"description\" content=\"A keyboard-first editor for writing and navigating structured graphs.\">\n  <title>ecs-canvas-graph</title>\n  <link rel=\"stylesheet\" href=\"styles.css\">\n  <script type=\"module\" src=\"app.ts\"><\/script>\n</head>\n<body>\n  <div id=\"app\"></div>\n\n  <template id=\"tpl-shell\">\n    <section class=\"shell\">\n      <header class=\"top\" data-place=\"top\"></header>\n      <main class=\"stage\" data-place=\"stage\"></main>\n      <div class=\"left\" data-place=\"left\"></div>\n      <div class=\"modal-slot\" data-place=\"modal\"></div>\n    </section>\n  </template>\n\n  <template id=\"tpl-toolbar\">\n    <nav class=\"toolbar\" aria-label=\"App commands\">\n      <div class=\"toolbar-start\" data-slot=\"start\"></div>\n      <span class=\"toolbar-spacer\"></span>\n      <div class=\"toolbar-end\" data-slot=\"end\"></div>\n    </nav>\n  </template>\n\n  <template id=\"tpl-log\">\n    <section>\n      <h2 class=\"panel-title\">Event log</h2>\n      <div class=\"log\" data-slot=\"rows\"></div>\n    </section>\n  </template>\n\n  <template id=\"tpl-log-row\">\n    <div class=\"log-row\" data-text=\"name\"></div>\n  </template>\n\n  <template id=\"tpl-nodes\">\n    <div class=\"nodes\">\n      <svg class=\"edges\" data-slot=\"edges\" overflow=\"visible\" aria-hidden=\"true\">\n        <defs>\n          <!-- Directional arrowhead shared by every edge. `orient=\"auto\"` aligns\n               with the line direction; `markerUnits=\"userSpaceOnUse\"` keeps the\n               arrow size fixed in graph space, independent of stroke width. -->\n          <marker id=\"edge-arrow\" viewBox=\"0 0 12 12\" refX=\"11\" refY=\"6\"\n                  markerWidth=\"12\" markerHeight=\"12\" orient=\"auto\" markerUnits=\"userSpaceOnUse\">\n            <path d=\"M0,0 L12,6 L0,12 Z\" />\n          </marker>\n        </defs>\n      </svg>\n    </div>\n  </template>\n\n  <template id=\"tpl-empty\">\n    <div class=\"empty\" role=\"status\" aria-live=\"polite\">\n      <div class=\"empty-title\" data-text=\"title\"></div>\n      <div class=\"empty-hint\" data-slot=\"hint\"></div>\n    </div>\n  </template>\n\n  <template id=\"tpl-node\">\n    <article class=\"node\">\n  \n      <div class=\"node-title\" data-editable-title data-slot=\"title\" data-text=\"title\"></div>\n      <div class=\"node-body\">\n        <div class=\"node-description\" data-slot=\"description\"></div>\n      </div>\n    </article>\n  </template>\n\n  <template id=\"tpl-modal\">\n    <div class=\"modal-layer\">\n      <div class=\"backdrop\" data-command=\"modal.close\"></div>\n      <section class=\"modal\">\n        <div class=\"modal-head\">\n          <span data-text=\"title\"></span>\n          <button data-command=\"modal.close\">Close</button>\n        </div>\n        <div class=\"modal-body\" data-slot=\"body\"></div>\n      </section>\n    </div>\n  </template>\n\n  <template id=\"tpl-palette\">\n    <section class=\"palette\">\n      <input class=\"palette-search\" placeholder=\"Search commands\" autocomplete=\"off\" autofocus>\n      <div class=\"command-list\" data-slot=\"commands\"></div>\n    </section>\n  </template>\n\n  <template id=\"tpl-command-section\">\n    <section class=\"command-section\">\n      <h3 data-text=\"group\"></h3>\n      <div data-slot=\"rows\"></div>\n    </section>\n  </template>\n\n  <template id=\"tpl-command-row\">\n    <button class=\"command-row\">\n      <span><b data-text=\"label\"></b><small data-text=\"id\"></small></span>\n      <kbd data-text=\"shortcut\"></kbd>\n    </button>\n  </template>\n\n  <template id=\"tpl-help-row\">\n    <div class=\"help-row\">\n      <span><b data-text=\"label\"></b><small data-text=\"id\"></small></span>\n      <input class=\"shortcut-edit editable-inline\">\n    </div>\n  </template>\n\n  <template id=\"tpl-properties\">\n    <section class=\"properties\">\n      <div data-slot=\"fields\"></div>\n    </section>\n  </template>\n</body>\n</html>\n";
 	//#endregion
 	//#region frontend/core/affordances.ts
 	/** Unified affordance lookup. Two kinds, one context:
@@ -63,6 +63,127 @@ var GraphViewer = (function(exports) {
 		};
 	}
 	//#endregion
+	//#region frontend/core/bus.ts
+	/** Nested-dispatch ceiling. Legit chains (request → fact → feature → …) sit in
+	*  single digits; hitting this means an event cycle — fail loud, with the name. */
+	var MAX_EMIT_DEPTH = 256;
+	function eventBus(perf) {
+		const listeners = /* @__PURE__ */ new Map();
+		let any = [];
+		const listenerCounts = /* @__PURE__ */ new Map();
+		const subscribed = /* @__PURE__ */ new Set();
+		const emitted = /* @__PURE__ */ new Set();
+		const subscribersOf = /* @__PURE__ */ new Map();
+		const subscriptionsOf = /* @__PURE__ */ new Map();
+		const emittersOf = /* @__PURE__ */ new Map();
+		const emissionsOf = /* @__PURE__ */ new Map();
+		const addSubscribed = (name) => {
+			listenerCounts.set(name, (listenerCounts.get(name) ?? 0) + 1);
+			subscribed.add(name);
+		};
+		const removeSubscribed = (name) => {
+			const next = (listenerCounts.get(name) ?? 0) - 1;
+			if (next > 0) listenerCounts.set(name, next);
+			else {
+				listenerCounts.delete(name);
+				subscribed.delete(name);
+			}
+		};
+		let depth = 0;
+		const dispatch = (name, data) => {
+			emitted.add(name);
+			if (++depth > MAX_EMIT_DEPTH) {
+				depth--;
+				throw new Error(`[bus] emit depth exceeded ${MAX_EMIT_DEPTH} at "${String(name)}" — event cycle (a handler re-emitting what triggered it?)`);
+			}
+			try {
+				const event = {
+					name,
+					data,
+					at: performance.now()
+				};
+				const anySnapshot = any;
+				const namedSnapshot = listeners.get(name);
+				const fireAny = () => {
+					for (const fn of anySnapshot) fn(event);
+				};
+				const fireNamed = () => {
+					if (namedSnapshot) for (const fn of namedSnapshot) fn(event.data, event);
+				};
+				if (perf?.enabled()) {
+					perf.count(`Bus.emit.${String(name)}`);
+					perf.measure(`Bus.any.${String(name)}`, fireAny);
+					perf.measure(`Bus.listeners.${String(name)}`, fireNamed);
+				} else {
+					fireAny();
+					fireNamed();
+				}
+			} finally {
+				depth--;
+			}
+		};
+		return {
+			on(name, fn) {
+				let active = true;
+				const wrapped = ((data, event) => fn(data, event));
+				addSubscribed(name);
+				listeners.set(name, [...listeners.get(name) ?? [], wrapped]);
+				return () => {
+					if (!active) return;
+					active = false;
+					const next = (listeners.get(name) ?? []).filter((entry) => entry !== wrapped);
+					if (next.length) listeners.set(name, next);
+					else listeners.delete(name);
+					removeSubscribed(name);
+				};
+			},
+			onAny(fn) {
+				let active = true;
+				any = [...any, fn];
+				return () => {
+					if (!active) return;
+					active = false;
+					any = any.filter((entry) => entry !== fn);
+				};
+			},
+			emit(name, ...args) {
+				dispatch(name, args[0]);
+			},
+			forward(name, data) {
+				dispatch(name, data);
+			},
+			_subscribed: subscribed,
+			_emitted: emitted,
+			_subscribersOf: (name) => [...subscribersOf.get(name)?.keys() ?? []],
+			_emittersOf: (name) => [...emittersOf.get(name) ?? []],
+			_subscriptionsOf: (origin) => [...subscriptionsOf.get(origin) ?? []],
+			_emissionsOf: (origin) => [...emissionsOf.get(origin) ?? []],
+			_trackSubscribe(name, origin) {
+				const counts = subscribersOf.get(name) ?? subscribersOf.set(name, /* @__PURE__ */ new Map()).get(name);
+				counts.set(origin, (counts.get(origin) ?? 0) + 1);
+				(subscriptionsOf.get(origin) ?? subscriptionsOf.set(origin, /* @__PURE__ */ new Set()).get(origin)).add(name);
+			},
+			_untrackSubscribe(name, origin) {
+				const counts = subscribersOf.get(name);
+				if (!counts) return;
+				const next = (counts.get(origin) ?? 0) - 1;
+				if (next > 0) {
+					counts.set(origin, next);
+					return;
+				}
+				counts.delete(origin);
+				if (!counts.size) subscribersOf.delete(name);
+				const set = subscriptionsOf.get(origin);
+				set?.delete(name);
+				if (set && !set.size) subscriptionsOf.delete(origin);
+			},
+			_trackEmit(name, origin) {
+				(emittersOf.get(name) ?? emittersOf.set(name, /* @__PURE__ */ new Set()).get(name)).add(origin);
+				(emissionsOf.get(origin) ?? emissionsOf.set(origin, /* @__PURE__ */ new Set()).get(origin)).add(name);
+			}
+		};
+	}
+	//#endregion
 	//#region frontend/core/cancellation.ts
 	/** First-class cancellation. Any system that has an "active mode" (modal open,
 	*  picker running, edit-in-place, selection set, jump letters showing) registers
@@ -103,11 +224,69 @@ var GraphViewer = (function(exports) {
 		};
 	}
 	//#endregion
+	//#region frontend/constants.ts
+	/** Runtime constants — split from types.ts so type definitions stay focused on the MODEL MAP.
+	*  Re-exported from types.ts for backward compatibility. */
+	var Places = {
+		Top: "top",
+		Left: "left",
+		Stage: "stage",
+		Modal: "modal"
+	};
+	/** Named slots inside an entity's rendered card. Abilities point their
+	*  `AffordanceDef.slot` at one of these; the renderer (`render-stage`,
+	*  `item-toolbar`) reads the same names when wiring affordances to template
+	*  `[data-slot=...]` elements. Centralized so a typo at either end becomes a
+	*  TypeScript error AND a DX rule. */
+	var Slots = {
+		/** Drag handle (handler affordance, draggable). Entity surface. */
+		Drag: "drag",
+		/** Resize handle (handler affordance, resizeable). Entity surface. */
+		Resize: "resize",
+		/** Default catch-all slot for button affordances with no explicit slot. Entity surface. */
+		Header: "header",
+		/** Left-of-title button row (collapsible). Entity surface. */
+		HeaderStart: "header:start",
+		/** Right-of-title button row (configurable). Entity surface. */
+		HeaderEnd: "header:end",
+		/** Editable title element (matches template `[data-editable-title]`). Entity surface. */
+		Title: "title",
+		/** Leading toolbar group. Top surface (system affordance). */
+		Start: "start",
+		/** Trailing toolbar group. Top surface (system affordance). */
+		End: "end"
+	};
+	/** Slots that live on the per-entity surface — DX checks `AffordanceDef.slot`
+	*  against this narrower set. Toolbar Start/End live on the top surface. */
+	var EntitySlots = new Set([
+		Slots.Drag,
+		Slots.Resize,
+		Slots.Header,
+		Slots.HeaderStart,
+		Slots.HeaderEnd,
+		Slots.Title
+	]);
+	/** Past-tense suffixes that mark an event as a fact (something already happened).
+	*  Convention rule: imperative names (`graph.node.create`) are requests; fact names
+	*  (`graph.node.created`) are emitted by the owning system after the change lands.
+	*  Other systems subscribe to facts, never to requests. The render scheduler reads
+	*  facts as redraw triggers via `factScope`. */
+	var FACT_SUFFIXES = [
+		".created",
+		".updated",
+		".deleted",
+		".switched",
+		".selected",
+		".focused",
+		".changed"
+	];
+	//#endregion
 	//#region frontend/core/io.ts
 	var STORAGE_KEYS = {
 		shortcuts: "frontend.shortcuts",
 		flags: "frontend.flags",
-		disabledCommands: "frontend.commands.disabled"
+		disabledCommands: "frontend.commands.disabled",
+		graphs: "frontend.graphs"
 	};
 	var localStorageIo = () => ({
 		get(key, fallback) {
@@ -364,15 +543,23 @@ var GraphViewer = (function(exports) {
 	*  shield "in another scope" inputs from spilling into app commands:
 	*
 	*    1. Typing — inside any input/textarea/select/contenteditable, non-global
-	*       commands without a `selector` are skipped (so typing the letter "a"
-	*       in a text field doesn't create a node).
+	*       commands without a `selector` are skipped.
 	*    2. Modal — when a modal is mounted, non-global commands whose event
-	*       target is outside the modal are skipped. Backdrop, form fields, and
-	*       command buttons inside the modal still work; A/E/G/etc on the
-	*       background do nothing until the modal closes. */
-	function inputRouter(commands, perf) {
+	*       target is outside the modal are skipped.
+	*
+	*  Coalescable events (wheel, pointermove, click, dblclick) are batched on the
+	*  shared frame loop: only the latest event of each type dispatches per frame,
+	*  eliminating wasted command matching on events whose intermediate results
+	*  would be overwritten before the next paint.  `[data-command]` button clicks
+	*  are excluded — toolbar buttons dispatch synchronously for instant feedback. */
+	function inputRouter(commands, perf, frameLoop, counters) {
+		const COALESCE = new Set([
+			"wheel",
+			"pointermove",
+			"click",
+			"dblclick"
+		]);
 		return { start(root = document) {
-			/** A modal is "mounted" when [data-place="modal"] has any rendered children. */
 			const modalScopeEl = () => {
 				const placeEl = (root instanceof Document ? root : root).querySelector("[data-place=\"modal\"]");
 				return placeEl?.firstElementChild ? placeEl : null;
@@ -385,6 +572,7 @@ var GraphViewer = (function(exports) {
 				const matched = [];
 				const runCommand = (id, target) => {
 					matched.push(id);
+					if (counters) counters.commands++;
 					const run = () => commands.run(id, {
 						event,
 						target
@@ -426,6 +614,28 @@ var GraphViewer = (function(exports) {
 					});
 				}
 			};
+			const batched = /* @__PURE__ */ new Map();
+			const flushBatch = () => {
+				batched.forEach((evt) => route(evt));
+				batched.clear();
+			};
+			const stageSelector = `[data-place="${Places.Stage}"]`;
+			const handleEvent = (event) => {
+				if (counters) counters.events++;
+				if (frameLoop && COALESCE.has(event.type)) {
+					if (event.type === "wheel") {
+						if ((event.target instanceof Element ? event.target : null)?.closest(stageSelector)) event.preventDefault();
+					}
+					if ((event.type === "click" || event.type === "dblclick") && (event.target instanceof Element ? event.target : null)?.closest("[data-command]")) {
+						route(event);
+						return;
+					}
+					batched.set(event.type, event);
+					frameLoop.schedule("input.batch", flushBatch, 0);
+					return;
+				}
+				route(event);
+			};
 			const types = [
 				"click",
 				"dblclick",
@@ -439,8 +649,8 @@ var GraphViewer = (function(exports) {
 				"focusout",
 				"paste"
 			];
-			types.forEach((type) => root.addEventListener(type, route, type === "wheel" ? { passive: false } : void 0));
-			return () => types.forEach((type) => root.removeEventListener(type, route));
+			types.forEach((type) => root.addEventListener(type, handleEvent, type === "wheel" ? { passive: false } : void 0));
+			return () => types.forEach((type) => root.removeEventListener(type, handleEvent));
 		} };
 	}
 	//#endregion
@@ -805,9 +1015,6 @@ var GraphViewer = (function(exports) {
 		const kind = collectionKind(collection);
 		return kind === "graph" ? "graph.delete" : `graph.${kind}.delete`;
 	};
-	var collectionSelectCommand = (collection) => {
-		return collectionKind(collection) === "graph" ? "graph.switch" : "selection.item.select";
-	};
 	//#endregion
 	//#region frontend/core/model-registry.ts
 	var createModelRegistry = (model, flags) => {
@@ -894,6 +1101,7 @@ var GraphViewer = (function(exports) {
 			this.graph = graph;
 			this.id = id;
 			this.kind = "node";
+			this.visualVersion = 0;
 			this.Label = draft.Label ?? { text: id };
 			this.Size = draft.Size ?? {
 				w: 150,
@@ -920,6 +1128,7 @@ var GraphViewer = (function(exports) {
 			this.graph = graph;
 			this.id = id;
 			this.kind = "edge";
+			this.visualVersion = 0;
 			this.From = draft.From;
 			this.To = draft.To;
 			this.Label = draft.Label;
@@ -944,8 +1153,11 @@ var GraphViewer = (function(exports) {
 		static {
 			this.CELL = 256;
 		}
+		static packCell(cx, cy) {
+			return (cx + 32768) * 65536 + (cy + 32768);
+		}
 		cellKey(x, y) {
-			return `${Math.floor(x / Graph.CELL)},${Math.floor(y / Graph.CELL)}`;
+			return Graph.packCell(Math.floor(x / Graph.CELL), Math.floor(y / Graph.CELL));
 		}
 		indexNode(node) {
 			const p = node.Position;
@@ -971,7 +1183,7 @@ var GraphViewer = (function(exports) {
 			const x0 = Math.floor(rect.x / Graph.CELL), x1 = Math.floor((rect.x + rect.w) / Graph.CELL);
 			const y0 = Math.floor(rect.y / Graph.CELL), y1 = Math.floor((rect.y + rect.h) / Graph.CELL);
 			const out = [];
-			for (let cx = x0; cx <= x1; cx++) for (let cy = y0; cy <= y1; cy++) this.grid.get(`${cx},${cy}`)?.forEach((id) => out.push(id));
+			for (let cx = x0; cx <= x1; cx++) for (let cy = y0; cy <= y1; cy++) this.grid.get(Graph.packCell(cx, cy))?.forEach((id) => out.push(id));
 			return out;
 		}
 		addAdj(edge) {
@@ -1049,6 +1261,7 @@ var GraphViewer = (function(exports) {
 			const reindex = "From" in patch || "To" in patch;
 			if (reindex) this.removeAdj(edge);
 			Object.assign(edge, patch);
+			edge.visualVersion++;
 			if (reindex) this.addAdj(edge);
 			return true;
 		}
@@ -1083,6 +1296,10 @@ var GraphViewer = (function(exports) {
 			const node = this.items.get(id);
 			if (!node) return false;
 			Object.assign(node, patch);
+			for (const key in patch) if (key !== "Position") {
+				node.visualVersion++;
+				break;
+			}
 			if ("Position" in patch) this.indexNode(node);
 			return true;
 		}
@@ -1204,47 +1421,66 @@ var GraphViewer = (function(exports) {
 			this.edgeArr = null;
 		}
 	};
-	function graphStore() {
-		let next = 1;
-		const graphs = /* @__PURE__ */ new Map();
-		const nextId = () => {
-			let id = `g${next++}`;
-			while (graphs.has(id)) id = `g${next++}`;
+	/** The multi-graph registry. A class (like Graph/GraphNode/GraphEdge) so the
+	*  whole model layer is constructors, not object literals — one shape, stricter
+	*  fields, and instance-property methods stay reassignable for instrumentation
+	*  (installGraphPerf wraps create/switch per store). */
+	var GraphStore = class {
+		constructor() {
+			this.next = 1;
+			this.graphs = /* @__PURE__ */ new Map();
+			this.create = (id = this.nextId()) => {
+				const existing = this.graphs.get(id);
+				if (existing) return existing;
+				const graph = Graph.new(id);
+				this.graphs.set(id, graph);
+				return graph;
+			};
+			this.switch = (id) => {
+				this.active = this.graphs.get(id) ?? this.create(id);
+				return this.active;
+			};
+			this.active = this.create();
+		}
+		nextId() {
+			let id = `g${this.next++}`;
+			while (this.graphs.has(id)) id = `g${this.next++}`;
 			return id;
-		};
-		const create = (id = nextId()) => {
-			const existing = graphs.get(id);
-			if (existing) return existing;
-			const graph = Graph.new(id);
-			graphs.set(id, graph);
-			return graph;
-		};
-		let current = create();
-		return {
-			get current() {
-				return current;
-			},
-			all: () => [...graphs.values()],
-			get: (id) => graphs.get(id),
-			create,
-			delete(id) {
-				if (graphs.size <= 1) return current;
-				graphs.delete(id);
-				if (current.id === id) current = graphs.values().next().value ?? create();
-				return current;
-			},
-			switch(id) {
-				current = graphs.get(id) ?? create(id);
-				return current;
-			}
-		};
-	}
+		}
+		get current() {
+			return this.active;
+		}
+		all() {
+			return [...this.graphs.values()];
+		}
+		get(id) {
+			return this.graphs.get(id);
+		}
+		delete(id) {
+			if (this.graphs.size <= 1) return this.active;
+			this.graphs.delete(id);
+			if (this.active.id === id) this.active = this.graphs.values().next().value ?? this.create();
+			return this.active;
+		}
+	};
+	var graphStore = () => new GraphStore();
 	//#endregion
 	//#region frontend/core/perf.ts
+	/** Current JS heap usage, environment-adaptive. Browser (Chromium) reads
+	*  `performance.memory.usedJSHeapSize`; Node/jsdom reads
+	*  `process.memoryUsage().heapUsed`; elsewhere null. */
+	var heapUsedBytes = () => {
+		const mem = performance.memory;
+		if (typeof mem?.usedJSHeapSize === "number") return mem.usedJSHeapSize;
+		const proc = globalThis.process;
+		if (typeof proc?.memoryUsage === "function") return proc.memoryUsage().heapUsed;
+		return null;
+	};
 	var now = () => performance.now();
 	var MAX_TIMELINE = 2e3;
 	var MAX_INPUTS = 500;
 	var MAX_LONG_TASKS = 200;
+	var MAX_MARKS = 1e3;
 	var pushCapped = (rows, row, max) => {
 		rows.push(row);
 		if (rows.length > max) rows.splice(0, rows.length - max);
@@ -1349,10 +1585,10 @@ var GraphViewer = (function(exports) {
 			},
 			mark(label) {
 				if (!on) return;
-				marks.push({
+				pushCapped(marks, {
 					label,
 					at: now()
-				});
+				}, MAX_MARKS);
 			},
 			measure(label, fn) {
 				if (!on) return fn();
@@ -1468,7 +1704,8 @@ var GraphViewer = (function(exports) {
 					timeline: [...timeline],
 					callGraph: graphRows,
 					inputs: [...inputs],
-					longTasks: [...longTasks]
+					longTasks: [...longTasks],
+					heapUsedBytes: heapUsedBytes()
 				};
 			}
 		};
@@ -1614,6 +1851,8 @@ var GraphViewer = (function(exports) {
 			bus.emit("selection.changed", { refs: arr });
 		};
 		const write = (graphId, refs) => {
+			const current = setOf(graphId);
+			if (current.length === refs.length && current.every((r, i) => sameItemRef(r, refs[i]))) return;
 			sel.set(graphId, refs);
 			commit(graphId);
 		};
@@ -1630,6 +1869,10 @@ var GraphViewer = (function(exports) {
 		};
 		bus.on("graph.node.deleted", ({ graphId, id }) => clearDeleted(graphId, nodeRef(id)));
 		bus.on("graph.edge.deleted", ({ graphId, id }) => clearDeleted(graphId, edgeRef(id)));
+		bus.on("graph.deleted", ({ id }) => {
+			sel.delete(id);
+			foc.delete(id);
+		});
 		const node = (ref, graphId) => {
 			if (!ref || ref.kind !== "node") return void 0;
 			return graphs.get(gid(graphId))?.node(ref.id);
@@ -1782,12 +2025,74 @@ var GraphViewer = (function(exports) {
 			});
 		};
 		const toggle = (id, defaultOpen = true) => set(id, !isOpen(id, defaultOpen));
+		bus.on("graph.deleted", ({ id }) => {
+			const prefix = `fold:${id}:`;
+			const dead = Object.keys(state).filter((key) => key.startsWith(prefix));
+			if (!dead.length) return;
+			dead.forEach((key) => {
+				delete state[key];
+			});
+			bus.emit("fold.changed", {
+				id: prefix,
+				open: true
+			});
+		});
 		return {
 			isOpen,
 			folded: (id) => !isOpen(id, true),
 			set,
 			toggle,
 			all: () => ({ ...state })
+		};
+	}
+	//#endregion
+	//#region frontend/core/frame-loop.ts
+	function createFrameLoop(debugLog = () => false) {
+		const queue = /* @__PURE__ */ new Map();
+		let scheduled = false;
+		let lastFlush = 0;
+		const flush = (timestamp) => {
+			const batch = [...queue.entries()].sort(([, a], [, b]) => a.priority - b.priority || 0).map(([id, item]) => ({
+				id,
+				...item
+			}));
+			queue.clear();
+			scheduled = false;
+			const gap = lastFlush ? timestamp - lastFlush : 0;
+			lastFlush = timestamp;
+			if (gap > 50 && debugLog()) console.debug(`[frameLoop] gap=${gap.toFixed(1)}ms queue=${batch.length} [${batch.map((b) => b.id).join(",")}]`);
+			for (const { id, callback } of batch) try {
+				callback(timestamp);
+			} catch (e) {
+				console.error(`[frameLoop] ${id} threw:`, e);
+			}
+			if (queue.size > 0) {
+				scheduled = true;
+				requestAnimationFrame(flush);
+			}
+		};
+		return {
+			schedule(id, callback, priority = 0) {
+				queue.set(id, {
+					callback,
+					priority
+				});
+				if (!scheduled) {
+					scheduled = true;
+					requestAnimationFrame(flush);
+				}
+			},
+			cancel(id) {
+				queue.delete(id);
+			},
+			hasPending() {
+				return queue.size > 0;
+			},
+			flushNow() {
+				if (!queue.size) return;
+				scheduled = false;
+				flush(performance.now());
+			}
 		};
 	}
 	//#endregion
@@ -2001,76 +2306,33 @@ var GraphViewer = (function(exports) {
 		return [...groups.entries()];
 	};
 	//#endregion
-	//#region frontend/constants.ts
-	/** Runtime constants — split from types.ts so type definitions stay focused on the MODEL MAP.
-	*  Re-exported from types.ts for backward compatibility. */
-	var Places = {
-		Top: "top",
-		Left: "left",
-		Stage: "stage",
-		Modal: "modal"
-	};
-	/** Named slots inside an entity's rendered card. Abilities point their
-	*  `AffordanceDef.slot` at one of these; the renderer (`render-stage`,
-	*  `item-toolbar`) reads the same names when wiring affordances to template
-	*  `[data-slot=...]` elements. Centralized so a typo at either end becomes a
-	*  TypeScript error AND a DX rule. */
-	var Slots = {
-		/** Drag handle (handler affordance, draggable). Entity surface. */
-		Drag: "drag",
-		/** Resize handle (handler affordance, resizeable). Entity surface. */
-		Resize: "resize",
-		/** Default catch-all slot for button affordances with no explicit slot. Entity surface. */
-		Header: "header",
-		/** Left-of-title button row (collapsible). Entity surface. */
-		HeaderStart: "header:start",
-		/** Right-of-title button row (configurable). Entity surface. */
-		HeaderEnd: "header:end",
-		/** Editable title element (matches template `[data-editable-title]`). Entity surface. */
-		Title: "title",
-		/** Leading toolbar group. Top surface (system affordance). */
-		Start: "start",
-		/** Trailing toolbar group. Top surface (system affordance). */
-		End: "end"
-	};
-	/** Slots that live on the per-entity surface — DX checks `AffordanceDef.slot`
-	*  against this narrower set. Toolbar Start/End live on the top surface. */
-	var EntitySlots = new Set([
-		Slots.Drag,
-		Slots.Resize,
-		Slots.Header,
-		Slots.HeaderStart,
-		Slots.HeaderEnd,
-		Slots.Title
-	]);
-	/** Past-tense suffixes that mark an event as a fact (something already happened).
-	*  Convention rule: imperative names (`graph.node.create`) are requests; fact names
-	*  (`graph.node.created`) are emitted by the owning system after the change lands.
-	*  Other systems subscribe to facts, never to requests. The render scheduler reads
-	*  facts as redraw triggers via `factScope`. */
-	var FACT_SUFFIXES = [
-		".created",
-		".updated",
-		".deleted",
-		".switched",
-		".selected",
-		".focused",
-		".changed"
-	];
-	//#endregion
 	//#region frontend/core/redraw.ts
 	/** Classify an event name by suffix.
 	*  - 'view.changed' → 'camera' (pan/zoom: move the layer transform, no rebuild)
-	*  - any other '.changed' → 'nodes' (e.g. selection repaint, no list churn)
+	*  - '.changed', '.selected', '.focused' → 'nodes' (decoration repaint, no data churn)
 	*  - any other fact suffix → 'both' (data changed; lists + canvas both refresh)
 	*  - non-fact     → null    (request events, render.*, app.start etc.) */
 	var factScope = (name) => {
 		if (name === "view.changed") return "camera";
 		for (const suffix of FACT_SUFFIXES) {
 			if (!name.endsWith(suffix)) continue;
-			return suffix === ".changed" ? "nodes" : "both";
+			if (suffix === ".changed") return "nodes";
+			if (suffix === ".focused" || suffix === ".selected") return "nodes.visual";
+			return "both";
 		}
 		return null;
+	};
+	/** Full event→scope classification, including the data-dependent special cases
+	*  (visual-only node patches, pure-decoration set changes). The ONLY home for
+	*  redraw-scope logic — the render scheduler calls this and nothing else, so a
+	*  new special case is one edit here, not a second heuristic in render.ts. */
+	var scopeForEvent = (name, data) => {
+		if (name === "graph.node.updated") {
+			const d = data;
+			if (d?.patch && !("Label" in d.patch)) return d.visual ? "nodes.visual" : "nodes";
+		}
+		if (name === "selection.changed" || name === "decoration.changed") return "nodes.visual";
+		return factScope(name);
 	};
 	//#endregion
 	//#region frontend/core/geometry.ts
@@ -2114,6 +2376,25 @@ var GraphViewer = (function(exports) {
 		x: r.x + r.w / 2,
 		y: r.y + r.h / 2
 	});
+	/** Shrink a segment endpoint to the target rect's border, so an arrowhead
+	*  lands outside the card rather than under it. Treats the target as an
+	*  axis-aligned rect centered on `rectCenter` with half-dims `half`.
+	*  Shared by the SVG edge renderer and the GPU scene builder. */
+	var intersectRectBoundary = (outside, rectCenter, half) => {
+		const { x: cx, y: cy } = rectCenter;
+		const dx = outside.x - cx, dy = outside.y - cy;
+		if (dx === 0 && dy === 0) return {
+			x: cx,
+			y: cy
+		};
+		const tx = dx === 0 ? Infinity : Math.abs(half.w / dx);
+		const ty = dy === 0 ? Infinity : Math.abs(half.h / dy);
+		const t = Math.min(tx, ty);
+		return {
+			x: cx + dx * t,
+			y: cy + dy * t
+		};
+	};
 	//#endregion
 	//#region frontend/core/introspect.ts
 	/** Build a structural snapshot of the running app. Sources its data from
@@ -2431,7 +2712,15 @@ var GraphViewer = (function(exports) {
 			},
 			stage: {
 				emptyStateVisible: !!stageEl?.querySelector(".empty"),
-				itemToolbarVisible: !!stageEl?.querySelector(".item-toolbar")
+				itemToolbarVisible: !!stageEl?.querySelector(".item-toolbar"),
+				marqueeVisible: !!stageEl?.querySelector(".select-marquee")
+			},
+			present: {
+				active: shellEl?.dataset.present === "true",
+				mode: shellEl?.dataset.presentMode ?? "nodes",
+				focusId: shellEl?.dataset.presentFocus || null,
+				neighbours: Number(shellEl?.dataset.presentNeighbours ?? 0),
+				overflow: shellEl?.dataset.presentOverflow === "true"
 			},
 			toolPanels: {
 				top: toolPanelInfo("top"),
@@ -2488,7 +2777,15 @@ var GraphViewer = (function(exports) {
 	};
 	var STAGE_CODE = {
 		emptyStateVisible: "!!ctx.contexts.places.el('stage')?.querySelector('.empty')",
-		itemToolbarVisible: "!!ctx.contexts.places.el('stage')?.querySelector('.item-toolbar')"
+		itemToolbarVisible: "!!ctx.contexts.places.el('stage')?.querySelector('.item-toolbar')",
+		marqueeVisible: "!!ctx.contexts.places.el('stage')?.querySelector('.select-marquee')"
+	};
+	var PRESENT_CODE = {
+		active: "ctx.contexts.places.el('top')?.parentElement?.dataset.present === 'true'",
+		mode: "(ctx.contexts.places.el('top')?.parentElement?.dataset.presentMode ?? 'nodes')",
+		focusId: "(ctx.contexts.places.el('top')?.parentElement?.dataset.presentFocus || null)",
+		neighbours: "Number(ctx.contexts.places.el('top')?.parentElement?.dataset.presentNeighbours ?? 0)",
+		overflow: "ctx.contexts.places.el('top')?.parentElement?.dataset.presentOverflow === 'true'"
 	};
 	var MODAL_CODE = {
 		open: "(ctx.contexts.places.el('modal')?.children.length ?? 0) > 0",
@@ -2547,6 +2844,7 @@ var GraphViewer = (function(exports) {
 		if (segment === "ui.modal" && MODAL_CODE[key]) return MODAL_CODE[key];
 		if (segment === "ui.outline" && OUTLINE_CODE[key]) return OUTLINE_CODE[key];
 		if (segment === "ui.toolPanels" && TOOL_PANEL_CODE[key]) return TOOL_PANEL_CODE[key];
+		if (segment === "ui.present" && PRESENT_CODE[key]) return PRESENT_CODE[key];
 		return `${parentCode}${optional ? "?." : "."}${key}`;
 	}
 	function nextSegment(parent, key) {
@@ -2567,6 +2865,7 @@ var GraphViewer = (function(exports) {
 			if (key === "modal") return "ui.modal";
 			if (key === "outline") return "ui.outline";
 			if (key === "toolPanels") return "ui.toolPanels";
+			if (key === "present") return "ui.present";
 		}
 		return "plain";
 	}
@@ -2711,110 +3010,7 @@ ${assertLines}
 	//#region frontend/core.ts
 	var systemOf = (id) => id.split(".")[0] || "app";
 	var uiValue = (value, item, fallback = "") => typeof value === "function" ? value(item) : value ?? fallback;
-	function eventBus(perf) {
-		const listeners = /* @__PURE__ */ new Map();
-		const any = [];
-		const listenerCounts = /* @__PURE__ */ new Map();
-		const subscribed = /* @__PURE__ */ new Set();
-		const emitted = /* @__PURE__ */ new Set();
-		const subscribersOf = /* @__PURE__ */ new Map();
-		const subscriptionsOf = /* @__PURE__ */ new Map();
-		const emittersOf = /* @__PURE__ */ new Map();
-		const emissionsOf = /* @__PURE__ */ new Map();
-		const addSubscribed = (name) => {
-			listenerCounts.set(name, (listenerCounts.get(name) ?? 0) + 1);
-			subscribed.add(name);
-		};
-		const removeSubscribed = (name) => {
-			const next = (listenerCounts.get(name) ?? 0) - 1;
-			if (next > 0) listenerCounts.set(name, next);
-			else {
-				listenerCounts.delete(name);
-				subscribed.delete(name);
-			}
-		};
-		const remove = (list, item) => {
-			const index = list.indexOf(item);
-			if (index >= 0) list.splice(index, 1);
-		};
-		const dispatch = (name, data) => {
-			emitted.add(name);
-			const event = {
-				name,
-				data,
-				at: performance.now()
-			};
-			perf?.count(`Bus.emit.${String(name)}`);
-			const fireAny = () => [...any].forEach((fn) => fn(event));
-			const fireNamed = () => [...listeners.get(name) || []].forEach((fn) => fn(event.data, event));
-			if (perf?.enabled()) {
-				perf.measure(`Bus.any.${String(name)}`, fireAny);
-				perf.measure(`Bus.listeners.${String(name)}`, fireNamed);
-			} else {
-				fireAny();
-				fireNamed();
-			}
-		};
-		return {
-			on(name, fn) {
-				let active = true;
-				const wrapped = fn;
-				addSubscribed(name);
-				(listeners.get(name) || listeners.set(name, []).get(name)).push(wrapped);
-				return () => {
-					if (!active) return;
-					active = false;
-					remove(listeners.get(name) ?? [], wrapped);
-					removeSubscribed(name);
-				};
-			},
-			onAny(fn) {
-				let active = true;
-				any.push(fn);
-				return () => {
-					if (!active) return;
-					active = false;
-					remove(any, fn);
-				};
-			},
-			emit(name, ...args) {
-				dispatch(name, args[0]);
-			},
-			forward(name, data) {
-				dispatch(name, data);
-			},
-			_subscribed: subscribed,
-			_emitted: emitted,
-			_subscribersOf: (name) => [...subscribersOf.get(name)?.keys() ?? []],
-			_emittersOf: (name) => [...emittersOf.get(name) ?? []],
-			_subscriptionsOf: (origin) => [...subscriptionsOf.get(origin) ?? []],
-			_emissionsOf: (origin) => [...emissionsOf.get(origin) ?? []],
-			_trackSubscribe(name, origin) {
-				const counts = subscribersOf.get(name) ?? subscribersOf.set(name, /* @__PURE__ */ new Map()).get(name);
-				counts.set(origin, (counts.get(origin) ?? 0) + 1);
-				(subscriptionsOf.get(origin) ?? subscriptionsOf.set(origin, /* @__PURE__ */ new Set()).get(origin)).add(name);
-			},
-			_untrackSubscribe(name, origin) {
-				const counts = subscribersOf.get(name);
-				if (!counts) return;
-				const next = (counts.get(origin) ?? 0) - 1;
-				if (next > 0) {
-					counts.set(origin, next);
-					return;
-				}
-				counts.delete(origin);
-				if (!counts.size) subscribersOf.delete(name);
-				const set = subscriptionsOf.get(origin);
-				set?.delete(name);
-				if (set && !set.size) subscriptionsOf.delete(origin);
-			},
-			_trackEmit(name, origin) {
-				(emittersOf.get(name) ?? emittersOf.set(name, /* @__PURE__ */ new Set()).get(name)).add(origin);
-				(emissionsOf.get(origin) ?? emissionsOf.set(origin, /* @__PURE__ */ new Set()).get(origin)).add(name);
-			}
-		};
-	}
-	function createContexts(bus, flags, io, perf) {
+	function createContexts(bus, flags, io, perf, frameLoop) {
 		const places = /* @__PURE__ */ new Map();
 		const templates = templateContext();
 		const view = viewContext(places);
@@ -2825,7 +3021,7 @@ ${assertLines}
 		const hierarchy = hierarchyContext();
 		const keyboard = keyboardCaptureContext();
 		const commands = commandsContext(bus, (origin) => !origin || flags.isOn(origin), io);
-		const input = inputRouter(commands, perf);
+		const input = inputRouter(commands, perf, frameLoop);
 		const storage = storageContext(bus);
 		const fold = foldContext(bus, io);
 		const placeContext = {
@@ -2997,15 +3193,18 @@ ${assertLines}
 		installGraphPerf(graphs, perf);
 		const bus = eventBus(perf);
 		const flags = createFlags(bus, initialFlags, io);
+		const selection = createSelectionStore(graphs, bus);
+		const frameLoop = createFrameLoop(() => perf.enabled());
 		return {
 			bus,
 			graphs,
 			flags,
-			selection: createSelectionStore(graphs, bus),
+			selection,
 			io,
 			perf,
+			frameLoop,
 			sim: createSim(bus),
-			contexts: createContexts(bus, flags, io, perf),
+			contexts: createContexts(bus, flags, io, perf, frameLoop),
 			model: createModelRegistry(model, flags)
 		};
 	}
@@ -3221,30 +3420,33 @@ ${assertLines}
 		}]
 	})]);
 	function registerDraggable(system) {
-		system("ability.draggable", ({ on, emit, contexts, graphs }) => {
+		system("ability.draggable", ({ on, emit, contexts, graphs, perf }) => {
 			let drag = null;
 			let pending = null;
-			let scheduled = false;
-			const applyPending = () => {
-				scheduled = false;
-				if (!drag || !pending) return;
-				const pointer = contexts.view.clientToSpace(Places.Stage, pending);
+			let captured = null;
+			const applyMove = () => {
+				const d = drag;
+				const p = pending;
+				if (!d || !p) return;
 				pending = null;
+				const t0 = perf.enabled() ? performance.now() : 0;
+				const pointer = contexts.view.clientToSpace(Places.Stage, p);
 				const Position = {
-					x: drag.start.x + pointer.x - drag.pointer.x,
-					y: drag.start.y + pointer.y - drag.pointer.y
+					x: d.start.x + pointer.x - d.pointer.x,
+					y: d.start.y + pointer.y - d.pointer.y
 				};
-				emit("item.update", {
-					ref: drag.ref,
-					patch: { Position }
+				graphs.current.updateNode(d.ref.id, { Position });
+				const gid = graphs.current.id;
+				emit("graph.node.updated", {
+					graphId: gid,
+					id: d.ref.id,
+					patch: { Position },
+					visual: true
 				});
-				emit("drag.item.moved", { ref: drag.ref });
-			};
-			const scheduleMove = (point) => {
-				pending = point;
-				if (scheduled) return;
-				scheduled = true;
-				requestAnimationFrame(applyPending);
+				if (perf.enabled()) {
+					perf.count("Drag.move");
+					perf.sample("Drag.move.ms", performance.now() - t0);
+				}
 			};
 			contexts.commands.register([
 				{
@@ -3259,11 +3461,19 @@ ${assertLines}
 						prevent: true
 					},
 					payload: ({ event, target }) => {
+						const e = event;
+						if (target instanceof Element && typeof target.setPointerCapture === "function") {
+							target.setPointerCapture(e.pointerId);
+							captured = {
+								el: target,
+								id: e.pointerId
+							};
+						}
 						const ref = itemRefFrom(target);
 						return ref ? {
 							ref,
-							x: event.clientX,
-							y: event.clientY
+							x: e.clientX,
+							y: e.clientY
 						} : void 0;
 					}
 				},
@@ -3305,13 +3515,29 @@ ${assertLines}
 				};
 			});
 			on("drag.item.move", ({ x, y }) => {
-				if (drag) scheduleMove({
+				if (!drag) return;
+				pending = {
 					x,
 					y
-				});
+				};
+				applyMove();
 			});
 			on("drag.item.end", () => {
-				if (pending) applyPending();
+				const d = drag;
+				if (pending && d) applyMove();
+				if (captured) {
+					try {
+						captured.el.releasePointerCapture?.(captured.id);
+					} catch {}
+					captured = null;
+				}
+				if (d) {
+					const node = graphs.current.getNode(d.ref.id);
+					if (node?.Position) emit("item.update", {
+						ref: d.ref,
+						patch: { Position: node.Position }
+					});
+				}
 				drag = null;
 				pending = null;
 			});
@@ -4188,24 +4414,6 @@ ${assertLines}
 		labelOf: (graph) => graph.id,
 		abilities: []
 	});
-	/** Shrink the line endpoint to the target rect's border so the arrowhead lands
-	*  outside the card, not inside it. Treats the target as an axis-aligned
-	*  rectangle centered on `(cx, cy)` with half-dims `(hw, hh)`. */
-	var intersectRectBoundary = (outside, rectCenter, half) => {
-		const { x: cx, y: cy } = rectCenter;
-		const dx = outside.x - cx, dy = outside.y - cy;
-		if (dx === 0 && dy === 0) return {
-			x: cx,
-			y: cy
-		};
-		const tx = dx === 0 ? Infinity : Math.abs(half.w / dx);
-		const ty = dy === 0 ? Infinity : Math.abs(half.h / dy);
-		const t = Math.min(tx, ty);
-		return {
-			x: cx + dx * t,
-			y: cy + dy * t
-		};
-	};
 	/** Compute the visible endpoint for an edge anchor: if the node is inside a
 	*  Collapsed container, the endpoint snaps to the outermost collapsed
 	*  ancestor's visual rect. Otherwise it's the node itself. Returns null when
@@ -4238,91 +4446,149 @@ ${assertLines}
 			}
 		};
 	};
+	var edgeRenderer = {
+		layer: "svg",
+		collect(graph, hiddenByFold, visibleNodeIds) {
+			const g = graph;
+			const nodeIds = visibleNodeIds ?? new Set(g.nodes().map((n) => n.id));
+			const seen = /* @__PURE__ */ new Set();
+			const edges = [];
+			for (const nid of nodeIds) for (const e of g.edgesOf(nid)) {
+				const k = e.id;
+				if (!seen.has(k)) {
+					seen.add(k);
+					edges.push(e);
+				}
+			}
+			return edges;
+		},
+		draw(edge, ctx) {
+			const from = resolveEndpoint({
+				kind: "node",
+				id: edge.From
+			}, ctx);
+			const to = resolveEndpoint({
+				kind: "node",
+				id: edge.To
+			}, ctx);
+			if (!from || !to) return null;
+			if (from.ref.kind === to.ref.kind && from.ref.id === to.ref.id) return null;
+			const ref = ctx.refOf(edge.id);
+			const tipAtTarget = intersectRectBoundary(from.center, to.center, to.half);
+			const tipAtSource = intersectRectBoundary(to.center, from.center, from.half);
+			const g = svg("g", {});
+			const edgeKind = isEdgeKind(edge.EdgeKind) ? edge.EdgeKind : "sync";
+			g.setAttribute("class", `edge edge-kind-${edgeKind}`);
+			const titleText = semanticTitle(edge);
+			if (titleText) {
+				const title = svg("title", {});
+				title.textContent = titleText;
+				g.append(title);
+			}
+			const line = (className, x1, y1, x2, y2, extra = {}) => {
+				const el = svg("line", {
+					x1,
+					y1,
+					x2,
+					y2,
+					class: `${className} edge-kind-${edgeKind}`,
+					...extra
+				});
+				ctx.tagItem(el, ref);
+				ctx.applyItemModes(el, ref);
+				return el;
+			};
+			g.append(line("edge-hit", from.center.x, from.center.y, to.center.x, to.center.y, { tabindex: -1 }));
+			g.append(line("edge-line", tipAtSource.x, tipAtSource.y, tipAtTarget.x, tipAtTarget.y, { "marker-end": "url(#edge-arrow)" }));
+			const label = edge.Label?.text;
+			if (label) {
+				const lines = label.split(/\r?\n/);
+				const lineH = 14;
+				const wrap = svg("g", {
+					class: "edge-label-wrap",
+					transform: labelTransform(from.center, to.center, lines.length, lineH)
+				});
+				const startY = -((lines.length - 1) * lineH) / 2 - 4;
+				const charW = 6.6, padX = 4, padY = 2;
+				const boxW = Math.max(...lines.map((l) => l.length)) * charW + padX * 2;
+				const boxH = (lines.length - 1) * lineH + 12 + padY * 2;
+				wrap.append(svg("rect", {
+					class: "edge-label-bg",
+					x: -boxW / 2,
+					y: startY - 9 - padY,
+					width: boxW,
+					height: boxH,
+					rx: 3
+				}));
+				const text = svg("text", {
+					class: `edge-label edge-kind-${edgeKind}`,
+					"text-anchor": "middle",
+					"font-size": 11
+				});
+				lines.forEach((line, i) => {
+					const tspan = svg("tspan", {
+						x: 0,
+						y: startY + i * lineH
+					});
+					tspan.textContent = line;
+					text.append(tspan);
+				});
+				wrap.append(text);
+				g.append(wrap);
+			}
+			return g;
+		},
+		/** Endpoint move (drag / nudge / cascade) — rewrite line coordinates and the
+		*  label wrapper's transform on the EXISTING SVG group instead of rebuilding
+		*  it. Uses the same endpoint resolution as draw (incl. collapsed-container
+		*  substitution), so the fast path can't drift from the slow one. */
+		reposition(el, edge, ctx) {
+			const from = resolveEndpoint({
+				kind: "node",
+				id: edge.From
+			}, ctx);
+			const to = resolveEndpoint({
+				kind: "node",
+				id: edge.To
+			}, ctx);
+			if (!from || !to || from.ref.kind === to.ref.kind && from.ref.id === to.ref.id) return;
+			const tipAtTarget = intersectRectBoundary(from.center, to.center, to.half);
+			const tipAtSource = intersectRectBoundary(to.center, from.center, from.half);
+			const setLine = (selector, x1, y1, x2, y2) => {
+				const lineEl = el.querySelector(selector);
+				if (!lineEl) return;
+				lineEl.setAttribute("x1", String(x1));
+				lineEl.setAttribute("y1", String(y1));
+				lineEl.setAttribute("x2", String(x2));
+				lineEl.setAttribute("y2", String(y2));
+			};
+			setLine(".edge-hit", from.center.x, from.center.y, to.center.x, to.center.y);
+			setLine(".edge-line", tipAtSource.x, tipAtSource.y, tipAtTarget.x, tipAtTarget.y);
+			const wrap = el.querySelector(".edge-label-wrap");
+			if (wrap) {
+				const lineCount = wrap.querySelectorAll("tspan").length || 1;
+				wrap.setAttribute("transform", labelTransform(from.center, to.center, lineCount, 14));
+			}
+		},
+		signature(edge) {
+			return `v${edge.visualVersion}`;
+		}
+	};
+	/** Anchor transform for an edge label: midpoint pushed to the RIGHT of the
+	*  from→to direction so the block clears the line and bidirectional pairs
+	*  don't stack. Right-normal in screen space (y-down): (-dy, dx). */
+	var labelTransform = (from, to, lineCount, lineH) => {
+		const dx = to.x - from.x, dy = to.y - from.y;
+		const len = Math.hypot(dx, dy) || 1;
+		const off = lineCount * lineH / 2 + 8;
+		const nx = -dy / len * off, ny = dx / len * off;
+		return `translate(${(from.x + to.x) / 2 + nx}, ${(from.y + to.y) / 2 + ny})`;
+	};
 	var edgeEntity = entityDef("edge", {
 		label: "Edge",
 		labelOf: (edge) => edge.Label?.text ?? `${edge.From}->${edge.To}`,
 		abilities: [],
-		render: {
-			layer: "svg",
-			collect(graph, hiddenByFold, visibleNodeIds) {
-				const g = graph;
-				const nodeIds = visibleNodeIds ?? new Set(g.nodes().map((n) => n.id));
-				const seen = /* @__PURE__ */ new Set();
-				const edges = [];
-				for (const nid of nodeIds) for (const e of g.edgesOf(nid)) {
-					const k = e.id;
-					if (!seen.has(k)) {
-						seen.add(k);
-						edges.push(e);
-					}
-				}
-				return edges;
-			},
-			draw(edge, ctx) {
-				const from = resolveEndpoint({
-					kind: "node",
-					id: edge.From
-				}, ctx);
-				const to = resolveEndpoint({
-					kind: "node",
-					id: edge.To
-				}, ctx);
-				if (!from || !to) return null;
-				if (from.ref.kind === to.ref.kind && from.ref.id === to.ref.id) return null;
-				const ref = ctx.refOf(edge.id);
-				const tipAtTarget = intersectRectBoundary(from.center, to.center, to.half);
-				const tipAtSource = intersectRectBoundary(to.center, from.center, from.half);
-				const g = svg("g", {});
-				const edgeKind = isEdgeKind(edge.EdgeKind) ? edge.EdgeKind : "sync";
-				g.setAttribute("class", `edge edge-kind-${edgeKind}`);
-				const titleText = semanticTitle(edge);
-				if (titleText) {
-					const title = svg("title", {});
-					title.textContent = titleText;
-					g.append(title);
-				}
-				const line = (className, x1, y1, x2, y2, extra = {}) => {
-					const el = svg("line", {
-						x1,
-						y1,
-						x2,
-						y2,
-						class: `${className} edge-kind-${edgeKind}`,
-						...extra
-					});
-					ctx.tagItem(el, ref);
-					ctx.applyItemModes(el, ref);
-					return el;
-				};
-				g.append(line("edge-hit", from.center.x, from.center.y, to.center.x, to.center.y, { tabindex: -1 }));
-				g.append(line("edge-line", tipAtSource.x, tipAtSource.y, tipAtTarget.x, tipAtTarget.y, { "marker-end": "url(#edge-arrow)" }));
-				const label = edge.Label?.text;
-				if (label) {
-					const midX = (from.center.x + to.center.x) / 2;
-					const midY = (from.center.y + to.center.y) / 2;
-					const lines = label.split(/\r?\n/);
-					const lineH = 14;
-					const startY = midY - (lines.length - 1) * lineH / 2 - 4;
-					const text = svg("text", {
-						class: `edge-label edge-kind-${edgeKind}`,
-						"text-anchor": "middle"
-					});
-					lines.forEach((line, i) => {
-						const tspan = svg("tspan", {
-							x: midX,
-							y: startY + i * lineH
-						});
-						tspan.textContent = line;
-						text.append(tspan);
-					});
-					g.append(text);
-				}
-				return g;
-			},
-			signature(edge) {
-				return `${edge.From}->${edge.To}|${edge.Label?.text ?? ""}|${edge.EdgeKind ?? ""}|${edge.LatencyMs ?? ""}|${edge.ThroughputRps ?? ""}|${edge.PayloadKb ?? ""}|${edge.Purpose ?? ""}|${edge.Assumptions ?? ""}|${edge.Limits ?? ""}|${edge.WhatThen ?? ""}|${edge.Observability ?? ""}|${edge.FailureMode ?? ""}|${edge.DataScale ?? ""}|${edge.FreshnessMs ?? ""}`;
-			}
-		},
+		render: edgeRenderer,
 		properties: [
 			property({
 				id: "label",
@@ -4517,10 +4783,11 @@ ${assertLines}
 						el.style.left = `${pos.x}px`;
 						el.style.top = `${pos.y}px`;
 					},
-					/** Everything the drawn node depends on *except* position. Unchanged ⇒ the
-					*  stage takes the cheap `reposition` path instead of a full redraw. */
+					/** Everything the drawn node depends on *except* position, as one integer:
+					*  Graph.updateNode bumps `visualVersion` on any non-Position change, so an
+					*  unchanged version ⇒ the stage takes the cheap `reposition` path. */
 					signature(node) {
-						return `${node.NodeType ?? "text"}|${node.Size.w}x${node.Size.h}|${node.Label.text}|${node.Description ?? ""}|${node.ComputeMs ?? ""}|${node.ExpectedRps ?? ""}|${node.LatencyMs ?? ""}|${node.Purpose ?? ""}|${node.Assumptions ?? ""}|${node.Limits ?? ""}|${node.WhatThen ?? ""}|${node.Observability ?? ""}|${node.FailureMode ?? ""}|${node.DataScale ?? ""}|${node.FreshnessMs ?? ""}`;
+						return `v${node.visualVersion}`;
 					}
 				},
 				abilities: [
@@ -4694,6 +4961,13 @@ ${assertLines}
 						meta: true,
 						prevent: true
 					},
+					available: () => allRefs().length > 0
+				},
+				{
+					id: "select.all",
+					label: "Select all",
+					event: "choose.all",
+					group: "choose",
 					available: () => allRefs().length > 0
 				},
 				{
@@ -7447,7 +7721,79 @@ ${assertLines}
 			if (!knownKinds.has(kind)) warn("entity.kind-no-declaration", `bus emits/handles graph.${kind}.* but no entity is declared for "${kind}"`);
 			if (!collectionKinds.has(kind)) warn("entity.kind-no-collection", `kind "${kind}" has no collection — it won't appear in outline / palette`);
 		});
+		checkLabelOverlaps(ctx, warn);
 		return issues;
+	}
+	/** Warn when an edge's label rect crosses a *different* edge's line — the layout
+	*  smell that a multi-line label got buried under other wiring. Mirrors the
+	*  renderer's right-of-direction offset (model/entities.ts) so the geometry it
+	*  checks is the geometry the user sees. Capped by edge count so the validator
+	*  stays sub-frame on large graphs. */
+	function checkLabelOverlaps(ctx, warn) {
+		const graph = ctx.graphs.current;
+		const edges = graph.edges();
+		if (!edges.length || edges.length > 400) return;
+		const LINE_H = 14, CHAR_W = 7;
+		const center = (id) => {
+			const n = graph.getNode(id);
+			return n?.Position ? {
+				pos: n.Position,
+				size: n.Size ?? {
+					w: 160,
+					h: 72
+				}
+			} : null;
+		};
+		const segs = [];
+		for (const e of edges) {
+			const f = center(e.From), t = center(e.To);
+			if (f && t) segs.push({
+				id: e.id,
+				ax: f.pos.x,
+				ay: f.pos.y,
+				bx: t.pos.x,
+				by: t.pos.y
+			});
+		}
+		const segRect = (s, r) => {
+			const inside = (x, y) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+			if (inside(s.ax, s.ay) || inside(s.bx, s.by)) return true;
+			const cross = (x1, y1, x2, y2, x3, y3, x4, y4) => {
+				const d = (x2 - x1) * (y4 - y3) - (y2 - y1) * (x4 - x3);
+				if (!d) return false;
+				const u = ((x3 - x1) * (y4 - y3) - (y3 - y1) * (x4 - x3)) / d;
+				const v = ((x3 - x1) * (y2 - y1) - (y3 - y1) * (x2 - x1)) / d;
+				return u >= 0 && u <= 1 && v >= 0 && v <= 1;
+			};
+			return cross(s.ax, s.ay, s.bx, s.by, r.x, r.y, r.x + r.w, r.y) || cross(s.ax, s.ay, s.bx, s.by, r.x, r.y + r.h, r.x + r.w, r.y + r.h) || cross(s.ax, s.ay, s.bx, s.by, r.x, r.y, r.x, r.y + r.h) || cross(s.ax, s.ay, s.bx, s.by, r.x + r.w, r.y, r.x + r.w, r.y + r.h);
+		};
+		let hits = 0;
+		for (const e of edges) {
+			const text = e.Label?.text;
+			if (!text) continue;
+			const f = center(e.From), t = center(e.To);
+			if (!f || !t) continue;
+			const lines = text.split(/\r?\n/);
+			const dx = t.pos.x - f.pos.x, dy = t.pos.y - f.pos.y;
+			const len = Math.hypot(dx, dy) || 1;
+			const blockH = lines.length * LINE_H;
+			const off = blockH / 2 + 8;
+			const cx = (f.pos.x + t.pos.x) / 2 + -dy / len * off;
+			const cy = (f.pos.y + t.pos.y) / 2 + dx / len * off;
+			const w = Math.max(...lines.map((l) => l.length)) * CHAR_W;
+			const rect = {
+				x: cx - w / 2,
+				y: cy - blockH / 2,
+				w,
+				h: blockH
+			};
+			const clash = segs.find((s) => s.id !== e.id && segRect(s, rect));
+			if (clash) {
+				hits++;
+				if (hits <= 8) warn("layout.label-overlap", `edge "${e.id}" label overlaps edge "${clash.id}" — run a layout or move the label`);
+			}
+		}
+		if (hits > 8) warn("layout.label-overlap", `…and ${hits - 8} more label/edge overlaps`);
 	}
 	//#endregion
 	//#region frontend/systems/foldable.ts
@@ -7486,12 +7832,14 @@ ${assertLines}
 			on("focus.node.focus", ({ id }) => emit("focus.item.focus", nodeRef(id)));
 			on("focus.node.clear", () => emit("focus.item.clear"));
 			on("focus.item.focus", (ref) => {
+				if (sameItemRef(selection.focused() ?? null, ref)) return;
 				selection.focus(ref);
 				contexts.decorations.modes.set(origin, "focused", [ref]);
 				emit("focus.item.focused", ref);
 				emit("focus.node.focused", { id: ref.kind === "node" ? ref.id : null });
 			});
 			on("focus.item.clear", () => {
+				if (!selection.focused()) return;
 				selection.focus(null);
 				contexts.decorations.unregisterOrigin(origin);
 				emit("focus.item.focused", null);
@@ -7730,13 +8078,13 @@ ${assertLines}
 	}
 	//#endregion
 	//#region frontend/systems/io.ts
-	/** io — persist flag / command / fold state to the IoApi adapter.
-	*  Reads happen at boot (core contexts hydrate from io.get); writes go through
-	*  events so core contexts never call io.set directly (Principle 9).
-	*  The io system owns the persistence boundary — all other systems just emit
-	*  facts that end in `.changed` and this system writes them to storage. */
+	/** io — persist flag / command / fold / graph state to the IoApi adapter.
+	*  Reads happen at boot (core contexts hydrate from io.get; graphs restore on
+	*  `app.start`); writes go through events so core contexts never call io.set
+	*  directly (Principle 9). The io system owns the persistence boundary — all
+	*  other systems just emit facts and this system writes them to storage. */
 	function registerIo(system) {
-		system("io", ({ on, io, flags, contexts }) => {
+		system("io", ({ on, emit, bus, io, flags, contexts, graphs }) => {
 			on("flag.changed", () => io.set(STORAGE_KEYS.flags, flags.all()));
 			on("command.shortcut.changed", ({ id, shortcut }) => {
 				const overrides = io.get(STORAGE_KEYS.shortcuts, {});
@@ -7750,6 +8098,47 @@ ${assertLines}
 				io.set(STORAGE_KEYS.disabledCommands, [...disabled]);
 			});
 			on("fold.changed", () => io.set("frontend.fold", contexts.fold.all()));
+			const saveGraphs = () => io.set(STORAGE_KEYS.graphs, {
+				current: graphs.current.id,
+				graphs: graphs.all().map((graph) => ({
+					id: graph.id,
+					snapshot: graph.snapshot()
+				}))
+			});
+			let pendingSave;
+			const scheduleSave = () => {
+				clearTimeout(pendingSave);
+				pendingSave = setTimeout(() => {
+					pendingSave = void 0;
+					saveGraphs();
+				}, 300);
+			};
+			const flushSave = () => {
+				if (pendingSave === void 0) return;
+				clearTimeout(pendingSave);
+				pendingSave = void 0;
+				saveGraphs();
+			};
+			const offAny = bus.onAny(({ name }) => {
+				if (name.startsWith("graph.") && name.endsWith("ed")) scheduleSave();
+			});
+			on("app.start", () => {
+				const saved = io.get(STORAGE_KEYS.graphs, null);
+				if (!saved?.graphs?.length) return;
+				const bootGraph = graphs.current;
+				const savedIds = new Set(saved.graphs.map((entry) => entry.id));
+				saved.graphs.forEach(({ id, snapshot }) => graphs.create(id).replace(snapshot));
+				if (savedIds.has(saved.current)) graphs.switch(saved.current);
+				if (!savedIds.has(bootGraph.id) && !bootGraph.nodes().length && !bootGraph.edges().length) graphs.delete(bootGraph.id);
+				if (graphs.current.nodes().length) emit("view.fit.all");
+			});
+			globalThis.addEventListener?.("pagehide", flushSave);
+			return () => {
+				globalThis.removeEventListener?.("pagehide", flushSave);
+				clearTimeout(pendingSave);
+				pendingSave = void 0;
+				offAny();
+			};
 		});
 	}
 	//#endregion
@@ -7906,9 +8295,18 @@ ${assertLines}
 	var nodeKey = (id) => `node:${id}`;
 	var GAP_X = 56;
 	var GAP_Y = 72;
+	var LABEL_LINE_H = 14;
 	var sizeOf = (node) => node.Size ?? {
 		w: 160,
 		h: 72
+	};
+	var labelPadOf = (edges) => {
+		let maxLines = 0;
+		for (const e of edges) {
+			const text = e.Label?.text;
+			if (text) maxLines = Math.max(maxLines, text.split(/\r?\n/).length);
+		}
+		return maxLines * LABEL_LINE_H;
 	};
 	function sectionRects(scope) {
 		if (!scope.bounds || !scope.sections?.length) return [];
@@ -8004,6 +8402,7 @@ ${assertLines}
 			(byLevel.get(lv) ?? byLevel.set(lv, []).get(lv)).push(n);
 		});
 		const levels = [...byLevel.entries()].sort((a, b) => a[0] - b[0]);
+		const labelPad = labelPadOf(scope.edges);
 		let y = scope.origin.y;
 		for (const [, nodes] of levels) {
 			const rowH = Math.max(...nodes.map((n) => sizeOf(n).h));
@@ -8017,7 +8416,7 @@ ${assertLines}
 				});
 				x += w + GAP_X;
 			});
-			y += rowH + GAP_Y;
+			y += rowH + GAP_Y + labelPad;
 		}
 	}
 	/** Square-ish grid per scope, centered at scope.origin. Cell size = the largest
@@ -8027,7 +8426,7 @@ ${assertLines}
 		const rows = Math.ceil(scope.nodes.length / cols);
 		const maxW = Math.max(...scope.nodes.map((n) => sizeOf(n).w), 0);
 		const maxH = Math.max(...scope.nodes.map((n) => sizeOf(n).h), 0);
-		const colSize = maxW + GAP_X, rowSize = maxH + GAP_Y;
+		const colSize = maxW + GAP_X, rowSize = maxH + GAP_Y + labelPadOf(scope.edges);
 		const startX = scope.origin.x - (cols - 1) * colSize / 2;
 		const startY = scope.origin.y - (rows - 1) * rowSize / 2;
 		scope.nodes.forEach((n, i) => {
@@ -8048,7 +8447,8 @@ ${assertLines}
 		const others = scope.nodes.filter((n) => n.id !== root.id);
 		const circumference = others.reduce((sum, n) => sum + sizeOf(n).w + GAP_X, 0);
 		const rootReach = Math.max(sizeOf(root).w, sizeOf(root).h) / 2;
-		const radius = Math.max(160, 60 + others.length * 22, circumference / (2 * Math.PI) + rootReach);
+		const labelPad = labelPadOf(scope.edges);
+		const radius = Math.max(160, 60 + others.length * 22, circumference / (2 * Math.PI) + rootReach + labelPad);
 		const center = root.Position ?? scope.origin;
 		others.forEach((n, i) => {
 			const angle = i / Math.max(1, others.length) * Math.PI * 2 - Math.PI / 2;
@@ -8097,32 +8497,38 @@ ${assertLines}
 					id: "layout.apply.radial",
 					label: "Radial layout",
 					group: "layout",
+					event: "layout.fit",
 					input: {
 						on: "keydown",
 						key: "r",
 						prevent: true
-					}
+					},
+					payload: () => ({ kind: "radial" })
 				},
 				{
 					id: "layout.apply.grid",
 					label: "Grid layout",
 					group: "layout",
+					event: "layout.fit",
 					input: {
 						on: "keydown",
 						key: "G",
 						shift: true,
 						prevent: true
-					}
+					},
+					payload: () => ({ kind: "grid" })
 				},
 				{
 					id: "layout.apply.tidy",
 					label: "Tidy tree layout",
 					group: "layout",
+					event: "layout.fit",
 					input: {
 						on: "keydown",
 						key: "t",
 						prevent: true
-					}
+					},
+					payload: () => ({ kind: "tidy" })
 				}
 			]);
 			const set = (id, Position) => emit("item.update", {
@@ -8135,46 +8541,15 @@ ${assertLines}
 				const focusedId = selection.focusedNode()?.id ?? selection.selectedNode()?.id;
 				partitionByScope(ctx).forEach((scope) => radialScope(scope, focusedId, set));
 			});
-		}, { requires: ["graph"] });
-	}
-	//#endregion
-	//#region frontend/systems/log.ts
-	/** Event log. Subscribes via bus.onAny, prepends each non-render.* event to a
-	*  capped ring, and emits the render.view.set on a single rAF — even under a
-	*  100-event burst, the log paints at most once per frame (principle 8). */
-	function registerLog(system) {
-		system("log", ({ bus, emit, contexts }) => {
-			const rows = [];
-			const renderLog = () => {
-				const panel = contexts.templates.clone("log");
-				const list = contexts.templates.slot(panel, "rows");
-				rows.forEach((row) => {
-					const item = contexts.templates.clone("log-row");
-					contexts.templates.text(item, "name", row);
-					list.append(item);
-				});
-				return panel;
-			};
-			let scheduled = false;
-			const scheduleDraw = () => {
-				if (scheduled) return;
-				scheduled = true;
-				requestAnimationFrame(() => {
-					scheduled = false;
-					emit("render.view.set", {
-						place: Places.Left,
-						key: "log",
-						view: renderLog
-					});
-				});
-			};
-			bus.onAny((event) => {
-				if (event.name.startsWith("render.")) return;
-				rows.unshift(event.name === "app.notice" ? `${event.name}: ${event.data.message}` : event.name);
-				rows.length = Math.min(rows.length, 12);
-				scheduleDraw();
+			on("layout.fit", ({ kind }) => {
+				emit({
+					tidy: "layout.apply.tidy",
+					grid: "layout.apply.grid",
+					radial: "layout.apply.radial"
+				}[kind]);
+				emit("view.fit.all");
 			});
-		}, { requires: ["render"] });
+		}, { requires: ["graph"] });
 	}
 	//#endregion
 	//#region frontend/systems/main.ts
@@ -8225,6 +8600,299 @@ ${assertLines}
 				if (id === ZEN_FOLD_ID$1) syncShellFold();
 			});
 		}, { requires: ["render"] });
+	}
+	//#endregion
+	//#region frontend/systems/view-pan.ts
+	/** Shared gesture state so pan (move-intent) and marquee (select-intent) split
+	*  the same pointerdown cleanly: pan owns two-finger / middle / space / alt,
+	*  marquee owns a bare single primary pointer. Tracked here (pan is the
+	*  render-adjacent camera owner) and read by `marquee.ts`. */
+	var gesture = {
+		pointers: /* @__PURE__ */ new Set(),
+		space: false
+	};
+	/** A pointerdown is "move intent" (→ pan) when it's a SECOND touch (two fingers
+	*  down), the middle button, or space/alt is held. Everything else on the empty
+	*  stage is select intent (→ marquee). The window-capture tracker adds the
+	*  CURRENT pointer before this runs, so `size` already counts this finger — a
+	*  lone finger is `size === 1` (select); the second makes it `>= 2` (pan). */
+	var isMoveIntent = (event) => event.button === 1 || event.altKey || gesture.space || event.pointerType === "touch" && gesture.pointers.size >= 2;
+	function registerViewPan(system) {
+		system("view.pan", ({ on, emit, contexts, frameLoop }) => {
+			let pan = null;
+			let panPointerId = -1;
+			let wheelAccum = {
+				dx: 0,
+				dy: 0
+			};
+			const stageSelector = `[data-place="${Places.Stage}"]`;
+			const commit = () => emit("view.changed", contexts.view.get());
+			const onDown = (e) => gesture.pointers.add(e.pointerId);
+			const onUp = (e) => gesture.pointers.delete(e.pointerId);
+			const onKey = (e) => {
+				if (e.code === "Space") gesture.space = e.type === "keydown";
+			};
+			window.addEventListener("pointerdown", onDown, true);
+			window.addEventListener("pointerup", onUp, true);
+			window.addEventListener("pointercancel", onUp, true);
+			window.addEventListener("keydown", onKey, true);
+			window.addEventListener("keyup", onKey, true);
+			const setViewFor = (pointer) => {
+				if (!pan) return;
+				contexts.view.set({
+					x: pan.view.x - (pointer.x - pan.pointer.x) / pan.view.scale,
+					y: pan.view.y - (pointer.y - pan.pointer.y) / pan.view.scale
+				});
+			};
+			contexts.commands.register([
+				{
+					id: "view.pan.start",
+					label: "Start canvas pan",
+					event: "view.pan.start",
+					group: "view",
+					hidden: true,
+					input: {
+						on: "pointerdown",
+						selector: stageSelector,
+						when: (event, stage) => isStageSurface(event, stage) && isMoveIntent(event),
+						prevent: true
+					},
+					payload: ({ event }) => ({
+						...clientPoint(event),
+						pointerId: event.pointerId
+					})
+				},
+				{
+					id: "view.pan.move",
+					label: "Pan canvas",
+					event: "view.pan.move",
+					group: "view",
+					hidden: true,
+					input: {
+						on: "pointermove",
+						when: () => !!pan,
+						prevent: true
+					},
+					payload: ({ event }) => ({
+						...clientPoint(event),
+						pointerId: event.pointerId
+					})
+				},
+				{
+					id: "view.pan.end",
+					label: "End canvas pan",
+					event: "view.pan.end",
+					group: "view",
+					hidden: true,
+					input: {
+						on: "pointerup",
+						when: () => !!pan
+					},
+					payload: ({ event }) => ({ pointerId: event.pointerId })
+				},
+				{
+					id: "view.wheel.pan",
+					label: "Wheel pan",
+					event: "view.wheel.pan",
+					group: "view",
+					hidden: true,
+					input: {
+						on: "wheel",
+						selector: stageSelector,
+						when: (event) => !event.ctrlKey,
+						prevent: true
+					},
+					payload: ({ event }) => ({
+						dx: event.deltaX,
+						dy: event.deltaY
+					})
+				}
+			]);
+			on("view.wheel.pan", ({ dx, dy }) => {
+				wheelAccum.dx += dx;
+				wheelAccum.dy += dy;
+				frameLoop.schedule("view.pan.wheel", () => {
+					if (!wheelAccum.dx && !wheelAccum.dy) return;
+					const v = contexts.view.get();
+					contexts.view.set({
+						x: v.x + wheelAccum.dx / v.scale,
+						y: v.y + wheelAccum.dy / v.scale
+					});
+					wheelAccum = {
+						dx: 0,
+						dy: 0
+					};
+					commit();
+				}, 10);
+			});
+			on("view.pan.start", ({ x, y, pointerId = 0 }) => {
+				emit("select.box.cancel");
+				pan = {
+					pointer: {
+						x,
+						y
+					},
+					view: contexts.view.get()
+				};
+				panPointerId = pointerId;
+				contexts.places.el(Places.Stage)?.classList.add("panning");
+			});
+			on("view.pan.move", (p) => {
+				const pointerId = p?.pointerId ?? panPointerId;
+				if (pan && pointerId === panPointerId) {
+					setViewFor({
+						x: p.x,
+						y: p.y
+					});
+					frameLoop.schedule("view.pan.commit", commit, 10);
+				}
+			});
+			on("view.pan.end", (p) => {
+				const pointerId = p?.pointerId ?? panPointerId;
+				if (pan && pointerId !== panPointerId) return;
+				commit();
+				frameLoop.cancel("view.pan.commit");
+				pan = null;
+				panPointerId = -1;
+				contexts.places.el(Places.Stage)?.classList.remove("panning");
+			});
+			return () => {
+				window.removeEventListener("pointerdown", onDown, true);
+				window.removeEventListener("pointerup", onUp, true);
+				window.removeEventListener("pointercancel", onUp, true);
+				window.removeEventListener("keydown", onKey, true);
+				window.removeEventListener("keyup", onKey, true);
+			};
+		}, { requires: ["render"] });
+	}
+	//#endregion
+	//#region frontend/systems/marquee.ts
+	/** Rubber-band rectangle selection — a bare single-pointer drag on empty canvas
+	*  paints a band and chooses every node it crosses on release. Pan is reserved
+	*  for move-intent gestures (two-finger / middle / space — see `view-pan.ts`), so
+	*  the plain drag is free to mean "select a region". Shift adds to the set. */
+	function registerMarquee(system) {
+		system("marquee", ({ on, emit, contexts, graphs, selection }) => {
+			const stageSelector = `[data-place="${Places.Stage}"]`;
+			let start = null;
+			let add = false;
+			let band = null;
+			let moved = false;
+			const stageEl = () => contexts.places.el(Places.Stage);
+			const clear = () => {
+				band?.remove();
+				band = null;
+				start = null;
+				moved = false;
+				stageEl()?.classList.remove("marquee-active");
+			};
+			const drawBand = (current) => {
+				const stage = stageEl();
+				if (!stage || !start) return;
+				const a = contexts.view.clientToScreen(Places.Stage, start);
+				const b = contexts.view.clientToScreen(Places.Stage, current);
+				if (!band) {
+					band = document.createElement("div");
+					band.className = "select-marquee";
+					stage.append(band);
+					stage.classList.add("marquee-active");
+				}
+				band.style.left = `${Math.min(a.x, b.x)}px`;
+				band.style.top = `${Math.min(a.y, b.y)}px`;
+				band.style.width = `${Math.abs(a.x - b.x)}px`;
+				band.style.height = `${Math.abs(a.y - b.y)}px`;
+			};
+			contexts.commands.register([
+				{
+					id: "select.box.start",
+					label: "Start box selection",
+					event: "select.box.start",
+					group: "selection",
+					hidden: true,
+					input: {
+						on: "pointerdown",
+						selector: stageSelector,
+						when: (event, stage) => {
+							const e = event;
+							return isStageSurface(event, stage) && e.isPrimary && e.button === 0 && !isMoveIntent(e);
+						},
+						prevent: true,
+						stop: true
+					},
+					payload: ({ event }) => ({
+						point: clientPoint(event),
+						add: event.shiftKey
+					})
+				},
+				{
+					id: "select.box.move",
+					label: "Extend box selection",
+					event: "select.box.move",
+					group: "selection",
+					hidden: true,
+					input: {
+						on: "pointermove",
+						when: () => !!start,
+						prevent: true
+					},
+					payload: ({ event }) => clientPoint(event)
+				},
+				{
+					id: "select.box.end",
+					label: "Commit box selection",
+					event: "select.box.end",
+					group: "selection",
+					hidden: true,
+					input: {
+						on: "pointerup",
+						when: () => !!start
+					}
+				}
+			]);
+			on("select.box.start", ({ point, add: addToSet }) => {
+				start = point;
+				add = addToSet;
+				moved = false;
+			});
+			on("select.box.move", (current) => {
+				if (!start) return;
+				moved = moved || Math.abs(current.x - start.x) + Math.abs(current.y - start.y) > 4;
+				if (moved) drawBand(current);
+			});
+			on("select.box.end", () => {
+				const startPoint = start;
+				const wasDrag = moved && !!band;
+				const rect = band?.getBoundingClientRect();
+				clear();
+				if (!startPoint) return;
+				if (!wasDrag) {
+					if (!add && selection.selected()) emit("selection.item.clear");
+					return;
+				}
+				const p1 = contexts.view.clientToSpace(Places.Stage, {
+					x: rect.left,
+					y: rect.top
+				});
+				const p2 = contexts.view.clientToSpace(Places.Stage, {
+					x: rect.right,
+					y: rect.bottom
+				});
+				const region = {
+					x: Math.min(p1.x, p2.x),
+					y: Math.min(p1.y, p2.y),
+					w: Math.abs(p1.x - p2.x),
+					h: Math.abs(p1.y - p2.y)
+				};
+				const refs = graphs.current.nodes().filter((n) => n.Position && rectsIntersect(region, nodeRect(n))).map((n) => nodeRef(n.id));
+				if (refs.length) emit("selection.choose", {
+					refs,
+					mode: add ? "add" : "replace"
+				});
+				else if (!add) emit("selection.item.clear");
+			});
+			on("select.box.cancel", clear);
+			return clear;
+		}, { requires: ["render", "graph"] });
 	}
 	//#endregion
 	//#region frontend/systems/modal.ts
@@ -8591,209 +9259,6 @@ ${assertLines}
 			"render.stage",
 			"ability.selectable"
 		] });
-	}
-	//#endregion
-	//#region frontend/systems/outline.ts
-	/** outline — the left-pane navigator. It renders each collection as a *section*
-	*  (preserving the collection/DX contract: every collection keeps its own
-	*  search + create + delete), but lays the items out by HIERARCHY rather than
-	*  flat: a kind that participates in the hierarchy shows its *roots*, with
-	*  contained items nested + foldable beneath their parent. Loose nodes stay in
-	*  the Nodes section; a node moved into a container leaves that flat list and
-	*  appears nested under the container — nesting is visible in navigation, not
-	*  just storage. Non-hierarchical kinds (graphs) render as flat leaves. */
-	function registerOutline(system) {
-		system("outline", (ctx) => {
-			const { on, emit, contexts, model } = ctx;
-			const hierarchy = contexts.hierarchy;
-			const searches = /* @__PURE__ */ new Map();
-			const el = (tag, className, text) => {
-				const node = document.createElement(tag);
-				if (className) node.className = className;
-				if (text != null) node.textContent = text;
-				return node;
-			};
-			/** kind → its declaring collection, so a nested child row (any kind) can
-			*  wire the right select/delete commands. */
-			const collectionsByKind = () => {
-				const map = /* @__PURE__ */ new Map();
-				model.collections().forEach((c) => map.set(collectionKind(c), c));
-				return map;
-			};
-			/** Render one hierarchy node (+ its kept descendants). Returns null when a
-			*  search query is active and neither this node nor any descendant matches. */
-			const renderRow = (node, parentIds, byKind, depth, query) => {
-				const kind = node.ref.kind;
-				const selfMatch = !query || (node.label ?? "").toLowerCase().includes(query);
-				const childRows = node.children.map((child) => renderRow(child, [...parentIds, node.ref.id], byKind, depth + 1, query)).filter((row) => !!row);
-				if (query && !selfMatch && !childRows.length) return null;
-				const coll = byKind.get(kind);
-				const ref = parentIds.length ? {
-					kind,
-					id: node.ref.id,
-					parent: parentIds
-				} : {
-					kind,
-					id: node.ref.id
-				};
-				const wrap = el("div", "outline-item");
-				const row = el("div", `outline-row depth-${depth}`);
-				tagItem(row, ref);
-				const foldId = `outline.item.${kind}:${node.ref.id}`;
-				const open = query ? true : contexts.fold.isOpen(foldId, true);
-				if (node.children.length) {
-					const toggle = el("button", "icon-button outline-fold", open ? "▾" : "▸");
-					toggle.dataset.foldId = foldId;
-					toggle.setAttribute("aria-expanded", open ? "true" : "false");
-					row.append(toggle);
-				} else row.append(el("span", "outline-fold-spacer"));
-				const main = el("button", "outline-main", node.label || node.ref.id);
-				if (coll) main.dataset.command = collectionSelectCommand(coll);
-				row.append(main);
-				if (model.entity(kind)?.properties?.length) {
-					const props = el("button", "icon-button", "⚙");
-					props.dataset.command = "item.properties.open";
-					row.append(props);
-				}
-				if (coll) {
-					const remove = el("button", "icon-button", "x");
-					remove.dataset.command = collectionDeleteCommand(coll);
-					row.append(remove);
-				}
-				wrap.append(row);
-				if (node.children.length && open) {
-					const kids = el("div", "outline-children");
-					childRows.forEach((child) => kids.append(child));
-					wrap.append(kids);
-				}
-				return wrap;
-			};
-			const leafNode = (collectionDef, item) => ({
-				ref: {
-					kind: collectionKind(collectionDef),
-					id: collectionDef.itemId(item)
-				},
-				label: collectionDef.itemLabel(item),
-				children: []
-			});
-			const renderSection = (collectionDef, roots, total, byKind, rootTotal = roots.length) => {
-				const section = el("section", "outline-section");
-				section.dataset.collectionId = collectionDef.id;
-				const foldId = `outline.collection.${collectionDef.id}`;
-				const open = contexts.fold.isOpen(foldId, true);
-				section.classList.toggle("folded", !open);
-				const head = el("div", "outline-head");
-				const foldTrigger = el("button", "icon-button outline-fold", open ? "▾" : "▸");
-				foldTrigger.dataset.foldId = foldId;
-				foldTrigger.setAttribute("aria-expanded", open ? "true" : "false");
-				foldTrigger.setAttribute("aria-label", open ? `Collapse ${collectionDef.label}` : `Expand ${collectionDef.label}`);
-				const query = searches.get(collectionDef.id) ?? "";
-				const title = el("input", "panel-title outline-title-search");
-				title.placeholder = collectionDef.label;
-				title.value = query;
-				title.dataset.collectionId = collectionDef.id;
-				title.setAttribute("aria-label", `Search ${collectionDef.label.toLowerCase()}`);
-				const createButton = el("button", "icon-button", "+");
-				createButton.dataset.command = collectionCreateCommand(collectionDef);
-				head.append(foldTrigger, title, createButton);
-				section.append(head);
-				if (!open) return section;
-				const q = query.trim().toLowerCase();
-				const list = el("div", "outline-list");
-				const rows = roots.slice(0, MAX_SECTION_ROWS).map((root) => renderRow(root, [], byKind, 0, q)).filter((row) => !!row);
-				rows.forEach((row) => list.append(row));
-				section.append(list);
-				if (!q && rootTotal > MAX_SECTION_ROWS) section.append(el("div", "outline-more", `${(rootTotal - MAX_SECTION_ROWS).toLocaleString()} more`));
-				if (!rows.length) {
-					const shortcut = commandShortcut(contexts.commands, collectionCreateCommand(collectionDef));
-					const label = collectionDef.label.toLowerCase();
-					const emptyTitle = q ? `No matches for "${query}"` : total > 0 ? `All ${label} are nested` : `No ${label} yet`;
-					const hint = !q && !total && shortcut ? kbdHint("Press ", shortcut, " or click +") : void 0;
-					const empty = emptyState(contexts.templates, emptyTitle, hint);
-					if (empty) section.append(empty);
-				}
-				return section;
-			};
-			const FLAT_KINDS = new Set(["graph", "edge"]);
-			const MAX_SECTION_ROWS = 50;
-			const PANEL_FOLD_ID = "outline.panel";
-			const renderOutline = () => {
-				const wrapper = el("div", "tool-panel outline-panel");
-				wrapper.dataset.outlineFolded = contexts.fold.folded(PANEL_FOLD_ID) ? "true" : "false";
-				const head = el("div", "outline-panel-head");
-				const foldBtn = el("button", "icon-button outline-fold", contexts.fold.folded(PANEL_FOLD_ID) ? "▸" : "▾");
-				foldBtn.dataset.foldId = PANEL_FOLD_ID;
-				foldBtn.setAttribute("aria-label", "Toggle outline");
-				const title = el("span", "panel-title", "Outline");
-				head.append(foldBtn, title);
-				wrapper.append(head);
-				const body = el("div", "outline-panel-body");
-				const panel = el("section", "outline");
-				const byKind = collectionsByKind();
-				const queryActive = [...searches.values()].some((query) => query.trim());
-				const nestedItemsExist = model.collections().some((def) => {
-					const collectionDef = def;
-					return collectionDef.section === false && !FLAT_KINDS.has(collectionKind(collectionDef)) && collectionDef.items(ctx).length > 0;
-				});
-				const needsTree = queryActive || nestedItemsExist;
-				const forest = needsTree ? hierarchy.tree() : [];
-				const itemKinds = needsTree ? new Set(hierarchy.items().map((item) => item.ref.kind)) : /* @__PURE__ */ new Set();
-				const contentTotal = needsTree ? hierarchy.items().filter((item) => !FLAT_KINDS.has(item.ref.kind)).length : 0;
-				let treeRendered = false;
-				model.collections().forEach((def) => {
-					const collectionDef = def;
-					if (collectionDef.section === false) return;
-					const kind = collectionKind(collectionDef);
-					const items = collectionDef.items(ctx);
-					if (FLAT_KINDS.has(kind)) {
-						const roots = needsTree && itemKinds.has(kind) ? forest.filter((node) => node.ref.kind === kind) : items.slice(0, MAX_SECTION_ROWS).map((item) => leafNode(collectionDef, item));
-						panel.append(renderSection(collectionDef, roots, items.length, byKind, needsTree ? roots.length : items.length));
-					} else {
-						if (treeRendered) return;
-						treeRendered = true;
-						const roots = needsTree ? forest.filter((node) => !FLAT_KINDS.has(node.ref.kind)) : items.slice(0, MAX_SECTION_ROWS).map((item) => leafNode(collectionDef, item));
-						panel.append(renderSection(collectionDef, roots, needsTree ? contentTotal : items.length, byKind, needsTree ? roots.length : items.length));
-					}
-				});
-				body.append(panel);
-				wrapper.append(body);
-				return wrapper;
-			};
-			const draw = () => emit("render.view.set", {
-				place: Places.Left,
-				key: "outline",
-				view: renderOutline
-			});
-			contexts.commands.register([{
-				id: "outline.search.change",
-				label: "Change outline search",
-				event: "outline.search.changed",
-				group: "outline",
-				hidden: true,
-				input: {
-					on: "input",
-					selector: ".outline-title-search"
-				},
-				payload: ({ target }) => ({
-					collectionId: target.dataset.collectionId,
-					query: target.value
-				})
-			}]);
-			on("app.start", draw);
-			on("outline.draw", draw);
-			on("fold.changed", ({ id }) => {
-				if (id.startsWith("outline.")) draw();
-			});
-			on("outline.search.changed", ({ collectionId, query }) => {
-				searches.set(collectionId, query);
-				draw();
-				queueMicrotask(() => {
-					const next = contexts.places.el(Places.Left)?.querySelector(`.outline-title-search[data-collection-id="${collectionId}"]`);
-					next?.focus();
-					next?.setSelectionRange(next.value.length, next.value.length);
-				});
-			});
-		}, { requires: ["render", "graph"] });
 	}
 	//#endregion
 	//#region frontend/systems/perf-panel.ts
@@ -9176,6 +9641,409 @@ ${assertLines}
 		}, { requires: ["modal"] });
 	}
 	//#endregion
+	//#region frontend/systems/present.ts
+	var MAX_PER_SIDE = 3;
+	var RING = 260;
+	var DIRS = [
+		"up",
+		"down",
+		"left",
+		"right"
+	];
+	var rectOf = (n) => {
+		const p = n.Position ?? {
+			x: 0,
+			y: 0
+		};
+		const s = n.Size ?? {
+			w: 160,
+			h: 72
+		};
+		return {
+			x: p.x - s.w / 2,
+			y: p.y - s.h / 2,
+			w: s.w,
+			h: s.h
+		};
+	};
+	/** Framed presentation mode — a distraction-free lens for walking someone through
+	*  a graph on any screen. It renders a REAL sub-graph (the model's own node/edge
+	*  renderers, on a gridded background, no panels) into the modal: the focus node
+	*  centered with up to three neighbours per side (a 3×3 compass), regardless of
+	*  where they sit on the big canvas. Navigation is a fluent hop between focus
+	*  nodes; it never moves the main canvas — only the explicit "Open in canvas"
+	*  button selects + fits the current node out there, so Escape leaves the real
+	*  view exactly as it was. Toggle node text ⟷ edge labels (labels off by default).
+	*  Observable via `shell[data-present*]`. */
+	function registerPresent(system) {
+		system("present", ({ on, emit, contexts, graphs, selection, model, contribute, frameLoop }) => {
+			let active = false;
+			let focusId = null;
+			let mode = "nodes";
+			let bodyEl = null;
+			let substageEl = null;
+			let modeBtn = null;
+			const navBtns = {};
+			const shellEl = () => contexts.places.el(Places.Top)?.parentElement;
+			const graph = () => graphs.current;
+			const node = (id) => id ? graph().getNode(id) : void 0;
+			const firstNodeId = () => graph().nodes()[0]?.id ?? null;
+			const dirOf = (from, to) => {
+				if (!from.Position || !to.Position) return "right";
+				const dx = to.Position.x - from.Position.x, dy = to.Position.y - from.Position.y;
+				if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? "right" : "left";
+				return dy >= 0 ? "down" : "up";
+			};
+			const neighbours = (id) => {
+				const focus = node(id);
+				if (!focus) return [];
+				const out = [];
+				graph().edgesOf(id).forEach((edge) => {
+					const otherId = edge.From === id ? edge.To : edge.From;
+					const other = node(otherId);
+					if (!other || otherId === id) return;
+					out.push({
+						node: other,
+						edge,
+						outgoing: edge.From === id,
+						dir: dirOf(focus, other)
+					});
+				});
+				return out;
+			};
+			const bySide = (list) => {
+				const sides = {
+					up: [],
+					down: [],
+					left: [],
+					right: []
+				};
+				list.forEach((n) => sides[n.dir].push(n));
+				return sides;
+			};
+			/** Where a neighbour sits inside the lens: fixed compass slots, spread along
+			*  the side by the widest/tallest member so cards never touch. */
+			const slotPos = (dir, i, count, span) => {
+				const spread = (i - (count - 1) / 2) * span;
+				if (dir === "up") return {
+					x: spread,
+					y: -260
+				};
+				if (dir === "down") return {
+					x: spread,
+					y: RING
+				};
+				if (dir === "left") return {
+					x: -260,
+					y: spread
+				};
+				return {
+					x: RING,
+					y: spread
+				};
+			};
+			const buildCtx = (items, kind) => ({
+				graph: {
+					getItem: (ref) => items.get(ref.id),
+					itemsOfKind: () => []
+				},
+				refOf: (id) => ({
+					kind,
+					id
+				}),
+				tagItem,
+				applyItemModes: () => {},
+				wireAffordances: () => {},
+				cloneTemplate: (name) => contexts.templates.clone(name),
+				templateSlot: (root, name) => contexts.templates.slot(root, name),
+				templateText: (root, name, value) => {
+					contexts.templates.text(root, name, value);
+				},
+				parentChain: () => [],
+				isFolded: () => false,
+				boundsOf: (ref) => {
+					const n = items.get(ref.id);
+					return n ? rectOf(n) : null;
+				}
+			});
+			const compass = (focus) => {
+				const fnode = node(focus);
+				const sides = bySide(neighbours(focus));
+				const items = /* @__PURE__ */ new Map();
+				items.set(focus, {
+					...fnode,
+					Position: {
+						x: 0,
+						y: 0
+					}
+				});
+				const edges = [];
+				let overflow = false;
+				DIRS.forEach((dir) => {
+					const arr = sides[dir].slice(0, MAX_PER_SIDE);
+					if (sides[dir].length > MAX_PER_SIDE) overflow = true;
+					const span = Math.max(120, ...arr.map((n) => (dir === "up" || dir === "down" ? n.node.Size?.w ?? 160 : n.node.Size?.h ?? 72) + 44));
+					arr.forEach((nb, i) => {
+						items.set(nb.node.id, {
+							...nb.node,
+							Position: slotPos(dir, i, arr.length, span)
+						});
+						edges.push(mode === "nodes" ? {
+							...nb.edge,
+							Label: void 0
+						} : { ...nb.edge });
+					});
+				});
+				return {
+					items,
+					edges,
+					sides,
+					overflow
+				};
+			};
+			const unionRect = (rects) => {
+				const minX = Math.min(...rects.map((r) => r.x)), minY = Math.min(...rects.map((r) => r.y));
+				const maxX = Math.max(...rects.map((r) => r.x + r.w)), maxY = Math.max(...rects.map((r) => r.y + r.h));
+				return {
+					x: minX,
+					y: minY,
+					w: maxX - minX,
+					h: maxY - minY
+				};
+			};
+			const renderSubstage = () => {
+				const shell = shellEl();
+				if (shell) {
+					shell.dataset.present = active ? "true" : "false";
+					shell.dataset.presentMode = mode;
+					shell.dataset.presentFocus = focusId ?? "";
+				}
+				if (!active || !substageEl || !focusId || !node(focusId)) return;
+				const { items, edges, sides, overflow } = compass(focusId);
+				const layer = contexts.templates.clone("nodes");
+				const svgLayer = contexts.templates.slot(layer, "edges");
+				const nodeCtx = buildCtx(items, "node"), edgeCtx = buildCtx(items, "edge");
+				const edgeRender = model.entity("edge").render, nodeRender = model.entity("node").render;
+				edges.forEach((e) => {
+					const el = edgeRender.draw(e, edgeCtx);
+					if (el) svgLayer.append(el);
+				});
+				items.forEach((n) => {
+					const el = nodeRender.draw(n, nodeCtx);
+					if (!el) return;
+					el.querySelector("[data-editable-title]")?.removeAttribute("data-editable-title");
+					if (n.id !== focusId) el.dataset.presentFocus = n.id;
+					else el.classList.add("present-focus-node");
+					layer.append(el);
+				});
+				DIRS.forEach((dir) => {
+					const extra = sides[dir].length - MAX_PER_SIDE;
+					if (extra <= 0) return;
+					const p = slotPos(dir, MAX_PER_SIDE, 4, 160);
+					const chip = document.createElement("div");
+					chip.className = "present-ellipsis";
+					chip.textContent = `+${extra}`;
+					chip.style.left = `${p.x}px`;
+					chip.style.top = `${p.y}px`;
+					layer.append(chip);
+				});
+				const host = substageEl;
+				const hw = host.clientWidth || 640, hh = host.clientHeight || 420;
+				const b = unionRect([...items.values()].map(rectOf));
+				const pad = 70;
+				const s = Math.min(hw / (b.w + 2 * pad), hh / (b.h + 2 * pad), 1.15);
+				const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+				const tx = hw / 2 - s * cx, ty = hh / 2 - s * cy;
+				layer.style.transform = `translate(${tx}px, ${ty}px) scale(${s})`;
+				host.style.setProperty("--grid-size", `${32 * s}px`);
+				host.style.setProperty("--grid-x", `${tx}px`);
+				host.style.setProperty("--grid-y", `${ty}px`);
+				host.dataset.mode = mode;
+				host.replaceChildren(layer);
+				DIRS.forEach((dir) => {
+					if (navBtns[dir]) navBtns[dir].disabled = sides[dir].length === 0;
+				});
+				if (modeBtn) modeBtn.textContent = mode === "nodes" ? "Show edge labels" : "Show node text";
+				if (shell) {
+					shell.dataset.presentNeighbours = String(items.size - 1);
+					shell.dataset.presentOverflow = overflow ? "true" : "false";
+				}
+			};
+			const setFocus = (id) => {
+				focusId = id;
+				renderSubstage();
+			};
+			const button = (cls, data, text, label = text) => {
+				const b = document.createElement("button");
+				b.type = "button";
+				b.className = cls;
+				b.dataset[data[0]] = data[1];
+				b.textContent = text;
+				b.setAttribute("aria-label", label);
+				return b;
+			};
+			const buildBody = () => {
+				bodyEl = document.createElement("div");
+				bodyEl.className = "present-body";
+				substageEl = document.createElement("div");
+				substageEl.className = "present-substage";
+				bodyEl.append(substageEl);
+				const controls = document.createElement("div");
+				controls.className = "present-controls";
+				modeBtn = button("present-mode-toggle", ["presentMode", "toggle"], "Show edge labels");
+				const jump = button("present-jump", ["presentJump", "true"], "Open in canvas", "Select and focus this node on the main canvas");
+				const pad = document.createElement("div");
+				pad.className = "present-pad";
+				[
+					"up",
+					"left",
+					"right",
+					"down"
+				].forEach((dir) => {
+					const glyph = {
+						up: "▲",
+						down: "▼",
+						left: "◀",
+						right: "▶"
+					}[dir];
+					const b = button(`present-nav present-nav-${dir}`, ["presentMove", dir], glyph, `Move ${dir}`);
+					navBtns[dir] = b;
+					pad.append(b);
+				});
+				controls.append(modeBtn, pad, jump);
+				bodyEl.append(controls);
+			};
+			const clearRefs = () => {
+				bodyEl = substageEl = modeBtn = null;
+				Object.keys(navBtns).forEach((d) => delete navBtns[d]);
+			};
+			const enter = () => {
+				active = true;
+				mode = "nodes";
+				focusId = selection.selectedNode()?.id ?? firstNodeId();
+				buildBody();
+				emit("modal.open", {
+					title: "Presentation",
+					body: bodyEl,
+					visual: "present"
+				});
+				renderSubstage();
+				frameLoop.schedule("present.refit", renderSubstage, 30);
+			};
+			contexts.commands.register([
+				{
+					id: "present.toggle",
+					label: "Presentation mode",
+					group: "view",
+					shortcut: "Shift+P",
+					input: {
+						on: "keydown",
+						key: "P",
+						shift: true,
+						prevent: true
+					},
+					available: () => graph().nodes().length > 0 || active
+				},
+				{
+					id: "present.frame.focus",
+					label: "Focus node",
+					event: "present.focus",
+					group: "view",
+					hidden: true,
+					input: {
+						on: "click",
+						selector: ".present-substage [data-present-focus]"
+					},
+					payload: (source) => ({ id: source.target.closest("[data-present-focus]").getAttribute("data-present-focus") })
+				},
+				{
+					id: "present.frame.move",
+					label: "Move focus",
+					event: "present.move",
+					group: "view",
+					hidden: true,
+					input: {
+						on: "click",
+						selector: "[data-present-move]"
+					},
+					payload: (source) => ({ dir: source.target.closest("[data-present-move]").getAttribute("data-present-move") })
+				},
+				{
+					id: "present.frame.mode",
+					label: "Toggle presentation content",
+					event: "present.mode.toggle",
+					group: "view",
+					hidden: true,
+					input: {
+						on: "click",
+						selector: "[data-present-mode]"
+					}
+				},
+				{
+					id: "present.frame.jump",
+					label: "Open node in canvas",
+					event: "present.jump",
+					group: "view",
+					hidden: true,
+					input: {
+						on: "click",
+						selector: "[data-present-jump]"
+					}
+				}
+			]);
+			on("present.toggle", () => {
+				if (active) emit("modal.close");
+				else enter();
+			});
+			on("present.focus", ({ id }) => {
+				if (active) setFocus(id);
+			});
+			on("present.mode.toggle", () => {
+				mode = mode === "nodes" ? "edges" : "nodes";
+				renderSubstage();
+			});
+			on("present.move", ({ dir }) => {
+				if (!active || !focusId) return;
+				const next = neighbours(focusId).filter((n) => n.dir === dir)[0];
+				if (next) setFocus(next.node.id);
+			});
+			on("present.jump", () => {
+				const id = focusId;
+				emit("modal.close");
+				if (!id) return;
+				emit("selection.item.select", nodeRef(id));
+				emit("view.fit.item", nodeRef(id));
+			});
+			on("modal.close", () => {
+				if (!active) return;
+				active = false;
+				const shell = shellEl();
+				if (shell) shell.dataset.present = "false";
+				clearRefs();
+			});
+			on("graph.node.updated", () => {
+				if (active) renderSubstage();
+			});
+			on("graph.edge.updated", () => {
+				if (active) renderSubstage();
+			});
+			on("graph.edge.created", () => {
+				if (active) renderSubstage();
+			});
+			on("graph.edge.deleted", () => {
+				if (active) renderSubstage();
+			});
+			contribute({
+				surface: "top",
+				command: "present.toggle",
+				kind: "button",
+				text: "▣",
+				label: "Presentation mode",
+				order: 81
+			});
+		}, { requires: ["render", "graph"] });
+	}
+	//#endregion
 	//#region frontend/systems/render.ts
 	/** render owns the shell + slot flush + redraw scheduler — never the canvas paint.
 	*  Stage drawing lives in `render.stage`, which listens for `render.stage.draw`.
@@ -9183,7 +10051,7 @@ ${assertLines}
 	*  these out lets the canvas/webgl swap touch a single system. */
 	function registerRender(system) {
 		system("render", (ctx) => {
-			const { on, emit, bus, contexts } = ctx;
+			const { on, emit, bus, contexts, frameLoop } = ctx;
 			const root = mountRoot();
 			const views = /* @__PURE__ */ new Map();
 			const mounted = /* @__PURE__ */ new Map();
@@ -9255,7 +10123,10 @@ ${assertLines}
 			*  Anything else (containers, graph switch, selection sets, layout) returns
 			*  null → the frame falls back to a full rebuild. */
 			const factItemRef = (name, data) => {
-				const id = data?.id;
+				const d = data;
+				if (!d) return null;
+				if (d.kind && d.id) return d;
+				const id = typeof d.id === "string" ? d.id : void 0;
 				if (!id) return null;
 				if (name.startsWith("graph.node.")) return {
 					kind: "node",
@@ -9265,10 +10136,22 @@ ${assertLines}
 					kind: "edge",
 					id
 				};
+				if (name.includes(".node.")) return {
+					kind: "node",
+					id
+				};
+				if (name.includes(".edge.")) return {
+					kind: "edge",
+					id
+				};
 				return null;
 			};
-			let scheduled = false;
 			let flushes = 0;
+			let scheduledRender = false;
+			let lastMarkEvent = "";
+			let lastFlushAt = 0;
+			let markCount = 0;
+			let lastDOMCount = 0;
 			let pendingFocusRef = null;
 			let pendingBlur = false;
 			const focusPendingItem = () => {
@@ -9286,12 +10169,25 @@ ${assertLines}
 				const focusable = item;
 				if (typeof focusable?.focus === "function") focusable.focus({ preventScroll: true });
 			};
+			/** One frame of paint budget (60fps). Flushes above it count as
+			*  `Render.flush.overBudget` — the number a WebGPU swap must drive to 0. */
+			const FRAME_BUDGET_MS = 16.7;
 			const flushDirty = () => {
-				scheduled = false;
+				const t0 = performance.now();
 				flushes++;
+				const perfLog = ctx.perf.enabled();
+				const scopes = perfLog ? [...dirty].join(",") : "";
+				const trigger = lastMarkEvent || "unknown";
+				const hasNodes = dirty.has("nodes") || dirty.has("nodes.visual");
+				const kind = !perfLog ? "" : hasNodes ? (fullNodes ? "FULL" : `PATCH(${[...dirtyItems].map(([k]) => k).join(",")})`) + (dirty.has("nodes") ? "" : "△") : dirty.has("camera") ? "CAMERA" : "OUTLINE";
+				const gap = lastFlushAt ? t0 - lastFlushAt : 0;
+				const since = lastFlushAt ? `${gap.toFixed(1)}ms` : "-";
+				lastFlushAt = t0;
+				lastMarkEvent = "";
 				ctx.perf.count("Render.flush");
 				ctx.perf.sample("Render.flush.dirtyScopes", dirty.size);
-				if (dirty.has("nodes")) {
+				if (gap > 0) ctx.perf.sample("Render.flush.gapMs", gap);
+				if (hasNodes) {
 					ctx.perf.count("Render.flush.nodes");
 					ctx.perf.sample("Render.flush.refs", dirtyItems.size);
 					emit("render.stage.draw", {
@@ -9309,36 +10205,58 @@ ${assertLines}
 				dirty.clear();
 				dirtyItems.clear();
 				fullNodes = false;
+				const facts = markCount;
+				markCount = 0;
+				scheduledRender = false;
+				const elapsed = performance.now() - t0;
+				ctx.perf.sample("Render.flush.ms", elapsed);
+				if (elapsed > FRAME_BUDGET_MS) ctx.perf.count("Render.flush.overBudget");
 				queueMicrotask(focusPendingItem);
+				if (perfLog) {
+					const domNow = contexts.places.el(Places.Stage)?.querySelectorAll("*").length ?? 0;
+					const domDelta = lastDOMCount ? domNow > lastDOMCount ? `+${domNow - lastDOMCount}` : `${domNow - lastDOMCount}` : "";
+					lastDOMCount = domNow;
+					console.debug(`[render] #${flushes} ${kind} dirty=[${scopes}] trig="${trigger}" facts=${facts} dom=${domNow}(${domDelta}) +${since} took=${elapsed.toFixed(1)}ms`);
+				}
 			};
 			const mark = (...scopes) => {
 				scopes.forEach((s) => dirty.add(s));
-				if (scheduled) return;
-				scheduled = true;
-				requestAnimationFrame(flushDirty);
+				markCount++;
+				if (scheduledRender) return;
+				scheduledRender = true;
+				frameLoop.schedule("render.flush", flushDirty, 20);
 			};
-			const applyScope = (scope) => scope === "both" ? mark("nodes", "outline") : mark(scope);
-			const scopeForEvent = (name, data) => {
-				if (name === "graph.node.updated") {
-					const patch = data?.patch;
-					if (patch && !("Label" in patch)) return "nodes";
-				}
-				return factScope(name);
-			};
-			ctx.expose("render", { flushes: () => flushes });
-			on("app.start", () => mark("nodes"));
+			const applyScope = (scope) => scope === "both" ? mark("nodes", "outline") : scope === "nodes.visual" ? mark("nodes.visual") : mark(scope);
+			ctx.expose("render", {
+				flushes: () => flushes,
+				lastTrigger: () => lastMarkEvent,
+				factsPerFrame: () => markCount
+			});
+			on("app.start", () => {
+				lastMarkEvent = "app.start";
+				mark("nodes");
+			});
 			on("focus.item.focused", (ref) => {
+				if (!ref && pendingFocusRef) dirtyItems.set(`${pendingFocusRef.kind}:${pendingFocusRef.id}`, pendingFocusRef);
 				pendingFocusRef = ref;
 				if (!ref) pendingBlur = true;
 			});
 			bus.onAny(({ name, data }) => {
 				const scope = scopeForEvent(name, data);
 				if (!scope) return;
+				lastMarkEvent = name;
 				applyScope(scope);
-				if (scope === "nodes" || scope === "both") {
+				if (scope === "nodes" || scope === "nodes.visual" || scope === "both") {
 					const ref = factItemRef(name, data);
 					if (ref) dirtyItems.set(`${ref.kind}:${ref.id}`, ref);
-					else fullNodes = true;
+					else if (name === "decoration.changed") {} else if (name === "selection.changed") {
+						const refs = data?.refs;
+						if (refs) refs.forEach((r) => dirtyItems.set(`${r.kind}:${r.id}`, r));
+						else fullNodes = true;
+					} else {
+						const d2 = data;
+						if (!((name.startsWith("focus.") || name.startsWith("selection.")) && (d2 === null || d2?.id === null))) fullNodes = true;
+					}
 				}
 			});
 		}, { requires: ["input"] });
@@ -9442,10 +10360,12 @@ ${assertLines}
 			let svgLayer = null;
 			const els = /* @__PURE__ */ new Map();
 			const sigCache = /* @__PURE__ */ new Map();
-			const cacheSig = (k, def, item) => {
+			const modeKey = (ref) => contexts.decorations.modes.for(ref).map((m) => m.mode).sort().join(",");
+			const cacheSig = (k, def, item, ref) => {
 				const sig = def.render?.signature?.(item);
-				if (sig === void 0) sigCache.delete(k);
-				else sigCache.set(k, sig);
+				const modes = ref ? `|modes:${modeKey(ref)}` : "";
+				if (sig !== void 0) sigCache.set(k, sig + modes);
+				else sigCache.delete(k);
 			};
 			const keyOf = (ref) => `${ref.kind}:${ref.id}:${(ref.parent ?? []).join("/")}`;
 			const refOf = (kind, item) => {
@@ -9529,7 +10449,7 @@ ${assertLines}
 						stableZ(ref, el);
 						targetLayer(def.render).append(el);
 						els.set(k, el);
-						cacheSig(k, def, item);
+						cacheSig(k, def, item, ref);
 						inserted++;
 					}
 				});
@@ -9560,9 +10480,12 @@ ${assertLines}
 					sigCache.delete(k);
 					return;
 				}
-				if (existing && renderer.reposition && renderer.signature && renderer.signature(item) === sigCache.get(k)) {
-					renderer.reposition(existing, item);
-					return;
+				if (existing && renderer.reposition && renderer.signature) {
+					if (renderer.signature(item) + `|modes:${modeKey(ref)}` === sigCache.get(k)) {
+						ctx.perf.count("Render.stage.reposition");
+						renderer.reposition(existing, item, renderCtxFor(entityDef, item));
+						return;
+					}
 				}
 				const fresh = ctx.perf.measure(`Render.entity.${ref.kind}.draw`, () => renderer.draw(item, renderCtxFor(entityDef, item)));
 				if (!fresh) {
@@ -9575,7 +10498,7 @@ ${assertLines}
 				if (existing) existing.replaceWith(fresh);
 				else targetLayer(renderer).append(fresh);
 				els.set(k, fresh);
-				cacheSig(k, entityDef, item);
+				cacheSig(k, entityDef, item, ref);
 			};
 			/** Patch the changed refs (+ edges incident to any moved node, whose paths
 			*  depend on endpoint positions). Falls back to a full rebuild if the layer
@@ -9698,6 +10621,628 @@ ${assertLines}
 			on("drag.item.start", () => contexts.places.el(Places.Stage)?.classList.add("dragging"));
 			on("drag.item.end", () => contexts.places.el(Places.Stage)?.classList.remove("dragging"));
 		}, { requires: ["render", "graph"] });
+	}
+	/** Stable palette index per NodeType — mirrors the CSS node-type accents. */
+	var NODE_COLOR_INDEX = {
+		text: 0,
+		square: 1,
+		circle: 2,
+		"user-input": 3,
+		gateway: 4,
+		service: 5,
+		database: 6,
+		kafka: 7,
+		index: 8,
+		cache: 9,
+		"rate-limit": 10,
+		"circuit-breaker": 11
+	};
+	var EDGE_KIND_INDEX = {
+		sync: 0,
+		async: 1,
+		read: 2,
+		write: 3
+	};
+	var grow = (current, needed) => {
+		if (current && current.length >= needed) return current;
+		let capacity = 1024;
+		while (capacity < needed) capacity *= 2;
+		return new Float32Array(capacity);
+	};
+	/** Flatten `graph` into instance arrays. Pass the previous scene back in to
+	*  reuse its buffers — steady-state rebuilds allocate nothing. */
+	function buildScene(graph, selectedIds, focusedId, prev) {
+		const nodes = graph.nodes();
+		const edges = graph.edges();
+		const nodeData = grow(prev?.nodeData, nodes.length * 8);
+		const edgeData = grow(prev?.edgeData, edges.length * 8);
+		let n = 0;
+		for (const node of nodes) {
+			const pos = node.Position;
+			if (!pos) continue;
+			const base = n * 8;
+			nodeData[base] = pos.x;
+			nodeData[base + 1] = pos.y;
+			nodeData[base + 2] = node.Size.w;
+			nodeData[base + 3] = node.Size.h;
+			nodeData[base + 4] = NODE_COLOR_INDEX[node.NodeType ?? "text"] ?? 0;
+			nodeData[base + 5] = (selectedIds.has(node.id) ? 1 : 0) | (focusedId === node.id ? 2 : 0);
+			nodeData[base + 6] = 0;
+			nodeData[base + 7] = 0;
+			n++;
+		}
+		let e = 0;
+		for (const edge of edges) {
+			const from = graph.getNode(edge.From);
+			const to = graph.getNode(edge.To);
+			if (!from?.Position || !to?.Position) continue;
+			const tip = intersectRectBoundary(from.Position, to.Position, {
+				w: to.Size.w / 2,
+				h: to.Size.h / 2
+			});
+			const base = e * 8;
+			edgeData[base] = from.Position.x;
+			edgeData[base + 1] = from.Position.y;
+			edgeData[base + 2] = tip.x;
+			edgeData[base + 3] = tip.y;
+			edgeData[base + 4] = EDGE_KIND_INDEX[edge.EdgeKind ?? "sync"] ?? 0;
+			edgeData[base + 5] = selectedIds.has(edge.id) ? 1 : 0;
+			edgeData[base + 6] = 0;
+			edgeData[base + 7] = 0;
+			e++;
+		}
+		return {
+			nodeData,
+			nodeCount: n,
+			edgeData,
+			edgeCount: e
+		};
+	}
+	/** Exact hit test for a click in graph space: cell-level candidates from the
+	*  spatial grid (expanded a cell so off-center rects are not missed), refined
+	*  against real bounds. Latest-created node wins, matching DOM stacking. */
+	function hitTestNode(graph, point) {
+		const MAX_HALF = 512;
+		const candidates = graph.nodeIdsInRect({
+			x: point.x - MAX_HALF,
+			y: point.y - MAX_HALF,
+			w: MAX_HALF * 2,
+			h: MAX_HALF * 2
+		});
+		let best = null;
+		for (const id of candidates) {
+			const node = graph.getNode(id);
+			const pos = node?.Position;
+			if (!node || !pos) continue;
+			if (Math.abs(point.x - pos.x) > node.Size.w / 2 || Math.abs(point.y - pos.y) > node.Size.h / 2) continue;
+			const seq = parseInt(id.replace(/^\D+/, ""), 10) || 0;
+			if (!best || seq > best.seq) best = {
+				id,
+				seq
+			};
+		}
+		return best?.id ?? null;
+	}
+	//#endregion
+	//#region frontend/systems/render-stage-gpu.ts
+	/** render.stage.gpu — alternative stage painter for LARGE graphs (10k+ nodes).
+	*  Same contract as render.stage: listens `render.stage.draw` / `.camera`,
+	*  mounts its output through `render.view.set`. Geometry only — node cards,
+	*  type-colored borders, selection/focus rings, kind-colored edges with
+	*  arrowheads. No text: this is the zoomed-out navigation mode; toggling back
+	*  to the DOM painter restores full cards. Registered but DORMANT until the
+	*  `render.gpu.toggle` command — activation stops the `render.stage` flag via
+	*  `flag.toggle` (the runtime feature manager hot-swaps the system) so exactly
+	*  one painter owns the stage at a time. No `navigator.gpu` → notice + no-op,
+	*  so jsdom/CI and non-WebGPU browsers boot unchanged. */
+	var SHADER = `
+struct Camera {
+  offset: vec2f,   // graph-space coord at the stage's top-left
+  scale: f32,
+  dpr: f32,
+  viewport: vec2f, // css px
+  _pad: vec2f,
+};
+@group(0) @binding(0) var<uniform> cam: Camera;
+@group(0) @binding(1) var<storage, read> inst: array<f32>;
+
+fn toClip(world: vec2f) -> vec4f {
+  let screen = (world - cam.offset) * cam.scale;
+  let ndc = screen / cam.viewport * 2.0 - vec2f(1.0, 1.0);
+  return vec4f(ndc.x, -ndc.y, 0.0, 1.0);
+}
+
+const QUAD = array<vec2f, 6>(
+  vec2f(-0.5, -0.5), vec2f(0.5, -0.5), vec2f(0.5, 0.5),
+  vec2f(-0.5, -0.5), vec2f(0.5, 0.5), vec2f(-0.5, 0.5),
+);
+
+// Node-type accent palette (matches the CSS accents loosely).
+const NODE_COLORS = array<vec3f, 12>(
+  vec3f(0.55, 0.58, 0.62), // text
+  vec3f(0.42, 0.48, 0.55), // square
+  vec3f(0.46, 0.52, 0.60), // circle
+  vec3f(0.35, 0.55, 0.80), // user-input
+  vec3f(0.55, 0.45, 0.78), // gateway
+  vec3f(0.25, 0.60, 0.45), // service
+  vec3f(0.80, 0.55, 0.25), // database
+  vec3f(0.72, 0.35, 0.35), // kafka
+  vec3f(0.30, 0.62, 0.65), // index
+  vec3f(0.85, 0.68, 0.25), // cache
+  vec3f(0.75, 0.42, 0.55), // rate-limit
+  vec3f(0.62, 0.32, 0.28), // circuit-breaker
+);
+const EDGE_COLORS = array<vec3f, 4>(
+  vec3f(0.55, 0.58, 0.62), // sync
+  vec3f(0.55, 0.45, 0.78), // async
+  vec3f(0.25, 0.60, 0.45), // read
+  vec3f(0.80, 0.55, 0.25), // write
+);
+const ACCENT = vec3f(0.15, 0.45, 0.95);
+
+struct NodeOut {
+  @builtin(position) pos: vec4f,
+  @location(0) local: vec2f,   // px from node center
+  @location(1) halfPx: vec2f,  // node half-size in screen px
+  @location(2) color: vec3f,
+  @location(3) flags: f32,
+};
+
+@vertex fn nodeVert(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> NodeOut {
+  let base = ii * 8u;
+  let center = vec2f(inst[base], inst[base + 1u]);
+  let size = vec2f(inst[base + 2u], inst[base + 3u]);
+  let corner = QUAD[vi];
+  var out: NodeOut;
+  out.pos = toClip(center + corner * size);
+  out.halfPx = size * 0.5 * cam.scale;
+  out.local = corner * size * cam.scale;
+  out.color = NODE_COLORS[u32(inst[base + 4u])];
+  out.flags = inst[base + 5u];
+  return out;
+}
+
+fn sdRoundBox(p: vec2f, b: vec2f, r: f32) -> f32 {
+  let q = abs(p) - b + vec2f(r, r);
+  return length(max(q, vec2f(0.0, 0.0))) + min(max(q.x, q.y), 0.0) - r;
+}
+
+@fragment fn nodeFrag(in: NodeOut) -> @location(0) vec4f {
+  let radius = min(10.0 * cam.scale, min(in.halfPx.x, in.halfPx.y));
+  let d = sdRoundBox(in.local, in.halfPx, radius);
+  let aa = 1.0;
+  let inside = 1.0 - smoothstep(-aa, aa, d);
+  if (inside <= 0.0) { discard; }
+  let selected = (u32(in.flags) & 1u) != 0u;
+  let focused = (u32(in.flags) & 2u) != 0u;
+  var borderW = max(1.5, 1.5 * cam.scale);
+  if (selected || focused) { borderW = max(3.0, 3.0 * cam.scale); }
+  let borderMix = 1.0 - smoothstep(-borderW - aa, -borderW + aa, d);
+  var borderColor = in.color;
+  if (selected || focused) { borderColor = ACCENT; }
+  let fill = vec3f(0.985, 0.985, 0.99);
+  let color = mix(fill, borderColor, borderMix);
+  return vec4f(color * inside, inside);
+}
+
+struct EdgeOut {
+  @builtin(position) pos: vec4f,
+  @location(0) across: f32,   // -1..1 across the line width
+  @location(1) color: vec3f,
+};
+
+fn edgeColor(base: u32) -> vec3f {
+  var c = EDGE_COLORS[u32(inst[base + 4u])];
+  if ((u32(inst[base + 5u]) & 1u) != 0u) { c = ACCENT; }
+  return c;
+}
+
+// Two triangles along the segment: (a,-1)(b,-1)(b,+1) and (a,-1)(b,+1)(a,+1).
+const SEG_T = array<f32, 6>(0.0, 1.0, 1.0, 0.0, 1.0, 0.0);
+const SEG_S = array<f32, 6>(-1.0, -1.0, 1.0, -1.0, 1.0, 1.0);
+
+@vertex fn edgeVert(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> EdgeOut {
+  let base = ii * 8u;
+  let a = vec2f(inst[base], inst[base + 1u]);
+  let b = vec2f(inst[base + 2u], inst[base + 3u]);
+  let dir = normalize(b - a + vec2f(1e-6, 0.0));
+  let normal = vec2f(-dir.y, dir.x);
+  let halfW = max(0.75, 0.75 * cam.scale) / cam.scale; // world units, ≥0.75px on screen
+  let t = SEG_T[vi];
+  let s = SEG_S[vi];
+  var out: EdgeOut;
+  out.pos = toClip(mix(a, b, t) + normal * halfW * s);
+  out.across = s;
+  out.color = edgeColor(base);
+  return out;
+}
+
+@fragment fn edgeFrag(in: EdgeOut) -> @location(0) vec4f {
+  let alpha = (1.0 - smoothstep(0.55, 1.0, abs(in.across))) * 0.9;
+  return vec4f(in.color * alpha, alpha);
+}
+
+struct ArrowOut {
+  @builtin(position) pos: vec4f,
+  @location(0) color: vec3f,
+};
+
+@vertex fn arrowVert(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> ArrowOut {
+  let base = ii * 8u;
+  let a = vec2f(inst[base], inst[base + 1u]);
+  let tip = vec2f(inst[base + 2u], inst[base + 3u]);
+  let dir = normalize(tip - a + vec2f(1e-6, 0.0));
+  let normal = vec2f(-dir.y, dir.x);
+  let len = max(9.0, 9.0 * cam.scale) / cam.scale;   // world units, ≥9px
+  var p = tip;
+  if (vi == 1u) { p = tip - dir * len + normal * len * 0.45; }
+  if (vi == 2u) { p = tip - dir * len - normal * len * 0.45; }
+  var out: ArrowOut;
+  out.pos = toClip(p);
+  out.color = edgeColor(base);
+  return out;
+}
+
+@fragment fn arrowFrag(in: ArrowOut) -> @location(0) vec4f {
+  return vec4f(in.color, 1.0);
+}
+`;
+	function registerRenderStageGpu(system) {
+		system("render.stage.gpu", (ctx) => {
+			const { on, emit, graphs, contexts, selection, frameLoop } = ctx;
+			let active = false;
+			let device = null;
+			let gpuContext = null;
+			let canvas = null;
+			let format = "bgra8unorm";
+			let nodePipeline = null;
+			let edgePipeline = null;
+			let arrowPipeline = null;
+			let pipelineLayout = null;
+			let bindGroupLayout = null;
+			let probeNext = null;
+			let cameraBuffer = null;
+			let nodeBuffer = null;
+			let edgeBuffer = null;
+			let nodeBindGroup = null;
+			let edgeBindGroup = null;
+			let scene;
+			let sceneDirty = true;
+			let resizeObserver = null;
+			contexts.commands.register([{
+				id: "render.gpu.toggle",
+				label: "Toggle GPU stage painter (geometry-only, for huge graphs)",
+				group: "view"
+			}]);
+			const selectedIds = () => new Set(selection.selectedAll().map((ref) => ref.id));
+			const focusedNodeId = () => {
+				const ref = selection.focused();
+				return ref?.kind === "node" ? ref.id : null;
+			};
+			const ensureInstanceBuffer = (current, data, label) => {
+				const bytes = data.byteLength;
+				if (current && current.size >= bytes) return current;
+				current?.destroy();
+				return device.createBuffer({
+					label,
+					size: bytes,
+					usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+				});
+			};
+			const rebuildBindGroups = () => {
+				nodeBindGroup = device.createBindGroup({
+					layout: bindGroupLayout,
+					entries: [{
+						binding: 0,
+						resource: { buffer: cameraBuffer }
+					}, {
+						binding: 1,
+						resource: { buffer: nodeBuffer }
+					}]
+				});
+				edgeBindGroup = device.createBindGroup({
+					layout: bindGroupLayout,
+					entries: [{
+						binding: 0,
+						resource: { buffer: cameraBuffer }
+					}, {
+						binding: 1,
+						resource: { buffer: edgeBuffer }
+					}]
+				});
+			};
+			const uploadScene = () => {
+				scene = buildScene(graphs.current, selectedIds(), focusedNodeId(), scene);
+				const prevNode = nodeBuffer, prevEdge = edgeBuffer;
+				nodeBuffer = ensureInstanceBuffer(nodeBuffer, scene.nodeData, "gpu-stage.nodes");
+				edgeBuffer = ensureInstanceBuffer(edgeBuffer, scene.edgeData, "gpu-stage.edges");
+				if (nodeBuffer !== prevNode || edgeBuffer !== prevEdge || !nodeBindGroup) rebuildBindGroups();
+				device.queue.writeBuffer(nodeBuffer, 0, scene.nodeData, 0, scene.nodeCount * 8);
+				device.queue.writeBuffer(edgeBuffer, 0, scene.edgeData, 0, scene.edgeCount * 8);
+				sceneDirty = false;
+			};
+			const writeCamera = () => {
+				const view = contexts.view.get();
+				const dpr = globalThis.devicePixelRatio || 1;
+				const w = canvas.clientWidth || canvas.width / dpr;
+				const h = canvas.clientHeight || canvas.height / dpr;
+				device.queue.writeBuffer(cameraBuffer, 0, new Float32Array([
+					view.x,
+					view.y,
+					view.scale,
+					dpr,
+					w,
+					h,
+					0,
+					0
+				]));
+			};
+			const renderFrame = () => {
+				if (!active || !device || !gpuContext || !canvas) return;
+				ctx.perf.measure("Render.gpu.frame", () => {
+					if (sceneDirty) uploadScene();
+					writeCamera();
+					const texture = gpuContext.getCurrentTexture();
+					const encoder = device.createCommandEncoder();
+					const pass = encoder.beginRenderPass({ colorAttachments: [{
+						view: texture.createView(),
+						clearValue: {
+							r: 0,
+							g: 0,
+							b: 0,
+							a: 0
+						},
+						loadOp: "clear",
+						storeOp: "store"
+					}] });
+					pass.setPipeline(edgePipeline);
+					pass.setBindGroup(0, edgeBindGroup);
+					pass.draw(6, scene.edgeCount);
+					pass.setPipeline(arrowPipeline);
+					pass.setBindGroup(0, edgeBindGroup);
+					pass.draw(3, scene.edgeCount);
+					pass.setPipeline(nodePipeline);
+					pass.setBindGroup(0, nodeBindGroup);
+					pass.draw(6, scene.nodeCount);
+					pass.end();
+					let probeBuffer = null;
+					let probeRows = 0, probeBpr = 0;
+					if (probeNext) {
+						probeRows = Math.min(64, texture.height);
+						probeBpr = Math.ceil(texture.width * 4 / 256) * 256;
+						probeBuffer = device.createBuffer({
+							label: "gpu-stage.probe",
+							size: probeBpr * probeRows,
+							usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+						});
+						encoder.copyTextureToBuffer({
+							texture,
+							origin: {
+								x: 0,
+								y: Math.max(0, Math.floor(texture.height / 2 - probeRows / 2))
+							}
+						}, {
+							buffer: probeBuffer,
+							bytesPerRow: probeBpr
+						}, {
+							width: texture.width,
+							height: probeRows
+						});
+					}
+					device.queue.submit([encoder.finish()]);
+					if (probeBuffer && probeNext) {
+						const resolve = probeNext;
+						probeNext = null;
+						const buffer = probeBuffer;
+						buffer.mapAsync(GPUMapMode.READ).then(() => {
+							const bytes = new Uint8Array(buffer.getMappedRange());
+							let nonZero = 0, sampled = 0;
+							for (let i = 3; i < bytes.length; i += 16) {
+								sampled++;
+								if (bytes[i] > 0) nonZero++;
+							}
+							buffer.unmap();
+							buffer.destroy();
+							resolve({
+								nonZero,
+								sampled
+							});
+						});
+					}
+					ctx.perf.count("Render.gpu.frames");
+					ctx.perf.sample("Render.gpu.nodes", scene.nodeCount);
+				});
+			};
+			const scheduleFrame = () => frameLoop.schedule("render.gpu", renderFrame, 30);
+			const sizeCanvas = () => {
+				const stage = contexts.places.el(Places.Stage);
+				if (!stage || !canvas) return;
+				const rect = stage.getBoundingClientRect();
+				const dpr = globalThis.devicePixelRatio || 1;
+				canvas.width = Math.max(1, Math.round(rect.width * dpr));
+				canvas.height = Math.max(1, Math.round(rect.height * dpr));
+				scheduleFrame();
+			};
+			const makePipeline = (module, vertex, fragment, label) => device.createRenderPipeline({
+				label,
+				layout: pipelineLayout,
+				vertex: {
+					module,
+					entryPoint: vertex
+				},
+				fragment: {
+					module,
+					entryPoint: fragment,
+					targets: [{
+						format,
+						blend: {
+							color: {
+								srcFactor: "one",
+								dstFactor: "one-minus-src-alpha"
+							},
+							alpha: {
+								srcFactor: "one",
+								dstFactor: "one-minus-src-alpha"
+							}
+						}
+					}]
+				},
+				primitive: { topology: "triangle-list" }
+			});
+			const bailToDom = (reason) => {
+				emit("app.notice", {
+					message: "WebGPU not available — staying on the DOM painter.",
+					level: "warn"
+				});
+				emit("render.gpu.changed", {
+					active: false,
+					reason
+				});
+				if (!ctx.flags.isOn("render.stage")) emit("flag.toggle", {
+					name: "render.stage",
+					on: true
+				});
+			};
+			const activate = async () => {
+				const gpu = navigator.gpu;
+				if (!gpu) {
+					bailToDom("no-webgpu");
+					return;
+				}
+				const adapter = await gpu.requestAdapter();
+				if (!adapter) {
+					bailToDom("no-adapter");
+					return;
+				}
+				device = await adapter.requestDevice();
+				device.onuncapturederror = (event) => console.error("[gpu-stage] uncaptured:", event.error?.message);
+				format = gpu.getPreferredCanvasFormat();
+				canvas = document.createElement("canvas");
+				canvas.className = "nodes gpu-canvas";
+				canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;";
+				gpuContext = canvas.getContext("webgpu");
+				gpuContext.configure({
+					device,
+					format,
+					alphaMode: "premultiplied",
+					usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
+				});
+				const module = device.createShaderModule({
+					label: "gpu-stage",
+					code: SHADER
+				});
+				const bindLayout = device.createBindGroupLayout({
+					label: "gpu-stage.bind",
+					entries: [{
+						binding: 0,
+						visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+						buffer: { type: "uniform" }
+					}, {
+						binding: 1,
+						visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+						buffer: { type: "read-only-storage" }
+					}]
+				});
+				pipelineLayout = device.createPipelineLayout({
+					label: "gpu-stage.layout",
+					bindGroupLayouts: [bindLayout]
+				});
+				bindGroupLayout = bindLayout;
+				nodePipeline = makePipeline(module, "nodeVert", "nodeFrag", "gpu-stage.node");
+				edgePipeline = makePipeline(module, "edgeVert", "edgeFrag", "gpu-stage.edge");
+				arrowPipeline = makePipeline(module, "arrowVert", "arrowFrag", "gpu-stage.arrow");
+				cameraBuffer = device.createBuffer({
+					label: "gpu-stage.camera",
+					size: 32,
+					usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+				});
+				canvas.addEventListener("click", (event) => {
+					const point = contexts.view.clientToSpace(Places.Stage, clientPoint(event));
+					const id = hitTestNode(graphs.current, point);
+					if (id) emit("selection.node.select", { id });
+				});
+				ctx.expose("gpuStage", { probe: () => new Promise((resolve) => {
+					if (!active) {
+						resolve({
+							nonZero: -1,
+							sampled: 0
+						});
+						return;
+					}
+					probeNext = resolve;
+					renderFrame();
+				}) });
+				active = true;
+				sceneDirty = true;
+				emit("flag.toggle", {
+					name: "render.stage",
+					on: false
+				});
+				emit("render.view.clear", {
+					place: Places.Stage,
+					key: "nodes"
+				});
+				emit("render.view.set", {
+					place: Places.Stage,
+					key: "nodes",
+					view: canvas
+				});
+				sizeCanvas();
+				resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(sizeCanvas);
+				const stage = contexts.places.el(Places.Stage);
+				if (stage && resizeObserver) resizeObserver.observe(stage);
+				emit("render.gpu.changed", { active: true });
+				emit("app.notice", { message: "GPU stage painter on — geometry mode, toggle again for full cards." });
+				scheduleFrame();
+			};
+			const deactivate = () => {
+				active = false;
+				resizeObserver?.disconnect();
+				resizeObserver = null;
+				frameLoop.cancel("render.gpu");
+				emit("render.view.clear", {
+					place: Places.Stage,
+					key: "nodes"
+				});
+				canvas?.remove();
+				nodeBuffer?.destroy();
+				nodeBuffer = null;
+				edgeBuffer?.destroy();
+				edgeBuffer = null;
+				cameraBuffer?.destroy();
+				cameraBuffer = null;
+				device?.destroy();
+				device = null;
+				gpuContext = null;
+				canvas = null;
+				nodeBindGroup = null;
+				edgeBindGroup = null;
+				scene = void 0;
+				emit("flag.toggle", {
+					name: "render.stage",
+					on: true
+				});
+				emit("render.gpu.changed", { active: false });
+			};
+			on("render.gpu.toggle", () => {
+				if (active) deactivate();
+				else activate();
+			});
+			on("app.start", () => {
+				if (!ctx.flags.isOn("render.stage") && !active) activate();
+			});
+			on("render.stage.draw", () => {
+				if (!active) return;
+				sceneDirty = true;
+				scheduleFrame();
+			});
+			on("render.stage.camera", () => {
+				if (active) scheduleFrame();
+			});
+			return () => {
+				if (active) deactivate();
+			};
+		}, { requires: ["render"] });
 	}
 	//#endregion
 	//#region frontend/systems/scenario.ts
@@ -10855,98 +12400,9 @@ ${assertLines}
 		] });
 	}
 	//#endregion
-	//#region frontend/systems/view-pan.ts
-	function registerViewPan(system) {
-		system("view.pan", ({ on, emit, contexts }) => {
-			let pan = null;
-			let pending = null;
-			let scheduled = false;
-			const stageSelector = `[data-place="${Places.Stage}"]`;
-			const commit = () => emit("view.changed", contexts.view.get());
-			const setViewFor = (pointer) => {
-				if (!pan) return;
-				contexts.view.set({
-					x: pan.view.x - (pointer.x - pan.pointer.x) / pan.view.scale,
-					y: pan.view.y - (pointer.y - pan.pointer.y) / pan.view.scale
-				});
-			};
-			const applyPending = () => {
-				scheduled = false;
-				if (!pan || !pending) return;
-				const pointer = pending;
-				pending = null;
-				setViewFor(pointer);
-				commit();
-			};
-			const scheduleMove = (pointer) => {
-				pending = pointer;
-				setViewFor(pointer);
-				if (scheduled) return;
-				scheduled = true;
-				requestAnimationFrame(applyPending);
-			};
-			contexts.commands.register([
-				{
-					id: "view.pan.start",
-					label: "Start canvas pan",
-					event: "view.pan.start",
-					group: "view",
-					hidden: true,
-					input: {
-						on: "pointerdown",
-						selector: stageSelector,
-						when: isStageSurface,
-						prevent: true
-					},
-					payload: ({ event }) => clientPoint(event)
-				},
-				{
-					id: "view.pan.move",
-					label: "Pan canvas",
-					event: "view.pan.move",
-					group: "view",
-					hidden: true,
-					input: {
-						on: "pointermove",
-						when: () => !!pan,
-						prevent: true
-					},
-					payload: ({ event }) => clientPoint(event)
-				},
-				{
-					id: "view.pan.end",
-					label: "End canvas pan",
-					event: "view.pan.end",
-					group: "view",
-					hidden: true,
-					input: {
-						on: "pointerup",
-						when: () => !!pan
-					}
-				}
-			]);
-			on("view.pan.start", (pointer) => {
-				pan = {
-					pointer,
-					view: contexts.view.get()
-				};
-				contexts.places.el(Places.Stage)?.classList.add("panning");
-			});
-			on("view.pan.move", (pointer) => {
-				if (pan) scheduleMove(pointer);
-			});
-			on("view.pan.end", () => {
-				if (pending) applyPending();
-				pan = null;
-				pending = null;
-				contexts.places.el(Places.Stage)?.classList.remove("panning");
-			});
-		}, { requires: ["render"] });
-	}
-	//#endregion
 	//#region frontend/systems/view-zoom.ts
 	function registerViewZoom(system) {
-		system("view.zoom", ({ on, emit, contexts, graphs, selection, contribute, model, declarePanel }) => {
+		system("view.zoom", ({ on, emit, contexts, graphs, selection, contribute, model, declarePanel, frameLoop }) => {
 			declarePanel({
 				id: "zoom",
 				anchor: "bottom-right",
@@ -10997,10 +12453,10 @@ ${assertLines}
 				contexts.view.zoomAtScreen(contexts.view.screenCenter(Places.Stage), factor);
 				commit();
 			};
-			let cameraFrame = 0;
+			let cameraCancelled = false;
 			const cancelCamera = () => {
-				if (cameraFrame) cancelAnimationFrame(cameraFrame);
-				cameraFrame = 0;
+				cameraCancelled = true;
+				frameLoop.cancel("camera.animate");
 			};
 			const animateViewTo = (next, duration = 180) => {
 				cancelCamera();
@@ -11008,8 +12464,11 @@ ${assertLines}
 				const dx = next.x - start.x, dy = next.y - start.y, ds = next.scale - start.scale;
 				if (Math.abs(dx) + Math.abs(dy) + Math.abs(ds) < .001) return;
 				const startAt = performance.now();
+				cameraCancelled = false;
+				const gen = cameraCancelled;
 				const ease = (t) => 1 - Math.pow(1 - t, 3);
 				const step = () => {
+					if (cameraCancelled !== gen) return;
 					const t = Math.min(1, Math.max(0, (performance.now() - startAt) / duration));
 					const k = ease(t);
 					contexts.view.set({
@@ -11018,10 +12477,9 @@ ${assertLines}
 						scale: start.scale + ds * k
 					});
 					commit();
-					if (t < 1) cameraFrame = requestAnimationFrame(step);
-					else cameraFrame = 0;
+					if (t < 1 && cameraCancelled === gen) frameLoop.schedule("camera.animate", step, 5);
 				};
-				cameraFrame = requestAnimationFrame(step);
+				frameLoop.schedule("camera.animate", step, 5);
 			};
 			contexts.commands.register([
 				{
@@ -11033,6 +12491,7 @@ ${assertLines}
 					input: {
 						on: "wheel",
 						selector: stageSelector,
+						when: (event) => event.ctrlKey,
 						prevent: true
 					},
 					payload: ({ event }) => {
@@ -11116,7 +12575,7 @@ ${assertLines}
 			on("view.zoom.by", ({ screen, factor }) => {
 				cancelCamera();
 				contexts.view.zoomAtScreen(screen, factor);
-				commit();
+				frameLoop.schedule("view.zoom.commit", commit, 10);
 			});
 			on("view.zoom.in", () => centerZoom(1.2));
 			on("view.zoom.out", () => centerZoom(1 / 1.2));
@@ -11298,6 +12757,7 @@ ${assertLines}
 		registerRender(system);
 		registerDarkTheme(system);
 		registerRenderStage(system);
+		registerRenderStageGpu(system);
 		registerTextLayout(system);
 		registerInput(system);
 		registerIo(system);
@@ -11305,7 +12765,6 @@ ${assertLines}
 		registerCancellation(system);
 		registerMain(system);
 		registerToolPanel(system);
-		registerLog(system);
 		registerModal(system);
 		registerCommandForm(system);
 		registerCommandPicker(system);
@@ -11316,6 +12775,7 @@ ${assertLines}
 		registerGraph(system);
 		registerViewZoom(system);
 		registerViewPan(system);
+		registerMarquee(system);
 		registerFocus(system);
 		registerLayout(system);
 		registerContextActions(system);
@@ -11323,8 +12783,8 @@ ${assertLines}
 		registerNodeVisuals(system);
 		registerNodeAutosize(system);
 		registerContainers(system);
-		registerOutline(system);
 		registerChoose(system);
+		registerPresent(system);
 		registerDetail(system);
 		registerDemo(system);
 		registerDebug(system);
@@ -11522,7 +12982,7 @@ ${assertLines}
 			ctx.bus.emit("graph.import.snapshot", snapshot);
 			ctx.bus.emit("container.import.snapshot", { containers: viewOpts.layout === "flow" ? [] : serviceContainersFor(slice.graph) });
 			target.classList.add("varflow");
-			requestAnimationFrame(() => {
+			ctx.frameLoop.schedule("lib.render.after", () => {
 				ctx.bus.emit("render.stage.draw", {
 					full: true,
 					refs: []
@@ -11530,7 +12990,7 @@ ${assertLines}
 				if (viewOpts.layout === "flow") ctx.bus.emit("layout.apply.tidy");
 				fit();
 				setTimeout(fit, 300);
-			});
+			}, 30);
 			const result = {
 				nodes: snapshot.nodes.length,
 				edges: snapshot.edges.length,
@@ -11554,12 +13014,12 @@ ${assertLines}
 				focusNodeId: nodeId
 			};
 			const result = renderLoaded(rawGraph, currentOpts);
-			requestAnimationFrame(() => {
+			ctx.frameLoop.schedule("lib.focus.after", () => {
 				ctx.bus.emit("selection.node.select", { id: nodeId });
 				window.setTimeout(() => {
 					suppressSelection = false;
 				}, 0);
-			});
+			}, 30);
 			return result;
 		};
 		const showAll = () => {

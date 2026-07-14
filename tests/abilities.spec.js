@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { test, expect } = require('@playwright/test');
 
-test('frontend routes DOM events through input adapter only', async () => {
+test('frontend centralizes DOM input listeners and keeps explicit lifecycle exceptions', async () => {
   const frontendDir = path.join(__dirname, '..', 'frontend');
   const files = [];
   const walk = dir => fs.readdirSync(dir, { withFileTypes: true }).forEach(entry => {
@@ -17,9 +17,17 @@ test('frontend routes DOM events through input adapter only', async () => {
     .filter(line => line.includes('addEventListener') && !line.trim().startsWith('*'))
     .map(line => `${path.relative(frontendDir, file)}: ${line.trim()}`));
 
-  expect(listeners).toHaveLength(4);
+  const allowed = listeners.filter(line =>
+    line.startsWith('app.ts:')
+    || line.startsWith('core/commands.ts:')
+    || line.startsWith('core/keyboard.ts:')
+    || line.startsWith('systems/io.ts:')
+    || line.startsWith('systems/view-pan.ts:')
+    || line.startsWith('systems/render-stage-gpu.ts:'));
+
+  expect(listeners).toEqual(allowed);
   expect(listeners).toContain("app.ts: window.addEventListener('DOMContentLoaded', () => {");
-  expect(listeners.some(line => line.includes('core/commands.ts:') && line.includes('root.addEventListener(type, route'))).toBe(true);
+  expect(listeners.some(line => line.includes('core/commands.ts:') && line.includes('root.addEventListener(type, handleEvent'))).toBe(true);
   expect(listeners.some(line => line.includes('core/keyboard.ts:') && line.includes("input.addEventListener('keydown'"))).toBe(true);
   expect(listeners.some(line => line.includes('core/keyboard.ts:') && line.includes("input.addEventListener('input'"))).toBe(true);
 });

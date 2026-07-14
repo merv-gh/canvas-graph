@@ -1,7 +1,11 @@
 {
   "name": "ecs-canvas-graph",
   "version": "0.1.0",
+  "description": "Keyboard-first, event-driven graph editor for writing and navigating structured ideas.",
   "private": true,
+  "engines": {
+    "node": "^20.19.0 || ^22.12.0 || >=24.0.0"
+  },
   "scripts": {
     "dx": "node dx/cli/dx.mjs",
     "dev": "node dx/cli/dev.mjs",
@@ -9,10 +13,12 @@
     "build": "vite build frontend --base ./",
     "preview:build": "vite preview frontend",
     "build:lib": "vite build --config vite.lib.config.ts",
+    "release:check": "npm run typecheck && npm run build && npm run build:lib && npm run test:dx && npm test",
     "test": "npm run test:commands:coverage && npm run test:browser",
     "test:browser": "playwright test",
     "test:commands": "vitest run",
     "test:commands:coverage": "vitest run --coverage",
+    "test:dx": "node dx/selftest.mjs",
     "bench": "vitest run --config vitest.bench.config.ts",
     "bench:burn": "BURN=1 vitest run --config vitest.bench.config.ts",
     "perf:browser": "PERF_BROWSER=1 playwright test tests/perf-real.spec.ts --project=chromium --reporter=line",

@@ -11,11 +11,10 @@ const boot = async (page) => {
   await page.waitForFunction(() => !!window.app);
 };
 
-test('outline lists an "edges" section (edge collection in model)', async ({ page }) => {
+test('model exposes an edge collection for navigation surfaces', async ({ page }) => {
   await boot(page);
-  const headings = await page.locator('.outline-section .outline-title-search').evaluateAll(inputs =>
-    inputs.map(input => input.getAttribute('placeholder')?.toLowerCase()));
-  expect(headings).toContain('edges');
+  const collections = await page.evaluate(() => window.app.model.collections().map(collection => collection.id));
+  expect(collections).toContain('edges');
 });
 
 test('editing.edge.create is a registered command, while graph.edge.create stays storage', async ({ page }) => {

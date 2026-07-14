@@ -6,7 +6,9 @@ Event-driven, plugin-structured TypeScript; the architecture is judged by how
 cheaply it can be regrouped and how easily a bug can be found, reproduced, and
 fixed — by a human *or* a local model.
 
-app is `frontend/`, served at root.
+The app is `frontend/`, served at root. Version 0.1 is distributed as a static
+web build and as an embeddable IIFE library; this repository is intentionally
+not configured for npm publication.
 
 ## Quickstart
 
@@ -14,13 +16,15 @@ app is `frontend/`, served at root.
 npm install
 npm run dev                 # app at http://127.0.0.1:5174
 npm run dx                  # dx task/status menu for local-model fixes
-npx vitest run             # fast jsdom suite (tests/commands/, ~545 tests, <60s)
+npx vitest run             # fast jsdom suite (tests/commands/, ~195 tests, <60s)
 npx vitest run -t "<name>" # one test by name — prefer while iterating
 npm run typecheck          # tsc --noEmit
 npm run test:browser       # Playwright (slow; layout/screenshots only)
+npm run release:check      # types + both builds + coverage + browser tests
 ```
 
-Verify with `npx vitest run` + `npm run typecheck` before claiming done. A DX
+Verify changes with `npx vitest run` + `npm run typecheck`. Before a release, run
+`npm run release:check`. A DX
 contract validator runs inside every boot — a violation throws in tests, so you
 don't have to eyeball it.
 
@@ -162,8 +166,9 @@ every feature pays a small observability tax as it lands. The contract:
 - **Pointer-stream testkit helpers** (`dragItem`, `resizeItem`) — lifts the
   gesture-only abilities (resize/drag) out of their coverage hole and lets traces
   carry gestures.
-- **Persistence as a swappable `io` system** — reload currently loses graphs; a
-  writing app needs durability (and export/import falls out nearly free).
+- **Persistence hardening.** Graphs already persist through the swappable `io`
+  system; add schema migration and corrupted-storage recovery before changing
+  the stored format.
 - **Undo as an inverse-patch listener** on the existing facts — the bus discipline
   already paid for it (Principle 21); it's observability turned into a feature.
 - **DX runtime hygiene** — surface `sim.orphanEmits()` / `silentListeners()` as

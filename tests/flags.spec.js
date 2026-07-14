@@ -71,7 +71,7 @@ test('requires.unmet warning fires when a dependency is disabled', async ({ page
   const warnings = await page.evaluate(() => window.app.contexts.dx.issues()
     .filter(i => i.rule === 'requires.unmet')
     .map(i => i.message));
-  expect(warnings.some(w => w.includes('outline') && w.includes('graph'))).toBe(true);
+  expect(warnings.some(w => w.includes('nodeLifecycle') && w.includes('graph'))).toBe(true);
 });
 
 test('split view: zoom and pan toggle independently', async ({ page }) => {
