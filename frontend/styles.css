@@ -467,37 +467,6 @@ button.icon:hover { color: var(--ink); }
 .tool-panel-stack[data-collapsed="true"] .tool-panel-head { border-bottom: 0; padding: 0; }
 .tool-panel-body { display: flex; gap: 4px; }
 .tool-panel-stack .tool-panel-body { flex-direction: column; }
-.tool-panel[data-panel-id="system-design"] {
-  width: 140px;
-  max-width: 140px;
-}
-.tool-panel[data-panel-id="system-design"] .tool-panel-body {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-}
-.design-palette-button {
-  min-width: 0;
-  height: 28px;
-  padding: 0 5px;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  font-size: 11px;
-  white-space: nowrap;
-}
-.design-palette-button:hover { border-color: var(--accent); }
-.design-node-database { color: #0369a1; }
-.design-node-kafka { color: #7c3aed; }
-.design-node-service { color: #0f766e; }
-.design-node-index { color: #b45309; }
-.design-node-user-input { color: #be123c; }
-.design-node-gateway { color: #4338ca; }
-.design-node-cache { color: #15803d; }
-.design-node-rate-limit { color: #dc2626; }
-.design-node-circuit-breaker { color: #7c2d12; }
-.design-edge-async { border-style: dashed; }
-.design-edge-read { color: #0369a1; }
-.design-edge-write { color: #b45309; }
 .node-type-panel {
   gap: 3px;
   max-width: none;
@@ -1176,6 +1145,111 @@ button.icon:hover { color: var(--ink); }
 .modal-layer[data-visual="properties"] .modal { width: min(360px, calc(100vw - 32px)); }
 .modal-layer[data-visual="perf"] .modal { width: min(1100px, calc(100vw - 32px)); }
 .modal-layer[data-visual="perf"] .modal-body { max-height: calc(100vh - 150px); overflow: auto; }
+.modal-layer[data-visual="onboarding"] .modal {
+  width: min(920px, calc(100vw - 28px));
+  top: clamp(18px, 5vh, 56px);
+}
+.modal-layer[data-visual="onboarding"] .modal-head {
+  padding: 8px 16px;
+  color: var(--text-muted);
+  font: 600 11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.modal-layer[data-visual="onboarding"] .modal-body {
+  max-height: calc(100vh - 120px);
+  padding: 0;
+  overflow: auto;
+}
+.onboarding {
+  --guide-cyan: #0e7490;
+  --guide-violet: #6d28d9;
+  --guide-amber: #b45309;
+  display: grid;
+  grid-template-columns: minmax(230px, .72fr) minmax(0, 1.4fr);
+  color: var(--ink);
+}
+.onboarding-intro {
+  padding: clamp(24px, 4vw, 46px);
+  color: #f8fafc;
+  background:
+    linear-gradient(145deg, rgba(14, 116, 144, .96), rgba(37, 58, 95, .98)),
+    var(--guide-cyan);
+}
+.onboarding-eyebrow {
+  display: block;
+  margin-bottom: 30px;
+  color: rgba(255,255,255,.7);
+  font: 600 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.onboarding h1 {
+  max-width: 11ch;
+  margin: 0;
+  font: 650 clamp(28px, 4vw, 46px)/.96 "Avenir Next Condensed", "Arial Narrow", system-ui, sans-serif;
+  letter-spacing: -.035em;
+}
+.onboarding-intro p { max-width: 30ch; margin: 22px 0 0; color: rgba(255,255,255,.82); line-height: 1.55; }
+.onboarding-keys {
+  grid-column: 1;
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0 28px 26px;
+  color: #e2e8f0;
+  background: #253a5f;
+  list-style: none;
+}
+.onboarding-keys li { display: grid; grid-template-columns: 58px 1fr; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid rgba(255,255,255,.12); }
+.onboarding-keys kbd { width: max-content; min-width: 25px; padding: 2px 5px; color: white; border: 1px solid rgba(255,255,255,.35); border-radius: 3px; font: 600 11px ui-monospace, monospace; text-align: center; }
+.onboarding-keys span { color: rgba(255,255,255,.76); font-size: 12px; }
+.onboarding-examples { grid-column: 2; grid-row: 1; padding: clamp(24px, 4vw, 42px); }
+.onboarding-section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 16px; }
+.onboarding-section-head strong { font-size: 15px; }
+.onboarding-section-head span { color: var(--text-muted); font-size: 11px; }
+.onboarding-example-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.onboarding-example {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  text-align: left;
+}
+.onboarding-example:hover { border-color: var(--guide-cyan); background: color-mix(in srgb, var(--guide-cyan) 5%, var(--panel)); }
+.onboarding-example strong, .onboarding-example small { display: block; }
+.onboarding-example strong { margin-bottom: 4px; font-size: 13px; }
+.onboarding-example small { color: var(--text-muted); line-height: 1.35; }
+.onboarding-topology { position: relative; display: block; height: 68px; border-radius: 5px; background: var(--panel-2); overflow: hidden; }
+.onboarding-topology::before, .onboarding-topology::after { content: ""; position: absolute; background: var(--line-strong); transform-origin: left center; }
+.onboarding-topology i { position: absolute; width: 10px; height: 10px; border: 2px solid currentColor; border-radius: 50%; background: var(--panel); }
+.topology-c4 { color: var(--guide-cyan); outline: 1px solid color-mix(in srgb, var(--guide-cyan) 28%, transparent); outline-offset: -10px; }
+.topology-c4 i:nth-child(1) { left: 9%; top: 28px; } .topology-c4 i:nth-child(2) { left: 38%; top: 15px; } .topology-c4 i:nth-child(3) { left: 38%; top: 42px; } .topology-c4 i:nth-child(4) { right: 9%; top: 28px; }
+.topology-c4 i:nth-child(n+5) { width: 7px; height: 7px; left: 58%; top: calc(17px + (var(--i) - 4) * 24px); }
+.topology-c4::before { left: 14%; top: 33px; width: 72%; height: 1px; }
+.topology-radial { color: var(--guide-violet); }
+.topology-radial i:first-child { left: calc(50% - 6px); top: 28px; width: 12px; height: 12px; background: color-mix(in srgb, var(--guide-violet) 20%, var(--panel)); }
+.topology-radial i:not(:first-child) { left: calc(50% - 5px + cos((var(--i) - 1) * 60deg) * 35px); top: calc(29px + sin((var(--i) - 1) * 60deg) * 24px); }
+.topology-radial::before { inset: 12px 25%; height: auto; border: 1px solid var(--line-strong); border-radius: 50%; background: transparent; }
+.topology-sequence { color: var(--guide-amber); }
+.topology-sequence i { left: calc(7% + var(--i) * 21%); top: 29px; border-radius: 2px; }
+.topology-sequence::before { left: 12%; top: 34px; width: 76%; height: 1px; }
+.topology-sequence::after { right: 15%; top: 41px; width: 34%; height: 1px; transform: rotate(165deg); }
+.onboarding-mermaid { grid-column: 2; grid-row: 2; display: grid; grid-template-columns: minmax(130px, .55fr) minmax(240px, 1.4fr) auto; align-items: center; gap: 14px; padding: 18px clamp(24px, 4vw, 42px) 30px; border-top: 1px solid var(--line); }
+.onboarding-mermaid p { margin: 4px 0 0; color: var(--text-muted); font-size: 11px; line-height: 1.35; }
+.onboarding-mermaid textarea { width: 100%; min-height: 104px; resize: vertical; padding: 10px; color: var(--ink); border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.onboarding-mermaid-import { align-self: stretch; padding-inline: 14px; border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
+@media (max-width: 720px) {
+  .onboarding { display: block; }
+  .onboarding-keys { padding-top: 0; }
+  .onboarding-example-grid { grid-template-columns: 1fr; }
+  .onboarding-mermaid { grid-template-columns: 1fr; }
+  .onboarding-mermaid-import { min-height: 42px; }
+}
 
 .palette-search {
   width: 100%;
@@ -1448,7 +1522,7 @@ button.icon:hover { color: var(--ink); }
    varflow viewer — file-projections graph mode (.varflow)
    Warm "paper" palette ported from file-projections src/ui/app.css, plus a
    read-only chrome: the canvas is for *reading* a program graph, so the node
-   editor, node-type palette, system-design observations, and outline sidebar
+   editor, node-type palette, and outline sidebar
    are hidden. Zoom/Fit stays. Scoped under .varflow so the editor is
    untouched when the app boots normally.
    ============================================================================ */
@@ -1471,7 +1545,6 @@ button.icon:hover { color: var(--ink); }
 }
 /* Hide editor affordances not applicable to a read-only program-graph view. */
 .varflow [data-panel-id="top"],
-.varflow [data-panel-id="system-design"],
 .varflow .design-hints,
 .varflow .node-type-panel,
 .varflow .item-toolbar,

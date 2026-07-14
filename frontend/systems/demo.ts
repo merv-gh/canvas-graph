@@ -4,9 +4,10 @@ import type { Id, ItemRef } from '../types';
 declare module '../types' {
   interface CustomEvents {
     'demo.run-self': void;
-    'demo.run-java': void;
-    'demo.run-concurrency': void;
-    'demo.run-jira': void;
+    'demo.run-c4': void;
+    'demo.run-math': void;
+    'demo.run-workflow': void;
+    'demo.loaded': { id: 'c4' | 'math' | 'workflow' };
   }
 }
 
@@ -26,21 +27,21 @@ export function registerDemo(system: Registry) {
         group: 'demo',
       },
       {
-        id: 'demo.render-java',
-        label: 'Render Java memory model map',
-        event: 'demo.run-java',
+        id: 'demo.render-c4',
+        label: 'Open C4 software architecture example',
+        event: 'demo.run-c4',
         group: 'demo',
       },
       {
-        id: 'demo.render-concurrency',
-        label: 'Render concurrency/process map',
-        event: 'demo.run-concurrency',
+        id: 'demo.render-math',
+        label: 'Open radial expected-value map',
+        event: 'demo.run-math',
         group: 'demo',
       },
       {
-        id: 'demo.render-jira',
-        label: 'Render JIRA workflow map',
-        event: 'demo.run-jira',
+        id: 'demo.render-workflow',
+        label: 'Open sequenced delivery workflow',
+        event: 'demo.run-workflow',
         group: 'demo',
       },
     ]);
@@ -149,82 +150,75 @@ export function registerDemo(system: Registry) {
       });
     });
 
-    on('demo.run-java', () => {
+    on('demo.run-c4', () => {
       clearGraph();
-
-      const runtime = makeContainer('Runtime Data Areas', { x: -520, y: 0 }, ['Heap', 'Thread stacks', 'Metaspace']);
-      const execution = makeContainer('Execution + JMM', { x: 0, y: 0 }, ['Threads', 'Synchronization', 'Happens-before']);
-      const toolchain = makeContainer('Toolchain', { x: 520, y: 0 }, ['Source', 'Bytecode', 'JIT']);
-
-      const source = makeNode('Java source', 'text', 'Classes, methods, fields, and generic source-level intent.', toolchain);
-      const bytecode = makeNode('Bytecode', 'square', '`javac` emits class files with symbolic refs and stack-machine ops.', toolchain);
-      const jit = makeNode('JIT compiler', 'circle', 'Hot methods become optimized machine code; deopt keeps the story reversible.', toolchain);
-      const heap = makeNode('Heap objects', 'square', 'Shared object graph: headers, fields, arrays, and references.', runtime);
-      const stacks = makeNode('Thread stacks', 'text', 'Frames hold locals, operand stacks, return points, and monitor records.', runtime);
-      const gc = makeNode('GC roots', 'circle', 'Stacks, statics, JNI refs, and VM roots seed reachability.', runtime);
-      const threads = makeNode('Threads', 'circle', 'Each thread executes frames while sharing heap state.', execution);
-      const sync = makeNode('Monitors + volatile', 'square', 'Synchronization creates ordering edges and visibility guarantees.', execution);
-      const hb = makeNode('Happens-before', 'text', '- program order\n- monitor unlock -> lock\n- volatile write -> read', execution);
-
+      const context = makeContainer('C4 · System context', { x: 0, y: 0 }, ['People', 'System', 'External'], 'columns');
+      const shop = makeContainer('C4 · Web shop containers', { x: 0, y: 0 }, ['Experience', 'Application', 'Data'], 'columns');
+      if (context && shop) emit('container.add-child', { containerId: context, childRef: { kind: 'container', id: shop }, sectionId: 's2' });
+      const customer = makeNode('Customer', 'circle', 'A person browsing products and placing an order.', context, 's1');
+      const payment = makeNode('Payment provider', 'square', 'External card authorization and settlement.', context, 's3');
+      const web = makeNode('Web application', 'text', 'Browser UI: catalog, basket, checkout.', shop, 's1');
+      const api = makeNode('Commerce API', 'square', 'Owns pricing, orders, and checkout orchestration.', shop, 's2');
+      const database = makeNode('Orders database', 'circle', 'Stores customers, baskets, and order state.', shop, 's3');
       [
-        [source, bytecode, 'compile'],
-        [bytecode, jit, 'hot path'],
-        [threads, stacks, 'executes'],
-        [stacks, heap, 'references'],
-        [gc, heap, 'traces'],
-        [threads, sync, 'coordinates'],
-        [sync, hb, 'orders'],
-        [hb, heap, 'visibility'],
-        [jit, threads, 'runs code'],
+        [customer, web, 'uses'],
+        [web, api, 'HTTPS / JSON'],
+        [api, database, 'reads + writes'],
+        [api, payment, 'authorizes'],
       ].forEach(([From, To, label]) => emit('graph.edge.create', { From, To, Label: { text: label } }));
-
       emit('layout.apply.tidy');
       emit('view.fit.all');
+      emit('demo.loaded', { id: 'c4' });
     });
 
-    on('demo.run-concurrency', () => {
+    on('demo.run-math', () => {
       clearGraph();
-      const shared = makeContainer('Shared Memory', { x: -420, y: 0 }, ['ordinary field', 'volatile flag', 'mutex-protected'], 'rows');
-      const threads = makeContainer('Process Threads', { x: 260, y: 0 }, ['Thread A', 'Thread B', 'Scheduler'], 'columns');
-
-      const write = makeNode('write x = 1', 'square', 'Ordinary write can be reordered unless a happens-before edge constrains it.', threads, 's1');
-      const volatileWrite = makeNode('volatile ready = true', 'circle', 'Volatile write publishes prior writes to later volatile readers.', threads, 's1');
-      const readFlag = makeNode('read ready', 'circle', 'Volatile read observes the publication edge.', threads, 's2');
-      const readX = makeNode('read x', 'square', 'If ready is observed, `x` is visible through happens-before.', threads, 's2');
-      const mutex = makeNode('mutex lock', 'circle', 'Mutual exclusion serializes the critical section.', shared, 's3');
-      const counter = makeNode('counter++', 'square', 'Read-modify-write needs atomicity: lock, CAS, or atomic classes.', shared, 's3');
-      const cache = makeNode('CPU cache / store buffer', 'text', 'Local execution can temporarily diverge from shared visibility.', shared, 's1');
-      const scheduler = makeNode('time slice', 'text', 'Interleavings create many legal traces; synchronization prunes them.', threads, 's3');
-
+      const expectation = makeNode('Expected value', 'circle', 'The probability-weighted center of a random variable.');
+      const variable = makeNode('Random variable X', 'square', 'A rule that assigns a number to each possible outcome.');
+      const outcomes = makeNode('Outcomes xᵢ', 'text', 'The values X can take: x₁, x₂, …');
+      const probabilities = makeNode('Probabilities pᵢ', 'text', 'Weights satisfy pᵢ ≥ 0 and Σpᵢ = 1.');
+      const formula = makeNode('E[X] = Σ xᵢpᵢ', 'square', 'Multiply each value by its probability, then add.');
+      const longRun = makeNode('Long-run mean', 'circle', 'Across many repetitions, the sample mean approaches E[X].');
+      const linearity = makeNode('Linearity', 'text', 'E[aX + bY] = aE[X] + bE[Y], even without independence.');
       [
-        [write, volatileWrite, 'program order'],
-        [volatileWrite, readFlag, 'synchronizes-with'],
-        [readFlag, readX, 'visibility'],
-        [mutex, counter, 'guards'],
-        [scheduler, write, 'runs A'],
-        [scheduler, readFlag, 'runs B'],
-        [cache, write, 'buffers'],
-        [counter, readX, 'shared state'],
+        [expectation, variable, 'describes'],
+        [expectation, outcomes, 'values'],
+        [expectation, probabilities, 'weights'],
+        [expectation, formula, 'compute'],
+        [expectation, longRun, 'interprets'],
+        [expectation, linearity, 'obeys'],
       ].forEach(([From, To, label]) => emit('graph.edge.create', { From, To, Label: { text: label } }));
-
-      emit('layout.apply.tidy');
+      emit('layout.apply.radial');
       emit('view.fit.all');
+      emit('demo.loaded', { id: 'math' });
     });
 
-    on('demo.run-jira', () => {
+    on('demo.run-workflow', () => {
       clearGraph();
-      const board = makeContainer('JIRA Workflow', { x: 0, y: 0 }, ['Backlog', 'In progress', 'Review', 'Done'], 'columns');
-      const idea = makeNode('Clarify request', 'text', 'Question, acceptance criteria, and rough slices.', board, 's1');
-      const build = makeNode('Implement slice', 'square', 'Code + local verification.', board, 's2');
-      const review = makeNode('Review / QA', 'circle', 'Check behavior, edge cases, and regressions.', board, 's3');
-      const done = makeNode('Release note', 'text', 'Merge once quality gates and story are clear.', board, 's4');
+      const board = makeContainer('Delivery workflow', { x: 0, y: 0 }, ['Frame', 'Build', 'Check', 'Release'], 'columns');
+      const request = makeNode('Frame the change', 'text', 'State the user outcome and the smallest acceptance check.', board, 's1');
+      const implement = makeNode('Implement', 'square', 'Change one coherent slice and keep it reviewable.', board, 's2');
+      const tests = makeNode('Automated checks', 'circle', 'Types, focused regression, then the full release gate.', board, 's3');
+      const review = makeNode('Review', 'square', 'Inspect behavior, architecture boundaries, and failure paths.', board, 's3');
+      const release = makeNode('Release', 'text', 'Publish the verified artifact and its concise change note.', board, 's4');
       [
-        [idea, build, 'ready'],
-        [build, review, 'PR'],
-        [review, done, 'approved'],
+        [request, implement, 'ready'],
+        [implement, tests, 'verify'],
+        [tests, review, 'green'],
+        [review, release, 'approved'],
+        [review, implement, 'changes requested'],
       ].forEach(([From, To, label]) => emit('graph.edge.create', { From, To, Label: { text: label } }));
       emit('layout.apply.tidy');
       emit('view.fit.all');
+      emit('demo.loaded', { id: 'workflow' });
+    });
+    on('app.start', () => {
+      const id = new URLSearchParams(location.search).get('demo');
+      const event = id === 'c4' ? 'demo.run-c4'
+        : id === 'math' ? 'demo.run-math'
+        : id === 'workflow' ? 'demo.run-workflow'
+        : null;
+      if (event) queueMicrotask(() => emit(event));
     });
   }, { requires: ['graph', 'render', 'containers'] });
 }

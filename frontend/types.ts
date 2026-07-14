@@ -141,7 +141,7 @@ export interface CustomEvents {}
  *  Augment to add a key without editing `AppCtx`. */
 export interface CustomExposable {}
 
-export type ModalVisual = 'panel' | 'command' | 'properties' | 'perf' | 'present';
+export type ModalVisual = 'panel' | 'command' | 'properties' | 'perf' | 'present' | 'onboarding';
 
 /** Framework events guaranteed by the frontend runtime. Domain events live next to
  *  their owners via `CustomEvents` augmentation. */
@@ -172,6 +172,7 @@ interface BuiltinEvents {
    *  commandModal, configurable); they all go through these two events. */
   'modal.open': { title?: string; body?: Renderable; visual?: ModalVisual };
   'modal.close': void;
+  'modal.closed': void;
   /** decorations facet-change notification (item modes / overlays). Render
    *  listens to redraw stage chrome (selection rings, jump letters, etc.). */
   'decoration.changed': { facet?: 'modes' | 'overlays'; source?: string };

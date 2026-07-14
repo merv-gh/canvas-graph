@@ -1,15 +1,14 @@
 import {
-  flattenSnapshotTree,
   snapshot,
   snapshotTree,
   traceToTest,
   type Assertion,
   type Registry,
   type Snapshot,
-  type SnapshotNode,
 } from '../core';
 import { Places } from '../types';
 import type { Trace } from '../core';
+import { buildDebugAssertView, buildDebugReplayView, buildDebugTree } from './debug-views';
 
 declare module '../types' {
   interface CustomEvents {
@@ -224,130 +223,16 @@ export function registerDebug(system: Registry) {
       writeRecording(recording);
     });
 
-    const renderTreeNode = (node: SnapshotNode, depth: number): HTMLElement => {
-      const row = document.createElement('div');
-      row.className = `debug-tree-row depth-${depth}`;
-      row.dataset.path = node.code;
-      const label = document.createElement('span');
-      label.className = 'debug-tree-label';
-      label.textContent = node.label;
-      row.append(label);
-      if (node.kind === 'literal') {
-        const value = document.createElement('button');
-        value.type = 'button';
-        value.className = 'debug-tree-value';
-        value.dataset.snapshotPick = '';
-        value.dataset.code = node.code;
-        value.dataset.matcher = node.value === null ? 'toBeNull' : node.value === undefined ? 'toBeUndefined' : 'toBe';
-        value.dataset.expected = node.value === null || node.value === undefined ? '' : JSON.stringify(node.value);
-        value.textContent = node.value === null ? 'null' : node.value === undefined ? 'undefined' : JSON.stringify(node.value);
-        value.title = `Click → expect(${node.code}).${value.dataset.matcher}(${value.dataset.expected})`;
-        row.append(value);
-      } else if (node.kind === 'array') {
-        const length = (node.value as unknown[]).length;
-        const value = document.createElement('button');
-        value.type = 'button';
-        value.className = 'debug-tree-value debug-tree-array';
-        value.dataset.snapshotPick = '';
-        value.dataset.code = node.code;
-        value.dataset.matcher = 'toHaveLength';
-        value.dataset.expected = String(length);
-        value.textContent = `Array(${length})`;
-        value.title = `Click → expect(${node.code}).toHaveLength(${length})`;
-        row.append(value);
-      } else {
-        const summary = document.createElement('span');
-        summary.className = 'debug-tree-summary';
-        summary.textContent = '{…}';
-        row.append(summary);
-      }
-      return row;
-    };
-
-    const buildTree = (root: SnapshotNode, query: string): HTMLElement => {
-      const list = document.createElement('div');
-      list.className = 'debug-tree';
-      const q = query.trim().toLowerCase();
-      const flat = flattenSnapshotTree(root);
-      const visible = q
-        ? flat.filter(n =>
-            n.path.toLowerCase().includes(q) ||
-            n.code.toLowerCase().includes(q) ||
-            n.label.toLowerCase().includes(q))
-        : flat;
-      visible.forEach(n => {
-        // Depth derived from the snapshot-path separators — matches the
-        // visual nesting in the tree.
-        const depth = (n.path.match(/[.[]/g) || []).length;
-        list.append(renderTreeNode(n, depth));
-      });
-      if (!visible.length) {
-        const empty = document.createElement('div');
-        empty.className = 'debug-tree-empty';
-        empty.textContent = `No matches for "${query}".`;
-        list.append(empty);
-      }
-      return list;
-    };
-
     const buildAssertModal = (): HTMLElement => {
       const snap = lastSnapshot ?? snapshot(ctx);
       lastSnapshot = snap;
-      const tree = snapshotTree(snap);
-      const wrap = document.createElement('section');
-      wrap.className = 'debug-assert';
-
-      const left = document.createElement('div');
-      left.className = 'debug-state';
-      const search = document.createElement('input');
-      search.className = 'debug-search';
-      search.placeholder = 'Filter state… (ctx.graphs.current.nodes…)';
-      search.value = assertSearch;
-      search.autofocus = true;
-      left.append(search);
-      left.append(buildTree(tree, assertSearch));
-      wrap.append(left);
-
-      const right = document.createElement('div');
-      right.className = 'debug-test';
-      const heading = document.createElement('div');
-      heading.className = 'debug-test-head';
-      const count = document.createElement('strong');
-      count.textContent = `${trace.length} events captured · ${assertions.length} assertion${assertions.length === 1 ? '' : 's'}`;
-      heading.append(count);
-      const clearAsserts = document.createElement('button');
-      clearAsserts.type = 'button';
-      clearAsserts.dataset.command = 'debug.assert.clear-asserts';
-      clearAsserts.textContent = 'Clear asserts';
-      clearAsserts.className = 'icon-button';
-      heading.append(clearAsserts);
-      right.append(heading);
-
-      const code = document.createElement('textarea');
-      code.className = 'debug-code';
-      code.spellcheck = false;
-      code.value = manualOverride ?? traceToTest({ trace, assertions });
-      right.append(code);
-
-      const actions = document.createElement('div');
-      actions.className = 'debug-actions';
-      const copy = document.createElement('button');
-      copy.type = 'button';
-      copy.dataset.command = 'debug.assert.copy';
-      copy.textContent = 'Copy';
-      const dl = document.createElement('button');
-      dl.type = 'button';
-      dl.dataset.command = 'debug.assert.download';
-      dl.textContent = 'Download .test.ts';
-      const replay = document.createElement('button');
-      replay.type = 'button';
-      replay.dataset.command = 'debug.assert.replay';
-      replay.textContent = 'Replay in place';
-      actions.append(copy, dl, replay);
-      right.append(actions);
-
-      wrap.append(right);
-      return wrap;
+      return buildDebugAssertView({
+        tree: snapshotTree(snap),
+        query: assertSearch,
+        traceCount: trace.length,
+        assertionCount: assertions.length,
+        code: manualOverride ?? traceToTest({ trace, assertions }),
+      });
     };
 
     const reopenAssertModal = () => emit('modal.open', {
@@ -382,7 +267,7 @@ export function registerDebug(system: Registry) {
       const tree = snapshotTree(lastSnapshot ?? snapshot(ctx));
       modalBody.querySelector('.debug-tree')?.remove();
       modalBody.querySelector('.debug-tree-empty')?.remove();
-      modalBody.append(buildTree(tree, query));
+      modalBody.append(buildDebugTree(tree, query));
     });
 
     on('debug.assert.edit', ({ code }) => {
@@ -435,29 +320,7 @@ export function registerDebug(system: Registry) {
       emit('modal.open', {
         title: 'Debug · paste & replay',
         visual: 'panel',
-        body: () => {
-          const wrap = document.createElement('section');
-          wrap.className = 'debug-replay';
-          const hint = document.createElement('p');
-          hint.className = 'debug-replay-hint';
-          hint.textContent = 'Paste a recorded trace (array of {name, data, at}) and Run.';
-          wrap.append(hint);
-          const textarea = document.createElement('textarea');
-          textarea.spellcheck = false;
-          textarea.placeholder = '[\n  { "name": "editing.node.create", "data": {}, "at": 0 }\n]';
-          textarea.value = replayDraft || JSON.stringify(trace, null, 2);
-          wrap.append(textarea);
-          const actions = document.createElement('div');
-          actions.className = 'debug-actions';
-          const run = document.createElement('button');
-          run.type = 'button';
-          run.dataset.command = 'debug.replay.run';
-          run.textContent = 'Run';
-          run.className = 'primary';
-          actions.append(run);
-          wrap.append(actions);
-          return wrap;
-        },
+        body: () => buildDebugReplayView(replayDraft || JSON.stringify(trace, null, 2)),
       });
     });
 

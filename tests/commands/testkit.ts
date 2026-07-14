@@ -32,7 +32,9 @@ export function bootApp(flags: FeatureFlags = {}, io: ReturnType<typeof memoryIo
   registerSystems(withKind(plugins, 'system'));
   registerAbilitySystems(withKind(plugins, 'ability'));
   registerFeatures(withKind(plugins, 'feature'));
-  const ctx = createAppContext(graphStore(), appModel, flags, io);
+  // Most command tests exercise the canvas directly. Onboarding has its own
+  // explicit tests and remains enabled in the real browser entrypoint.
+  const ctx = createAppContext(graphStore(), appModel, { onboarding: false, ...flags }, io);
   installRuntimeFeatureManager(ctx, plugins);
   plugins.start(ctx);
   ctx.bus.emit('app.start');

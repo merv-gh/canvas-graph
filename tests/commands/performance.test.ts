@@ -30,14 +30,17 @@ const syntheticSnapshot: GraphSnapshot = {
 };
 
 describe('performance metrics', () => {
-  it('LCP: boot under 500ms', async () => {
+  it('LCP: boot stays inside its instrumentation-aware budget', async () => {
     const t0 = performance.now();
     const ctx = bootApp({ dx: false, demo: false, debug: false });
     await settle();
     const bootMs = performance.now() - t0;
 
     console.log(`  Boot: ${bootMs.toFixed(0)}ms`);
-    expect(bootMs).toBeLessThan(500);
+    // V8 coverage instruments every loaded module and is not a product-speed
+    // measurement. release:check runs this file once without instrumentation
+    // at the real 500ms budget, then again under coverage with headroom.
+    expect(bootMs).toBeLessThan(process.env.COVERAGE ? 750 : 500);
     expect(ctx.contexts.commands.all().length).toBeGreaterThan(0);
   }, 5000);
 

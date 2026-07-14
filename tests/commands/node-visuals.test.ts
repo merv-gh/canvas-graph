@@ -79,15 +79,16 @@ describe('node visuals and explanation maps', () => {
     expect(layouts.length).toBeGreaterThan(beforeDeleteLayouts);
   });
 
-  it('renders the Java memory model demo as a verifiable explanation map', async () => {
+  it('renders a nested C4 example with containers and grouping', async () => {
     const ctx = bootApp();
-    expect(runCommand(ctx, 'demo.render-java')).toBe(true);
+    expect(runCommand(ctx, 'demo.render-c4')).toBe(true);
     await settle();
 
     const snap = snapshot(ctx);
-    expect(ctx.graphs.current.nodes().length).toBeGreaterThanOrEqual(9);
-    expect(ctx.graphs.current.edges().length).toBeGreaterThanOrEqual(8);
-    expect(containers(ctx)).toHaveLength(3);
+    expect(ctx.graphs.current.nodes().length).toBeGreaterThanOrEqual(5);
+    expect(ctx.graphs.current.edges().length).toBeGreaterThanOrEqual(4);
+    expect(containers(ctx)).toHaveLength(2);
+    expect(containers(ctx).some(container => container.Children.some(child => child.kind === 'container'))).toBe(true);
     expect(containers(ctx).some(container => (container.Sections?.length ?? 0) >= 3)).toBe(true);
     expect(snap.ui.rendered.squareNodes).toBeGreaterThan(0);
     expect(snap.ui.rendered.circleNodes).toBeGreaterThan(0);
@@ -95,22 +96,24 @@ describe('node visuals and explanation maps', () => {
     expect(snap.ui.rendered.sectionedContainers).toBeGreaterThan(0);
   });
 
-  it('renders concurrency and workflow examples with sectioned containers', async () => {
+  it('renders radial math and sequenced workflow examples', async () => {
     const ctx = bootApp();
-    expect(runCommand(ctx, 'demo.render-concurrency')).toBe(true);
+    expect(runCommand(ctx, 'demo.render-math')).toBe(true);
     await settle();
-    expect(ctx.graphs.current.nodes().some(node => node.Label.text.includes('volatile'))).toBe(true);
-    expect(ctx.graphs.current.edges().some(edge => edge.Label?.text === 'synchronizes-with')).toBe(true);
-    expect(containers(ctx).some(container => container.SectionAxis === 'columns')).toBe(true);
+    expect(ctx.graphs.current.nodes().some(node => node.Label.text === 'Expected value')).toBe(true);
+    expect(ctx.graphs.current.nodes().some(node => node.Label.text.includes('Σ'))).toBe(true);
+    expect(ctx.graphs.current.edges()).toHaveLength(6);
 
-    expect(runCommand(ctx, 'demo.render-jira')).toBe(true);
+    expect(runCommand(ctx, 'demo.render-workflow')).toBe(true);
     await settle();
     expect(ctx.graphs.current.nodes().map(node => node.Label.text)).toEqual([
-      'Clarify request',
-      'Implement slice',
-      'Review / QA',
-      'Release note',
+      'Frame the change',
+      'Implement',
+      'Automated checks',
+      'Review',
+      'Release',
     ]);
-    expect(containers(ctx)[0].Sections?.map(section => section.title)).toEqual(['Backlog', 'In progress', 'Review', 'Done']);
+    expect(containers(ctx)[0].Sections?.map(section => section.title)).toEqual(['Frame', 'Build', 'Check', 'Release']);
+    expect(ctx.graphs.current.edges().some(edge => edge.Label?.text === 'changes requested')).toBe(true);
   });
 });

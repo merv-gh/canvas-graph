@@ -14,7 +14,7 @@ import type { EdgeKind, GraphSnapshot, NodeType } from '../model';
  *     edges:[{from,to,kind,label,cross}] }
  *
  * We adapt that to a `GraphSnapshot` and drive the same import path the built-in
- * system-design demos use (`graph.import.snapshot`). Nodes arrive position-less,
+ * canonical demos use (`graph.import.snapshot`). Nodes arrive position-less,
  * so after import we run the layered `tidy` layout and fit the camera.
  *
  * Boot:  ?varflow=<url>            fetch JSON from a file-projections server

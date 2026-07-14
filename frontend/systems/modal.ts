@@ -20,6 +20,7 @@ export function registerModal(system: Registry) {
     on('modal.close', () => {
       open = false;
       emit('render.view.clear', { place: Places.Modal, key: 'modal' });
+      emit('modal.closed');
     });
     on('modal.open', ({ title = 'Modal', body, visual = 'panel' }) => {
       open = true;

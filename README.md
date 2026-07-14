@@ -6,9 +6,9 @@ Event-driven, plugin-structured TypeScript; the architecture is judged by how
 cheaply it can be regrouped and how easily a bug can be found, reproduced, and
 fixed — by a human *or* a local model.
 
-The app is `frontend/`, served at root. Version 0.1 is distributed as a static
-web build and as an embeddable IIFE library; this repository is intentionally
-not configured for npm publication.
+The app is `frontend/`, served at root. Version 0.1 is distributed only as a
+static web build; the experimental embeddable library is outside the first
+release and this repository is intentionally not configured for npm publication.
 
 ## Quickstart
 
@@ -16,17 +16,22 @@ not configured for npm publication.
 npm install
 npm run dev                 # app at http://127.0.0.1:5174
 npm run dx                  # dx task/status menu for local-model fixes
-npx vitest run             # fast jsdom suite (tests/commands/, ~195 tests, <60s)
+npx vitest run             # fast jsdom suite (tests/commands/, ~198 tests, <60s)
 npx vitest run -t "<name>" # one test by name — prefer while iterating
 npm run typecheck          # tsc --noEmit
 npm run test:browser       # Playwright (slow; layout/screenshots only)
-npm run release:check      # types + both builds + coverage + browser tests
+npm run release:check      # app build + DX + types + coverage + browser tests
 ```
 
 Verify changes with `npx vitest run` + `npm run typecheck`. Before a release, run
 `npm run release:check`. A DX
 contract validator runs inside every boot — a violation throws in tests, so you
 don't have to eyeball it.
+
+Canonical hosted-demo routes are `?demo=c4`, `?demo=math`, and
+`?demo=workflow`. First-time visitors see the in-app guide once; the
+`showDemo=false` cookie suppresses it on later visits, while the Guide command
+always reopens it.
 
 ## Repo map
 

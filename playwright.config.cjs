@@ -8,6 +8,15 @@ module.exports = defineConfig({
   reporter: [['./tests/screenshot-reporter.cjs']],
   use: {
     baseURL: 'http://127.0.0.1:5174',
+    // Existing browser specs exercise the canvas directly. First-visit cookie
+    // behavior is covered by the focused onboarding suite.
+    storageState: {
+      cookies: [{
+        name: 'showDemo', value: 'false', domain: '127.0.0.1', path: '/',
+        expires: -1, httpOnly: false, secure: false, sameSite: 'Lax',
+      }],
+      origins: [],
+    },
     viewport: { width: 800, height: 600 },
     deviceScaleFactor: 1,
     screenshot: 'only-on-failure',

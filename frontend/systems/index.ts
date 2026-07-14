@@ -25,6 +25,7 @@ import { registerModal } from './modal';
 import { registerItemToolbar } from './item-toolbar';
 import { registerNodeAutosize } from './node-autosize';
 import { registerNodeVisuals } from './node-visuals';
+import { registerOnboarding } from './onboarding';
 import { registerPerfPanel } from './perf-panel';
 import { registerPresent } from './present';
 import { registerRender } from './render';
@@ -77,6 +78,7 @@ export function registerSystems(system: Registry) {
   registerPresent(system);
   registerDetail(system);
   registerDemo(system);
+  registerOnboarding(system);
   registerDebug(system);
   registerScenario(system);
   registerShare(system);

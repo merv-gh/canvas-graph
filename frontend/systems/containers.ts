@@ -1,16 +1,21 @@
-import { collapsible, configurable, draggable, editable, nudgeable, resizeable, selectable } from '../abilities';
 import { boundsOf, createNesting, expandRect, itemFoldId, itemIdFrom, rectCenter, refKey, sameItemRef, unionRect, type NestApi, type Registry } from '../core';
-import { Places, Slots } from '../types';
+import { Places } from '../types';
 import type {
-  EntityDef,
-  EntityRenderer,
   Id,
   ItemRef,
   Position,
-  PropertyDef,
   Rect,
   Size,
 } from '../types';
+import {
+  createContainerEntity,
+  DEFAULT_CONTAINER_SIZE,
+  firstSectionId,
+  sanitizeContainerSections,
+  type Container,
+  type ContainerPatch,
+  type SectionAxis,
+} from './container-entity';
 
 /**
  * Container system — one file, one mental model.
@@ -46,59 +51,10 @@ declare module '../types' {
   }
 }
 
-type SectionAxis = 'rows' | 'columns';
-type ContainerSection = { id: Id; title: string; weight: number };
-type Container = {
-  id: Id;
-  kind: 'container';
-  Label: { text: string };
-  Position: Position;
-  Size: Size;
-  /** Default true: visual rect is auto-fit from children. Manual resize flips this. */
-  AutoFit?: boolean;
-  Sections?: ContainerSection[];
-  SectionAxis?: SectionAxis;
-  ChildSections?: Record<string, Id>;
-  Children: ItemRef[];
-};
-type ContainerPatch = Partial<Pick<Container, 'Label' | 'Position' | 'Size' | 'AutoFit' | 'Sections' | 'SectionAxis' | 'ChildSections'>>;
-
-const DEFAULT_SIZE: Size = { w: 320, h: 200 };
 /** Compact size used when collapsed — just enough room for the label badge. */
 const COLLAPSED_SIZE: Size = { w: 140, h: 36 };
 const PADDING = 24;
 const LABEL_BAND = 18;
-
-const parseSections = (value: unknown, existing: ContainerSection[] = []): ContainerSection[] =>
-  String(value)
-    .split(/\r?\n/)
-    .map(title => title.trim())
-    .filter(Boolean)
-    .map((title, index) => ({ id: existing[index]?.id ?? `s${index + 1}`, title, weight: existing[index]?.weight ?? 1 }));
-const validAxis = (value: unknown): value is SectionAxis => value === 'rows' || value === 'columns';
-const firstSectionId = (c: Container) => c.Sections?.[0]?.id;
-const sanitizeSections = (c: Container) => {
-  c.Sections = c.Sections?.map((section, index) => ({
-    id: section.id || `s${index + 1}`,
-    title: section.title || `Section ${index + 1}`,
-    weight: Math.max(0.15, Number(section.weight) || 1),
-  })) ?? [];
-  c.SectionAxis = c.SectionAxis ?? 'rows';
-  const valid = new Set(c.Sections.map(section => section.id));
-  const refKeys = new Set(c.Children.map(refKey));
-  const fallback = firstSectionId(c);
-  const next: Record<string, Id> = {};
-  Object.entries(c.ChildSections ?? {}).forEach(([key, sectionId]) => {
-    if (!refKeys.has(key)) return;
-    if (valid.has(sectionId)) next[key] = sectionId;
-    else if (fallback) next[key] = fallback;
-  });
-  c.Children.forEach(child => {
-    const key = refKey(child);
-    if (fallback && !next[key]) next[key] = fallback;
-  });
-  c.ChildSections = next;
-};
 
 // ---------- The system ----------
 
@@ -148,7 +104,7 @@ export function registerContainers(system: Registry) {
       return parent?.kind === 'container' ? containersHere().get(parent.id) ?? null : null;
     };
     const assignChildSection = (c: Container, childRef: ItemRef, sectionId?: Id) => {
-      sanitizeSections(c);
+      sanitizeContainerSections(c);
       if (!c.Sections?.length) return false;
       const valid = new Set(c.Sections.map(section => section.id));
       const next = sectionId && valid.has(sectionId) ? sectionId : firstSectionId(c);
@@ -221,11 +177,11 @@ export function registerContainers(system: Registry) {
     const expandedRect = (c: Container): Rect => {
       if (c.AutoFit === false || c.Sections?.length) return boundsOf(c)!;
       const kids = c.Children.map(childBounds).filter((r): r is Rect => !!r);
-      if (!kids.length) return boundsOf({ Position: c.Position, Size: DEFAULT_SIZE })!;
+      if (!kids.length) return boundsOf({ Position: c.Position, Size: DEFAULT_CONTAINER_SIZE })!;
       return expandRect(kids.reduce(unionRect), PADDING, LABEL_BAND);
     };
     const visualRect = (c: Container | null): Rect => {
-      if (!c) return boundsOf({ Position: { x: 0, y: 0 }, Size: DEFAULT_SIZE })!;
+      if (!c) return boundsOf({ Position: { x: 0, y: 0 }, Size: DEFAULT_CONTAINER_SIZE })!;
       // Folded → compact badge centered *live* on where the children are, so it
       // never jumps and uncollapse restores exactly (no stored position).
       if (folded(c)) return boundsOf({ Position: rectCenter(expandedRect(c)), Size: COLLAPSED_SIZE })!;
@@ -233,107 +189,7 @@ export function registerContainers(system: Registry) {
     };
 
     // ---------- Entity declaration ----------
-    const render: EntityRenderer<Container> = {
-      layer: 'html',
-      bounds: visualRect,
-      draw(c, r) {
-        const rect = visualRect(c);
-        const el = document.createElement('div');
-        el.className = 'container';
-        if (folded(c)) el.classList.add('collapsed');
-        if (c.AutoFit === false) el.classList.add('manual');
-        el.dataset.sectionAxis = c.SectionAxis ?? 'rows';
-        el.style.left = `${rect.x + rect.w / 2}px`;
-        el.style.top = `${rect.y + rect.h / 2}px`;
-        el.style.width = `${rect.w}px`;
-        el.style.height = `${rect.h}px`;
-        const ref = r.refOf(c.id);
-        r.tagItem(el, ref);
-        r.applyItemModes(el, ref);
-        if (!folded(c) && c.Sections?.length) {
-          el.classList.add('has-sections');
-          const sections = document.createElement('div');
-          sections.className = 'container-sections';
-          sections.dataset.axis = c.SectionAxis ?? 'rows';
-          c.Sections.forEach((section, index) => {
-            const band = document.createElement('div');
-            band.className = 'container-section';
-            band.dataset.sectionId = section.id;
-            band.style.flexGrow = `${Math.max(0.15, section.weight ?? 1)}`;
-            const title = document.createElement('span');
-            title.dataset.containerSectionTitle = '';
-            title.dataset.containerId = c.id;
-            title.dataset.sectionId = section.id;
-            title.tabIndex = 0;
-            title.textContent = section.title;
-            band.append(title);
-            sections.append(band);
-            if (index < (c.Sections?.length ?? 0) - 1) {
-              const divider = document.createElement('button');
-              divider.type = 'button';
-              divider.className = 'container-section-divider';
-              divider.dataset.containerSectionResize = '';
-              divider.dataset.containerId = c.id;
-              divider.dataset.sectionIndex = `${index}`;
-              divider.setAttribute('aria-label', 'Resize container sections');
-              sections.append(divider);
-            }
-          });
-          el.append(sections);
-        }
-        // Editable label (data-editable-title triggers the generic edit flow).
-        const label = document.createElement('div');
-        label.className = 'container-label';
-        label.dataset.editableTitle = '';
-        label.textContent = c.Label.text;
-        // Resize handle slot — wireAffordances injects data-resize-handle.
-        const handle = document.createElement('div');
-        handle.className = 'container-resize';
-        handle.dataset.slot = Slots.Resize;
-        el.append(label, handle);
-        r.wireAffordances(el);
-        return el;
-      },
-    };
-
-    const properties: PropertyDef<Container, ContainerPatch>[] = [
-      { id: 'title', label: 'Title', input: 'text',
-        value: c => c.Label.text,
-        patch: (_c, v) => ({ Label: { text: String(v) } }) },
-      { id: 'width', label: 'Width', input: 'number', min: 120, step: 8,
-        value: c => c.Size.w,
-        patch: (c, v) => Number.isFinite(Number(v)) ? { Size: { ...c.Size, w: Math.max(120, Number(v)) } } : undefined },
-      { id: 'height', label: 'Height', input: 'number', min: 80, step: 8,
-        value: c => c.Size.h,
-        patch: (c, v) => Number.isFinite(Number(v)) ? { Size: { ...c.Size, h: Math.max(80, Number(v)) } } : undefined },
-      { id: 'sectionAxis', label: 'Section axis', input: 'select', group: 'Structure',
-        options: [{ value: 'rows', label: 'Rows' }, { value: 'columns', label: 'Columns' }],
-        value: c => c.SectionAxis ?? 'rows',
-        patch: (_c, v) => validAxis(v) ? { SectionAxis: v } : undefined },
-      { id: 'sections', label: 'Sections', input: 'textarea', rows: 4, group: 'Structure',
-        value: c => c.Sections?.map(s => s.title).join('\n') ?? '',
-        patch: (c, v) => ({ Sections: parseSections(v, c.Sections) }) },
-    ];
-
-    const entity: EntityDef<Container, ContainerPatch> = {
-      kind: 'container',
-      label: 'Container',
-      labelOf: c => c.Label.text || c.id,
-      order: -10, // Paint behind nodes/edges.
-      // All 7 abilities — container satisfies every structural shape.
-      abilities: [
-        selectable<Container>(),
-        draggable<Container>(),
-        nudgeable<Container>(),
-        editable<Container>(),
-        collapsible<Container>(),
-        configurable<Container>(),
-        resizeable<Container>(),
-      ],
-      properties,
-      render,
-    };
-    const offEntity = ctx.model.registerEntity(entity);
+    const offEntity = ctx.model.registerEntity(createContainerEntity(visualRect, folded));
     const offCollection = ctx.model.registerCollection({
       id: 'containers',
       label: 'Containers',
@@ -519,7 +375,7 @@ export function registerContainers(system: Registry) {
         id, kind: 'container',
         Label: draft.Label ?? { text: id },
         Position: draft.at ?? { x: 0, y: 0 },
-        Size: { ...DEFAULT_SIZE },
+        Size: { ...DEFAULT_CONTAINER_SIZE },
         Sections: [],
         SectionAxis: 'rows',
         ChildSections: {},
@@ -539,7 +395,7 @@ export function registerContainers(system: Registry) {
           kind: 'container',
           Label: { text: input.label },
           Position: { x: 0, y: 0 },
-          Size: { ...DEFAULT_SIZE },
+          Size: { ...DEFAULT_CONTAINER_SIZE },
           AutoFit: true,
           Sections: [],
           SectionAxis: 'rows',
@@ -675,7 +531,7 @@ export function registerContainers(system: Registry) {
       const p = patch as ContainerPatch;
       const oldPos = { ...c.Position };
       Object.assign(c, p);
-      if (p.Sections || p.SectionAxis || p.ChildSections) sanitizeSections(c);
+      if (p.Sections || p.SectionAxis || p.ChildSections) sanitizeContainerSections(c);
       // Drag cascade: when the container moves, children move with it.
       if (p.Position && (p.Position.x !== oldPos.x || p.Position.y !== oldPos.y)) {
         const dx = p.Position.x - oldPos.x;

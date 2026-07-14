@@ -28,8 +28,10 @@
 - `tool-panel.ts` — stage tool-panel **registry**: systems `declarePanel({id,anchor,foldId?,movable?,layout?,mountWhen?})` and route a top button to it via `SystemAffordance.panel`. Top toolbar is fixed + centered (`top-center`, not movable/collapsible); start-slot buttons cluster into `.tool-group`s via `SystemAffordance.group` (`edit`/`layout`). *The* seam for new floating panels (zoom/log).
 - `item-toolbar.ts` — floating toolbar above selected item, built from entity affordances.
 - `log.ts` — event log panel.
-- `demo.ts` — renders the app's own plugin graph as a demo doc.
-- `debug.ts` — in-app recorder → snapshot → assert-picker → generated `.test.ts` (the agent pipeline).
+- `demo.ts` — canonical C4, radial math, workflow, and app self-graph examples.
+- `onboarding.ts` — first-visit field guide, `showDemo` cookie, example launcher, Mermaid workbench.
+- `debug.ts` — recorder behavior and generated-test actions; DOM builders live in `debug-views.ts`.
+- `container-entity.ts` — container data shape, entity declaration, renderer, and properties; behavior/storage stay in `containers.ts`.
 - `dx.ts` — boot-time contract validator (`runDx`); errors throw, warnings log.
 
 Adding one: export `register<Name>(system: Registry)`, call `system('name', ctx => {...},

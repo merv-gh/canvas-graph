@@ -4,6 +4,7 @@ node_modules/
 test-results/
 playwright-report/
 coverage/
+dist-lib/
 frontend/dist/
 
 # secrets — .env holds SSH creds for the ollama box; never commit

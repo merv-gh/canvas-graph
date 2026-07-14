@@ -119,7 +119,7 @@ export const decodeGraph = async (encoded: string): Promise<GraphSnapshot | null
       return fromCompact(JSON.parse(new TextDecoder().decode(bytes)) as CompactGraph);
     }
     // Legacy: base64url(JSON) — either the new compact shape or the old
-    // system-design shape (both carry {n,e}). Read the fields we understand.
+    // Legacy compact shape (both carry {n,e}). Read the fields we understand.
     const raw = JSON.parse(new TextDecoder().decode(base64UrlToBytes(encoded))) as CompactGraph;
     if (!Array.isArray(raw.n) || !Array.isArray(raw.e)) return null;
     return fromCompact(raw);

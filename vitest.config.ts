@@ -11,7 +11,8 @@ export default defineConfig({
       include: ['frontend/**/*.ts'],
       exclude: [
         'frontend/app.ts',
-        'frontend/systems/system-design.ts',
+        // Experimental embed API is not part of the 0.1 static-app release.
+        'frontend/lib.ts',
         'frontend/systems/varflow.ts',
         // WebGPU device plumbing — needs a real GPU; jsdom has no navigator.gpu.
         // The CPU side (core/gpu-scene.ts) stays covered; the device path is
