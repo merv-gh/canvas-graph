@@ -6,7 +6,7 @@
 
 import assert from 'node:assert';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +18,7 @@ import { Workspace } from './ollama-runner/workspace.mjs';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 let passed = 0;
+let skipped = 0;
 const ok = (name, fn) => {
   try { fn(); passed++; console.log(`✓ ${name}`); }
   catch (err) { console.error(`✗ ${name}\n  ${err.message}`); process.exitCode = 1; }
@@ -25,6 +26,12 @@ const ok = (name, fn) => {
 const okAsync = async (name, fn) => {
   try { await fn(); passed++; console.log(`✓ ${name}`); }
   catch (err) { console.error(`✗ ${name}\n  ${err.message}`); process.exitCode = 1; }
+};
+const graphOk = (name, fn) => {
+  const available = process.env.DX_SKIP_GRAPH_DB !== '1'
+    && existsSync(join(REPO, '.code-review-graph/graph.db'));
+  if (available) ok(name, fn);
+  else { skipped++; console.log(`↷ ${name} (graph.db unavailable)`); }
 };
 
 // --- inspect: commands ---
@@ -169,15 +176,15 @@ ok('gen_test: rejects assertion-free regression tests', () => {
 });
 
 // --- graph queries ---
-ok('graph find: locates the editable ability source', () => {
+graphOk('graph find: locates the editable ability source', () => {
   const hits = graphQuery(REPO, 'find', 'registerEditable');
   assert(hits.some(h => h.file === 'frontend/abilities/editable.ts'), JSON.stringify(hits).slice(0, 300));
 });
-ok('graph callers: someone calls registerJump', () => {
+graphOk('graph callers: someone calls registerJump', () => {
   const hits = graphQuery(REPO, 'callers', 'registerJump');
   assert(hits.length >= 1 && hits[0].file.includes('systems'), JSON.stringify(hits).slice(0, 300));
 });
-ok('graph file: symbols of containers.ts', () => {
+graphOk('graph file: symbols of containers.ts', () => {
   const hits = graphQuery(REPO, 'file', 'frontend/systems/containers.ts');
   assert(hits.some(h => h.name === 'registerContainers'), JSON.stringify(hits.map(h => h.name)));
 });
@@ -789,4 +796,4 @@ await okAsync('set_command + add_command take effect in a booted copy', async ()
   }
 });
 
-console.log(`\n${passed} checks passed${process.exitCode ? ' (with FAILURES above)' : ''}`);
+console.log(`\n${passed} checks passed${skipped ? `, ${skipped} skipped` : ''}${process.exitCode ? ' (with FAILURES above)' : ''}`);
