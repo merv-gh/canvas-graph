@@ -15,6 +15,7 @@ import { registerDx } from './dx';
 import { registerFoldable } from './foldable';
 import { registerFocus } from './focus';
 import { registerGraph } from './graph';
+import { registerHistory } from './history';
 import { registerInput } from './input';
 import { registerIo } from './io';
 import { registerJump } from './jump';
@@ -26,16 +27,16 @@ import { registerItemToolbar } from './item-toolbar';
 import { registerNodeAutosize } from './node-autosize';
 import { registerNodeVisuals } from './node-visuals';
 import { registerOnboarding } from './onboarding';
+import { registerOutline } from './outline';
 import { registerPerfPanel } from './perf-panel';
-import { registerPresent } from './present';
 import { registerRender } from './render';
 import { registerRenderStage } from './render-stage';
 import { registerRenderStageGpu } from './render-stage-gpu';
+import { registerRequirementsView } from './requirements-view';
 import { registerScenario } from './scenario';
 import { registerShare } from './share';
 import { registerTextLayout } from './text-layout';
 import { registerToolPanel } from './tool-panel';
-import { registerVarflow } from './varflow';
 import { registerViewPan } from './view-pan';
 import { registerViewZoom } from './view-zoom';
 
@@ -51,8 +52,9 @@ export function registerSystems(system: Registry) {
   registerCancellation(system);
   registerMain(system);
   registerToolPanel(system);
-  // Log + outline unregistered for release — dev/left-pane chrome that pulled
-  // focus off the canvas. Files kept for type augmentations + revival.
+  // The event log remains developer-only. The release navigator is the
+  // polished document tree in outline.ts.
+  registerOutline(system);
   registerModal(system);
   registerCommandForm(system);
   registerCommandPicker(system);
@@ -74,14 +76,16 @@ export function registerSystems(system: Registry) {
   registerNodeVisuals(system);
   registerNodeAutosize(system);
   registerContainers(system);
+  registerRequirementsView(system);
+  registerHistory(system);
   registerChoose(system);
-  registerPresent(system);
   registerDetail(system);
   registerDemo(system);
   registerOnboarding(system);
   registerDebug(system);
   registerScenario(system);
   registerShare(system);
-  registerVarflow(system);
+  // Presentation and varflow remain in-tree (and documented) but are not
+  // registered in the release composition until their UX is ready.
   registerDx(system);
 }

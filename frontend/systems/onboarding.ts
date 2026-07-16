@@ -1,4 +1,5 @@
 import type { Registry } from '../core';
+import { Slots } from '../types';
 
 declare module '../types' {
   interface CustomEvents {
@@ -30,11 +31,11 @@ const key = (value: string, label: string) => {
   return item;
 };
 
-const topology = (kind: 'c4' | 'radial' | 'sequence') => {
+const topology = (kind: 'c4' | 'radial' | 'sequence' | 'list') => {
   const preview = document.createElement('span');
   preview.className = `onboarding-topology topology-${kind}`;
   preview.setAttribute('aria-hidden', 'true');
-  const count = kind === 'radial' ? 7 : kind === 'sequence' ? 5 : 6;
+  const count = kind === 'radial' ? 7 : kind === 'sequence' ? 5 : kind === 'list' ? 8 : 6;
   for (let index = 0; index < count; index++) {
     const dot = document.createElement('i');
     dot.style.setProperty('--i', `${index}`);
@@ -43,7 +44,7 @@ const topology = (kind: 'c4' | 'radial' | 'sequence') => {
   return preview;
 };
 
-const example = (command: string, kind: 'c4' | 'radial' | 'sequence', title: string, description: string) => {
+const example = (command: string, kind: 'c4' | 'radial' | 'sequence' | 'list', title: string, description: string) => {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'onboarding-example';
@@ -53,7 +54,10 @@ const example = (command: string, kind: 'c4' | 'radial' | 'sequence', title: str
   heading.textContent = title;
   const detail = document.createElement('small');
   detail.textContent = description;
-  copy.append(heading, detail);
+  const warning = document.createElement('small');
+  warning.className = 'onboarding-example-warning';
+  warning.textContent = 'Replaces this graph · Undo available';
+  copy.append(heading, detail, warning);
   button.append(topology(kind), copy);
   return button;
 };
@@ -68,15 +72,19 @@ const guideView = () => {
   eyebrow.className = 'onboarding-eyebrow';
   eyebrow.textContent = 'A field guide to this canvas';
   const title = document.createElement('h1');
-  title.textContent = 'Think in shapes. Edit in place.';
+  title.textContent = 'Map an idea. Keep it editable.';
   const lead = document.createElement('p');
-  lead.textContent = 'Start from an example or make one node. Every visible object stays editable; the canvas saves locally as you work.';
+  lead.textContent = 'Tap an item to select it, drag to arrange it, then edit every part in place.';
   intro.append(eyebrow, title, lead);
 
   const shortcuts = document.createElement('ol');
   shortcuts.className = 'onboarding-keys';
   shortcuts.append(
-    key('A', 'Create a node'),
+    key('Tap', 'Select an item and reveal its actions'),
+    key('Drag', 'Arrange a node or pan empty canvas'),
+    key('A', 'Create the next item in the active layout'),
+    key('Shift+A', 'Create a connected branch and keep its parent selected'),
+    key('V · H · T · R', 'Vertical, horizontal, tree, or radial layout'),
     key('Enter', 'Rename the selected item'),
     key('E', 'Connect two nodes'),
     key('Z', 'Fit the whole graph'),
@@ -87,13 +95,14 @@ const guideView = () => {
   examples.className = 'onboarding-examples';
   const examplesHead = document.createElement('div');
   examplesHead.className = 'onboarding-section-head';
-  examplesHead.innerHTML = '<strong>Three useful shapes</strong><span>Loading an example replaces this canvas.</span>';
+  examplesHead.innerHTML = '<strong>Four editable examples</strong><span>Open one, then edit every part.</span>';
   const grid = document.createElement('div');
   grid.className = 'onboarding-example-grid';
   grid.append(
     example('demo.render-c4', 'c4', 'C4 architecture', 'Nested systems, containers, and ownership'),
     example('demo.render-math', 'radial', 'Expected value', 'A radial map from intuition to formula'),
     example('demo.render-workflow', 'sequence', 'Delivery workflow', 'A sequence with review and a return loop'),
+    example('demo.render-game', 'list', 'Game design map', 'A detailed vertical list with connected nesting'),
   );
   examples.append(examplesHead, grid);
 
@@ -103,7 +112,7 @@ const guideView = () => {
   const mermaidTitle = document.createElement('strong');
   mermaidTitle.textContent = 'Already use Mermaid?';
   const mermaidHint = document.createElement('p');
-  mermaidHint.textContent = 'Edit this flowchart and convert it directly into canvas nodes.';
+  mermaidHint.textContent = 'Edit this flowchart, validate it, then review the replacement before importing.';
   mermaidCopy.append(mermaidTitle, mermaidHint);
   const textarea = document.createElement('textarea');
   textarea.className = 'onboarding-mermaid-source';
@@ -114,7 +123,7 @@ const guideView = () => {
   importButton.type = 'button';
   importButton.className = 'primary onboarding-mermaid-import';
   importButton.dataset.command = 'onboarding.mermaid.import';
-  importButton.textContent = 'Convert to canvas';
+  importButton.textContent = 'Preview import';
   mermaid.append(mermaidCopy, textarea, importButton);
 
   guide.append(intro, shortcuts, examples, mermaid);
@@ -128,7 +137,7 @@ export function registerOnboarding(system: Registry) {
       { id: 'onboarding.open', label: 'Open getting-started guide', group: 'help' },
       {
         id: 'onboarding.mermaid.import',
-        label: 'Convert Mermaid source to canvas',
+        label: 'Preview Mermaid import',
         event: 'graph.import.mermaid',
         group: 'graph',
         hidden: true,
@@ -138,7 +147,7 @@ export function registerOnboarding(system: Registry) {
         },
       },
     ]);
-    contribute({ surface: 'top', command: 'onboarding.open', kind: 'button', text: 'Guide', label: 'Open getting-started guide', order: 75 });
+    contribute({ surface: 'top', command: 'onboarding.open', kind: 'button', text: 'Guide', label: 'Open getting-started guide', slot: Slots.End, order: 75 });
 
     const open = () => {
       guideOpen = true;

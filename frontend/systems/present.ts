@@ -100,6 +100,9 @@ export function registerPresent(system: Registry) {
       parentChain: () => [],
       isFolded: () => false,
       boundsOf: ref => { const n = items.get(ref.id); return n ? rectOf(n) : null; },
+      boundsInRect: (_kind, area) => [...items.values()].map(rectOf).filter(rect =>
+        rect.x < area.x + area.w && rect.x + rect.w > area.x
+        && rect.y < area.y + area.h && rect.y + rect.h > area.y),
     });
 
     const compass = (focus: string) => {

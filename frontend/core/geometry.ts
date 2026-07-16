@@ -24,6 +24,46 @@ export const unionRect = (a: Rect, b: Rect): Rect => {
 export const expandRect = (r: Rect, pad: number, topExtra = 0): Rect =>
   ({ x: r.x - pad, y: r.y - pad - topExtra, w: r.w + pad * 2, h: r.h + pad * 2 + topExtra });
 
+export const rectsOverlap = (a: Rect, b: Rect, gap = 0) =>
+  a.x < b.x + b.w + gap
+  && a.x + a.w + gap > b.x
+  && a.y < b.y + b.h + gap
+  && a.y + a.h + gap > b.y;
+
+/** Small uniform-grid index for temporary layout geometry. Unlike the graph's
+ * node index, this stores whole rectangles (including virtual edge labels), so
+ * callers can query collision candidates without an O(items²) sweep. */
+export type RectIndex<T extends { rect: Rect }> = {
+  cellSize: number;
+  cells: Map<string, Set<T>>;
+};
+
+const rectCells = (rect: Rect, cellSize: number) => {
+  const x0 = Math.floor(rect.x / cellSize), x1 = Math.floor((rect.x + rect.w) / cellSize);
+  const y0 = Math.floor(rect.y / cellSize), y1 = Math.floor((rect.y + rect.h) / cellSize);
+  const cells: string[] = [];
+  for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) cells.push(`${x}:${y}`);
+  return cells;
+};
+
+export const addToRectIndex = <T extends { rect: Rect }>(index: RectIndex<T>, item: T) => {
+  rectCells(item.rect, index.cellSize).forEach(key =>
+    (index.cells.get(key) ?? index.cells.set(key, new Set()).get(key)!).add(item));
+};
+
+export const createRectIndex = <T extends { rect: Rect }>(items: T[], cellSize = 256): RectIndex<T> => {
+  const index: RectIndex<T> = { cellSize, cells: new Map() };
+  items.forEach(item => addToRectIndex(index, item));
+  return index;
+};
+
+export const queryRectIndex = <T extends { rect: Rect }>(index: RectIndex<T>, rect: Rect, padding = 0): T[] => {
+  const area = expandRect(rect, padding);
+  const candidates = new Set<T>();
+  rectCells(area, index.cellSize).forEach(key => index.cells.get(key)?.forEach(item => candidates.add(item)));
+  return [...candidates].filter(item => rectsOverlap(item.rect, area));
+};
+
 /** Center of a rect. */
 export const rectCenter = (r: Rect): Position => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
 

@@ -21,6 +21,9 @@ export const factScope = (name: string): RedrawScope | null => {
  *  redraw-scope logic — the render scheduler calls this and nothing else, so a
  *  new special case is one edit here, not a second heuristic in render.ts. */
 export const scopeForEvent = (name: string, data: unknown): RedrawScope | null => {
+  // History availability only redraws its toolbar contribution explicitly;
+  // rebuilding canvas nodes here would steal focus from the active item.
+  if (name === 'history.changed') return null;
   if (name === 'graph.node.updated') {
     const d = data as { patch?: Record<string, unknown>; visual?: boolean } | undefined;
     if (d?.patch && !('Label' in d.patch)) return d.visual ? 'nodes.visual' : 'nodes';

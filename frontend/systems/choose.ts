@@ -35,32 +35,25 @@ export function registerChoose(system: Registry) {
 
     contexts.commands.register([
       {
-        id: 'choose.all', label: 'Choose all', group: 'choose', shortcut: 'Ctrl+A',
+        id: 'choose.all', label: 'Select all', group: 'choose', shortcut: 'Ctrl+A',
         input: { on: 'keydown', key: 'a', ctrl: true, prevent: true },
         available: () => allRefs().length > 0,
       },
       {
-        id: 'choose.all.cmd', label: 'Choose all (Cmd+A)', event: 'choose.all',
+        id: 'choose.all.cmd', label: 'Select all (Cmd+A)', event: 'choose.all',
         group: 'choose', hidden: true, shortcut: 'Cmd+A',
         input: { on: 'keydown', key: 'a', meta: true, prevent: true },
         available: () => allRefs().length > 0,
       },
+      { id: 'choose.none', label: 'Clear selection', group: 'choose', available: () => selection.selectedAll().length > 0 },
+      { id: 'choose.invert', label: 'Invert selection', group: 'choose', available: () => allRefs().length > 0, shortcut: 'I', input: { on: 'keydown', key: 'i', prevent: true } },
+      { id: 'choose.follow', label: 'Expand selection along connections', group: 'choose', available: () => chosenNodes().length > 0 },
+      { id: 'choose.radius', label: 'Expand selection by proximity', group: 'choose', available: () => chosenNodes().length > 0 },
       {
-        // Palette-discoverable alias — people search "select all", not "choose".
-        // No input binding (Ctrl/Cmd+A above already own the keys); no button
-        // (choose.all's "All" button covers the surface). Fires the same event.
-        id: 'select.all', label: 'Select all', event: 'choose.all', group: 'choose',
-        available: () => allRefs().length > 0,
-      },
-      { id: 'choose.none', label: 'Choose none', group: 'choose', available: () => selection.selectedAll().length > 0 },
-      { id: 'choose.invert', label: 'Invert choice', group: 'choose', available: () => allRefs().length > 0, shortcut: 'I', input: { on: 'keydown', key: 'i', prevent: true } },
-      { id: 'choose.follow', label: 'Grow along edges', group: 'choose', available: () => chosenNodes().length > 0 },
-      { id: 'choose.radius', label: 'Grow by proximity', group: 'choose', available: () => chosenNodes().length > 0 },
-      {
-        id: 'choose.search', label: 'Choose by search', group: 'choose',
+        id: 'choose.search', label: 'Select by search', group: 'choose',
         form: {
-          title: 'Choose by search',
-          submitLabel: 'Choose',
+          title: 'Select by search',
+          submitLabel: 'Select',
           shouldOpen: () => true,
           fields: [{ id: 'q', label: 'Label contains', autofocus: true }],
           payload: values => ({ q: values.q ?? '' }),
@@ -70,7 +63,8 @@ export function registerChoose(system: Registry) {
       {
         id: 'selection.group', label: 'Group into container', group: 'choose', shortcut: 'Ctrl+G',
         input: { on: 'keydown', key: 'g', ctrl: true, prevent: true },
-        available: () => flags.isOn('containers') && selection.selectedAll().some(ref => ref.kind === 'node' || ref.kind === 'container'),
+        available: () => flags.isOn('containers')
+          && selection.selectedAll().filter(ref => ref.kind === 'node' || ref.kind === 'container').length >= 2,
       },
     ]);
 
@@ -115,7 +109,7 @@ export function registerChoose(system: Registry) {
     // the create handler's own select — children land, container ends selected.
     on('selection.group', () => {
       const members = selection.selectedAll().filter(ref => ref.kind === 'node' || ref.kind === 'container');
-      if (!members.length) return;
+      if (members.length < 2) return;
       const off = on('container.created', ({ id }) => {
         off();
         members.forEach(childRef => emit('container.add-child', { containerId: id, childRef }));
@@ -123,7 +117,6 @@ export function registerChoose(system: Registry) {
       emit('editing.container.create', {});
     });
 
-    contribute({ surface: 'top', command: 'choose.all', kind: 'button', text: 'All', order: 40, group: 'edit' });
     contribute({ surface: 'top', command: 'selection.group', kind: 'button', text: 'Group', order: 41, group: 'edit' });
   }, { requires: ['ability.selectable', 'graph'] });
 }

@@ -1,9 +1,9 @@
 import { clamp, semanticTitle } from '../core';
-import { intersectRectBoundary } from '../core/geometry';
+import { expandRect, intersectRectBoundary } from '../core/geometry';
 import { renderMarkdown } from '../core/markdown';
 import { collapsible, configurable, draggable, editable, nudgeable, selectable } from '../abilities';
 import type { DataScale, EdgeKind, Graph, GraphEdge, GraphNode, NodeEntity, EdgePatch, NodePatch, NodeType } from './graph';
-import type { EntityDef, EntityRenderer, ItemRef, PropertyDef, Rect } from '../types';
+import type { EntityDef, EntityRenderCtx, EntityRenderer, ItemRef, Position, PropertyDef, Rect, Size } from '../types';
 
 /** Built-in entity declarations — what a graph / node / edge *is*: its label,
  *  abilities, properties, and renderer. Behavior (commands, storage handlers,
@@ -23,7 +23,7 @@ const property = <T, Patch>(def: PropertyDef<T, Patch>) => def;
 const entityDef = <T, Patch = unknown>(kind: string, def: Omit<EntityDef<T, Patch>, 'kind'>): EntityDef<T, Patch> => ({ kind, ...def });
 const NODE_TYPES: { value: NodeType; label: string }[] = [
   { value: 'text', label: 'Text' },
-  { value: 'square', label: 'Square' },
+  { value: 'square', label: 'Box' },
   { value: 'circle', label: 'Circle' },
   { value: 'user-input', label: 'User input' },
   { value: 'gateway', label: 'Gateway' },
@@ -61,7 +61,7 @@ const numberPatch = <T, K extends string>(key: K, value: unknown) => {
 
 export const graphEntity: EntityDef<Graph> = entityDef<Graph>('graph', {
   label: 'Graph',
-  labelOf: graph => graph.id,
+  labelOf: graph => graph.name,
   abilities: [],
 });
 
@@ -87,6 +87,91 @@ const resolveEndpoint = (nodeRef: { kind: 'node'; id: string }, ctx: { graph: { 
   const node = ctx.graph.getItem(nodeRef) as NodeEntity | undefined;
   if (!node?.Position) return null;
   return { ref: nodeRef, center: node.Position, half: { w: node.Size.w / 2, h: node.Size.h / 2 } };
+};
+
+export const EDGE_LABEL_FONT_SIZE = 13;
+export const EDGE_LABEL_LINE_HEIGHT = 16;
+export const EDGE_LABEL_CHAR_WIDTH = 9;
+const EDGE_LABEL_PAD_X = 5;
+const EDGE_LABEL_PAD_Y = 2;
+const EDGE_LABEL_LINE_GAP = 10;
+const EDGE_LABEL_AVOID_STEP = 12;
+export const EDGE_LABEL_AVOID_REACH = 480;
+
+export const measureEdgeLabel = (label: string): Size => {
+  const lines = label.split(/\r?\n/);
+  return {
+    w: Math.max(1, ...lines.map(line => line.length)) * EDGE_LABEL_CHAR_WIDTH + EDGE_LABEL_PAD_X * 2,
+    h: (lines.length - 1) * EDGE_LABEL_LINE_HEIGHT + EDGE_LABEL_FONT_SIZE + EDGE_LABEL_PAD_Y * 2,
+  };
+};
+
+/** The label is a real graph-space rectangle, not just text painted at a
+ * midpoint. Its anchor is staggered slightly along the edge, then moved far
+ * enough along the right-normal for the whole rectangle (including a gap) to
+ * clear the line and arrow axis. Projecting both width and height onto that
+ * normal is what keeps near-vertical labels clear too. */
+export const edgeLabelGeometry = (
+  label: string,
+  from: Position,
+  to: Position,
+  edgeId = '',
+  avoid: Rect[] = [],
+) => {
+  const lines = label.split(/\r?\n/);
+  const size = measureEdgeLabel(label);
+  const dx = to.x - from.x, dy = to.y - from.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len, ny = dx / len;
+  // Deterministic staggering prevents several labels on crossing/parallel
+  // relationships from all claiming the exact midpoint. Keep every candidate
+  // source-side of the arrowhead.
+  const hash = [...edgeId].reduce((value, char) => (value * 33 + char.charCodeAt(0)) >>> 0, 5381);
+  const preferredT = 0.36 + (hash % 5) * 0.04;
+  const tx = dx / len, ty = dy / len;
+  const alongHalf = Math.abs(tx) * size.w / 2 + Math.abs(ty) * size.h / 2;
+  const minT = (alongHalf + 8) / len;
+  const maxT = 1 - (alongHalf + 18) / len;
+  const t = minT <= maxT ? clamp(preferredT, minT, maxT) : 0.5;
+  let clearance = Math.abs(nx) * size.w / 2 + Math.abs(ny) * size.h / 2 + EDGE_LABEL_LINE_GAP;
+  let anchor = {
+    x: from.x + dx * t + nx * clearance,
+    y: from.y + dy * t + ny * clearance,
+  };
+  let rect = { x: anchor.x - size.w / 2, y: anchor.y - size.h / 2, w: size.w, h: size.h };
+  const overlaps = (a: Rect, b: Rect) =>
+    a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+  // Short relationships may not have enough along-edge room for a long label.
+  // Walk the rectangle farther along the same normal until it clears both cards;
+  // it stays attached to the edge but never hides an endpoint.
+  for (let pass = 0; pass < EDGE_LABEL_AVOID_REACH / EDGE_LABEL_AVOID_STEP && avoid.some(obstacle => overlaps(rect, obstacle)); pass++) {
+    clearance += EDGE_LABEL_AVOID_STEP;
+    anchor = {
+      x: from.x + dx * t + nx * clearance,
+      y: from.y + dy * t + ny * clearance,
+    };
+    rect = { x: anchor.x - size.w / 2, y: anchor.y - size.h / 2, w: size.w, h: size.h };
+  }
+  return {
+    lines,
+    size,
+    rect,
+    anchor,
+    textStartY: -((lines.length - 1) * EDGE_LABEL_LINE_HEIGHT) / 2 + EDGE_LABEL_FONT_SIZE * 0.35,
+    transform: `translate(${anchor.x}, ${anchor.y})`,
+  };
+};
+
+const renderedEdgeLabelGeometry = (
+  label: string,
+  from: Position,
+  to: Position,
+  edgeId: string,
+  ctx: EntityRenderCtx,
+) => {
+  const initial = edgeLabelGeometry(label, from, to, edgeId);
+  const obstacles = ctx.boundsInRect('node', expandRect(initial.rect, EDGE_LABEL_AVOID_REACH));
+  return edgeLabelGeometry(label, from, to, edgeId, obstacles);
 };
 
 const edgeRenderer: EntityRenderer<GraphEdge> = {
@@ -140,24 +225,31 @@ const edgeRenderer: EntityRenderer<GraphEdge> = {
     g.append(line('edge-line', tipAtSource.x, tipAtSource.y, tipAtTarget.x, tipAtTarget.y, { 'marker-end': 'url(#edge-arrow)' }));
     const label = edge.Label?.text;
     if (label) {
-      const lines = label.split(/\r?\n/);
-      const lineH = 14;
+      const geometry = renderedEdgeLabelGeometry(label, tipAtSource, tipAtTarget, edge.id, ctx);
       // Label content is built in LOCAL coords around (0,0) inside a translated
       // wrapper group — reposition then only rewrites the wrapper's transform.
-      const wrap = svg('g', { class: 'edge-label-wrap', transform: labelTransform(from.center, to.center, lines.length, lineH) });
-      // Center the block on the anchor (top line lifted by half the block).
-      const startY = -((lines.length - 1) * lineH) / 2 - 4;
-      // Opaque backdrop so the text stays legible where the label crosses an edge
-      // — sized from the text metrics (graph units, so it scales with the label).
-      const charW = 6.6, padX = 4, padY = 2;
-      const boxW = Math.max(...lines.map(l => l.length)) * charW + padX * 2;
-      const boxH = (lines.length - 1) * lineH + 12 + padY * 2;
+      const wrap = svg('g', {
+        class: 'edge-label-wrap',
+        transform: geometry.transform,
+        'data-label-width': geometry.size.w,
+        'data-label-height': geometry.size.h,
+      });
+      // Opaque backdrop uses the same rectangle the layout engine reserves.
       wrap.append(svg('rect', {
-        class: 'edge-label-bg', x: -boxW / 2, y: startY - 9 - padY, width: boxW, height: boxH, rx: 3,
+        class: 'edge-label-bg',
+        x: -geometry.size.w / 2,
+        y: -geometry.size.h / 2,
+        width: geometry.size.w,
+        height: geometry.size.h,
+        rx: 3,
       }));
-      const text = svg('text', { class: `edge-label edge-kind-${edgeKind}`, 'text-anchor': 'middle', 'font-size': 11 });
-      lines.forEach((line, i) => {
-        const tspan = svg('tspan', { x: 0, y: startY + i * lineH });
+      const text = svg('text', {
+        class: `edge-label edge-kind-${edgeKind}`,
+        'text-anchor': 'middle',
+        'font-size': EDGE_LABEL_FONT_SIZE,
+      });
+      geometry.lines.forEach((line, i) => {
+        const tspan = svg('tspan', { x: 0, y: geometry.textStartY + i * EDGE_LABEL_LINE_HEIGHT });
         tspan.textContent = line;
         text.append(tspan);
       });
@@ -190,92 +282,27 @@ const edgeRenderer: EntityRenderer<GraphEdge> = {
     setLine('.edge-hit', from.center.x, from.center.y, to.center.x, to.center.y);
     setLine('.edge-line', tipAtSource.x, tipAtSource.y, tipAtTarget.x, tipAtTarget.y);
     const wrap = el.querySelector('.edge-label-wrap');
-    if (wrap) {
-      const lineCount = wrap.querySelectorAll('tspan').length || 1;
-      wrap.setAttribute('transform', labelTransform(from.center, to.center, lineCount, 14));
-    }
+    const label = edge.Label?.text;
+    if (wrap && label) wrap.setAttribute(
+      'transform',
+      renderedEdgeLabelGeometry(label, tipAtSource, tipAtTarget, edge.id, ctx).transform,
+    );
   },
   signature(edge) {
     return `v${edge.visualVersion}`;
   },
 };
 
-/** Anchor transform for an edge label: midpoint pushed to the RIGHT of the
- *  from→to direction so the block clears the line and bidirectional pairs
- *  don't stack. Right-normal in screen space (y-down): (-dy, dx). */
-const labelTransform = (from: { x: number; y: number }, to: { x: number; y: number }, lineCount: number, lineH: number) => {
-  const dx = to.x - from.x, dy = to.y - from.y;
-  const len = Math.hypot(dx, dy) || 1;
-  const off = (lineCount * lineH) / 2 + 8;
-  const nx = (-dy / len) * off, ny = (dx / len) * off;
-  return `translate(${(from.x + to.x) / 2 + nx}, ${(from.y + to.y) / 2 + ny})`;
-};
-
 export const edgeEntity: EntityDef<GraphEdge, EdgePatch> = entityDef<GraphEdge, EdgePatch>('edge', {
   label: 'Edge',
-  labelOf: edge => edge.Label?.text ?? `${edge.From}->${edge.To}`,
-  abilities: [],
+  labelOf: edge => edge.Label?.text?.trim() || 'Connection',
+  abilities: [selectable<GraphEdge>(), configurable<GraphEdge>()],
   render: edgeRenderer,
   properties: [
     property<GraphEdge, EdgePatch>({
       id: 'label', label: 'Label', input: 'text',
       value: edge => edge.Label?.text ?? '',
       patch: (_edge, value) => ({ Label: { text: String(value) } }),
-    }),
-    property<GraphEdge, EdgePatch>({
-      id: 'edgeKind', label: 'Type', input: 'select', options: EDGE_KINDS,
-      value: edge => edge.EdgeKind ?? 'sync',
-      patch: (_edge, value) => isEdgeKind(value) ? { EdgeKind: value } : undefined,
-    }),
-    property<GraphEdge, EdgePatch>({
-      id: 'latencyMs', label: 'Latency ms', input: 'number', min: 0, step: 1, group: 'Performance',
-      value: edge => edge.LatencyMs ?? '',
-      patch: (_edge, value) => numberPatch<EdgePatch, 'LatencyMs'>('LatencyMs', value),
-    }),
-    property<GraphEdge, EdgePatch>({
-      id: 'throughputRps', label: 'Throughput rps', input: 'number', min: 0, step: 10, group: 'Performance',
-      value: edge => edge.ThroughputRps ?? '',
-      patch: (_edge, value) => numberPatch<EdgePatch, 'ThroughputRps'>('ThroughputRps', value),
-    }),
-    property<GraphEdge, EdgePatch>({
-      id: 'payloadKb', label: 'Payload KB', input: 'number', min: 0, step: 1, group: 'Performance',
-      value: edge => edge.PayloadKb ?? '',
-      patch: (_edge, value) => numberPatch<EdgePatch, 'PayloadKb'>('PayloadKb', value),
-    }),
-    property<GraphEdge, EdgePatch>({
-      id: 'purpose', label: 'Purpose', input: 'textarea', rows: 3, group: 'Semantics',
-      value: edge => edge.Purpose ?? '',
-      patch: (_edge, value) => ({ Purpose: String(value) }),
-    }),
-    property<GraphEdge, EdgePatch>({
-      id: 'assumptions', label: 'Assumptions', input: 'textarea', rows: 3, group: 'Semantics',
-      value: edge => edge.Assumptions ?? '',
-      patch: (_edge, value) => ({ Assumptions: String(value) }),
-    }),
-    property<GraphEdge, EdgePatch>({
-      id: 'limits', label: 'Limits', input: 'textarea', rows: 3, group: 'Semantics',
-      value: edge => edge.Limits ?? '',
-      patch: (_edge, value) => ({ Limits: String(value) }),
-    }),
-    property<GraphEdge, EdgePatch>({
-      id: 'whatThen', label: 'What then', input: 'textarea', rows: 3, group: 'Semantics',
-      value: edge => edge.WhatThen ?? '',
-      patch: (_edge, value) => ({ WhatThen: String(value) }),
-    }),
-    property<GraphEdge, EdgePatch>({
-      id: 'observability', label: 'Observability', input: 'textarea', rows: 3, group: 'Observability',
-      value: edge => edge.Observability ?? '',
-      patch: (_edge, value) => ({ Observability: String(value) }),
-    }),
-    property<GraphEdge, EdgePatch>({
-      id: 'failureMode', label: 'What if fails', input: 'textarea', rows: 3, group: 'Observability',
-      value: edge => edge.FailureMode ?? '',
-      patch: (_edge, value) => ({ FailureMode: String(value) }),
-    }),
-    property<GraphEdge, EdgePatch>({
-      id: 'freshnessMs', label: 'Freshness budget ms', input: 'number', min: 0, step: 100, group: 'Observability',
-      value: edge => edge.FreshnessMs ?? '',
-      patch: (_edge, value) => numberPatch<EdgePatch, 'FreshnessMs'>('FreshnessMs', value),
     }),
   ],
 });
@@ -285,9 +312,26 @@ export const nodeBoundsOf = (node: GraphNode): Rect => {
   return { x: pos.x - node.Size.w / 2, y: pos.y - node.Size.h / 2, w: node.Size.w, h: node.Size.h };
 };
 
+// Fold is presentation state, not graph data. Keep the expanded model Size and
+// cache only the currently rendered title-only geometry for edge anchors,
+// culling, Fit, and the floating toolbar.
+const renderedNodeSizes = new WeakMap<GraphNode, Size>();
+const collapsedNodeSize = (node: GraphNode): Size => {
+  const explicitLines = Math.max(1, node.Label.text.split(/\r?\n/).length);
+  const capacity = Math.max(8, Math.floor((node.Size.w - 24) / 7.2));
+  const wrappedLines = node.Label.text.split(/\r?\n/)
+    .reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / capacity)), 0);
+  return { w: node.Size.w, h: clamp(Math.max(explicitLines, wrappedLines) * 22 + 20, 56, 120) };
+};
+const renderedNodeBoundsOf = (node: GraphNode): Rect => {
+  const pos = node.Position ?? { x: 0, y: 0 };
+  const size = renderedNodeSizes.get(node) ?? node.Size;
+  return { x: pos.x - size.w / 2, y: pos.y - size.h / 2, w: size.w, h: size.h };
+};
+
 const nodeRenderer: EntityRenderer<GraphNode> = {
   layer: 'html',
-  bounds: nodeBoundsOf,
+  bounds: renderedNodeBoundsOf,
   collect(graph, hiddenByFold, visibleNodeIds) {
     const g = graph as unknown as Graph;
     const all = visibleNodeIds
@@ -308,10 +352,16 @@ const nodeRenderer: EntityRenderer<GraphNode> = {
     ].filter(Boolean).join(' · ');
     ctx.tagItem(el, ref);
     el.tabIndex = -1;
+    el.setAttribute('role', 'button');
+    el.setAttribute('aria-label', `${node.Label.text || 'Untitled'}; ${typeLabel(nodeType)} node. Press Enter to edit.`);
     ctx.applyItemModes(el, ref);
-    el.classList.toggle('collapsed', ctx.isFolded(ref));
+    const collapsed = !!description && ctx.isFolded(ref);
+    const renderedSize = collapsed ? collapsedNodeSize(node) : node.Size;
+    renderedNodeSizes.set(node, renderedSize);
+    el.classList.toggle('collapsed', collapsed);
     el.classList.add(`node-type-${nodeType}`);
     el.classList.toggle('has-description', !!description);
+    if (description) el.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
     el.classList.toggle('semantic-big-data', node.DataScale === 'big' || node.DataScale === 'huge');
     el.classList.toggle('semantic-stale-risk', node.FreshnessMs != null && node.FreshnessMs > 60_000);
     el.dataset.nodeType = nodeType;
@@ -320,8 +370,8 @@ const nodeRenderer: EntityRenderer<GraphNode> = {
     if (titleText) el.title = titleText;
     el.style.left = `${pos.x}px`;
     el.style.top = `${pos.y}px`;
-    el.style.width = `${node.Size.w}px`;
-    el.style.height = `${node.Size.h}px`;
+    el.style.width = `${renderedSize.w}px`;
+    el.style.height = `${renderedSize.h}px`;
     ctx.templateText(el, 'type', typeLabel(nodeType));
     ctx.templateText(el, 'metrics', meta);
     ctx.templateText(el, 'title', node.Label.text);
@@ -352,7 +402,7 @@ export const nodeEntity: EntityDef<GraphNode, NodePatch> = entityDef<GraphNode, 
     selectable<GraphNode>(),
     draggable<GraphNode>(),
     nudgeable<GraphNode>(),
-    collapsible<GraphNode>(),
+    collapsible<GraphNode>(node => !!node.Description?.trim()),
     editable<GraphNode>(),
     configurable<GraphNode>(),
   ],

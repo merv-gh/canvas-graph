@@ -22,6 +22,7 @@ export function commandsContext(bus: Bus, isFlagOn: (origin?: string) => boolean
   const disabledCommands = new Set<string>(io.get<string[]>(STORAGE_KEYS.disabledCommands, []));
   let enabledCache: CommandSpec[] | null = null;
   const inputCache = new Map<RawInput, CommandSpec[]>();
+  const guards = new Map<string, (command: CommandSpec, source: CommandSource) => true | string>();
   const invalidate = () => {
     enabledCache = null;
     inputCache.clear();
@@ -74,7 +75,12 @@ export function commandsContext(bus: Bus, isFlagOn: (origin?: string) => boolean
     unregister(id: string) { commandMap.delete(id); invalidate(); },
     unregisterOrigin(origin: string) {
       for (const [id, command] of commandMap) if (command.origin === origin) commandMap.delete(id);
+      guards.delete(origin);
       invalidate();
+    },
+    registerGuard(origin: string, guard: (command: CommandSpec, source: CommandSource) => true | string) {
+      guards.set(origin, guard);
+      return () => { if (guards.get(origin) === guard) guards.delete(origin); };
     },
     get: (id: string) => commandMap.get(id),
     all: () => [...commandMap.values()],
@@ -112,6 +118,13 @@ export function commandsContext(bus: Bus, isFlagOn: (origin?: string) => boolean
       const command = commandMap.get(id);
       if (!command || !isEnabled(command) || command.available?.(source) === false) return false;
       const resolved: CommandSource = source.origin ? source : { ...source, origin: originFromEvent(source.event) };
+      for (const guard of guards.values()) {
+        const result = guard(command, resolved);
+        if (result !== true) {
+          if (result) bus.emit('app.notice', { message: result, level: 'warn' });
+          return false;
+        }
+      }
       const payload = command.payload?.(resolved);
       if (command.picker) {
         bus.emit('commandPicker.open', { commandId: id, source: resolved });
@@ -152,7 +165,7 @@ export function inputRouter(commands: ReturnType<typeof commandsContext>, perf?:
     start(root: Document | HTMLElement = document) {
       const modalScopeEl = (): Element | null => {
         const placeEl = (root instanceof Document ? root : root).querySelector('[data-place="modal"]');
-        return placeEl?.firstElementChild ? placeEl : null;
+        return placeEl?.querySelector('.modal-layer') ? placeEl : null;
       };
       const targetInModal = (target: Element | null, modal: Element | null) =>
         !!modal && !!target && modal.contains(target);

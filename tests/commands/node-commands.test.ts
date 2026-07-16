@@ -16,6 +16,34 @@ const waitCamera = async () => {
 };
 
 describe('frontend node commands', () => {
+  it('offers fold only for described nodes and clears stale fold state with the description', async () => {
+    const ctx = bootApp();
+    runCommand(ctx, 'editing.node.create');
+    await settle();
+    const node = ctx.graphs.current.nodes()[0];
+    const ref = { kind: 'node' as const, id: node.id };
+    const foldId = itemFoldId(ref, ctx.graphs.current.id);
+
+    expect(document.querySelector('.item-toolbar [data-command="item.collapse.toggle"]')).toBeNull();
+    expect(runCommand(ctx, 'item.collapse.toggle')).toBe(false);
+
+    ctx.bus.emit('item.update', { ref, patch: { Description: 'Foldable **detail**.' } });
+    await settle();
+    expect(document.querySelector('.item-toolbar [data-command="item.collapse.toggle"]')).not.toBeNull();
+    expect(runCommand(ctx, 'item.collapse.toggle')).toBe(true);
+    await settle();
+    const element = document.querySelector<HTMLElement>(`.node[data-item-id="${node.id}"]`)!;
+    expect(element.classList.contains('collapsed')).toBe(true);
+    expect(element.getAttribute('aria-expanded')).toBe('false');
+    expect(Number.parseFloat(element.style.height)).toBeLessThan(node.Size.h);
+
+    ctx.bus.emit('item.update', { ref, patch: { Description: '' } });
+    await settle();
+    expect(ctx.contexts.fold.folded(foldId)).toBe(false);
+    expect(document.querySelector(`.node[data-item-id="${node.id}"]`)?.classList.contains('collapsed')).toBe(false);
+    expect(document.querySelector('.item-toolbar [data-command="item.collapse.toggle"]')).toBeNull();
+  });
+
   it('creates, selects, focuses, renders, collapses, nudges, and configures a node', async () => {
     const ctx = bootApp();
 
@@ -31,6 +59,8 @@ describe('frontend node commands', () => {
 
     // Collapse is fold state now (presentation), not node data.
     const nodeFold = () => ctx.contexts.fold.folded(itemFoldId({ kind: 'node', id: node.id }, ctx.graphs.current.id));
+    ctx.bus.emit('item.update', { ref: { kind: 'node', id: node.id }, patch: { Description: 'Details to fold.' } });
+    await settle();
     expect(runCommand(ctx, 'item.collapse.toggle')).toBe(true);
     expect(nodeFold()).toBe(true);
 
@@ -38,23 +68,20 @@ describe('frontend node commands', () => {
     expect(runCommand(ctx, 'item.nudge.right')).toBe(true);
     expect(node.Position).toEqual({ x: before.x + 24, y: before.y });
 
-    expect(ctx.contexts.commands.get('item.properties.open')?.input).toMatchObject({ key: '.' });
+    expect(ctx.contexts.commands.get('item.context.open')?.input).toMatchObject({ key: '.' });
     document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '.', bubbles: true, cancelable: true }));
     await settle();
-    expect(document.querySelector('.modal-head')?.textContent).toContain('Node Properties');
-    const title = document.querySelector<HTMLInputElement>('.properties [data-field="title"]')!;
+    expect(document.querySelector('.context-actions')).not.toBeNull();
+    const title = document.querySelector<HTMLInputElement>('[data-item-modal-title]')!;
     title.focus();
     title.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     await settle();
     expect(document.activeElement).toBe(title);
     title.value = 'Configured';
-    expect(runCommand(ctx, 'properties.item.input', { target: title })).toBe(true);
+    expect(runCommand(ctx, 'properties.title.input', { target: title })).toBe(true);
     expect(node.Label.text).toBe('Configured');
-
-    const width = document.querySelector<HTMLInputElement>('.properties [data-field="width"]')!;
-    width.value = '222';
-    expect(runCommand(ctx, 'properties.item.input', { target: width })).toBe(true);
-    expect(node.Size.w).toBe(222);
+    expect(document.querySelector('.properties [data-field="width"]')).toBeNull();
+    expect(document.querySelector('.properties [data-field="height"]')).toBeNull();
 
     // No 'collapsed' property anymore — toggling the fold again expands it.
     expect(runCommand(ctx, 'item.collapse.toggle')).toBe(true);
@@ -71,9 +98,10 @@ describe('frontend node commands', () => {
     commandButton('editing.node.create')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     await settle();
     expect(ctx.graphs.current.nodes()).toHaveLength(2);
+    expect(ctx.graphs.current.edges()).toHaveLength(0);
   });
 
-  it('fits to a newly created node when attached placement lands offscreen', async () => {
+  it('centres the graph after attached placement lands offscreen', async () => {
     const ctx = bootApp();
     const anchor = ctx.graphs.current.createNode({
       Label: { text: 'edge anchor' },
@@ -86,10 +114,19 @@ describe('frontend node commands', () => {
     await waitCamera();
 
     const created = ctx.graphs.current.nodes().find(node => node.id !== anchor.id)!;
-    expect(created.Position!.x).toBeGreaterThan(900);
+    expect(created.Position!.x).toBe(anchor.Position!.x);
+    expect(created.Position!.y).toBeGreaterThan(anchor.Position!.y);
     expect(ctx.contexts.view.get()).not.toEqual(before);
-    expect(ctx.contexts.view.get().scale).toBe(1);
-    expect(containsRect(ctx.contexts.view.visibleRect(Places.Stage)!, nodeRect(created))).toBe(true);
+    expect(ctx.contexts.view.get().scale).toBe(1.25);
+    const visible = ctx.contexts.view.visibleRect(Places.Stage)!;
+    const bounds = ctx.graphs.current.nodes().map(nodeRect);
+    const centre = {
+      x: (Math.min(...bounds.map(rect => rect.x)) + Math.max(...bounds.map(rect => rect.x + rect.w))) / 2,
+      y: (Math.min(...bounds.map(rect => rect.y)) + Math.max(...bounds.map(rect => rect.y + rect.h))) / 2,
+    };
+    expect(visible.x + visible.w / 2).toBeCloseTo(centre.x);
+    expect(visible.y + visible.h / 2).toBeCloseTo(centre.y);
+    expect(containsRect(visible, nodeRect(created))).toBe(true);
   });
 
   it('moves DOM focus when selecting nodes by pointer or Tab', async () => {
@@ -136,6 +173,67 @@ describe('frontend node commands', () => {
     title.textContent = '';
     expect(runCommand(ctx, 'item.title.commit.focusout', { target: title })).toBe(true);
     expect(title.textContent).toBe('Inline');
+  });
+
+  it('returns keyboard focus to the node after Enter finishes title editing', async () => {
+    const ctx = bootApp();
+    runCommand(ctx, 'editing.node.create');
+    await settle();
+    const node = ctx.graphs.current.nodes()[0];
+
+    expect(runCommand(ctx, 'item.title.edit')).toBe(true);
+    await settle();
+    const title = document.querySelector<HTMLElement>('.node-title')!;
+    expect(document.activeElement).toBe(title);
+    title.textContent = 'Keyboard title';
+
+    expect(runCommand(ctx, 'item.title.commit.enter', { target: title })).toBe(true);
+    await settle();
+    expect(node.Label.text).toBe('Keyboard title');
+    expect(document.activeElement).not.toBe(title);
+    expect((document.activeElement as HTMLElement | null)?.dataset.itemId).toBe(node.id);
+
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true }));
+    await settle();
+    expect(ctx.graphs.current.nodes()).toHaveLength(2);
+  });
+
+  it('blurs the inspector title input when Enter finishes editing', async () => {
+    const ctx = bootApp();
+    runCommand(ctx, 'editing.node.create');
+    await settle();
+    expect(runCommand(ctx, 'item.properties.open')).toBe(true);
+    await settle();
+    const title = document.querySelector<HTMLInputElement>('[data-item-modal-title]')!;
+    title.focus();
+    title.value = 'Inspector title';
+    expect(runCommand(ctx, 'properties.title.input', { target: title })).toBe(true);
+    expect(runCommand(ctx, 'properties.title.finish.enter', { target: title })).toBe(true);
+    await settle();
+
+    expect(ctx.graphs.current.nodes()[0].Label.text).toBe('Inspector title');
+    expect(document.activeElement).not.toBe(title);
+  });
+
+  it('preserves existing positions when nodes are added or deleted', async () => {
+    const ctx = bootApp();
+    runCommand(ctx, 'editing.node.create');
+    await settle();
+    const first = ctx.graphs.current.nodes()[0];
+    ctx.bus.emit('item.update', { ref: { kind: 'node', id: first.id }, patch: { Position: { x: 420, y: 260 } } });
+    await settle();
+    const stablePosition = { ...first.Position! };
+
+    runCommand(ctx, 'editing.node.create');
+    await settle();
+    const second = ctx.graphs.current.nodes().find(node => node.id !== first.id)!;
+    expect(first.Position).toEqual(stablePosition);
+
+    const cameraBeforeDelete = ctx.contexts.view.get();
+    ctx.bus.emit('graph.node.delete', { id: second.id });
+    await settle();
+    expect(first.Position).toEqual(stablePosition);
+    expect(ctx.contexts.view.get()).toEqual(cameraBeforeDelete);
   });
 
   it('drags only from the explicit drag handle (now in ephemeral node-toolbar)', async () => {

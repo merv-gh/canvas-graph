@@ -50,7 +50,7 @@ describe('frontend gentle item camera', () => {
     expect(ctx.contexts.view.get().scale).toBeGreaterThan(0.85);
   });
 
-  it('zooms out more when panning cannot create enough room', async () => {
+  it('keeps an oversized item readable at 80% and aligns its start to the top', async () => {
     const ctx = bootApp();
     const node = ctx.graphs.current.createNode({
       Label: { text: 'huge' },
@@ -61,7 +61,25 @@ describe('frontend gentle item camera', () => {
     ctx.bus.emit('view.fit.item', { kind: 'node', id: node.id });
     await waitCamera();
 
-    expect(ctx.contexts.view.get().scale).toBeLessThan(0.5);
-    expect(containsRect(ctx.contexts.view.visibleRect(Places.Stage)!, nodeRect(node))).toBe(true);
+    const view = ctx.contexts.view.get();
+    expect(view.scale).toBeCloseTo(0.8, 5);
+    expect(containsRect(ctx.contexts.view.visibleRect(Places.Stage)!, nodeRect(node))).toBe(false);
+    const nodeTop = (node.Position!.y - node.Size.h / 2 - view.y) * view.scale;
+    expect(nodeTop).toBeCloseTo(72, 0);
+  });
+
+  it('fits a tall document no lower than 80% and lets its lower end continue off-screen', async () => {
+    const ctx = bootApp({ autoLayout: false });
+    const first = ctx.graphs.current.createNode({ Label: { text: 'first' }, Position: { x: 450, y: 120 } });
+    const last = ctx.graphs.current.createNode({ Label: { text: 'last' }, Position: { x: 450, y: 2120 } });
+
+    ctx.bus.emit('view.fit.all');
+    const view = ctx.contexts.view.get();
+
+    expect(view.scale).toBeCloseTo(0.8, 5);
+    const firstTop = (first.Position!.y - first.Size.h / 2 - view.y) * view.scale;
+    const lastBottom = (last.Position!.y + last.Size.h / 2 - view.y) * view.scale;
+    expect(firstTop).toBeCloseTo(72, 0);
+    expect(lastBottom).toBeGreaterThan(600);
   });
 });

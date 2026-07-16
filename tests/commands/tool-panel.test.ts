@@ -15,14 +15,15 @@ describe('top tool panel', () => {
     expect(ctx.debug!.snapshot().ui.toolPanels.top.collapsed).toBe(false);
   });
 
-  it('fades panels in zen (not collapse), persists through a canvas click, exits on escape', async () => {
+  it('hides chrome in zen without unmounting it, persists through a canvas click, exits on escape', async () => {
     const ctx = bootApp();
     await settle();
 
     expect(runCommand(ctx, 'view.zen')).toBe(true);
     await settle();
 
-    // Zen fades panels via CSS; the top panel stays mounted, not collapsed.
+    // Zen is a visual state; the top panel stays mounted and keeps its command
+    // registrations even though CSS removes it from the visible/focusable UI.
     expect(ctx.debug!.snapshot().ui.shell.zen).toBe(true);
     expect(ctx.debug!.snapshot().ui.toolPanels.top.collapsed).toBe(false);
     expect(ctx.debug!.snapshot().ui.toolPanels.top.mounted).toBe(true);

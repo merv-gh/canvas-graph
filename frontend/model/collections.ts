@@ -13,20 +13,20 @@ export const appCollections = [
     label: 'Graphs',
     kind: 'graph',
     items: ctx => ctx.graphs.all(),
-    toolbar: { text: '+ Graph', order: 20 },
+    toolbar: { text: 'New graph', order: 20 },
   }),
   collection<NodeEntity>({
     id: 'nodes',
     label: 'Nodes',
     kind: 'node',
     items: ctx => ctx.graphs.current.nodes(),
-    toolbar: { text: '+ Node', order: 10 },
+    toolbar: { text: 'Add node', order: 10 },
   }),
   collection<EdgeEntity>({
     id: 'edges',
     label: 'Edges',
     kind: 'edge',
     items: ctx => ctx.graphs.current.edges(),
-    toolbar: { text: '+ Edge', order: 15 },
+    toolbar: { text: 'Connect', order: 15 },
   }),
 ];

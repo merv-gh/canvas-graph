@@ -1,6 +1,6 @@
 import { commandShortcut, type Registry } from '../core';
 import { Places, Slots } from '../types';
-import type { PanelDef, Position } from '../types';
+import type { PanelDef, Place, Position } from '../types';
 
 declare module '../types' {
   interface CustomEvents {
@@ -8,6 +8,7 @@ declare module '../types' {
     'tool.panel.drag.move': { x: number; y: number };
     'tool.panel.drag.end': void;
     'tool.panel.moved': { id: string; position: Position };
+    'tool.panel.mobile.toggle': void;
   }
 }
 
@@ -15,13 +16,14 @@ const TOP_PANEL_ID = 'top';
 const ZEN_FOLD_ID = 'shell.zen';
 
 export function registerToolPanel(system: Registry) {
-  system('tool.panel', ({ on, emit, contexts, declarePanel }) => {
+  system('tool.panel', ({ on, emit, bus, contexts, declarePanel }) => {
     // Drag overrides only; un-dragged panels (incl. the fixed top toolbar)
     // position via their `data-anchor` CSS.
     const positions = new Map<string, Position>();
     // Render keys we have mounted, so a panel that goes away (origin teardown or
     // a false `mountWhen`) gets its stage view cleared instead of going stale.
-    const mounted = new Set<string>();
+    const mounted = new Map<string, Place>();
+    let mobileOpen = false;
     let drag: { id: string; pointer: Position; start: Position } | null = null;
 
     const keyOf = (id: string) => `tool-panel:${id}`;
@@ -41,16 +43,17 @@ export function registerToolPanel(system: Registry) {
     const anchorPosition = (panel: PanelDef): Position => {
       const rect = stageRect();
       const margin = 12;
-      const x = panel.anchor.endsWith('right') && rect ? Math.max(margin, rect.width - 180 - margin) : margin;
+      const x = panel.anchor === 'bottom-center' && rect
+        ? Math.max(margin, rect.width / 2 - 90)
+        : panel.anchor.endsWith('right') && rect ? Math.max(margin, rect.width - 180 - margin) : margin;
       const y = panel.anchor === 'middle-right' && rect
         ? Math.max(margin, rect.height / 2 - 120)
         : panel.anchor.startsWith('bottom') && rect ? Math.max(margin, rect.height - 44 - margin) : margin;
       return { x, y };
     };
     const panelPosition = (panel: PanelDef) => positions.get(panel.id) ?? anchorPosition(panel);
-    // Zen no longer collapses panels — it fades every panel to semi-transparent
-    // via `.shell[data-zen] .tool-panel` CSS, so they stay in place, just quiet.
     const isCollapsed = (panel: PanelDef) => panel.foldId ? contexts.fold.folded(panel.foldId) : false;
+    const placeFor = (panel: PanelDef) => panel.id === TOP_PANEL_ID ? Places.Top : Places.Stage;
     const buttonsFor = (panelId: string) =>
       contexts.affordances.system('top').filter(aff => (aff.panel ?? TOP_PANEL_ID) === panelId);
 
@@ -87,6 +90,7 @@ export function registerToolPanel(system: Registry) {
         hidden: true,
         input: { on: 'pointerup', when: () => !!drag, stop: true },
       },
+      { id: 'tool.panel.mobile.toggle', label: 'Toggle mobile actions', group: 'tool-panel', hidden: true },
     ]);
 
     const buttonFor = (commandId: string, text: string, label?: string) => {
@@ -115,16 +119,20 @@ export function registerToolPanel(system: Registry) {
       btn.dataset.foldId = panel.foldId ?? '';
       btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
       btn.setAttribute('aria-label', collapsed ? 'Expand panel' : 'Collapse panel');
-      btn.textContent = collapsed ? '▾' : '▴';
+      btn.textContent = collapsed ? '⊞' : '⊟';
       return btn;
     };
 
-    const addButton = (parent: HTMLElement, aff: { command: string; text?: string; label?: string; className?: string }) => {
+    const addButton = (parent: HTMLElement, aff: { command: string; text?: string; label?: string; className?: string; active?: () => boolean }) => {
       const cmd = contexts.commands.get(aff.command);
       if (cmd?.available && !cmd.available()) return;
-      const button = buttonFor(aff.command, aff.text ?? aff.command, aff.label);
+      const text = aff.text ?? aff.command;
+      const button = buttonFor(aff.command, text, aff.label);
       const shortcut = commandShortcut(contexts.commands, aff.command);
-      if (shortcut) button.title = shortcut;
+      const description = !aff.label && cmd?.label !== text ? cmd?.label : undefined;
+      if (description) button.setAttribute('aria-description', description);
+      button.title = [description, shortcut].filter(Boolean).join(' · ');
+      if (aff.active) button.setAttribute('aria-pressed', aff.active() ? 'true' : 'false');
       if (aff.className) button.classList.add(...aff.className.split(/\s+/).filter(Boolean));
       parent.append(button);
     };
@@ -152,6 +160,22 @@ export function registerToolPanel(system: Registry) {
       const toolbar = contexts.templates.clone('toolbar');
       const start = contexts.templates.slot(toolbar, 'start');
       const end = contexts.templates.slot(toolbar, 'end');
+      if (panel.id === TOP_PANEL_ID) {
+        const brand = document.createElement('span');
+        brand.className = 'toolbar-brand';
+        brand.setAttribute('aria-label', 'Canvas Graph — visual editor for systems, flows, and ideas');
+        brand.title = 'Visual editor for systems, flows, and ideas';
+        const name = document.createElement('b');
+        name.textContent = 'Canvas';
+        const kind = document.createElement('span');
+        kind.textContent = 'Graph';
+        brand.append(name, kind);
+        toolbar.prepend(brand);
+        const actions = buttonFor('tool.panel.mobile.toggle', 'Actions', 'Show editing actions');
+        actions.className = 'mobile-actions-toggle';
+        actions.setAttribute('aria-expanded', mobileOpen ? 'true' : 'false');
+        end.prepend(actions);
+      }
       const groups = new Map<string, HTMLElement>();
       buttonsFor(panel.id).forEach(aff => {
         if (aff.slot === Slots.End) addButton(end, aff);
@@ -169,13 +193,14 @@ export function registerToolPanel(system: Registry) {
 
     const drawPanel = (panel: PanelDef) => {
       const key = keyOf(panel.id);
+      const place = placeFor(panel);
       if (panel.mountWhen && !panel.mountWhen()) {
-        if (mounted.delete(key)) emit('render.view.clear', { place: Places.Stage, key });
+        if (mounted.delete(key)) emit('render.view.clear', { place, key });
         return;
       }
-      mounted.add(key);
+      mounted.set(key, place);
       emit('render.view.set', {
-        place: Places.Stage,
+        place,
         key,
         view: () => {
           const collapsed = isCollapsed(panel);
@@ -183,6 +208,7 @@ export function registerToolPanel(system: Registry) {
           section.className = `tool-panel${panel.layout === 'toolbar' ? ' top-tool-panel' : ' tool-panel-stack'}`;
           section.dataset.panelId = panel.id;
           section.dataset.collapsed = collapsed ? 'true' : 'false';
+          section.dataset.mobileOpen = mobileOpen ? 'true' : 'false';
           const dragged = positions.get(panel.id);
           if (dragged) {
             section.style.left = `${dragged.x}px`;
@@ -206,14 +232,23 @@ export function registerToolPanel(system: Registry) {
     };
 
     const drawPanels = () => {
+      const focused = document.activeElement instanceof HTMLElement
+        ? document.activeElement.closest<HTMLElement>('[data-command]')?.dataset.command
+        : undefined;
       const live = new Set(panels().map(p => keyOf(p.id)));
-      for (const key of [...mounted]) {
+      for (const [key, place] of [...mounted]) {
         if (!live.has(key)) {
-          emit('render.view.clear', { place: Places.Stage, key });
+          emit('render.view.clear', { place, key });
           mounted.delete(key);
         }
       }
       panels().forEach(drawPanel);
+      if (focused) {
+        const shell = contexts.places.el(Places.Top)?.parentElement;
+        const replacement = [...(shell?.querySelectorAll<HTMLElement>('[data-command]') ?? [])]
+          .find(button => button.dataset.command === focused);
+        replacement?.focus({ preventScroll: true });
+      }
     };
 
     on('tool.panel.drag.start', ({ id, x, y }) => {
@@ -232,6 +267,27 @@ export function registerToolPanel(system: Registry) {
       drawPanels();
     });
     on('tool.panel.drag.end', () => { drag = null; });
+    on('tool.panel.mobile.toggle', () => { mobileOpen = !mobileOpen; drawPanels(); });
+
+    const closeMobileActions = () => {
+      if (!mobileOpen) return;
+      mobileOpen = false;
+      drawPanels();
+    };
+    const offAny = bus.onAny(({ name }) => {
+      if (!mobileOpen) return;
+      const mobileActionEvents = new Set(buttonsFor(TOP_PANEL_ID)
+        .filter(affordance => affordance.slot !== Slots.End)
+        .map(affordance => {
+          const command = contexts.commands.get(affordance.command);
+          return command?.event ?? command?.id;
+        })
+        .filter((event): event is string => !!event));
+      if (mobileActionEvents.has(name)) queueMicrotask(closeMobileActions);
+    });
+    on('modal.open', closeMobileActions);
+    on('commandPicker.open', closeMobileActions);
+    on('graph.switched', closeMobileActions);
 
     on('app.start', drawPanels);
     on('affordance.contributed', ({ surface }) => { if (surface === 'top') drawPanels(); });
@@ -240,8 +296,10 @@ export function registerToolPanel(system: Registry) {
     });
     on('debug.enabled.changed', drawPanels);
     on('debug.recording.changed', drawPanels);
+    on('history.changed', drawPanels);
     // Only panels with a `mountWhen` predicate care about selection changes;
     // skip the redraw entirely when none do (keeps the top panel untouched).
     on('selection.changed', () => { if (panels().some(p => p.mountWhen)) drawPanels(); });
+    return () => offAny();
   }, { requires: ['render.stage'] });
 }

@@ -8,6 +8,7 @@
 - `share.ts` — graph share/import: `?g=` (compressed, `~`-prefixed) round-trip codec, `?in=` + paste mermaid import (incl. mermaid.live `pako:` links), `graph.share.copy` / `graph.import.mermaid`.
 - `input.ts` — starts the DOM→command router (`core/commands.ts` owns the logic).
 - `graph.ts` — node/edge/graph commands, lifecycle handlers, storage for node/edge, hierarchy source.
+- `history.ts` — bounded per-graph undo/redo over versioned full-document snapshots; coalesces gesture facts.
 - `containers.ts` — container kind end-to-end: entity, nesting, drag-cascade, commands (Y/M), storage. *The* exemplar for a new kind.
 - `collections.ts` — derives create/delete/select commands from collection declarations.
 - `choose.ts` — set-building commands (Ctrl+A all, invert, follow edges, radius, search) + group (Ctrl+G).

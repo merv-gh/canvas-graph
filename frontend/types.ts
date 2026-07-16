@@ -170,12 +170,12 @@ interface BuiltinEvents {
   'render.stage.camera': void;
   /** Modal layer contract. Multiple systems open modals (commandForm,
    *  commandModal, configurable); they all go through these two events. */
-  'modal.open': { title?: string; body?: Renderable; visual?: ModalVisual };
+  'modal.open': { title?: string; titleView?: Renderable; body?: Renderable; visual?: ModalVisual };
   'modal.close': void;
   'modal.closed': void;
   /** decorations facet-change notification (item modes / overlays). Render
    *  listens to redraw stage chrome (selection rings, jump letters, etc.). */
-  'decoration.changed': { facet?: 'modes' | 'overlays'; source?: string };
+  'decoration.changed': { facet?: 'modes' | 'overlays'; source?: string; refs?: ItemRef[] };
   /** Fold (collapse/expand) request + fact for any panel/section. Owned by the
    *  foldable system; consumers (outline, main, …) listen on `.changed` and
    *  re-render. */
@@ -354,6 +354,9 @@ export type AffordanceDef<T = unknown> = {
   surface: AffordanceSurface;
   command: string;
   kind: AffordanceKind;
+  /** Item-dependent disclosure. The action remains one canonical command, but
+   *  irrelevant controls are absent from this particular entity instance. */
+  when?: (item: T) => boolean;
   slot?: SlotName;
   text?: UiValue<T>;
   label?: UiValue<T>;
@@ -367,10 +370,14 @@ export type AffordanceDef<T = unknown> = {
  *  `top`-surface button to a declared tool panel by id; omit it for the default
  *  top toolbar. Routing here (not a bespoke render) is what lets the `command-ui`
  *  projection move a button between panels as a one-field views edit. */
-export type SystemAffordance = Omit<AffordanceDef<void>, 'text' | 'label'> & {
+export type SystemAffordance = Omit<AffordanceDef<void>, 'text' | 'label' | 'when'> & {
   text?: string;
   label?: string;
   panel?: string;
+  /** Live pressed state for mutually-exclusive controls such as layout modes.
+   *  The tool-panel renderer exposes it through aria-pressed and the shared
+   *  selected-control styling; the command remains the only mutation path. */
+  active?: () => boolean;
   /** Cluster start-slot toolbar buttons that share this key into one visual
    *  `.tool-group` (e.g. 'edit', 'layout'). Omit to render loose. */
   group?: string;
@@ -378,7 +385,7 @@ export type SystemAffordance = Omit<AffordanceDef<void>, 'text' | 'label'> & {
 };
 
 /** Where a tool panel anchors on the stage when it has not been dragged. */
-export type PanelAnchor = 'top-left' | 'top-center' | 'top-right' | 'middle-right' | 'bottom-left' | 'bottom-right';
+export type PanelAnchor = 'top-left' | 'top-center' | 'top-right' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
 
 /** A movable/collapsible tool panel on the stage. Declared as data via
  *  `contexts.affordances.declarePanel(...)` from the owning system's file, so
@@ -454,6 +461,10 @@ export type EntityRenderCtx = {
    *  visible endpoint. Returns null when the ref has no entity, no item, or
    *  the entity renderer doesn't declare bounds. */
   boundsOf(ref: ItemRef): Rect | null;
+  /** Resolve only the rendered bounds intersecting a graph-space area. This is
+   * the spatial-query seam for renderers whose geometry must avoid nearby
+   * entities without scanning the entire document for every painted item. */
+  boundsInRect(kind: string, rect: Rect): Rect[];
 };
 
 export type EntityRenderer<T = unknown> = {

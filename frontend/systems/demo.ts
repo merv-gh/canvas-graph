@@ -7,7 +7,8 @@ declare module '../types' {
     'demo.run-c4': void;
     'demo.run-math': void;
     'demo.run-workflow': void;
-    'demo.loaded': { id: 'c4' | 'math' | 'workflow' };
+    'demo.run-game': void;
+    'demo.loaded': { id: 'c4' | 'math' | 'workflow' | 'game' };
   }
 }
 
@@ -17,14 +18,14 @@ declare module '../types' {
  *  feature / entity / collection shows up here with zero edits. */
 export function registerDemo(system: Registry) {
   system('demo', (ctx) => {
-    const { on, emit, graphs, contribute } = ctx;
-    contribute({ surface: 'top', command: 'demo.render-self', kind: 'button', text: '★ Self', order: 60 });
+    const { on, emit, graphs } = ctx;
     ctx.contexts.commands.register([
       {
         id: 'demo.render-self',
         label: 'Render self-graph',
         event: 'demo.run-self',
         group: 'demo',
+        hidden: true,
       },
       {
         id: 'demo.render-c4',
@@ -42,6 +43,12 @@ export function registerDemo(system: Registry) {
         id: 'demo.render-workflow',
         label: 'Open sequenced delivery workflow',
         event: 'demo.run-workflow',
+        group: 'demo',
+      },
+      {
+        id: 'demo.render-game',
+        label: 'Open vertical nested Game design map',
+        event: 'demo.run-game',
         group: 'demo',
       },
     ]);
@@ -64,6 +71,30 @@ export function registerDemo(system: Registry) {
     const clearGraph = () => {
       graphs.current.nodes().slice().forEach(node => emit('graph.node.delete', { id: node.id }));
       containerIds().forEach(id => emit('graph.container.delete', { id }));
+    };
+    // Node creation schedules the normal auto-layout feature in a microtask.
+    // Canonical demos need their authored layout to win after that generic
+    // pass, and fitting must use those final positions.
+    const finishDemo = (
+      layout: 'layout.apply.tidy' | 'layout.apply.radial' | 'layout.apply.vertical' | null,
+      id?: 'c4' | 'math' | 'workflow' | 'game',
+      arrange?: () => void,
+    ) => {
+      queueMicrotask(() => {
+        arrange?.();
+        if (layout) emit(layout);
+        emit('selection.item.clear');
+        emit('view.fit.all');
+        if (id) emit('demo.loaded', { id });
+      });
+    };
+    const place = (id: Id | undefined, Position: { x: number; y: number }, Size?: { w: number; h: number }) => {
+      if (!id) return;
+      emit('item.update', { ref: { kind: 'node', id }, patch: { Position, ...(Size ? { Size } : {}) } });
+    };
+    const frame = (id: Id | undefined, Position: { x: number; y: number }, Size: { w: number; h: number }) => {
+      if (!id) return;
+      emit('item.update', { ref: { kind: 'container', id }, patch: { Position, Size, AutoFit: false } });
     };
     const makeContainer = (title: string, at: { x: number; y: number }, sections: string[], axis: 'rows' | 'columns' = 'rows') => {
       const before = new Set(containerIds());
@@ -140,8 +171,7 @@ export function registerDemo(system: Registry) {
       // Tidy is scope-aware (layout.ts `partitionByScope`) — each container's
       // children lay out inside the container's local frame, root-scope items
       // lay out around (0,0). Then fit-all so everything is visible.
-      emit('layout.apply.tidy');
-      emit('view.fit.all');
+      finishDemo('layout.apply.tidy');
 
       console.info('[demo] self-graph rendered', {
         nodes: wantedNodes.length,
@@ -166,9 +196,15 @@ export function registerDemo(system: Registry) {
         [api, database, 'reads + writes'],
         [api, payment, 'authorizes'],
       ].forEach(([From, To, label]) => emit('graph.edge.create', { From, To, Label: { text: label } }));
-      emit('layout.apply.tidy');
-      emit('view.fit.all');
-      emit('demo.loaded', { id: 'c4' });
+      finishDemo(null, 'c4', () => {
+        frame(context, { x: 0, y: 0 }, { w: 1760, h: 660 });
+        frame(shop, { x: 20, y: 0 }, { w: 1080, h: 460 });
+        place(customer, { x: -700, y: -60 });
+        place(payment, { x: 700, y: 60 });
+        place(web, { x: -320, y: -90 });
+        place(api, { x: 20, y: 0 });
+        place(database, { x: 360, y: 90 });
+      });
     });
 
     on('demo.run-math', () => {
@@ -188,9 +224,7 @@ export function registerDemo(system: Registry) {
         [expectation, longRun, 'interprets'],
         [expectation, linearity, 'obeys'],
       ].forEach(([From, To, label]) => emit('graph.edge.create', { From, To, Label: { text: label } }));
-      emit('layout.apply.radial');
-      emit('view.fit.all');
-      emit('demo.loaded', { id: 'math' });
+      finishDemo('layout.apply.radial', 'math');
     });
 
     on('demo.run-workflow', () => {
@@ -208,15 +242,67 @@ export function registerDemo(system: Registry) {
         [review, release, 'approved'],
         [review, implement, 'changes requested'],
       ].forEach(([From, To, label]) => emit('graph.edge.create', { From, To, Label: { text: label } }));
-      emit('layout.apply.tidy');
-      emit('view.fit.all');
-      emit('demo.loaded', { id: 'workflow' });
+      finishDemo(null, 'workflow', () => {
+        frame(board, { x: 0, y: 0 }, { w: 1560, h: 440 });
+        place(request, { x: -560, y: 0 });
+        place(implement, { x: -190, y: 0 });
+        place(tests, { x: 180, y: -90 });
+        place(review, { x: 180, y: 90 });
+        place(release, { x: 560, y: 0 });
+      });
+    });
+    on('demo.run-game', () => {
+      clearGraph();
+      graphs.current.rename('Game');
+      emit('graph.renamed', { id: graphs.current.id, name: graphs.current.name });
+
+      const game = makeNode(
+        'Game',
+        'circle',
+        '**Creative blueprint** connecting what the player experiences, hears, sees, and repeatedly does.',
+      );
+      const narrative = makeNode('Narrative', 'square', 'Meaning, dramatic structure, people, and the world that make play worth caring about.');
+      const story = makeNode('Story', 'text', '**Premise · themes · structure · pacing**\n\nDefine the dramatic question, major beats, and how play advances them.');
+      const characters = makeNode('Characters', 'text', '**Player · allies · rivals · NPCs**\n\nGive each a role, motivation, voice, relationships, and visible arc.');
+      const world = makeNode('World & lore', 'text', '**Setting · history · factions · rules**\n\nBuild coherent context that can be discovered through action instead of exposition alone.');
+      const quests = makeNode('Quests & dialogue', 'text', '**Objectives · choices · consequences**\n\nTurn narrative intent into playable goals and responsive conversations.');
+
+      const audio = makeNode('Audio', 'square', 'The audible layer that establishes place, communicates state, and reinforces emotion and action.');
+      const music = makeNode('Music', 'text', '**Themes · adaptive score · transitions**\n\nMove cleanly between exploration, tension, combat, success, and loss.');
+      const sound = makeNode('Sound design', 'text', '**Ambience · Foley · UI · feedback**\n\nMake spaces believable and every important action readable without looking.');
+      const voice = makeNode('Voice', 'text', '**Casting · performance · recording · localization**\n\nPreserve character intent across sessions, languages, and runtime variation.');
+      const mix = makeNode('Runtime mix', 'text', '**Spatial audio · priority · ducking · loudness**\n\nKeep essential cues intelligible when many systems speak at once.');
+
+      const visuals = makeNode('Visuals', 'square', 'The visual language that makes the world coherent, legible, performant, and emotionally distinct.');
+      const art = makeNode('Art direction', 'text', '**Shape · color · material · composition**\n\nDefine a singular visual grammar and references for every production discipline.');
+      const rendering = makeNode('Rendering & lighting', 'text', '**Pipeline · shaders · cameras · light**\n\nDeliver the intended look inside frame-time and platform constraints.');
+      const models = makeNode('3D models', 'text', '**Characters · environments · props · LODs**\n\nAuthor production-ready assets with consistent scale, topology, collision, and budgets.');
+      const animation = makeNode('Animation & VFX', 'text', '**Motion · state changes · particles · impact**\n\nCommunicate weight, intention, timing, danger, and reward.');
+
+      const design = makeNode('Game Design', 'square', 'The rules and decisions that turn content into a learnable, replayable, and balanced experience.');
+      const loop = makeNode('Core game loop', 'text', '**Act → feedback → reward → new decision**\n\nState the repeatable minute-to-minute promise before expanding scope.');
+      const mechanics = makeNode('Mechanics & systems', 'text', '**Movement · combat · interaction · simulation**\n\nDefine rules, inputs, state, feedback, failure, and meaningful combinations.');
+      const levels = makeNode('Level design', 'text', '**Space · encounter · pacing · navigation**\n\nTeach and test mechanics through readable routes, choices, landmarks, and escalation.');
+      const progression = makeNode('Progression & balance', 'text', '**Difficulty · economy · unlocks · mastery**\n\nShape short- and long-term goals while keeping strategies viable and rewards meaningful.');
+
+      const branches: Array<[string, string[]]> = [
+        [narrative, [story, characters, world, quests]],
+        [audio, [music, sound, voice, mix]],
+        [visuals, [art, rendering, models, animation]],
+        [design, [loop, mechanics, levels, progression]],
+      ];
+      branches.forEach(([category, details]) => {
+        emit('graph.edge.create', { From: game, To: category });
+        details.forEach(detail => emit('graph.edge.create', { From: category, To: detail }));
+      });
+      finishDemo('layout.apply.vertical', 'game');
     });
     on('app.start', () => {
       const id = new URLSearchParams(location.search).get('demo');
       const event = id === 'c4' ? 'demo.run-c4'
         : id === 'math' ? 'demo.run-math'
         : id === 'workflow' ? 'demo.run-workflow'
+        : id === 'game' ? 'demo.run-game'
         : null;
       if (event) queueMicrotask(() => emit(event));
     });

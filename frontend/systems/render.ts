@@ -21,19 +21,32 @@ export function registerRender(system: Registry) {
       return `[data-item-kind="${attr(ref.kind)}"][data-item-id="${attr(ref.id)}"]${parent ? `[data-item-parent="${attr(parent)}"]` : ':not([data-item-parent])'}`;
     };
     const activeElement = () => document.activeElement as (Element & { blur?: () => void }) | null;
-    const modalOpen = () => (contexts.places.el(Places.Modal)?.children.length ?? 0) > 0;
+    const modalOpen = () => !!contexts.places.el(Places.Modal)?.querySelector('.modal-layer');
     const blurActiveItem = () => {
       const active = activeElement();
       if (active?.closest('[data-item-kind][data-item-id]') && typeof active.blur === 'function') active.blur();
     };
     const nodeOf = (view: Renderable) => typeof view === 'function' ? view() : view;
     const mountedFor = (place: Place) => mounted.get(place) ?? mounted.set(place, new Map()).get(place)!;
+    const tagRenderKey = (node: Node, key: string) => {
+      if (node instanceof HTMLElement) node.dataset.renderKey = key;
+      return node;
+    };
+    const removeDuplicateKey = (slot: Element, key: string, keep?: Node) => {
+      [...slot.children].forEach(child => {
+        if (child !== keep && child instanceof HTMLElement && child.dataset.renderKey === key) child.remove();
+      });
+    };
     const mountView = (place: Place, key: string, view: Renderable) => {
       const slot = contexts.places.el(place);
       if (!slot) return;
       const live = mountedFor(place);
       const previous = live.get(key);
-      const next = nodeOf(view);
+      const next = tagRenderKey(nodeOf(view), key);
+      // A hot redraw or shell remount may race a previous view replacement.
+      // Render keys are singular: reconcile stale siblings before mounting so
+      // overlapping command rails never leave duplicate focus targets behind.
+      removeDuplicateKey(slot, key, previous);
       if (previous === next) {
         if (previous.parentNode !== slot) slot.append(previous);
         return;
@@ -47,7 +60,8 @@ export function registerRender(system: Registry) {
       if (!slot || !parts) return;
       const live = mountedFor(place);
       parts.forEach((view, key) => {
-        const node = live.get(key) ?? nodeOf(view);
+        const node = tagRenderKey(live.get(key) ?? nodeOf(view), key);
+        removeDuplicateKey(slot, key, node);
         live.set(key, node);
         slot.append(node);
       });
@@ -206,7 +220,15 @@ export function registerRender(system: Registry) {
       if (scope === 'nodes' || scope === 'nodes.visual' || scope === 'both') {
         const ref = factItemRef(name, data);
         if (ref) { dirtyItems.set(`${ref.kind}:${ref.id}`, ref); }
-        else if (name === 'decoration.changed') { /* modes included in sigCache now — PATCH handles it */ }
+        else if (name === 'decoration.changed') {
+          // A mode replacement affects both sides of the transition: the new
+          // selected/focused ref gains a class and every previous ref loses it.
+          // Decorations carries that union so patch rendering stays O(changed)
+          // without leaving stale halos behind.
+          const refs = (data as { refs?: ItemRef[] } | undefined)?.refs;
+          if (refs?.length) refs.forEach(r => dirtyItems.set(`${r.kind}:${r.id}`, r));
+          else fullNodes = true;
+        }
         else if (name === 'selection.changed') {
           // Carries { refs: ItemRef[] } — extract individual refs.
           const refs = (data as { refs?: ItemRef[] } | undefined)?.refs;

@@ -7,7 +7,7 @@ import { Places } from '../types';
 const ZEN_FOLD_ID = 'shell.zen';
 
 export function registerMain(system: Registry) {
-  system('main', ({ on, emit, contexts, contribute, origin }) => {
+  system('main', ({ on, emit, contexts, origin }) => {
     // Escape exits zen mode through the shared cancellation stack. `background:
     // false` keeps zen active on canvas clicks — it persists until an explicit
     // exit (`\` or Escape), so the faded panels don't pop back on a stray click.
@@ -37,7 +37,6 @@ export function registerMain(system: Registry) {
         payload: () => ({ id: ZEN_FOLD_ID }),
       },
     ]);
-    contribute({ surface: 'top', command: 'view.zen', kind: 'button', text: '☾', label: 'Toggle zen mode', order: 80 });
     on('app.start', () => { emit('render.shell'); syncShellFold(); });
     on('fold.changed', ({ id }) => { if (id === ZEN_FOLD_ID) syncShellFold(); });
   }, { requires: ['render'] });

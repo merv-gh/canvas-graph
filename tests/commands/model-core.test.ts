@@ -173,7 +173,7 @@ describe('frontend model and core helpers', () => {
     const fake = { id: 'foos', label: 'Foos', items: () => [{ id: 'f1' }] };
 
     expect(collectionKind(fake)).toBe('foo');
-    expect(graphs.itemLabel(ctx.graphs.current)).toBe(ctx.graphs.current.id);
+    expect(graphs.itemLabel(ctx.graphs.current)).toBe(ctx.graphs.current.name);
     expect(nodes.itemLabel({ id: 'n1', Label: { text: 'Named' } })).toBe('Named');
     expect(collectionCreateCommand(graphs)).toBe('graph.create');
     expect(collectionDeleteCommand(graphs)).toBe('graph.delete');
@@ -225,8 +225,8 @@ describe('frontend model and core helpers', () => {
     expect(commandShortcut(commands, 'graph.node.delete')).toBe('');
     expect(commands.shortcutConflict('palette.open.alt', 'A')?.id).toBe('editing.node.create');
     expect(commands.setShortcut('palette.open.alt', 'A')).toBe(false);
-    expect(commands.setShortcut('palette.open.alt', 'H')).toBe(true);
-    expect(help.shortcut).toBe('H');
+    expect(commands.setShortcut('palette.open.alt', 'Ctrl+H')).toBe(true);
+    expect(help.shortcut).toBe('Ctrl+H');
 
     expect(commands.setEnabled('palette.open.alt', false)).toBe(true);
     expect(commands.run('palette.open.alt')).toBe(false);

@@ -14,7 +14,7 @@ const createNodes = async (page, labels) => page.evaluate((labels) => {
 test('frontend boots current TypeScript entrypoint with edge creation UI enabled', async ({ page }) => {
   await boot(page);
 
-  await expect(page.locator('.toolbar [data-command="editing.edge.create"]')).toHaveText('+ Edge');
+  await expect(page.locator('.toolbar [data-command="editing.edge.create"]')).toHaveText('Connect');
   const state = await page.evaluate(() => ({
     commandFormOn: window.app.flags.isOn('commandForm'),
     commandFormRegistered: !!window.app.contexts.commands.get('commandForm.submit'),
@@ -40,6 +40,7 @@ test('edge command explains why it cannot run before two nodes exist', async ({ 
   await expect.poll(() => page.evaluate(() => window.__notices.at(-1))).toContain('Nothing to pick for Pick source node');
 
   await createNodes(page, ['A']);
+  await expect(page.locator('.node')).toHaveCount(1);
   await page.locator('.toolbar [data-command="editing.edge.create"]').click();
   await expect.poll(() => page.evaluate(() => window.__notices.at(-1))).toContain('Nothing to pick for Pick target node');
 });

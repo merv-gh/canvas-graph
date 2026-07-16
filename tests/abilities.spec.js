@@ -22,6 +22,7 @@ test('frontend centralizes DOM input listeners and keeps explicit lifecycle exce
     || line.startsWith('core/commands.ts:')
     || line.startsWith('core/keyboard.ts:')
     || line.startsWith('systems/io.ts:')
+    || line.startsWith('systems/view-zoom.ts:')
     || line.startsWith('systems/view-pan.ts:')
     || line.startsWith('systems/render-stage-gpu.ts:'));
 
@@ -48,11 +49,11 @@ test('frontend help rejects duplicate shortcuts without saving', async ({ page }
 
   await expect.poll(() => page.evaluate(() => window.app.contexts.commands.get('help.open').shortcut)).toBe('?');
 
-  await helpShortcut.fill('H');
+  await helpShortcut.fill('Control+H');
   await expect(helpShortcut).not.toHaveClass(/is-conflict/);
   await helpShortcut.evaluate(input => input.blur());
 
-  await expect.poll(() => page.evaluate(() => window.app.contexts.commands.get('help.open').shortcut)).toBe('H');
+  await expect.poll(() => page.evaluate(() => window.app.contexts.commands.get('help.open').shortcut)).toBe('Control+H');
 });
 
 test('frontend configurable ability opens node properties', async ({ page }) => {
@@ -61,25 +62,48 @@ test('frontend configurable ability opens node properties', async ({ page }) => 
   expect(nodeTemplate).not.toContain('node.collapse.toggle');
   expect(nodeTemplate).not.toContain('item.properties.open');
 
-  await page.getByRole('button', { name: '+ Node' }).click();
+  await page.getByRole('button', { name: 'Add node', exact: true }).click();
 
   const node = page.locator('.node').first();
   const toolbar = page.locator('.node-toolbar');
   await expect(node).toBeVisible();
-  await expect(toolbar.locator('[data-command="item.collapse.toggle"]')).toHaveText('▾');
+  const compactHeight = (await node.boundingBox()).height;
+  await expect(toolbar.locator('[data-command="item.collapse.toggle"]')).toHaveCount(0);
   await toolbar.locator('[data-command="item.properties.open"]').click();
 
   await expect(page.locator('.modal-layer[data-visual="properties"]')).toBeVisible();
-  await expect(page.locator('.modal-head')).toContainText('Node Properties');
+  await expect(page.locator('.context-actions')).toBeVisible();
 
-  await page.locator('.properties [data-field="title"]').fill('Configured');
+  await page.getByLabel('Item title').fill('Configured');
   await expect(node.locator('.node-title')).toHaveText('Configured');
+  await page.locator('.properties [data-field="description"]').fill([
+    '### Details',
+    'A *rendered* paragraph.',
+    '1. First',
+    '2. Second',
+    '> Visible context',
+    '```js',
+    'const ready = true;',
+    '```',
+  ].join('\n'));
+  await expect(node.locator('.node-description h3')).toHaveText('Details');
+  await expect(node.locator('.node-description em')).toHaveText('rendered');
+  await expect(node.locator('.node-description ol li')).toHaveCount(2);
+  await expect(node.locator('.node-description blockquote')).toHaveText('Visible context');
+  await expect(node.locator('.node-description pre code')).toHaveText('const ready = true;');
+  await expect.poll(async () => (await node.boundingBox()).height).toBeGreaterThan(compactHeight);
 
-  await page.locator('.properties [data-field="width"]').fill('220');
-  await expect.poll(() => node.evaluate(el => getComputedStyle(el).width)).toBe('220px');
+  await expect(page.locator('.properties [data-field="width"]')).toHaveCount(0);
+  await expect(page.locator('.properties [data-field="height"]')).toHaveCount(0);
 
   await expect(page.locator('.properties [data-field="collapsed"]')).toHaveCount(0);
   await page.getByRole('button', { name: 'Close' }).click();
+  await expect(toolbar.locator('[data-command="item.collapse.toggle"]')).toHaveText('⊟');
   await toolbar.locator('[data-command="item.collapse.toggle"]').click();
   await expect(node).toHaveClass(/collapsed/);
+  await expect(toolbar.locator('[data-command="item.collapse.toggle"]')).toHaveText('⊞');
+  const nodeBox = await node.boundingBox();
+  const titleBox = await node.locator('.node-title').boundingBox();
+  expect(nodeBox.height).toBeLessThan(compactHeight + 1);
+  expect(Math.abs((nodeBox.y + nodeBox.height / 2) - (titleBox.y + titleBox.height / 2))).toBeLessThan(1);
 });

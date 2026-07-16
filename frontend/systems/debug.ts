@@ -100,6 +100,7 @@ export function registerDebug(system: Registry) {
         id: 'debug.enable',
         label: 'Toggle debug tools',
         group: 'debug',
+        hidden: true,
         payload: () => ({ on: !enabled }),
       },
       {

@@ -1,4 +1,5 @@
 import { commandShortcut, edgeRef, emptyState, foldHidden, itemFoldId, kbdHint, tagItem, type Registry } from '../core';
+import { expandRect, rectsOverlap } from '../core/geometry';
 import { Places, Slots } from '../types';
 import type { ActionDef, AffordanceDef, EntityDef, EntityRenderCtx, ItemRef } from '../types';
 import { uiValue } from '../core';
@@ -28,6 +29,7 @@ export function registerRenderStage(system: Registry) {
     const wireItemAffordances = <T>(el: HTMLElement, entityDef: EntityDef<T>, item: T) => {
       const grouped = new Map<string, { action: ActionDef<T>; ui: AffordanceDef<T> }[]>();
       contexts.affordances.entity(entityDef).forEach(({ action, ui }) => {
+        if (ui.when && !ui.when(item)) return;
         const slotName = ui.slot ?? Slots.Header;
         (grouped.get(slotName) ?? grouped.set(slotName, []).get(slotName)!).push({ action: action as ActionDef<T>, ui: ui as AffordanceDef<T> });
       });
@@ -72,6 +74,23 @@ export function registerRenderStage(system: Registry) {
       parentChain: ref => contexts.hierarchy.parentChain(ref),
       isFolded: ref => contexts.fold.folded(itemFoldId(ref, graphs.current.id)),
       boundsOf: boundsOfRef,
+      boundsInRect: (kind, area) => {
+        const entityDef = model.entity(kind) as EntityDef<unknown> | undefined;
+        const bounds = entityDef?.render?.bounds;
+        if (!bounds) return [];
+        // Node sizes are clamped to 900 graph units. Query centers with a
+        // half-size margin, then refine against the renderer's exact bounds.
+        const items = kind === 'node'
+          ? graphs.current.nodeIdsInRect(expandRect(area, 450)).flatMap(id => {
+              const item = graphs.current.getItem({ kind: 'node', id });
+              return item ? [item] : [];
+            })
+          : graphs.current.itemsOfKind(kind);
+        return items.flatMap(item => {
+          const rect = bounds(item);
+          return rect && rectsOverlap(rect, area) ? [rect] : [];
+        });
+      },
     });
     /** True when any ancestor of `ref` is `Collapsed`. Collapsed containers
      *  hide their entire subtree — the children stay in the data store (so
@@ -85,6 +104,7 @@ export function registerRenderStage(system: Registry) {
       stage.style.setProperty('--grid-x', `${-view.x * view.scale}px`);
       stage.style.setProperty('--grid-y', `${-view.y * view.scale}px`);
       stage.dataset.zoom = `${Math.round(view.scale * 100)}%`;
+      stage.dataset.zoomBand = view.scale < 0.5 ? 'far' : view.scale < 0.72 ? 'overview' : 'detail';
     };
     const layerTransform = (view: import('../types').ViewState) =>
       `translate(${-view.x * view.scale}px, ${-view.y * view.scale}px) scale(${view.scale})`;
@@ -337,8 +357,13 @@ export function registerRenderStage(system: Registry) {
         key: 'empty',
         view: () => {
           const shortcut = commandShortcut(contexts.commands, 'editing.node.create');
-          const hint = shortcut ? kbdHint('Press ', shortcut, ' to add a node') : undefined;
-          return emptyState(contexts.templates, 'No nodes in this graph yet', hint) ?? document.createDocumentFragment();
+          const hint = document.createDocumentFragment();
+          const purpose = document.createElement('span');
+          purpose.className = 'empty-purpose';
+          purpose.textContent = 'Map a system, workflow, or connected idea.';
+          hint.append(purpose);
+          if (shortcut) hint.append(kbdHint('Press ', shortcut, ' to add a node'));
+          return emptyState(contexts.templates, 'No nodes in this graph yet', hint, 'editing.node.create') ?? document.createDocumentFragment();
         },
       });
     };

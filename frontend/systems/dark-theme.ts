@@ -9,8 +9,8 @@ declare module '../types' {
 const KEY = 'theme';
 type Theme = 'light' | 'dark' | 'system';
 
-/** Dark mode toggle. Persisted via IoApi; falls back to OS preference when set to
- *  'system'. Applies `data-theme` on `.shell` so CSS custom properties cascade
+/** Theme toggle. Persisted via IoApi; legacy `system` values resolve to the
+ *  product's light default. Applies `data-theme` on `.shell` so CSS custom properties cascade
  *  without touching the flag/plugin machinery. Theme is UI state, not a feature
  *  toggle — it doesn't go through the registry flag system. */
 export function registerDarkTheme(system: Registry) {
@@ -19,32 +19,20 @@ export function registerDarkTheme(system: Registry) {
     const shellEl = () =>
       contexts.places.el('top')?.parentElement as HTMLElement | null;
 
-    const prefersDark = (): boolean =>
-      typeof window.matchMedia === 'function'
-        ? window.matchMedia('(prefers-color-scheme: dark)').matches
-        : false;
-
     const resolveTheme = (stored: Theme): 'light' | 'dark' => {
       if (stored === 'light' || stored === 'dark') return stored;
-      return prefersDark() ? 'dark' : 'light';
+      return 'light';
     };
 
     const applyTheme = () => {
       const shell = shellEl();
       if (!shell) return;
-      const stored = io.get<Theme>(KEY, 'system');
+      const stored = io.get<Theme>(KEY, 'light');
       const resolved = resolveTheme(stored);
       shell.setAttribute('data-theme', resolved);
       // Expose resolved value so snapshot can read a stable string.
       shell.dataset.colorscheme = resolved;
     };
-
-    if (typeof window.matchMedia === 'function') {
-      const mq = window.matchMedia('(prefers-color-scheme: dark)');
-      mq.onchange = () => {
-        if (io.get<Theme>(KEY, 'system') === 'system') applyTheme();
-      };
-    }
 
     contexts.commands.register([
       {
@@ -59,22 +47,25 @@ export function registerDarkTheme(system: Registry) {
     ]);
 
     on('theme.toggle', () => {
-      const stored = io.get<Theme>(KEY, 'system');
+      const stored = io.get<Theme>(KEY, 'light');
       const resolved = resolveTheme(stored);
       const next: Theme = resolved === 'dark' ? 'light' : 'dark';
       io.set(KEY, next);
       applyTheme();
     });
 
-    on('app.start', () => { applyTheme(); });
+    // `main` mounts the shell during the same app.start dispatch. Defer one
+    // microtask so theme application is independent of system registration order.
+    on('app.start', () => { queueMicrotask(applyTheme); });
 
     contribute({
       origin: 'dark.theme',
       surface: 'top',
       command: 'theme.toggle',
       kind: 'button',
-      text: '☀',
+      text: 'Theme',
       label: 'Toggle theme',
+      className: 'theme-toggle',
       slot: 'end',
       order: 78,
     });

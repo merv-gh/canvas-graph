@@ -5,8 +5,8 @@
   ],
   "asserts": [
     { "rect": ".shell", "op": "visible" },
-    { "cssvar": ".shell", "prop": "--bg", "op": "contains", "value": "rgb" },
-    { "cssvar": ".shell", "prop": "--accent", "op": "contains", "value": "rgb" },
+    { "cssvar": ".shell", "prop": "--bg", "op": "eq", "value": "#f5f5f5" },
+    { "cssvar": ".shell", "prop": "--accent", "op": "eq", "value": "#424242" },
     { "path": "ui.colorscheme", "op": "truthy" },
     { "path": "ui.shell.zen", "op": "eq", "value": false }
   ]

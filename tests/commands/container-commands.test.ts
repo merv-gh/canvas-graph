@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { bootApp, runCommand, settle } from './testkit';
 import type { Id, ItemRef } from '../../frontend/types';
+import { itemFoldId } from '../../frontend/core';
 
 type ContainerLite = { id: Id; kind: 'container'; Label: { text: string }; Children: ItemRef[]; Position: { x: number; y: number } };
 
@@ -17,6 +18,27 @@ describe('frontend containers', () => {
     expect(list).toHaveLength(1);
     expect(ctx.selection.selected()).toEqual({ kind: 'container', id: list[0].id });
     expect(ctx.contexts.hierarchy.targets().some(t => t.ref.kind === 'container' && t.ref.id === list[0].id)).toBe(true);
+  });
+
+  it('unfolds a collapsed container on double-click with maximize and minimize icons', async () => {
+    const ctx = bootApp();
+    await settle();
+    runCommand(ctx, 'editing.container.create');
+    await settle();
+    const container = containers(ctx)[0];
+    const ref = { kind: 'container', id: container.id } as const;
+    const foldId = itemFoldId(ref, ctx.graphs.current.id);
+    ctx.contexts.fold.set(foldId, false);
+    await settle();
+
+    const collapsed = document.querySelector<HTMLElement>(`.container.collapsed[data-item-id="${container.id}"]`)!;
+    expect(collapsed).not.toBeNull();
+    expect(document.querySelector<HTMLButtonElement>('.item-toolbar [data-command="item.collapse.toggle"]')?.textContent).toBe('⊞');
+    expect(runCommand(ctx, 'item.collapse.open.dblclick', { target: collapsed })).toBe(true);
+    await settle();
+
+    expect(ctx.contexts.fold.isOpen(foldId)).toBe(true);
+    expect(document.querySelector<HTMLButtonElement>('.item-toolbar [data-command="item.collapse.toggle"]')?.textContent).toBe('⊟');
   });
 
   it('drag-cascades children: moving a container moves nested nodes by the same delta', async () => {
@@ -126,6 +148,31 @@ describe('frontend containers', () => {
     expect(deletedFired).toEqual([containerId]);
     expect(containers(ctx)).toHaveLength(0);
     expect(ctx.graphs.current.getNode(child.id)).toBeUndefined();
+  });
+
+  it('warns before deleting nested contents and offers a keep-contents path', async () => {
+    const ctx = bootApp();
+    await settle();
+    runCommand(ctx, 'editing.container.create');
+    const containerId = containers(ctx)[0].id;
+    const child = ctx.graphs.current.createNode({ Label: { text: 'child' } });
+    ctx.bus.emit('container.add-child', { containerId, childRef: { kind: 'node', id: child.id } });
+    await settle();
+
+    ctx.bus.emit('selection.item.select', { kind: 'container', id: containerId });
+    expect(runCommand(ctx, 'container.delete.request', { origin: 'pointer' })).toBe(true);
+    await settle();
+    expect(document.querySelector('.container-delete-preview')?.textContent).toContain('1 node');
+    expect(document.querySelector('.container-delete-preview')?.textContent).toContain('Ungroup and keep contents');
+    expect(ctx.graphs.current.getNode(child.id)).not.toBeUndefined();
+
+    expect(runCommand(ctx, 'container.delete.cancel')).toBe(true);
+    await settle();
+    expect(containers(ctx)).toHaveLength(1);
+    expect(runCommand(ctx, 'container.ungroup')).toBe(true);
+    await settle();
+    expect(containers(ctx)).toHaveLength(0);
+    expect(ctx.graphs.current.getNode(child.id)).not.toBeUndefined();
   });
 
   it('boots with zero DX errors when container ability is fully wired', async () => {

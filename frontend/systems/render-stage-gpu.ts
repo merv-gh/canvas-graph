@@ -207,7 +207,7 @@ export function registerRenderStageGpu(system: Registry) {
     let resizeObserver: ResizeObserver | null = null;
 
     contexts.commands.register([
-      { id: 'render.gpu.toggle', label: 'Toggle GPU stage painter (geometry-only, for huge graphs)', group: 'view' },
+      { id: 'render.gpu.toggle', label: 'Toggle GPU stage painter (geometry-only, for huge graphs)', group: 'view', hidden: true },
     ]);
 
     const selectedIds = () => new Set(selection.selectedAll().map(ref => ref.id));

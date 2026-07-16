@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="A keyboard-first editor for writing and navigating structured graphs.">
-  <title>ecs-canvas-graph</title>
+  <meta name="description" content="Canvas Graph is a keyboard-first visual editor for structured systems, flows, and ideas.">
+  <meta name="theme-color" content="#f8f8f8">
+  <title>Canvas Graph — Visual Graph Editor</title>
   <link rel="stylesheet" href="styles.css">
   <script type="module" src="app.ts"></script>
 </head>
@@ -74,11 +75,11 @@
 
   <template id="tpl-modal">
     <div class="modal-layer">
-      <div class="backdrop" data-command="modal.close"></div>
-      <section class="modal">
+      <div class="backdrop" data-command="modal.close" aria-hidden="true"></div>
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
         <div class="modal-head">
-          <span data-text="title"></span>
-          <button data-command="modal.close">Close</button>
+          <span id="modal-title" data-text="title"></span>
+          <button class="modal-close icon" data-command="modal.close" aria-label="Close dialog" title="Close">×</button>
         </div>
         <div class="modal-body" data-slot="body"></div>
       </section>

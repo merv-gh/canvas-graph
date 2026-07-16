@@ -5,12 +5,17 @@ declare module '../types' {
   interface CustomEvents {
     /** Copy a share link (`?g=`) for the current graph to the clipboard. */
     'graph.share.copy': void;
+    'graph.share.clipboard': { url: string };
     'graph.shared': { url: string };
     /** Import a mermaid flowchart from a string (raw source, a mermaid.live
      *  link, or an http(s) URL) — the paste/`?in=` entry point. */
     'graph.import.mermaid': { source: string };
+    'graph.import.confirm': void;
+    'graph.import.cancel': void;
     /** Read the clipboard and import it as mermaid (palette action). */
     'graph.import.paste': void;
+    /** Preview Mermaid entered in the import dialog. */
+    'graph.import.submit': { source: string };
   }
 }
 
@@ -66,29 +71,13 @@ const inflateZlib = (bytes: Uint8Array) => streamBytes(bytes, 'deflate', 'decomp
 // ---------------------------------------------------------------------------
 type CompactNode = [string, string, string, number, number, number, number, string?];
 type CompactEdge = [string, string, string, string?, string?];
-type CompactGraph = { v: 3; n: CompactNode[]; e: CompactEdge[] };
+type LegacyCompactGraph = { v: 3; n: CompactNode[]; e: CompactEdge[] };
+type CompactGraph = LegacyCompactGraph | { v: 4; s: GraphSnapshot };
 
-const toCompact = (snapshot: GraphSnapshot): CompactGraph => ({
-  v: 3,
-  n: snapshot.nodes.map(node => [
-    node.id,
-    node.Label?.text ?? node.id,
-    node.NodeType ?? 'text',
-    Math.round(node.Position?.x ?? 0),
-    Math.round(node.Position?.y ?? 0),
-    Math.round(node.Size?.w ?? 200),
-    Math.round(node.Size?.h ?? 120),
-    node.Description || undefined,
-  ] as CompactNode),
-  e: snapshot.edges.map(edge => [
-    edge.id,
-    edge.From,
-    edge.To,
-    edge.EdgeKind || undefined,
-    edge.Label?.text || undefined,
-  ] as CompactEdge),
-});
-const fromCompact = (compact: CompactGraph): GraphSnapshot => ({
+// v4 compresses the complete versioned document. Deflate removes repeated
+// field names while preserving every semantic field and entity extension.
+const toCompact = (snapshot: GraphSnapshot): CompactGraph => ({ v: 4, s: snapshot });
+const fromLegacyCompact = (compact: LegacyCompactGraph): GraphSnapshot => ({
   nodes: compact.n.map(([id, title, NodeType, x, y, w, h, Description]) => ({
     id,
     Label: { text: title },
@@ -114,15 +103,34 @@ export const encodeGraph = async (snapshot: GraphSnapshot): Promise<string> => {
 };
 export const decodeGraph = async (encoded: string): Promise<GraphSnapshot | null> => {
   try {
+    const unpack = (raw: CompactGraph): GraphSnapshot | null => {
+      if (raw.v === 4) return Array.isArray(raw.s?.nodes) && Array.isArray(raw.s?.edges) ? raw.s : null;
+      return Array.isArray(raw.n) && Array.isArray(raw.e) ? fromLegacyCompact(raw) : null;
+    };
     if (encoded.startsWith('~')) {
       const bytes = await inflateRaw(base64UrlToBytes(encoded.slice(1)));
-      return fromCompact(JSON.parse(new TextDecoder().decode(bytes)) as CompactGraph);
+      return unpack(JSON.parse(new TextDecoder().decode(bytes)) as CompactGraph);
     }
     // Legacy: base64url(JSON) — either the new compact shape or the old
     // Legacy compact shape (both carry {n,e}). Read the fields we understand.
     const raw = JSON.parse(new TextDecoder().decode(base64UrlToBytes(encoded))) as CompactGraph;
-    if (!Array.isArray(raw.n) || !Array.isArray(raw.e)) return null;
-    return fromCompact(raw);
+    return unpack(raw);
+  } catch {
+    return null;
+  }
+};
+
+const jsonToSnapshot = (source: string): GraphSnapshot | null => {
+  try {
+    const parsed = JSON.parse(source) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    const record = parsed as Record<string, unknown>;
+    const candidate = record.snapshot && typeof record.snapshot === 'object' ? record.snapshot : record;
+    const snapshot = candidate as Partial<GraphSnapshot>;
+    if (!snapshot || !Array.isArray(snapshot.nodes) || !Array.isArray(snapshot.edges)) return null;
+    if (!snapshot.nodes.every(node => !!node && typeof node === 'object' && typeof node.id === 'string')) return null;
+    if (!snapshot.edges.every(edge => !!edge && typeof edge === 'object' && typeof edge.id === 'string')) return null;
+    return snapshot as GraphSnapshot;
   } catch {
     return null;
   }
@@ -210,7 +218,7 @@ const LINK = /^\s*(?:--+\s*(?:"((?:[^"]|\n)*?)"|([^|>\n]*?))\s*)?(<--+>|--+>|--+
 type MermaidNode = { id: string; label?: string };
 type MermaidEdge = { from: string; to: string; label?: string };
 
-const parseMermaid = (source: string): { nodes: MermaidNode[]; edges: MermaidEdge[] } => {
+const parseMermaid = (source: string): { nodes: MermaidNode[]; edges: MermaidEdge[]; invalid: boolean } => {
   // Strip frontmatter (--- … ---) and split into statements, keeping quoted
   // multi-line labels intact (newlines inside `"` don't end a statement).
   let src = source.replace(/^﻿/, '');
@@ -231,6 +239,7 @@ const parseMermaid = (source: string): { nodes: MermaidNode[]; edges: MermaidEdg
   const SKIP = /^\s*(flowchart|graph|sequenceDiagram|subgraph|end\b|classDef|class\s|style\s|linkStyle|click\s|direction\s|%%|title:|accTitle|accDescr)/;
   const nodes = new Map<string, MermaidNode>();
   const edges: MermaidEdge[] = [];
+  let invalid = false;
   const note = (id: string, label?: string) => {
     const existing = nodes.get(id);
     if (!existing) nodes.set(id, { id, label });
@@ -241,27 +250,24 @@ const parseMermaid = (source: string): { nodes: MermaidNode[]; edges: MermaidEdg
     const line = stmt.trim();
     if (!line || SKIP.test(line)) continue;
     let cur = parseNode(stmt, 0);
-    if (!cur) continue;
+    if (!cur) { invalid = true; continue; }
     note(cur.id, cur.label);
     let cursor = cur.end;
-    let matched = false;
     while (cursor < stmt.length) {
       const rest = stmt.slice(cursor);
       const link = LINK.exec(rest);
-      if (!link) break;
+      if (!link) { if (rest.trim()) invalid = true; break; }
       const next = parseNode(stmt, cursor + link[0].length);
-      if (!next) break;
+      if (!next) { invalid = true; break; }
       note(next.id, next.label);
       // Groups: 1 dash-quote label, 2 dash bare label, 3 arrow, 4 pipe-quote, 5 pipe bare.
       const label = link[1] ?? link[2] ?? link[4] ?? link[5];
       edges.push({ from: cur.id, to: next.id, label: label?.trim() || undefined });
       cur = next;
       cursor = next.end;
-      matched = true;
     }
-    void matched;
   }
-  return { nodes: [...nodes.values()], edges };
+  return { nodes: [...nodes.values()], edges, invalid };
 };
 
 /** mermaid text (or link) -> snapshot with a simple grid layout so it lands
@@ -269,8 +275,8 @@ const parseMermaid = (source: string): { nodes: MermaidNode[]; edges: MermaidEdg
 export const mermaidToSnapshot = async (input: string): Promise<GraphSnapshot | null> => {
   const source = mermaidLivePayload(input) ? await decodeMermaidLive(input) : input;
   if (!source) return null;
-  const { nodes, edges } = parseMermaid(source);
-  if (!nodes.length) return null;
+  const { nodes, edges, invalid } = parseMermaid(source);
+  if (!nodes.length || invalid) return null;
   const cols = Math.max(1, Math.ceil(Math.sqrt(nodes.length)));
   const CW = 300, CH = 200;
   const snapshot: GraphSnapshot = {
@@ -302,11 +308,37 @@ const looksLikeMermaid = (text: string) =>
   !!mermaidLivePayload(text) ||
   (/-->|---|-\.->|==>/.test(text) && /[A-Za-z0-9_]/.test(text));
 
+export const SHARE_URL_LIMIT = 7500;
+export const shareUrlTooLarge = (url: string) => url.length > SHARE_URL_LIMIT;
+
 export function registerShare(system: Registry) {
-  system('share', ({ on, emit, contexts, graphs }) => {
+  system('share', ({ on, emit, contexts, graphs, contribute }) => {
+    let pendingImport: { snapshot: GraphSnapshot; format: 'JSON' | 'Mermaid'; tidy: boolean } | null = null;
     contexts.commands.register([
-      { id: 'graph.share.copy', label: 'Copy share link', group: 'graph' },
+      { id: 'graph.share.copy', label: 'Share current graph', group: 'graph' },
+      {
+        id: 'graph.share.clipboard', label: 'Copy share link', group: 'graph', hidden: true,
+        input: { on: 'click', selector: '[data-share-copy]' },
+        payload: ({ target }) => ({
+          url: (target?.closest('.share-link-panel')?.querySelector('[data-share-url]') as HTMLInputElement | null)?.value ?? '',
+        }),
+      },
       { id: 'graph.import.paste', label: 'Import graph from clipboard', group: 'graph' },
+      {
+        id: 'graph.import.submit', label: 'Preview Mermaid import', group: 'graph', hidden: true,
+        input: { on: 'click', selector: '[data-import-submit]' },
+        payload: ({ target }) => ({
+          source: (target?.closest('.import-source')?.querySelector('[data-import-source]') as HTMLTextAreaElement | null)?.value ?? '',
+        }),
+      },
+      {
+        id: 'graph.import.confirm', label: 'Replace graph with import', group: 'graph', hidden: true,
+        input: { on: 'click', selector: '[data-import-confirm]' },
+      },
+      {
+        id: 'graph.import.cancel', label: 'Cancel graph import', group: 'graph', hidden: true,
+        input: { on: 'click', selector: '[data-import-cancel]' },
+      },
       {
         id: 'graph.import.mermaid.paste-event',
         label: 'Import pasted mermaid graph',
@@ -335,6 +367,101 @@ export function registerShare(system: Registry) {
       emit('view.fit.all');
     };
 
+    const shareBody = (url: string) => () => {
+      const panel = document.createElement('section');
+      panel.className = 'share-link-panel';
+      const tooLarge = shareUrlTooLarge(url);
+      const intro = document.createElement('p');
+      intro.textContent = tooLarge
+        ? 'This snapshot is too large for a reliable browser link. Export a file instead.'
+        : 'Portable snapshot link. Anyone with this URL can open an editable copy; changes do not sync back.';
+      if (tooLarge) {
+        intro.className = 'share-size-warning';
+        panel.dataset.shareTooLarge = '';
+      }
+      const field = document.createElement('div');
+      field.className = 'share-link-field';
+      const input = document.createElement('input');
+      input.readOnly = true;
+      input.value = url;
+      input.dataset.shareUrl = '';
+      input.setAttribute('aria-label', 'Share link');
+      const copy = document.createElement('button');
+      copy.type = 'button';
+      copy.className = 'primary share-copy';
+      copy.dataset.shareCopy = '';
+      copy.dataset.command = 'graph.share.clipboard';
+      copy.setAttribute('aria-label', 'Copy share link');
+      copy.textContent = '⧉ Copy';
+      copy.disabled = tooLarge;
+      field.append(input, copy);
+      const meta = document.createElement('small');
+      meta.className = 'share-size';
+      meta.textContent = `${url.length.toLocaleString()} characters · graph data is embedded in the URL`;
+      panel.append(intro, field, meta);
+      if (tooLarge) {
+        const fallback = document.createElement('button');
+        fallback.type = 'button';
+        fallback.className = 'primary';
+        fallback.dataset.command = 'graph.export.json';
+        fallback.textContent = 'Export a file instead';
+        panel.append(fallback);
+      }
+      return panel;
+    };
+
+    const importPreviewBody = (snapshot: GraphSnapshot, format: 'JSON' | 'Mermaid') => () => {
+      const panel = document.createElement('section');
+      panel.className = 'import-preview';
+      const summary = document.createElement('p');
+      const nodes = `${snapshot.nodes.length} node${snapshot.nodes.length === 1 ? '' : 's'}`;
+      const edges = `${snapshot.edges.length} edge${snapshot.edges.length === 1 ? '' : 's'}`;
+      summary.textContent = `${format}: ${nodes} and ${edges} are ready to import.`;
+      const warning = document.createElement('p');
+      warning.className = 'import-warning';
+      warning.textContent = 'This replaces the current graph. You can undo after importing.';
+      const actions = document.createElement('div');
+      actions.className = 'import-actions';
+      const cancel = document.createElement('button');
+      cancel.type = 'button';
+      cancel.dataset.command = 'graph.import.cancel';
+      cancel.dataset.importCancel = '';
+      cancel.textContent = 'Keep current graph';
+      const confirm = document.createElement('button');
+      confirm.type = 'button';
+      confirm.className = 'primary import-confirm';
+      confirm.dataset.command = 'graph.import.confirm';
+      confirm.dataset.importConfirm = '';
+      confirm.textContent = 'Replace graph';
+      actions.append(cancel, confirm);
+      panel.append(summary, warning, actions);
+      return panel;
+    };
+
+    const importSourceBody = (source = '') => () => {
+      const panel = document.createElement('section');
+      panel.className = 'import-source';
+      const intro = document.createElement('p');
+      intro.textContent = 'Paste Canvas Graph JSON, Mermaid flowchart source, or a mermaid.live link. You will review changes before replacement.';
+      const textarea = document.createElement('textarea');
+      textarea.dataset.importSource = '';
+      textarea.setAttribute('aria-label', 'Graph JSON or Mermaid source');
+      textarea.placeholder = 'Paste exported JSON or: flowchart LR\n  A[Draft] --> B[Published]';
+      textarea.value = source;
+      textarea.autofocus = true;
+      const actions = document.createElement('div');
+      actions.className = 'import-actions';
+      const preview = document.createElement('button');
+      preview.type = 'button';
+      preview.className = 'primary import-confirm';
+      preview.dataset.command = 'graph.import.submit';
+      preview.dataset.importSubmit = '';
+      preview.textContent = 'Preview import';
+      actions.append(preview);
+      panel.append(intro, textarea, actions);
+      return panel;
+    };
+
     on('graph.share.copy', () => {
       void (async () => {
         const encoded = await encodeGraph(graphs.current.snapshot());
@@ -342,26 +469,67 @@ export function registerShare(system: Registry) {
         url.hash = '';
         url.searchParams.delete('in');
         url.searchParams.set('g', encoded);
-        await navigator.clipboard?.writeText?.(url.toString()).catch(() => {});
         emit('graph.shared', { url: url.toString() });
-        emit('app.notice', { message: 'Share link copied.' });
+        emit('modal.open', { title: 'Share graph', visual: 'properties', body: shareBody(url.toString()) });
       })();
+    });
+    on('graph.share.clipboard', ({ url }) => {
+      if (!url) return;
+      void navigator.clipboard?.writeText?.(url).then(
+        () => emit('app.notice', { message: 'Share link copied.' }),
+        () => emit('app.notice', { message: 'Select the link and copy it manually.', level: 'warn' }),
+      );
     });
 
     on('graph.import.mermaid', ({ source }) => {
       void (async () => {
         const snapshot = await mermaidToSnapshot(source);
-        if (!snapshot) { emit('app.notice', { message: 'Could not read a mermaid graph from that.', level: 'warn' }); return; }
-        importSnapshot(snapshot, true);
-        emit('app.notice', { message: `Imported ${snapshot.nodes.length} nodes from mermaid.` });
+        if (!snapshot) {
+          emit('app.notice', { message: 'Mermaid has incomplete or unsupported syntax. Nothing was changed.', level: 'warn' });
+          return;
+        }
+        pendingImport = { snapshot, format: 'Mermaid', tidy: true };
+        emit('modal.open', { title: 'Review Mermaid import', visual: 'properties', body: importPreviewBody(snapshot, 'Mermaid') });
       })();
     });
+    on('graph.import.submit', ({ source }) => {
+      if (!source.trim()) {
+        emit('app.notice', { message: 'Paste graph JSON or Mermaid before previewing.', level: 'warn' });
+        return;
+      }
+      if (source.trimStart().startsWith('{')) {
+        const snapshot = jsonToSnapshot(source);
+        if (!snapshot) {
+          emit('app.notice', { message: 'JSON is not a valid Canvas Graph export. Nothing was changed.', level: 'warn' });
+          return;
+        }
+        pendingImport = { snapshot, format: 'JSON', tidy: false };
+        emit('modal.open', { title: 'Review JSON import', visual: 'properties', body: importPreviewBody(snapshot, 'JSON') });
+        return;
+      }
+      emit('graph.import.mermaid', { source });
+    });
+    on('graph.import.confirm', () => {
+      const pending = pendingImport;
+      if (!pending) return;
+      pendingImport = null;
+      importSnapshot(pending.snapshot, pending.tidy);
+      emit('modal.close');
+      emit('app.notice', { message: `Imported ${pending.snapshot.nodes.length} nodes from ${pending.format}.` });
+    });
+    on('graph.import.cancel', () => { pendingImport = null; emit('modal.close'); });
+    on('modal.closed', () => { pendingImport = null; });
 
     on('graph.import.paste', () => {
-      void (async () => {
-        const text = await navigator.clipboard?.readText?.().catch(() => '');
-        if (text) emit('graph.import.mermaid', { source: text });
-      })();
+      // Open immediately: clipboard permission prompts may stay pending until
+      // user interaction. The manual path must never wait behind that promise.
+      emit('modal.open', { title: 'Import graph', visual: 'properties', body: importSourceBody() });
+      const read = navigator.clipboard?.readText?.();
+      if (read) void read.then(text => {
+        if (!text) return;
+        const textarea = contexts.places.el('modal')?.querySelector<HTMLTextAreaElement>('[data-import-source]');
+        if (textarea && !textarea.value) textarea.value = text;
+      }).catch(() => undefined);
     });
 
     const bootFromUrl = () => {
@@ -379,5 +547,7 @@ export function registerShare(system: Registry) {
     };
 
     on('app.start', bootFromUrl);
-  }, { requires: ['graph'] });
+    contribute({ surface: 'top', command: 'graph.import.paste', kind: 'button', text: 'Import', order: 23, group: 'file' });
+    contribute({ surface: 'top', command: 'graph.share.copy', kind: 'button', text: 'Share', order: 24, group: 'file' });
+  }, { requires: ['graph', 'modal'] });
 }

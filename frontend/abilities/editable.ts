@@ -27,7 +27,8 @@ export const editable = <T extends Labeled>() => ability<T>('editable', [action<
 })]);
 
 export function registerEditable(system: Registry) {
-  system('ability.editable', ({ on, emit, contexts, graphs, selection, origin }) => {
+  system('ability.editable', ({ on, emit, contexts, graphs, selection, origin, frameLoop }) => {
+    const finishFocusTask = 'editable.title.finish.focus';
     /** Find the title element belonging to a given ref. Generic over kind via the
      *  data-item-* tagging — works for node, container, or any future kind that
      *  marks its title with [data-editable-title]. */
@@ -53,6 +54,15 @@ export function registerEditable(system: Registry) {
 
     const enterEditMode = (el: HTMLElement) => {
       el.contentEditable = 'plaintext-only';
+      el.setAttribute('role', 'textbox');
+      el.setAttribute('aria-label', 'Item title');
+      // Firefox/Chromium treat contenteditable as focusable, but jsdom and a
+      // few assistive-browser paths do not. Make that contract explicit while
+      // editing and restore the renderer's original tab behavior afterwards.
+      if (!el.hasAttribute('tabindex')) {
+        el.dataset.editableManagedTabindex = 'true';
+        el.tabIndex = -1;
+      }
       el.classList.add('editing');
       el.focus();
       const range = document.createRange();
@@ -63,6 +73,12 @@ export function registerEditable(system: Registry) {
     };
     const exitEditMode = (el: HTMLElement) => {
       el.contentEditable = 'inherit';
+      el.removeAttribute('role');
+      el.removeAttribute('aria-label');
+      if (el.dataset.editableManagedTabindex) {
+        delete el.dataset.editableManagedTabindex;
+        el.removeAttribute('tabindex');
+      }
       el.classList.remove('editing');
     };
 
@@ -90,7 +106,14 @@ export function registerEditable(system: Registry) {
         event: 'item.title.edit',
         group: 'item',
         hidden: true,
-        input: { on: 'dblclick', selector: '[data-editable-title]', prevent: true },
+        // A folded item owns double-click as “unfold”. Its title becomes
+        // editable again after expansion, avoiding two gestures firing at once.
+        input: {
+          on: 'dblclick',
+          selector: '[data-editable-title]',
+          when: event => !(event.target instanceof Element && event.target.closest('.collapsed')),
+          prevent: true,
+        },
         payload: ({ target }) => {
           const ref = itemRefFrom(target);
           return ref ? { ref } : undefined;
@@ -116,12 +139,15 @@ export function registerEditable(system: Registry) {
       },
     ]);
 
-    on('item.title.edit', ({ ref }) => queueMicrotask(() => {
-      const el = titleEl(ref);
-      if (!el) return;
-      editingRef = ref;
-      enterEditMode(el);
-    }));
+    on('item.title.edit', ({ ref }) => {
+      frameLoop.cancel(finishFocusTask);
+      queueMicrotask(() => {
+        const el = titleEl(ref);
+        if (!el) return;
+        editingRef = ref;
+        enterEditMode(el);
+      });
+    });
     on('item.title.commit', ({ ref, text, finish }) => {
       const item = graphs.current.getItem(ref) as Labeled | undefined;
       if (!item) return;
@@ -132,10 +158,16 @@ export function registerEditable(system: Registry) {
       }
       const el = titleEl(ref);
       if (el) exitEditMode(el);
-      if (finish) queueMicrotask(() => {
-        const refocus = titleEl(ref);
-        refocus?.blur();
-      });
+      if (finish) frameLoop.schedule(finishFocusTask, () => queueMicrotask(() => {
+          // Label commits redraw their item. Reacquire it after render rather
+          // than focusing the soon-to-be-replaced pre-commit element.
+          const title = titleEl(ref);
+          const item = title?.closest<HTMLElement>('[data-item-kind][data-item-id]');
+          title?.blur();
+          // Return keyboard ownership to the selected item, not its text editor.
+          // Global shortcuts (A, Tab, X, …) can continue after the second Enter.
+          item?.focus({ preventScroll: true });
+        }), 30);
       if (editingRef && editingRef.kind === ref.kind && editingRef.id === ref.id) editingRef = null;
     });
 

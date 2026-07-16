@@ -133,6 +133,7 @@ describe('frontend choose — multi-item set + bulk actions', () => {
     // Choose BOTH the container and its child, then nudge.
     ctx.bus.emit('selection.choose', { refs: [{ kind: 'container', id: cid }, { kind: 'node', id: child.id }], mode: 'replace' });
     await settle();
+    expect(document.querySelector(`.node[data-item-id="${child.id}"]`)?.classList.contains('selected')).toBe(true);
     runCommand(ctx, 'item.nudge.right');
     await settle();
     // Child moved by exactly one delta (container cascade), not two.

@@ -95,7 +95,8 @@ function captureUi(ctx: AppCtx) {
   const leftEl = placeEl('left');
   const shellEl = topEl?.parentElement ?? null;
   const toolPanelInfo = (id: string) => {
-    const el = stageEl?.querySelector(`.tool-panel[data-panel-id="${id}"]`) as HTMLElement | null;
+    const place = id === 'top' ? topEl : stageEl;
+    const el = place?.querySelector(`.tool-panel[data-panel-id="${id}"]`) as HTMLElement | null;
     return {
       mounted: !!el,
       collapsed: el?.dataset.collapsed === 'true',
@@ -162,7 +163,6 @@ function captureUi(ctx: AppCtx) {
     },
     toolPanels: {
       top: toolPanelInfo('top'),
-      nodeTypes: toolPanelInfo('node-types'),
     },
     // Outline shape — how nesting actually renders in the left pane. `nested`
     // counts rows that live inside a parent's children block, so a recorded
@@ -173,7 +173,7 @@ function captureUi(ctx: AppCtx) {
       nested: leftCount('.outline-children .outline-row'),
     },
     modal: {
-      open: (modalEl?.children.length ?? 0) > 0,
+      open: !!modalEl?.querySelector('.modal-layer'),
       fields: modalFields,
       focusedField,
     },
@@ -235,7 +235,7 @@ const PRESENT_CODE: Record<string, string> = {
   overflow: "ctx.contexts.places.el('top')?.parentElement?.dataset.presentOverflow === 'true'",
 };
 const MODAL_CODE: Record<string, string> = {
-  open: "(ctx.contexts.places.el('modal')?.children.length ?? 0) > 0",
+  open: "!!ctx.contexts.places.el('modal')?.querySelector('.modal-layer')",
   focusedField: "(() => { const a = document.activeElement; const m = ctx.contexts.places.el('modal'); return a && m?.contains(a) ? a.getAttribute('data-field') : null; })()",
 };
 const OUTLINE_CODE: Record<string, string> = {
@@ -245,7 +245,6 @@ const OUTLINE_CODE: Record<string, string> = {
 };
 const TOOL_PANEL_CODE: Record<string, string> = {
   top: "ctx.contexts.places.el('stage')?.querySelector('.tool-panel[data-panel-id=\"top\"]')",
-  nodeTypes: "ctx.contexts.places.el('stage')?.querySelector('.tool-panel[data-panel-id=\"node-types\"]')",
 };
 
 /** Selection has method-shaped readers (`selected()`, `focused()`) instead of

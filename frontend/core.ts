@@ -51,7 +51,7 @@ export { grouped } from './core/util';
 export { factScope } from './core/redraw';
 export { createModelRegistry } from './core/model-registry';
 export { createPerfApi, type PerfApi, type PerfCallEdge, type PerfCountRow, type PerfInputRow, type PerfSampleRow, type PerfSnapshot, type PerfTimelineRow, type PerfTimingRow } from './core/perf';
-export { boundsOf, unionRect, expandRect, rectCenter } from './core/geometry';
+export { boundsOf, unionRect, expandRect, rectCenter, rectsOverlap, createRectIndex, addToRectIndex, queryRectIndex, type RectIndex } from './core/geometry';
 export { introspect, type IntrospectKind, type IntrospectNode, type IntrospectEdge, type IntrospectRelation, type IntrospectRef, type IntrospectSnapshot } from './core/introspect';
 export { storageContext, type StorageApi, type StorageApply } from './core/storage';
 export { foldContext, itemFoldId, foldHidden, type FoldStore } from './core/fold';

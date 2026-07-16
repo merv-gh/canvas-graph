@@ -29,11 +29,18 @@ export type TemplateApi = ReturnType<typeof templateContext>;
 
 /** Build an empty-state DOM block. `hint` is a Node — typically text + a <kbd>.
  *  Use `kbdHint(lead, key, tail)` for "Press <kbd>K</kbd> tail" without HTML strings. */
-export const emptyState = (templates: TemplateApi, title: string, hint?: Node) => {
+export const emptyState = (templates: TemplateApi, title: string, hint?: Node, command?: string) => {
   try {
     const el = templates.clone<HTMLElement>('empty');
     templates.text(el, 'title', title);
     if (hint) templates.slot(el, 'hint').append(hint);
+    if (command) {
+      el.classList.add('empty-action');
+      el.dataset.command = command;
+      el.tabIndex = 0;
+      el.setAttribute('role', 'button');
+      el.setAttribute('aria-label', `${title}. Activate to continue.`);
+    }
     return el;
   } catch { return null; }
 };

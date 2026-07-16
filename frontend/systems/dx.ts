@@ -183,7 +183,7 @@ function checkLabelOverlaps(ctx: AppCtx, warn: (rule: string, message: string) =
   const graph = ctx.graphs.current;
   const edges = graph.edges();
   if (!edges.length || edges.length > 400) return; // perf guard for huge graphs
-  const LINE_H = 14, CHAR_W = 7;
+  const LINE_H = 16, CHAR_W = 9;
   const center = (id: string) => {
     const n = graph.getNode(id) as { Position?: { x: number; y: number }; Size?: { w: number; h: number } } | undefined;
     return n?.Position ? { pos: n.Position, size: n.Size ?? { w: 160, h: 72 } } : null;

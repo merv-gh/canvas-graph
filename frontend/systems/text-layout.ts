@@ -1,4 +1,5 @@
 import { clamp, type Registry } from '../core';
+import { markdownPlainText, parseMarkdown, type MarkdownBlock } from '../core/markdown';
 import type { Size } from '../types';
 
 export type TextLayoutInput = {
@@ -35,7 +36,15 @@ const linesOf = (text: string) => text.split(/\r?\n/).flatMap(line => {
 
 export const estimateTextSize = (input: TextLayoutInput): Size => {
   const titleLines = linesOf(input.title);
-  const bodyLines = linesOf(input.description ?? '');
+  const blocks = parseMarkdown(input.description ?? '');
+  const textOf = (block: MarkdownBlock): string[] => {
+    if (block.kind === 'rule') return [];
+    if (block.kind === 'code') return block.text.split('\n');
+    if (block.kind === 'unordered-list' || block.kind === 'ordered-list')
+      return block.items.map(item => `• ${markdownPlainText(item)}`);
+    return [markdownPlainText(block.text)];
+  };
+  const bodyLines = blocks.flatMap(textOf).filter(Boolean);
   const CHAR_W = 7.2, PAD_X = 32;
   const longest = [...titleLines, ...bodyLines].reduce((max, line) => Math.max(max, line.length), 1);
   const maxWidth = input.maxWidth ?? 320;
@@ -46,8 +55,17 @@ export const estimateTextSize = (input: TextLayoutInput): Size => {
   const wrappedRows = (lines: string[]) =>
     lines.reduce((rows, line) => rows + Math.max(1, Math.ceil(line.length / capacity)), 0);
   const titleRows = Math.max(1, wrappedRows(titleLines));
-  const bodyRows = wrappedRows(bodyLines);
-  const height = clamp(titleRows * 22 + bodyRows * 16 + 24, input.minHeight ?? 56, input.maxHeight ?? 280);
+  const rows = (text: string) => Math.max(1, Math.ceil(Math.max(1, text.length) / capacity));
+  const bodyHeight = blocks.reduce((height, block) => {
+    if (block.kind === 'rule') return height + 9;
+    if (block.kind === 'code') return height + Math.max(1, block.text.split('\n').length) * 15 + 10;
+    if (block.kind === 'heading') return height + rows(markdownPlainText(block.text)) * 20 + 4;
+    if (block.kind === 'unordered-list' || block.kind === 'ordered-list')
+      return height + block.items.reduce((sum, item) => sum + rows(markdownPlainText(item)) * 16, 4);
+    if (block.kind === 'quote') return height + rows(markdownPlainText(block.text)) * 16 + 8;
+    return height + rows(markdownPlainText(block.text)) * 16 + 3;
+  }, 0);
+  const height = clamp(titleRows * 22 + bodyHeight + 24, input.minHeight ?? 56, input.maxHeight ?? 480);
   return { w: Math.round(width), h: Math.round(height) };
 };
 

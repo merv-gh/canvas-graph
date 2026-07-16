@@ -20,7 +20,7 @@ test('toolbar contributions disappear when their owning system is off', async ({
   await goWithFlags(page, { 'view.zoom': false });
   const zoomButtons = await page.locator('.toolbar button[data-command^="view.zoom"]').count();
   expect(zoomButtons).toBe(0);
-  const plusNode = await page.getByRole('button', { name: '+ Node' }).count();
+  const plusNode = await page.getByRole('button', { name: 'Add node', exact: true }).count();
   expect(plusNode).toBe(1);
 });
 
@@ -28,7 +28,7 @@ test('disabling an ability removes its commands and entity affordances', async (
   await goWithFlags(page, { 'ability.collapsible': false });
   const collapseCmd = await page.evaluate(() => !!window.app.contexts.commands.get('node.collapse.toggle'));
   expect(collapseCmd).toBe(false);
-  await page.getByRole('button', { name: '+ Node' }).click();
+  await page.getByRole('button', { name: 'Add node', exact: true }).click();
   const collapseBtn = await page.locator('.node [data-command="node.collapse.toggle"]').count();
   expect(collapseBtn).toBe(0);
 });

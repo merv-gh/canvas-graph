@@ -103,12 +103,12 @@ describe('container sections', () => {
     ctx.bus.emit('selection.node.select', { id: node.id });
     await settle();
 
-    expect(document.querySelector('.node-context-actions')).not.toBeNull();
+    expect(document.querySelector('.node-config')).not.toBeNull();
     expect(runCommand(ctx, 'item.context.open')).toBe(true);
     await settle();
-    expect(document.querySelector('.context-actions')?.textContent).toContain('Move to section');
+    expect(document.querySelector('.context-actions')?.textContent).toContain('Placement');
     const target = [...document.querySelectorAll<HTMLElement>('.context-action')]
-      .find(button => button.textContent === 'B')!;
+      .find(button => button.dataset.sectionId === 's2')!;
     expect(runCommand(ctx, 'container.child.section.set', { target })).toBe(true);
     await settle();
     expect(container.ChildSections?.[childKey({ kind: 'node', id: node.id })]).toBe('s2');

@@ -36,6 +36,10 @@ declare module '../types' {
     'editing.container.create': { Label?: { text: string }; at?: Position };
     'container.created': { id: Id };
     'container.updated': { id: Id };
+    'container.delete.request': { id: Id; confirm?: boolean };
+    'container.delete.confirm': void;
+    'container.delete.cancel': void;
+    'container.ungroup': { id: Id };
     'graph.container.delete': { id: Id };
     'container.deleted': { id: Id };
     'container.add-child': { containerId: Id; childRef: ItemRef; sectionId?: Id };
@@ -55,6 +59,7 @@ declare module '../types' {
 const COLLAPSED_SIZE: Size = { w: 140, h: 36 };
 const PADDING = 24;
 const LABEL_BAND = 18;
+type ContainerSnapshot = Omit<Container, 'kind'>;
 
 // ---------- The system ----------
 
@@ -62,6 +67,7 @@ export function registerContainers(system: Registry) {
   system('containers', (ctx) => {
     const { on, emit, contexts, graphs, selection, contribute, origin } = ctx;
     let next = 1;
+    let pendingContainerDelete: Id | null = null;
 
     /** Per-graph state bucket — containers, the nesting helper, and the live
      *  item-store registration. Keyed by graph id so switching graphs hides
@@ -70,20 +76,72 @@ export function registerContainers(system: Registry) {
       containers: Map<Id, Container>;
       nest: NestApi;
       storeOff: () => void;
+      snapshotOff: () => void;
     };
     const states = new Map<Id, GraphState>();
     const ensureState = (gid: Id): GraphState => {
       const existing = states.get(gid);
       if (existing) return existing;
       const containers = new Map<Id, Container>();
+      let restoring = false;
       const nest = createNesting<Container>({
         parents: containers,
         parentKind: 'container',
-        onChange: id => emit('container.children.changed', { id }),
+        onChange: id => { if (!restoring) emit('container.children.changed', { id }); },
       });
       const graph = graphs.get(gid) ?? graphs.current;
       const storeOff = graph.registerItemStore<Container>('container', () => [...containers.values()]);
-      const state: GraphState = { containers, nest, storeOff };
+      const serialize = (): ContainerSnapshot[] => [...containers.values()].map(container => ({
+        id: container.id,
+        Label: { ...container.Label },
+        Position: { ...container.Position },
+        Size: { ...container.Size },
+        AutoFit: container.AutoFit,
+        Sections: container.Sections?.map(section => ({ ...section })),
+        SectionAxis: container.SectionAxis,
+        ChildSections: { ...(container.ChildSections ?? {}) },
+        Children: container.Children.map(child => ({ ...child, parent: child.parent ? [...child.parent] : undefined })),
+      }));
+      const restore = (value: ContainerSnapshot[] | undefined) => {
+        restoring = true;
+        try {
+          [...containers.values()].forEach(container => container.Children.forEach(child => nest.remove(child)));
+          containers.clear();
+          const saved = Array.isArray(value) ? value : [];
+          saved.forEach(input => {
+            if (!input?.id || !input.Label || !input.Position || !input.Size) return;
+            containers.set(input.id, {
+              id: input.id,
+              kind: 'container',
+              Label: { ...input.Label },
+              Position: { ...input.Position },
+              Size: { ...input.Size },
+              AutoFit: input.AutoFit,
+              Sections: input.Sections?.map(section => ({ ...section })) ?? [],
+              SectionAxis: input.SectionAxis ?? 'rows',
+              ChildSections: { ...(input.ChildSections ?? {}) },
+              Children: [],
+            });
+            const sequence = Number.parseInt(input.id.replace(/^\D+/, ''), 10);
+            if (Number.isFinite(sequence)) next = Math.max(next, sequence + 1);
+          });
+          saved.forEach(input => {
+            if (!containers.has(input.id)) return;
+            input.Children?.forEach(child => {
+              if (child?.id && (child.kind === 'node' || child.kind === 'container') && graph.getItem(child)) {
+                nest.add(input.id, { ...child, parent: child.parent ? [...child.parent] : undefined });
+              }
+            });
+            const container = containers.get(input.id);
+            if (container) sanitizeContainerSections(container);
+          });
+        } finally {
+          restoring = false;
+        }
+      };
+      restore(graph.snapshotExtension<ContainerSnapshot[]>('containers'));
+      const snapshotOff = graph.registerSnapshotExtension('containers', serialize, restore);
+      const state: GraphState = { containers, nest, storeOff, snapshotOff };
       states.set(gid, state);
       return state;
     };
@@ -216,7 +274,40 @@ export function registerContainers(system: Registry) {
       },
       {
         id: 'graph.container.delete',
-        label: 'Delete container',
+        label: 'Delete container immediately',
+        group: 'container',
+        hidden: true,
+        available: source => {
+          const fromDom = !!source?.target?.closest('[data-item-kind="container"]') && !!itemIdFrom(source?.target);
+          const ref = selection.selected();
+          return fromDom || ref?.kind === 'container';
+        },
+        payload: source => {
+          const fromDom = source.target?.closest('[data-item-kind="container"]')?.getAttribute('data-item-id');
+          if (fromDom) return { id: fromDom };
+          const ref = selection.selected();
+          return ref?.kind === 'container' ? { id: ref.id } : undefined;
+        },
+      },
+      {
+        id: 'container.delete.request',
+        label: 'Delete container…',
+        group: 'container',
+        available: source => {
+          const fromDom = !!source?.target?.closest('[data-item-kind="container"]') && !!itemIdFrom(source?.target);
+          const ref = selection.selected();
+          return fromDom || ref?.kind === 'container';
+        },
+        payload: source => {
+          const fromDom = source.target?.closest('[data-item-kind="container"]')?.getAttribute('data-item-id');
+          if (fromDom) return { id: fromDom, confirm: source.origin !== 'programmatic' };
+          const ref = selection.selected();
+          return ref?.kind === 'container' ? { id: ref.id, confirm: source.origin !== 'programmatic' } : undefined;
+        },
+      },
+      {
+        id: 'container.ungroup',
+        label: 'Ungroup and keep contents',
         group: 'container',
         available: source => {
           const fromDom = !!source?.target?.closest('[data-item-kind="container"]') && !!itemIdFrom(source?.target);
@@ -229,6 +320,14 @@ export function registerContainers(system: Registry) {
           const ref = selection.selected();
           return ref?.kind === 'container' ? { id: ref.id } : undefined;
         },
+      },
+      {
+        id: 'container.delete.confirm', label: 'Confirm container deletion', group: 'container', hidden: true,
+        input: { on: 'click', selector: '[data-container-delete-confirm]' },
+      },
+      {
+        id: 'container.delete.cancel', label: 'Cancel container deletion', group: 'container', hidden: true,
+        input: { on: 'click', selector: '[data-container-delete-cancel]' },
       },
       {
         id: 'container.add-child',
@@ -407,6 +506,97 @@ export function registerContainers(system: Registry) {
       });
       emit('selection.item.clear');
     });
+    const descendantCounts = (id: Id) => {
+      const seen = new Set<Id>();
+      let nodes = 0;
+      let containers = 0;
+      const visit = (containerId: Id) => {
+        if (seen.has(containerId)) return;
+        seen.add(containerId);
+        containersHere().get(containerId)?.Children.forEach(child => {
+          if (child.kind === 'node') nodes += 1;
+          else if (child.kind === 'container') { containers += 1; visit(child.id); }
+        });
+      };
+      visit(id);
+      return { nodes, containers };
+    };
+    const deletePreview = (id: Id) => () => {
+      const container = containersHere().get(id);
+      const counts = descendantCounts(id);
+      const panel = document.createElement('section');
+      panel.className = 'delete-preview container-delete-preview';
+      const warning = document.createElement('p');
+      const parts = [
+        counts.nodes ? `${counts.nodes} node${counts.nodes === 1 ? '' : 's'}` : '',
+        counts.containers ? `${counts.containers} nested container${counts.containers === 1 ? '' : 's'}` : '',
+      ].filter(Boolean);
+      warning.textContent = parts.length
+        ? `Delete “${container?.Label.text ?? id}” and its ${parts.join(' and ')}? This cannot be undone.`
+        : `Delete empty container “${container?.Label.text ?? id}”?`;
+      const note = document.createElement('small');
+      note.textContent = parts.length ? 'To remove only the boundary, choose Ungroup and keep contents.' : '';
+      const actions = document.createElement('div');
+      actions.className = 'import-actions';
+      const cancel = document.createElement('button');
+      cancel.type = 'button';
+      cancel.dataset.command = 'container.delete.cancel';
+      cancel.dataset.containerDeleteCancel = '';
+      cancel.textContent = 'Keep container';
+      const confirm = document.createElement('button');
+      confirm.type = 'button';
+      confirm.className = 'danger graph-delete-confirm';
+      confirm.dataset.command = 'container.delete.confirm';
+      confirm.dataset.containerDeleteConfirm = '';
+      confirm.textContent = parts.length ? 'Delete contents' : 'Delete container';
+      actions.append(cancel, confirm);
+      panel.append(warning);
+      if (note.textContent) panel.append(note);
+      panel.append(actions);
+      return panel;
+    };
+    on('container.delete.request', ({ id, confirm }) => {
+      const container = containersHere().get(id);
+      if (!container) return;
+      const counts = descendantCounts(id);
+      if (!confirm || (!counts.nodes && !counts.containers)) {
+        emit('graph.container.delete', { id });
+        return;
+      }
+      pendingContainerDelete = id;
+      emit('modal.open', { title: 'Delete container?', visual: 'properties', body: deletePreview(id) });
+    });
+    on('container.delete.confirm', () => {
+      const id = pendingContainerDelete;
+      if (!id) return;
+      pendingContainerDelete = null;
+      emit('graph.container.delete', { id });
+      emit('modal.close');
+    });
+    on('container.delete.cancel', () => { pendingContainerDelete = null; emit('modal.close'); });
+    on('modal.closed', () => { pendingContainerDelete = null; });
+    on('container.ungroup', ({ id }) => {
+      const here = containersHere();
+      const nest = nestHere();
+      const container = here.get(id);
+      if (!container) return;
+      const parent = nest.parentRefOf({ kind: 'container', id });
+      const children = [...container.Children];
+      children.forEach(child => {
+        nest.remove(child);
+        removeChildSection(child, id);
+        if (parent?.kind === 'container') {
+          nest.add(parent.id, child);
+          const parentContainer = here.get(parent.id);
+          if (parentContainer) assignChildSection(parentContainer, child);
+        }
+      });
+      nest.remove({ kind: 'container', id });
+      here.delete(id);
+      selection.select(null);
+      emit('container.deleted', { id });
+      emit('app.notice', { message: `Removed “${container.Label.text}” and kept ${children.length} item${children.length === 1 ? '' : 's'}.` });
+    });
     on('graph.container.delete', ({ id }) => {
       const here = containersHere();
       const nest = nestHere();
@@ -520,7 +710,7 @@ export function registerContainers(system: Registry) {
       // Delete every chosen container (containers owns its kind; selectable owns
       // node/edge). Fan-out over the set — same command for 1 or N.
       selection.selectedAll().forEach(ref => {
-        if (ref.kind === 'container') emit('graph.container.delete', { id: ref.id });
+        if (ref.kind === 'container') emit('container.delete.request', { id: ref.id, confirm: true });
       });
     });
 
@@ -546,12 +736,12 @@ export function registerContainers(system: Registry) {
       if (p.Sections || p.SectionAxis || p.ChildSections) emit('container.children.changed', { id: c.id });
     });
 
-    contribute({ surface: 'top', command: 'editing.container.create', kind: 'button', text: '+ Container', order: 17, group: 'edit' });
+    contribute({ surface: 'top', command: 'editing.container.create', kind: 'button', text: 'Add container', order: 17, group: 'edit' });
 
     return () => {
       offEntity();
       offCollection();
-      states.forEach(s => s.storeOff());
+      states.forEach(s => { s.storeOff(); s.snapshotOff(); });
       states.clear();
     };
   }, { requires: ['render.stage', 'graph'] });

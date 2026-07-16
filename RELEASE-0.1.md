@@ -14,13 +14,13 @@ the `codex/noncore-quest-learning-archive` branch and are not release inputs.
 ## Current evidence
 
 - TypeScript typecheck: passing.
-- Command suite with V8 coverage: 197 passing, 1 skipped; 83.08% statements,
-  82.44% functions, and 85.91% lines.
-- Production app build: passing; about 210 kB JavaScript (67 kB gzip) and 43 kB
-  CSS (9 kB gzip) at the time of this audit.
+- Command suite with V8 coverage: 204 passing, 7 intentionally skipped; 82.01%
+  statements, 80.50% functions, and 85.26% lines.
+- Production app build: passing; 222.16 kB JavaScript (69.90 kB gzip) and
+  54.03 kB CSS (10.81 kB gzip) at the time of this audit.
 - Dependency audit: zero known vulnerabilities at moderate severity or higher.
 - DX/CLI self-test: 42 checks passing.
-- Browser suite: 26 passing, 2 intentionally skipped.
+- Browser suite: 33 passing, 2 intentionally skipped.
 - Complete `release:check`: passing on the audited release-preparation tree.
 
 ## Strengths
@@ -31,6 +31,20 @@ the `codex/noncore-quest-learning-archive` branch and are not release inputs.
   independently; architecture rules run as tests.
 - Local persistence, import/export, sharing, nested graphs, keyboard navigation,
   and large-graph rendering already form a coherent graph-editor product.
+- Versioned snapshots preserve entity extensions such as containers and sections
+  across reload, JSON export, share links, and undo/redo. Unknown extension keys
+  survive round-trips for forward compatibility.
+- Mermaid replacement is atomic: malformed input changes nothing; valid input
+  shows counts and requires confirmation. Whole-graph deletion is also confirmed.
+- Phone layouts start canvas-first with a collapsed document rail and a compact
+  primary toolbar. The rail remains visible below the toolbar and expands into
+  the full document navigator. A visible local-save state communicates persistence.
+- Import and export remain usable when Clipboard API access is missing or
+  pending: both expose explicit, labeled source/JSON dialogs. Transient notices
+  no longer block unrelated canvas commands.
+- Modals expose dialog semantics, isolate background controls, start focus at a
+  predictable control, and restore focus on close. Inline title editing is
+  labeled for assistive technology.
 - Fast jsdom tests, browser layout tests, coverage gates, snapshots, scenarios,
   and local-model tooling provide unusually strong diagnosis and regression paths.
 - The static build is small enough for inexpensive hosting and has no runtime
@@ -52,12 +66,12 @@ the `codex/noncore-quest-learning-archive` branch and are not release inputs.
 - Contributor documentation remains more extensive than end-user documentation,
   though the first-visit guide and canonical hosted demos now cover the initial journey.
 
-## Release blockers requiring an owner decision
+## Distribution decisions (not application-code blockers)
 
 - Choose and add a license before distributing source or artifacts publicly.
 - Choose the hosting/release destination and canonical public URL.
 - Decide whether 0.1 promises only Chromium or expands the browser matrix.
-- Confirm the product name and visual identity; the current name is technical.
+- Confirm whether the working product name, Canvas Graph, is the final public brand.
 
 ## Release checklist
 
@@ -74,7 +88,8 @@ the `codex/noncore-quest-learning-archive` branch and are not release inputs.
 ## Post-0.1 plan
 
 1. Continue splitting container behavior along entity, storage, and interaction boundaries.
-2. Add storage schema versioning, migrations, and recovery UX.
+2. Add explicit migrations when a schema-v2 change is introduced; v1 and legacy
+   node/edge-only snapshots are currently supported.
 3. Add Firefox/WebKit CI after compatibility issues are catalogued.
 4. Revisit the embeddable library with minified/source-mapped variants and a documented API.
 5. Add accessibility review and expand the keyboard reference.

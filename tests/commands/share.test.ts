@@ -3,17 +3,20 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { bootApp, settle } from './testkit';
-import { decodeGraph, encodeGraph, mermaidToSnapshot } from '../../frontend/systems/share';
+import { decodeGraph, encodeGraph, mermaidToSnapshot, SHARE_URL_LIMIT, shareUrlTooLarge } from '../../frontend/systems/share';
 import type { GraphSnapshot } from '../../frontend/model';
 
 const RepoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 const sample: GraphSnapshot = {
+  schemaVersion: 1,
+  name: 'Release map',
   nodes: [
     { id: 'a', Label: { text: 'Alpha' }, NodeType: 'text', Position: { x: 0, y: 0 }, Size: { w: 200, h: 120 }, Description: 'first' },
     { id: 'b', Label: { text: 'Beta' }, NodeType: 'text', Position: { x: 300, y: 0 }, Size: { w: 200, h: 120 } },
   ],
   edges: [{ id: 'e0', From: 'a', To: 'b', EdgeKind: 'sync', Label: { text: 'calls' } }],
+  extensions: { containers: [{ id: 'c1', Label: { text: 'System' }, Children: [{ kind: 'node', id: 'a' }] }] },
 };
 
 const tick = async () => { await settle(); await new Promise(r => setTimeout(r, 0)); await settle(); };
@@ -28,6 +31,8 @@ describe('graph share codec', () => {
     expect(decoded?.nodes[0].Label?.text).toBe('Alpha');
     expect(decoded?.nodes[0].Description).toBe('first');
     expect(decoded?.edges[0]).toMatchObject({ From: 'a', To: 'b', EdgeKind: 'sync' });
+    expect(decoded?.name).toBe('Release map');
+    expect(decoded?.extensions?.containers).toEqual(sample.extensions?.containers);
   });
 
   it('compresses better than raw base64 JSON for a large graph', async () => {
@@ -41,6 +46,11 @@ describe('graph share codec', () => {
     const compressed = await encodeGraph(big);
     const raw = JSON.stringify(big).length;
     expect(compressed.length).toBeLessThan(raw / 2);       // deflate wins on big graphs
+  });
+
+  it('guards links beyond the reliable browser URL budget', () => {
+    expect(shareUrlTooLarge(`https://canvas.test/?g=${'x'.repeat(SHARE_URL_LIMIT)}`)).toBe(true);
+    expect(shareUrlTooLarge('https://canvas.test/?g=small')).toBe(false);
   });
 
   it('still decodes a legacy uncompressed base64 payload', async () => {
@@ -76,12 +86,27 @@ describe('mermaid import', () => {
     expect(snapshot!.nodes.every(n => !/[<>]/.test(n.Label?.text ?? ''))).toBe(true);
   });
 
-  it('imports mermaid through the graph.import.mermaid event', async () => {
+  it('previews and confirms mermaid before replacing the graph', async () => {
     const ctx = bootApp();
     await settle();
     ctx.bus.emit('graph.import.mermaid', { source: 'flowchart\nA[One] --> B[Two]\nB --> C[Three]' });
     await tick();
+    expect(ctx.graphs.current.nodes()).toHaveLength(0);
+    expect(document.querySelector('.import-preview')?.textContent).toContain('3 nodes and 2 edges');
+    ctx.bus.emit('graph.import.confirm');
+    await tick();
     expect(ctx.graphs.current.nodes()).toHaveLength(3);
     expect(ctx.graphs.current.edges()).toHaveLength(2);
+  });
+
+  it('rejects incomplete mermaid atomically', async () => {
+    const ctx = bootApp();
+    await settle();
+    ctx.bus.emit('graph.node.create', { Label: { text: 'Keep me' } });
+    await tick();
+    ctx.bus.emit('graph.import.mermaid', { source: 'flowchart LR\nA -->' });
+    await tick();
+    expect(ctx.graphs.current.nodes().map(node => node.Label.text)).toEqual(['Keep me']);
+    expect(document.querySelector('.import-preview')).toBeNull();
   });
 });

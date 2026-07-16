@@ -39,8 +39,9 @@ describe('performance metrics', () => {
     console.log(`  Boot: ${bootMs.toFixed(0)}ms`);
     // V8 coverage instruments every loaded module and is not a product-speed
     // measurement. release:check runs this file once without instrumentation
-    // at the real 500ms budget, then again under coverage with headroom.
-    expect(bootMs).toBeLessThan(process.env.COVERAGE ? 750 : 500);
+    // at the real 500ms budget, then again amid the parallel coverage suite as
+    // a coarse regression check. The strict result is the isolated phase.
+    expect(bootMs).toBeLessThan(process.env.COVERAGE ? 2000 : 500);
     expect(ctx.contexts.commands.all().length).toBeGreaterThan(0);
   }, 5000);
 

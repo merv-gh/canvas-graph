@@ -16,7 +16,8 @@ declare module './types' {
 export function registerFeatures(feature: Registry) {
   // System-design feature disabled for release. Graph share/import (`?g=`, `?in=`,
   // mermaid paste) now lives in `systems/share.ts`, decoupled from it.
-  feature('nodeLifecycle', ({ on, emit, contexts, graphs, selection }) => {
+  feature('nodeLifecycle', (ctx) => {
+    const { on, emit, contexts, graphs, selection } = ctx;
     const rectContains = (outer: { x: number; y: number; w: number; h: number }, inner: { x: number; y: number; w: number; h: number }) =>
       inner.x >= outer.x && inner.y >= outer.y && inner.x + inner.w <= outer.x + outer.w && inner.y + inner.h <= outer.y + outer.h;
     const createdNodeIsOffscreen = (id: string) => {
@@ -25,15 +26,20 @@ export function registerFeatures(feature: Registry) {
       return !!node && !!visible && !rectContains(visible, nodeRect(node));
     };
 
-    /** When a node is already selected, A creates a child of it and wires the
-     *  edge in one keystroke; the new node becomes the selection so further
-     *  A keystrokes build a chain. Shift+A does the same but keeps the
-     *  selection on the source so sequence builders can fan out siblings. */
-    const attachedDraft = (keepFocus: boolean) => {
+    /** A / Shift+A ask the active layout for its spatial grammar. Tree keeps the
+     *  established child / sibling-fan-out behavior; Vertical and Horizontal
+     *  advance their primary axis and use Shift for an indented connected
+     *  branch; Radial drills outward or fans spokes. Pointer toolbar activation
+     *  remains a standalone node because a generic “Add node” click must not
+     *  hide an edge mutation. */
+    const attachedDraft = (alternate: boolean) => {
       const selected = selection.selectedNode();
       const base = { Label: { text: `Node ${graphs.current.nodes().length + 1}` } };
       if (!selected) return base;
-      return { ...base, relativeTo: selected.id, connectFrom: selected.id, ...(keepFocus ? { keepFocus: true } : {}) };
+      const layout = ctx.layout?.creation(selected.id, alternate);
+      return layout
+        ? { ...base, ...layout }
+        : { ...base, relativeTo: selected.id, connectFrom: selected.id, ...(alternate ? { keepFocus: true } : {}) };
     };
     contexts.commands.register([
       {
@@ -42,7 +48,9 @@ export function registerFeatures(feature: Registry) {
         group: 'editing',
         shortcut: 'A',
         input: { on: 'keydown', key: 'a', prevent: true },
-        payload: () => attachedDraft(false),
+        payload: source => source.origin === 'pointer'
+          ? { Label: { text: `Node ${graphs.current.nodes().length + 1}` } }
+          : attachedDraft(false),
       },
       {
         id: 'editing.node.create.keep',
@@ -115,21 +123,26 @@ export function registerFeatures(feature: Registry) {
       if (!graphs.current.getNode(From) || !graphs.current.getNode(To)) return;
       emit('graph.edge.create', { From, To, Label: draft.Label });
     });
+    on('commandPicker.submit', ({ commandId }) => {
+      if (commandId === 'editing.edge.create') emit('app.notice', { message: 'Edge created.' });
+    });
   }, { requires: ['graph'] });
-  feature('autoLayout', ({ on, emit, graphs }) => {
-    const MAX_AUTO_LAYOUT_NODES = 250;
+  // Compatibility name retained for persisted/test flags. This feature no
+  // longer runs whole-graph Tidy: that made every neighbouring node jump after
+  // an add or delete. Creation only re-frames the already-positioned graph.
+  // Sectioned containers retain their local structural placement inside the
+  // edited boundary; explicit Tidy/Grid/Radial remain user commands.
+  feature('autoLayout', ({ on, emit }) => {
     let pending = false;
-    const scheduleTidy = () => {
-      if (graphs.current.nodes().length > MAX_AUTO_LAYOUT_NODES) return;
+    const scheduleFit = () => {
       if (pending) return;
       pending = true;
       queueMicrotask(() => {
         pending = false;
-        emit('layout.apply.tidy');
+        emit('view.fit.all');
       });
     };
-    on('graph.node.created', scheduleTidy);
-    on('graph.node.deleted', scheduleTidy);
-    on('container.children.changed', scheduleTidy);
+    on('graph.node.created', scheduleFit);
+    on('container.children.changed', ({ id }) => emit('layout.apply.sections', { id }));
   }, { requires: ['graph', 'layout'] });
 }

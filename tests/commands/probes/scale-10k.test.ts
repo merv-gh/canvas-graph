@@ -81,7 +81,9 @@ describe('10k-node scale probes', () => {
     const flags5 = scene.nodeData[4 * NODE_FLOATS + 5];
     expect(flags5 & FLAG_SELECTED).toBe(FLAG_SELECTED);
     console.log(`  buildScene 10k: cold=${coldMs.toFixed(1)}ms warm=${warmMs.toFixed(1)}ms`);
-    expect(warmMs).toBeLessThan(100);
+    // release:check also runs this probe without instrumentation at the strict
+    // 100ms budget. V8 coverage plus parallel workers is a coarse guard only.
+    expect(warmMs).toBeLessThan(process.env.COVERAGE ? 250 : 100);
   }, 30_000);
 
   it('hitTestNode resolves exact node at 10k scale', async () => {

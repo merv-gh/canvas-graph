@@ -58,12 +58,21 @@ export type EdgeEntity = SemanticFields & {
 export type EdgeDraft = { From: Id; To: Id; Label?: Label; EdgeKind?: EdgeKind; LatencyMs?: number; ThroughputRps?: number; PayloadKb?: number } & SemanticFields;
 export type EdgeCreateDraft = Partial<EdgeDraft>;
 export type EdgePatch = Partial<Pick<EdgeEntity, 'Label' | 'From' | 'To' | 'EdgeKind' | 'LatencyMs' | 'ThroughputRps' | 'PayloadKb' | 'Purpose' | 'Assumptions' | 'Limits' | 'WhatThen' | 'Observability' | 'FailureMode' | 'DataScale' | 'FreshnessMs'>>;
-export type GraphSnapshot = { nodes: NodeDraftWithId[]; edges: EdgeDraftWithId[] };
+export type GraphSnapshot = {
+  /** Versioned document envelope. Missing means legacy v0 (nodes + edges only). */
+  schemaVersion?: 1;
+  name?: string;
+  nodes: NodeDraftWithId[];
+  edges: EdgeDraftWithId[];
+  /** Entity-owned data. Core preserves unknown keys for forward compatibility. */
+  extensions?: Record<string, unknown>;
+};
 export type NodeDraftWithId = NodeDraft & { id: Id };
 export type EdgeDraftWithId = EdgeDraft & { id: Id };
 
 type StoredItem = { id?: Id; parent?: Id[] };
 type ItemStore<T = unknown> = () => T[];
+type SnapshotExtension = { snapshot: () => unknown; restore?: (value: unknown) => void };
 
 const parentKey = (parent?: Id[]) => JSON.stringify(parent ?? []);
 
@@ -157,6 +166,8 @@ export class Graph {
   private items = new Map<Id, GraphNode>();
   private edgeMap = new Map<Id, GraphEdge>();
   private itemStores = new Map<string, ItemStore>();
+  private snapshotExtensions = new Map<string, SnapshotExtension>();
+  private storedExtensions: Record<string, unknown> = {};
   // Snapshot caches: nodes()/edges() handed out a fresh `[...spread]` on every
   // call (hot — the renderer iterates per redraw). Cache the array and null it
   // only on *structural* change (create/delete); in-place updates keep the same
@@ -220,9 +231,19 @@ export class Graph {
     this.adjacency.get(edge.To)?.delete(edge.id);
   }
 
+  name: string;
+
   private constructor(readonly id: Id) {
+    this.name = `Graph ${id.replace(/^g/i, '') || id}`;
     this.registerItemStore('node', () => this.nodes());
     this.registerItemStore('edge', () => this.edges());
+  }
+
+  rename(name: string) {
+    const next = name.trim();
+    if (!next || next === this.name) return false;
+    this.name = next;
+    return true;
   }
 
   registerItemStore<T>(kind: string, provider: ItemStore<T>) {
@@ -230,6 +251,24 @@ export class Graph {
     return () => {
       if (this.itemStores.get(kind) === provider) this.itemStores.delete(kind);
     };
+  }
+
+  /** Plugin/entity seam for versioned document persistence. Unknown extension
+   *  payloads remain stored even when their owning system is unavailable. */
+  registerSnapshotExtension<T>(key: string, snapshot: () => T, restore?: (value: T | undefined) => void) {
+    const extension: SnapshotExtension = {
+      snapshot,
+      restore: restore ? value => restore(value as T | undefined) : undefined,
+    };
+    this.snapshotExtensions.set(key, extension);
+    return () => {
+      if (this.snapshotExtensions.get(key) === extension) this.snapshotExtensions.delete(key);
+    };
+  }
+
+  snapshotExtension<T>(key: string): T | undefined {
+    const live = this.snapshotExtensions.get(key);
+    return (live ? live.snapshot() : this.storedExtensions[key]) as T | undefined;
   }
 
   itemsOfKind<T = unknown>(kind: string): T[] {
@@ -372,17 +411,24 @@ export class Graph {
   }
 
   snapshot(): GraphSnapshot {
+    const extensions = { ...this.storedExtensions };
+    this.snapshotExtensions.forEach((extension, key) => { extensions[key] = extension.snapshot(); });
     return {
+      schemaVersion: 1,
+      name: this.name,
       nodes: this.nodes().map(({ id, Label, Position, Size, NodeType, Description, ComputeMs, ExpectedRps, LatencyMs, Purpose, Assumptions, Limits, WhatThen, Observability, FailureMode, DataScale, FreshnessMs }) => ({
         id, Label, Position, Size, NodeType, Description, ComputeMs, ExpectedRps, LatencyMs, Purpose, Assumptions, Limits, WhatThen, Observability, FailureMode, DataScale, FreshnessMs,
       })),
       edges: this.edges().map(({ id, From, To, Label, EdgeKind, LatencyMs, ThroughputRps, PayloadKb, Purpose, Assumptions, Limits, WhatThen, Observability, FailureMode, DataScale, FreshnessMs }) => ({
         id, From, To, Label, EdgeKind, LatencyMs, ThroughputRps, PayloadKb, Purpose, Assumptions, Limits, WhatThen, Observability, FailureMode, DataScale, FreshnessMs,
       })),
+      ...(Object.keys(extensions).length ? { extensions } : {}),
     };
   }
 
   replace(snapshot: GraphSnapshot) {
+    if (snapshot.name?.trim()) this.name = snapshot.name.trim();
+    this.storedExtensions = { ...(snapshot.extensions ?? {}) };
     this.items.clear();
     this.edgeMap.clear();
     this.adjacency.clear();
@@ -409,6 +455,7 @@ export class Graph {
     this.nextEdge = maxEdge + 1;
     this.nodeArr = null;
     this.edgeArr = null;
+    this.snapshotExtensions.forEach((extension, key) => extension.restore?.(this.storedExtensions[key]));
   }
 }
 

@@ -7,6 +7,7 @@ declare module '../types' {
     'help.open': void;
     'commandModal.run': { commandId: string };
     'commandModal.search.changed': { query: string };
+    'commandModal.search.clear': void;
     'shortcut.edit.preview': { id: string; shortcut?: string };
     'shortcut.edit.commit': { id: string; shortcut?: string };
     'palette.nav': { delta: number };
@@ -17,7 +18,7 @@ declare module '../types' {
   }
 }
 
-const PLACEHOLDER = 'Search commands & nodes';
+const PLACEHOLDER = 'Search commands and graph items';
 const ALT_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789'.split('');
 
 type Row =
@@ -32,8 +33,8 @@ type Row =
 export function registerCommandModal(system: Registry) {
   system('commandModal', (ctx) => {
     const { on, emit, contexts, contribute } = ctx;
-    contribute({ surface: 'top', command: 'help.open', kind: 'button', text: '?', label: 'Help', slot: Slots.End, order: 99 });
-    contribute({ surface: 'top', command: 'palette.open', kind: 'button', text: '🔍', label: 'Search (P)', slot: Slots.End, order: 100 });
+    contribute({ surface: 'top', command: 'help.open', kind: 'button', text: 'Help', label: 'Commands and shortcuts', order: 99, group: 'help' });
+    contribute({ surface: 'top', command: 'palette.open', kind: 'button', text: 'Search', label: 'Search commands and graph items (P)', slot: Slots.End, order: 100 });
 
     let query = '';
     let selected = 0;
@@ -43,13 +44,19 @@ export function registerCommandModal(system: Registry) {
 
     const modalEl = () => contexts.places.el(Places.Modal);
     const activePalette = () => !!modalEl()?.querySelector('[data-command-modal="palette"]');
+    const isInteractionPhase = (command: CommandSpec) => {
+      const event = command.input?.on ?? '';
+      return event.startsWith('pointer') || event === 'wheel' || event === 'dblclick'
+        || /\.(start|move|end)$/.test(command.id);
+    };
 
     const visibleCommands = (q = '') => {
       const needle = q.trim().toLowerCase();
       return contexts.commands.all()
-        .filter(command => !command.hidden)
+        .filter(command => !command.hidden || (!!needle && isInteractionPhase(command)))
+        .filter(command => contexts.commands.isEnabled(command))
         .filter(command => !!needle || command.available?.() !== false)
-        .filter(command => !needle || `${command.id} ${command.label} ${command.group ?? ''} ${shortcutOf(command)}`.toLowerCase().includes(needle));
+        .filter(command => !needle || `${command.id} ${command.label} ${command.group ?? ''} ${shortcutOf(command)} ${command.input?.on ?? ''}`.toLowerCase().includes(needle));
     };
     // Context-ranked: when something is chosen, groups acting on the current
     // target sort first; otherwise create/navigate groups lead.
@@ -146,6 +153,19 @@ export function registerCommandModal(system: Registry) {
         return contexts.templates.slot(section, 'rows');
       };
       currentRows.forEach(row => rowsSlotFor(row.group).append(rowEl(row, index++)));
+      if (!currentRows.length) {
+        const empty = document.createElement('section');
+        empty.className = 'palette-empty';
+        empty.setAttribute('role', 'status');
+        const message = document.createElement('p');
+        message.textContent = `No commands or graph items match “${q.trim()}”.`;
+        const clear = document.createElement('button');
+        clear.type = 'button';
+        clear.dataset.command = 'commandModal.search.clear';
+        clear.textContent = 'Clear search';
+        empty.append(message, clear);
+        fragment.append(empty);
+      }
       return fragment;
     };
     const renderPalette = () => {
@@ -158,10 +178,18 @@ export function registerCommandModal(system: Registry) {
     };
     const renderHelp = () => {
       const fragment = document.createDocumentFragment();
-      contexts.commands.all()
-        .filter(command => !command.hidden)
-        .sort((a, b) => (a.group ?? '').localeCompare(b.group ?? '') || a.label.localeCompare(b.label))
-        .forEach(command => {
+      const commands = contexts.commands.all()
+        .filter(command => !command.hidden && contexts.commands.isEnabled(command))
+        .filter(command => !!shortcutOf(command))
+        .filter(command => !['debug', 'perf', 'scenario', 'dx'].includes(command.group ?? ''))
+        .sort((a, b) => a.label.localeCompare(b.label));
+      [...grouped(commands, command => command.group ?? systemOf(command.id))]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .forEach(([group, rows]) => {
+          const section = contexts.templates.clone<HTMLElement>('command-section');
+          contexts.templates.text(section, 'group', group);
+          const slot = contexts.templates.slot(section, 'rows');
+          rows.forEach(command => {
           const row = contexts.templates.clone<HTMLElement>('help-row');
           contexts.templates.text(row, 'label', command.label);
           contexts.templates.text(row, 'id', command.id);
@@ -169,9 +197,35 @@ export function registerCommandModal(system: Registry) {
           if (input) {
             input.value = shortcutOf(command);
             input.dataset.shortcutCommand = command.id;
+            input.setAttribute('aria-label', `Shortcut for ${command.label}`);
           }
-          fragment.append(row);
+            slot.append(row);
+          });
+          fragment.append(section);
         });
+      const phases = contexts.commands.all()
+        .filter(command => command.hidden && contexts.commands.isEnabled(command) && isInteractionPhase(command))
+        .sort((a, b) => a.label.localeCompare(b.label));
+      if (phases.length) {
+        const section = contexts.templates.clone<HTMLElement>('command-section');
+        contexts.templates.text(section, 'group', 'Interaction phases');
+        const slot = contexts.templates.slot(section, 'rows');
+        phases.forEach(command => {
+          const row = document.createElement('div');
+          row.className = 'help-row help-phase-row';
+          const copy = document.createElement('span');
+          const label = document.createElement('b');
+          label.textContent = command.label;
+          const id = document.createElement('small');
+          id.textContent = command.id;
+          copy.append(label, id);
+          const trigger = document.createElement('kbd');
+          trigger.textContent = command.input?.on ?? 'internal';
+          row.append(copy, trigger);
+          slot.append(row);
+        });
+        fragment.append(section);
+      }
       return fragment;
     };
     const rerender = () => {
@@ -278,6 +332,7 @@ export function registerCommandModal(system: Registry) {
         input: { on: 'input', selector: '.palette-search' },
         payload: ({ target }) => ({ query: (target as HTMLInputElement).value }),
       },
+      { id: 'commandModal.search.clear', label: 'Clear palette search', group: 'modal', hidden: true },
       {
         id: 'shortcut.edit.preview',
         label: 'Preview shortcut edit',
@@ -304,7 +359,7 @@ export function registerCommandModal(system: Registry) {
 
     const open = () => emit('modal.open', { title: 'Palette', visual: 'command', body: () => renderPalette() });
     on('palette.open', () => { query = ''; selected = 0; open(); });
-    on('help.open', () => emit('modal.open', { title: 'Help', visual: 'command', body: () => renderHelp() }));
+    on('help.open', () => emit('modal.open', { title: 'Commands and shortcuts', visual: 'command', body: () => renderHelp() }));
     on('palette.nav', ({ delta }) => {
       if (!currentRows.length) return;
       selected = (selected + delta + currentRows.length) % currentRows.length;
@@ -330,6 +385,14 @@ export function registerCommandModal(system: Registry) {
       query = q;
       selected = 0;
       rerender();
+    });
+    on('commandModal.search.clear', () => {
+      query = '';
+      selected = 0;
+      const input = modalEl()?.querySelector<HTMLInputElement>('.palette-search');
+      if (input) input.value = '';
+      rerender();
+      input?.focus();
     });
     const shortcutInput = (id: string) =>
       modalEl()?.querySelector(`.shortcut-edit[data-shortcut-command="${CSS.escape(id)}"]`) as HTMLInputElement | null;

@@ -15,6 +15,26 @@ const pressLetter = (letter: string) =>
   captureInput()!.dispatchEvent(new KeyboardEvent('keydown', { key: letter, bubbles: true, cancelable: true }));
 
 describe('frontend edge commands (picker-driven)', () => {
+  it('accepts pointer clicks on visible candidates and confirms completion', async () => {
+    const ctx = bootApp({ autoLayout: false });
+    await settle();
+    runCommand(ctx, 'editing.node.create');
+    ctx.bus.emit('selection.item.clear');
+    runCommand(ctx, 'editing.node.create');
+    await settle();
+    const [source, target] = ctx.graphs.current.nodes();
+    const baseline = ctx.graphs.current.edges().length;
+    ctx.bus.emit('selection.node.select', { id: source.id });
+    await settle();
+    runCommand(ctx, 'editing.edge.create');
+    await settle();
+    document.querySelector<HTMLElement>(`.node[data-item-id="${target.id}"]`)!
+      .dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true }));
+    await settle();
+    expect(ctx.graphs.current.edges()).toHaveLength(baseline + 1);
+    expect(document.querySelector('.app-notice')?.textContent).toBe('Edge created.');
+  });
+
   it('emits a notice when nothing is pickable for a step', async () => {
     const ctx = bootApp();
     createNode(ctx, 'lonely');
@@ -101,6 +121,33 @@ describe('frontend edge commands (picker-driven)', () => {
     expect(ctx.graphs.current.edges()).toHaveLength(0);
   });
 
+  it('cancels the active picker when switching graphs or opening a modal', async () => {
+    const ctx = bootApp();
+    createNode(ctx, 'A');
+    createNode(ctx, 'B');
+    ctx.bus.emit('selection.item.clear');
+    await settle();
+    runCommand(ctx, 'editing.edge.create');
+    await settle();
+    expect(captureInput()).not.toBeNull();
+
+    runCommand(ctx, 'graph.create');
+    await settle();
+    expect(captureInput()).toBeNull();
+    expect(document.querySelector('.picker-prompt')).toBeNull();
+
+    createNode(ctx, 'C');
+    createNode(ctx, 'D');
+    ctx.bus.emit('selection.item.clear');
+    runCommand(ctx, 'editing.edge.create');
+    await settle();
+    expect(captureInput()).not.toBeNull();
+    ctx.bus.emit('modal.open', { title: 'Other task', body: () => document.createElement('p') });
+    await settle();
+    expect(captureInput()).toBeNull();
+    expect(document.querySelector('.picker-prompt')).toBeNull();
+  });
+
   it('keeps a form open when form payload cannot be built (form path still supported)', () => {
     const ctx = bootApp();
     ctx.contexts.commands.register([{
@@ -136,14 +183,35 @@ describe('frontend edge commands (picker-driven)', () => {
     fakeRow.dataset.itemKind = 'edge';
     fakeRow.dataset.itemId = edge.id;
     expect(runCommand(ctx, 'item.properties.open', { target: fakeRow })).toBe(true);
-    expect(modalText()).toContain('Edge Properties');
-    const label = document.querySelector<HTMLInputElement>('.properties [data-field="label"]')!;
+    const label = document.querySelector<HTMLInputElement>('[data-item-modal-title]')!;
+    expect(label.value).toBe('depends');
     label.value = 'blocks';
-    expect(runCommand(ctx, 'properties.item.input', { target: label })).toBe(true);
+    expect(runCommand(ctx, 'properties.title.input', { target: label })).toBe(true);
     expect(edge.Label?.text).toBe('blocks');
+    expect(document.querySelector('.properties [data-field="label"]')).toBeNull();
 
     expect(runCommand(ctx, 'graph.edge.delete', { target: fakeRow })).toBe(true);
     expect(ctx.graphs.current.edges()).toHaveLength(0);
+  });
+
+  it('surfaces edge editing beside a selected connection', async () => {
+    const ctx = bootApp();
+    const source = createNode(ctx, 'A');
+    const target = createNode(ctx, 'B');
+    ctx.bus.emit('graph.edge.create', { From: source.id, To: target.id, Label: { text: 'calls' } });
+    const edge = ctx.graphs.current.edges()[0];
+    ctx.bus.emit('selection.item.select', { kind: 'edge', id: edge.id });
+    await settle();
+
+    const edit = document.querySelector<HTMLElement>('.item-toolbar [data-command="item.properties.open"]');
+    expect(edit).not.toBeNull();
+    expect(edit?.getAttribute('aria-label')).toContain('Edit');
+    expect(runCommand(ctx, 'item.properties.open', { target: edit })).toBe(true);
+    await settle();
+    expect(document.querySelector('.context-actions')?.textContent).toContain('Reverse direction');
+    expect(document.querySelector('.context-actions')?.textContent).toContain('Delete connection');
+    expect(document.querySelectorAll('.property-advanced-group')).toHaveLength(0);
+    expect(document.querySelector('.properties-autosave-note')?.textContent).toContain('save automatically');
   });
 
   it('deletes a selected edge from command or X shortcut', async () => {
