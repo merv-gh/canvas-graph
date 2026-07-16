@@ -913,6 +913,7 @@ button.icon:hover { color: var(--ink); }
 /* Nodes without descriptions stay title-only; ids are data attrs, not visual noise. */
 .node:not(.has-description) .node-body { display: none; }
 .node.collapsed .node-body { display: none; }
+.node:not(.has-description) .node-title,
 .node.collapsed .node-title {
   display: grid;
   place-items: center;

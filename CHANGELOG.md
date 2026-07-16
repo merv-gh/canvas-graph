@@ -5,6 +5,16 @@ All notable changes to this project will be documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-07-16
+
+### Added
+
+- Added Makefile commands for running, testing, and patch/minor/major releases.
+
+### Fixed
+
+- Centered node titles when the node has no description.
+
 ## [0.1.0] - 2026-07-16
 
 ### Added
@@ -25,5 +35,6 @@ All notable changes to this project will be documented here. The format follows
 - Scoped 0.1 to the static application; the experimental library remains post-0.1 work.
 - Removed the unused system-design subsystem and split container/debug rendering policy from behavior.
 
-[Unreleased]: https://github.com/merv-gh/canvas-graph/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/merv-gh/canvas-graph/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/merv-gh/canvas-graph/releases/tag/v0.1.1
 [0.1.0]: https://github.com/merv-gh/canvas-graph/releases/tag/v0.1.0

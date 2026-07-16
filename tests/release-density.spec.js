@@ -99,6 +99,26 @@ test('first node and every creation fit share the exact stage centre', async ({ 
   await expect(page.getByRole('button', { name: 'Close dialog' })).toHaveText('×');
 });
 
+test('a title-only node centres its text inside the node', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New graph', exact: true }).click();
+  await page.getByRole('button', { name: 'Add node', exact: true }).click();
+
+  const offset = await page.locator('.node-title').evaluate(title => {
+    const node = title.closest('.node').getBoundingClientRect();
+    const range = document.createRange();
+    range.selectNodeContents(title);
+    const text = range.getBoundingClientRect();
+    return {
+      x: text.left + text.width / 2 - (node.left + node.width / 2),
+      y: text.top + text.height / 2 - (node.top + node.height / 2),
+    };
+  });
+
+  expect(Math.abs(offset.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(offset.y)).toBeLessThanOrEqual(1);
+});
+
 test('period opens one compact actions and properties inspector', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'New graph', exact: true }).click();
