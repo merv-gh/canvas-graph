@@ -1,6 +1,6 @@
 {
   "name": "ecs-canvas-graph",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Keyboard-first, event-driven graph editor for writing and navigating structured ideas.",
   "license": "Apache-2.0",
   "private": true,
