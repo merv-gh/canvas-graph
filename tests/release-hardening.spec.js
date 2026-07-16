@@ -99,7 +99,7 @@ test('expanded navigator never covers the desktop command bar', async ({ page })
   expect(shellBox).not.toBeNull();
   expect(navigatorBox.x).toBe(shellBox.x);
   expect(navigatorBox.x + navigatorBox.width).toBe(shellBox.x + shellBox.width);
-  await expect(page.getByRole('button', { name: 'Show editing actions' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Show create and file actions' })).toBeVisible();
 });
 
 test('light onboarding keeps its dialog label visible', async ({ page }) => {
@@ -113,7 +113,8 @@ test('light onboarding keeps its dialog label visible', async ({ page }) => {
 test('far mobile overview favors readable titles over clipped descriptions', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open getting-started guide' }).click();
+  await page.getByRole('button', { name: 'Open commands and graph search' }).click();
+  await page.getByRole('button', { name: 'Open getting-started guide', exact: true }).click();
   await page.getByRole('button', { name: /C4 architecture/ }).click();
   // Fit deliberately stops at the 80% reading floor. Exercise semantic zoom
   // through the explicit zoom command instead of requiring Fit to violate it.

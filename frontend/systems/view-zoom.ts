@@ -34,19 +34,11 @@ export function registerViewZoom(system: Registry) {
   system('view.zoom', ({ on, emit, contexts, graphs, selection, contribute, model, declarePanel, frameLoop }) => {
     // Stage tool panel — buttons reach it via panel: 'zoom' on their contribute(...).
     declarePanel({ id: 'zoom', anchor: 'bottom-right', movable: false, layout: 'toolbar', order: 20 });
-    contribute({ panel: 'zoom', surface: 'top', command: 'view.zoom.out', kind: 'button', text: '−', slot: Slots.End, order: 10 });
-    contribute({ panel: 'zoom', surface: 'top', command: 'view.zoom.reset', kind: 'button', text: '100%', slot: Slots.End, order: 20 });
-    contribute({ panel: 'zoom', surface: 'top', command: 'view.zoom.in', kind: 'button', text: '+', slot: Slots.End, order: 30 });
-    contribute({ panel: 'zoom', surface: 'top', command: 'view.fit.all', kind: 'button', text: 'Fit', slot: Slots.End, order: 5 });
+    // Zoom is gesture/key driven. One recovery control earns persistent canvas
+    // chrome: Fit. +/-/100% remain commands and palette entries, not buttons.
+    contribute({ panel: 'zoom', surface: 'top', command: 'view.fit.all', kind: 'button', text: 'Fit', label: 'Fit canvas to content', slot: Slots.End, order: 5 });
     const stageSelector = `[data-place="${Places.Stage}"]`;
     const commit = () => emit('view.changed', contexts.view.get());
-    const syncZoomLabel = () => {
-      const button = contexts.places.el(Places.Stage)?.querySelector<HTMLButtonElement>('[data-command="view.zoom.reset"]');
-      if (!button) return;
-      const percent = Math.round(contexts.view.get().scale * 100);
-      button.textContent = `${percent}%`;
-      button.setAttribute('aria-label', `Reset zoom, current ${percent}%`);
-    };
     const centerZoom = (factor: number) => {
       cancelCamera();
       contexts.view.zoomAtScreen(contexts.view.screenCenter(Places.Stage), factor);
@@ -418,7 +410,6 @@ export function registerViewZoom(system: Registry) {
         const rect = contexts.places.el(Places.Stage)?.getBoundingClientRect();
         if (!rect) return;
         if (rect.width > 0 && rect.height > 0 && graphs.current.nodes().length) emit('view.fit.all');
-        else syncZoomLabel();
       }, 20);
     };
     globalThis.addEventListener?.('resize', fitAfterResize);
@@ -430,14 +421,8 @@ export function registerViewZoom(system: Registry) {
         if (stage) resizeObserver.observe(stage);
         if (panel) resizeObserver.observe(panel);
       }
-      frameLoop.schedule('view.zoom.label', syncZoomLabel, 30);
     });
-    on('view.changed', syncZoomLabel);
-    on('history.changed', () => frameLoop.schedule('view.zoom.label', syncZoomLabel, 30));
-    on('tool.panel.mobile.toggle', () => frameLoop.schedule('view.zoom.label', syncZoomLabel, 30));
-    on('selection.changed', () => frameLoop.schedule('view.zoom.label', syncZoomLabel, 30));
     on('fold.changed', ({ id }) => {
-      frameLoop.schedule('view.zoom.label', syncZoomLabel, 30);
       if (id === 'outline.panel' && graphs.current.nodes().length) {
         frameLoop.schedule('view.navigator.fit', () => emit('view.fit.all'), 30);
       }
@@ -448,7 +433,6 @@ export function registerViewZoom(system: Registry) {
       globalThis.removeEventListener?.('resize', fitAfterResize);
       frameLoop.cancel('view.resize.fit');
       frameLoop.cancel('view.navigator.fit');
-      frameLoop.cancel('view.zoom.label');
     };
   }, { requires: ['render'] });
 }

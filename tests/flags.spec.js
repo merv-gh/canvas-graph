@@ -18,7 +18,7 @@ const goWithFlags = async (page, overrides = {}) => {
 
 test('toolbar contributions disappear when their owning system is off', async ({ page }) => {
   await goWithFlags(page, { 'view.zoom': false });
-  const zoomButtons = await page.locator('.toolbar button[data-command^="view.zoom"]').count();
+  const zoomButtons = await page.locator('[data-panel-id="zoom"] button').count();
   expect(zoomButtons).toBe(0);
   const plusNode = await page.getByRole('button', { name: 'Add node', exact: true }).count();
   expect(plusNode).toBe(1);
@@ -37,7 +37,8 @@ test('all flags on: baseline affordances exist', async ({ page }) => {
   await goWithFlags(page);
   await expect(page.locator('.toolbar button[data-command="editing.node.create"]')).toBeVisible();
   await expect(page.locator('.toolbar button[data-command="palette.open"]')).toBeVisible();
-  await expect(page.locator('.toolbar button[data-command="view.zoom.in"]')).toBeVisible();
+  await expect(page.locator('.toolbar button[data-command="view.fit.all"]')).toBeVisible();
+  await expect(page.locator('.toolbar button[data-command="view.zoom.in"]')).toHaveCount(0);
 });
 
 test('empty-state hint appears when graph has no nodes', async ({ page }) => {

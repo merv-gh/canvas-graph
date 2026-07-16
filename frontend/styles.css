@@ -2541,3 +2541,173 @@ input:not([type]):focus {
   .toolbar-brand span { display: none; }
   .top > .tool-panel[data-panel-id="top"] .toolbar-end button { padding-inline: 5px; font-size: 10px; }
 }
+
+/* --- Touch action wheel -------------------------------------------------- */
+@keyframes action-wheel-enter {
+  from { opacity: 0; transform: scale(.82); }
+}
+.item-action-wheel {
+  position: absolute;
+  z-index: 24;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+  animation: action-wheel-enter var(--duration-normal) var(--ease-default);
+}
+.item-action-wheel::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 224px;
+  height: 224px;
+  transform: translate(-50%, -50%);
+  border: 1px solid color-mix(in srgb, var(--line-strong) 70%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--panel) 84%, transparent);
+  backdrop-filter: blur(12px);
+}
+.item-action-choice,
+.item-action-center {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 62px;
+  min-width: 62px;
+  height: 62px;
+  min-height: 62px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--panel);
+  pointer-events: auto;
+}
+.item-action-choice {
+  transform: translate(calc(-50% + var(--wheel-x)), calc(-50% + var(--wheel-y)));
+  align-content: center;
+  gap: 2px;
+}
+.item-action-choice b { font: 600 18px/1 "Avenir Next", Inter, system-ui, sans-serif; }
+.item-action-choice span { color: var(--text-muted); font-size: 9px; line-height: 1; white-space: nowrap; }
+.item-action-choice:hover,
+.item-action-choice:focus-visible { border-color: var(--ink); background: var(--panel-2); }
+.item-action-choice.danger b,
+.item-action-choice.danger span { color: var(--danger); }
+.item-action-center {
+  width: 66px;
+  min-width: 66px;
+  height: 66px;
+  min-height: 66px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  color: var(--bg);
+  border-color: var(--ink);
+  background: var(--ink);
+  font-size: 11px;
+}
+.stage.holding-action { cursor: progress; }
+.node-rename { min-width: 50px; }
+
+/* Mobile command menu starts as an action sheet. Search remains one tap away,
+   but opening Tools never summons the keyboard by itself. */
+.palette-quick { display: grid; gap: 6px; }
+.palette-quick h3,
+.touch-guide strong {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.palette-quick-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; }
+.palette-quick-grid button {
+  display: grid;
+  place-items: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 58px;
+  padding: 7px 3px;
+  border-color: var(--line);
+  background: var(--panel-2);
+}
+.palette-quick-grid button b { font-size: 18px; line-height: 1; }
+.palette-quick-grid button span { overflow: hidden; width: 100%; color: var(--text-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.touch-guide { display: grid; gap: 2px; }
+.touch-guide > div {
+  display: grid;
+  grid-template-columns: minmax(80px, .42fr) 1fr;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.touch-guide > div:last-child { border-bottom: 0; }
+.touch-guide span { color: var(--ink); font-size: 13px; }
+
+@media (max-width: 680px) {
+  /* Canvas-first compact rail: global Guide/Theme remain in Tools, leaving two
+     primary controls here. */
+  .top > .tool-panel[data-panel-id="top"] {
+    border-color: color-mix(in srgb, var(--line-strong) 70%, transparent);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--chrome) 92%, transparent);
+    backdrop-filter: blur(12px);
+  }
+  .top > .tool-panel[data-panel-id="top"] .toolbar-end [data-command="onboarding.open"],
+  .top > .tool-panel[data-panel-id="top"] .toolbar-end [data-command="theme.toggle"] { display: none; }
+  .top > .tool-panel[data-panel-id="top"] .toolbar-brand {
+    flex: 1 1 auto;
+    border-right: 0;
+    font-size: 9px;
+  }
+  .top > .tool-panel[data-panel-id="top"] .toolbar-end { flex: 0 0 auto; }
+  .top > .tool-panel[data-panel-id="top"] .toolbar-end button {
+    min-width: 62px;
+    border-left: 1px solid var(--line);
+  }
+  .item-toolbar { display: none !important; }
+  .tool-panel[data-panel-id="zoom"] {
+    min-height: 46px;
+    padding: 2px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--panel) 92%, transparent);
+    backdrop-filter: blur(10px);
+  }
+  .tool-panel[data-panel-id="zoom"] button {
+    min-width: 58px;
+    min-height: 42px;
+    border-radius: 999px;
+  }
+  .picker-prompt em { color: var(--ink); }
+  .empty kbd,
+  .onboarding-keys,
+  .command-row kbd,
+  .help-phase-row { display: none !important; }
+  .modal-layer[data-visual="command"] .modal {
+    left: 8px;
+    right: 8px;
+    top: auto;
+    bottom: 8px;
+    width: auto;
+    max-height: calc(100dvh - 24px);
+    transform: none;
+    border-radius: 18px;
+  }
+  .modal-layer[data-visual="command"] .modal-head { min-height: 48px; padding-inline: 12px; }
+  .modal-layer[data-visual="command"] .modal-body { max-height: calc(100dvh - 78px); padding: 10px; }
+  .palette-search { min-height: 46px; padding-inline: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); }
+  .command-list { max-height: min(46dvh, 390px); }
+  .command-row { min-height: 44px; padding: 9px 10px; }
+  .palette-quick-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+
+@media (max-width: 380px) {
+  .palette-quick-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .item-action-choice,
+  .item-action-center { transform-origin: center; }
+}

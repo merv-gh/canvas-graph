@@ -1,6 +1,6 @@
 # ecs-canvas-graph
 
-A keyboard-first graph editor for **writing graphs** — explaining programming
+A touch- and keyboard-friendly graph editor for **writing graphs** — explaining programming
 concepts, sequences, workflows, and nested maps of memory with fast navigation.
 Event-driven, plugin-structured TypeScript; the architecture is judged by how
 cheaply it can be regrouped and how easily a bug can be found, reproduced, and

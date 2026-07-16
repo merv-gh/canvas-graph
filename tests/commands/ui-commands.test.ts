@@ -8,7 +8,7 @@ const createNodes = async (ctx: ReturnType<typeof bootApp>, count: number) => {
 };
 
 describe('frontend UI command surfaces', () => {
-  it('renders the top toolbar with graph-editing and layout button groups', async () => {
+  it('keeps editing in the top toolbar and removes persistent layout chrome', async () => {
     const ctx = bootApp();
     await createNodes(ctx, 2);
 
@@ -17,13 +17,13 @@ describe('frontend UI command surfaces', () => {
     expect(document.querySelectorAll('.tool-panel[data-panel-id="top"]')).toHaveLength(1);
     expect(document.querySelector('.top > .tool-panel[data-panel-id="top"]')).not.toBeNull();
     expect(document.querySelector('.tool-panel[data-panel-id="top"] .tool-group[data-group="edit"] [data-command="editing.edge.create"]')?.textContent).toBe('Connect');
-    // Layout lives in its own separate panel, not the top bar.
-    expect(document.querySelector('.tool-panel[data-panel-id="layout"] [data-command="layout.apply.vertical"]')?.textContent).toBe('Vertical');
-    expect(document.querySelector('.tool-panel[data-panel-id="layout"] [data-command="layout.apply.horizontal"]')?.textContent).toBe('Horizontal');
-    expect(document.querySelector('.tool-panel[data-panel-id="layout"] [data-command="layout.apply.tree"]')?.textContent).toBe('Tree');
-    expect(document.querySelector('.tool-panel[data-panel-id="layout"] [data-command="layout.apply.radial"]')?.textContent).toBe('Radial');
+    // Layout stays command/palette reachable without occupying the canvas.
+    expect(document.querySelector('.tool-panel[data-panel-id="layout"]')).toBeNull();
+    expect(ctx.contexts.commands.get('layout.apply.vertical')).toBeTruthy();
+    expect(ctx.contexts.commands.get('layout.apply.horizontal')).toBeTruthy();
+    expect(ctx.contexts.commands.get('layout.apply.tree')).toBeTruthy();
+    expect(ctx.contexts.commands.get('layout.apply.radial')).toBeTruthy();
     expect(document.querySelector('.tool-panel[data-panel-id="top"] [data-command="layout.apply.tree"]')).toBeNull();
-    expect(getComputedStyle(document.querySelector('.tool-panel[data-panel-id="layout"]')!).display).not.toBe('none');
     // Search icon lives in the trailing (right) toolbar slot.
     expect(document.querySelector('.top-tool-panel .toolbar-end [data-command="palette.open"]')).not.toBeNull();
     // Release document navigator is present; the event log remains absent.
@@ -32,19 +32,24 @@ describe('frontend UI command surfaces', () => {
     expect(ctx.bus['_emitted'].has('render.view.set')).toBe(true);
   });
 
-  it('keeps the live zoom readout through tool-panel redraws', async () => {
+  it('keeps zoom commands while exposing only Fit as persistent chrome', async () => {
     const ctx = bootApp();
     await settle();
     ctx.contexts.view.set({ x: 24, y: -18, scale: 1.17 });
     ctx.bus.emit('view.changed', ctx.contexts.view.get());
     await settle();
-    const label = () => document.querySelector('[data-command="view.zoom.reset"]')?.textContent;
-    expect(label()).toBe('117%');
+    expect(document.querySelector('[data-command="view.fit.all"]')?.textContent).toBe('Fit');
+    expect(document.querySelector('[data-command="view.zoom.in"]')).toBeNull();
+    expect(document.querySelector('[data-command="view.zoom.out"]')).toBeNull();
+    expect(document.querySelector('[data-command="view.zoom.reset"]')).toBeNull();
+    expect(ctx.contexts.commands.get('view.zoom.in')).toBeTruthy();
+    expect(ctx.contexts.commands.get('view.zoom.out')).toBeTruthy();
+    expect(ctx.contexts.commands.get('view.zoom.reset')).toBeTruthy();
 
     expect(runCommand(ctx, 'tool.panel.mobile.toggle')).toBe(true);
     await settle();
     expect(ctx.contexts.view.get()).toEqual({ x: 24, y: -18, scale: 1.17 });
-    expect(label()).toBe('117%');
+    expect(document.querySelectorAll('.tool-panel[data-panel-id="zoom"] button')).toHaveLength(1);
   });
 
   it('opens palette, filters commands, and runs a command row', async () => {

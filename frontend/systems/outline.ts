@@ -593,7 +593,13 @@ export function registerOutline(system: Registry) {
       // first visit focused on the document instead of opening a file tree
       // over it. The graph name and the Graphs affordance remain visible.
       const foldState = contexts.fold.all();
-      if (!Object.prototype.hasOwnProperty.call(foldState, PANEL_FOLD_ID)) {
+      const compact = globalThis.innerWidth <= 680
+        || globalThis.matchMedia?.('(pointer: coarse)').matches === true;
+      if (compact && contexts.fold.isOpen(PANEL_FOLD_ID)) {
+        // A persisted desktop-open navigator must not cover a phone canvas on
+        // reload. Users can still expand it from the compact document chip.
+        contexts.fold.set(PANEL_FOLD_ID, false);
+      } else if (!Object.prototype.hasOwnProperty.call(foldState, PANEL_FOLD_ID)) {
         contexts.fold.set(PANEL_FOLD_ID, false);
       }
       draw();

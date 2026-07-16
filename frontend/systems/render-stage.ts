@@ -362,7 +362,8 @@ export function registerRenderStage(system: Registry) {
           purpose.className = 'empty-purpose';
           purpose.textContent = 'Map a system, workflow, or connected idea.';
           hint.append(purpose);
-          if (shortcut) hint.append(kbdHint('Press ', shortcut, ' to add a node'));
+          if (globalThis.innerWidth <= 680) hint.append('Tap to add a node');
+          else if (shortcut) hint.append(kbdHint('Press ', shortcut, ' to add a node'));
           return emptyState(contexts.templates, 'No nodes in this graph yet', hint, 'editing.node.create') ?? document.createDocumentFragment();
         },
       });

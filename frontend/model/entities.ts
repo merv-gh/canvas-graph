@@ -353,7 +353,8 @@ const nodeRenderer: EntityRenderer<GraphNode> = {
     ctx.tagItem(el, ref);
     el.tabIndex = -1;
     el.setAttribute('role', 'button');
-    el.setAttribute('aria-label', `${node.Label.text || 'Untitled'}; ${typeLabel(nodeType)} node. Press Enter to edit.`);
+    const editHint = globalThis.innerWidth <= 680 ? 'Hold for actions.' : 'Press Enter to edit.';
+    el.setAttribute('aria-label', `${node.Label.text || 'Untitled'}; ${typeLabel(nodeType)} node. ${editHint}`);
     ctx.applyItemModes(el, ref);
     const collapsed = !!description && ctx.isFolded(ref);
     const renderedSize = collapsed ? collapsedNodeSize(node) : node.Size;

@@ -464,7 +464,7 @@ const applyLabelAware = (
 
 export function registerLayout(system: Registry) {
   system('layout', (ctx) => {
-    const { on, emit, contexts, graphs, selection, contribute, declarePanel } = ctx;
+    const { on, emit, contexts, graphs, selection } = ctx;
     type GraphLayoutState = { kind: LayoutKind; snapshotOff: () => void };
     const states = new Map<Id, GraphLayoutState>();
     let syncModeUi = () => {};
@@ -564,13 +564,8 @@ export function registerLayout(system: Registry) {
     };
     ctx.expose('layout', { active, creation });
 
-    // Layout gets its own dedicated panel (bottom-left), fully separate from the
-    // top-center graph-editing bar — distinct button groups, distinct places.
-    declarePanel({ id: 'layout', anchor: 'bottom-center', movable: false, layout: 'toolbar', order: 10 });
-    contribute({ surface: 'top', panel: 'layout', command: 'layout.apply.vertical', kind: 'button', text: 'Vertical', label: 'Vertical nested-list layout', active: () => active() === 'vertical', order: 65 });
-    contribute({ surface: 'top', panel: 'layout', command: 'layout.apply.horizontal', kind: 'button', text: 'Horizontal', label: 'Horizontal nested-list layout', active: () => active() === 'horizontal', order: 66 });
-    contribute({ surface: 'top', panel: 'layout', command: 'layout.apply.tree', kind: 'button', text: 'Tree', label: 'Top-down tree layout', active: () => active() === 'tree', order: 67 });
-    contribute({ surface: 'top', panel: 'layout', command: 'layout.apply.radial', kind: 'button', text: 'Radial', label: 'Radial map layout', active: () => active() === 'radial', order: 68 });
+    // Layout modes stay one command away through keyboard or command menu. A
+    // persistent four-button canvas panel made every graph feel like layout UI.
     // User-facing commands re-frame after applying (via layout.fit); the raw
     // layout.apply.* events do the layout only for explicit programmatic use.
     contexts.commands.register([

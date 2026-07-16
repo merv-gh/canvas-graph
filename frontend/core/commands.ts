@@ -6,7 +6,7 @@ import type { PerfApi } from './perf';
 import { bindingParsed, keyMatchesEvent, parseShortcut, shortcutOf } from './shortcuts';
 import type { FrameLoop } from './frame-loop';
 
-const POINTER_TYPES = new Set(['click', 'pointerdown', 'pointermove', 'pointerup', 'wheel']);
+const POINTER_TYPES = new Set(['click', 'contextmenu', 'pointerdown', 'pointermove', 'pointerup', 'wheel']);
 const originFromEvent = (event?: Event): CommandOrigin => {
   if (!event) return 'programmatic';
   if (event instanceof KeyboardEvent) return 'keyboard';
@@ -249,7 +249,7 @@ export function inputRouter(commands: ReturnType<typeof commandsContext>, perf?:
         route(event);
       };
 
-      const types: string[] = ['click', 'dblclick', 'keydown', 'pointerdown', 'pointermove', 'pointerup', 'wheel', 'input', 'change', 'focusout', 'paste'];
+      const types: string[] = ['click', 'dblclick', 'contextmenu', 'keydown', 'pointerdown', 'pointermove', 'pointerup', 'wheel', 'input', 'change', 'focusout', 'paste'];
       types.forEach(type => root.addEventListener(type, handleEvent, type === 'wheel' ? { passive: false } : undefined));
       return () => types.forEach(type => root.removeEventListener(type, handleEvent));
     },

@@ -110,7 +110,8 @@ describe('frontend principles (enforced)', () => {
     const before = ctx.contexts.view.get().scale;
 
     expect(ctx.contexts.commands.get('view.zoom.in')).toBeTruthy();
-    expect(commandButton('view.zoom.in')).not.toBeNull();
+    expect(commandButton('view.zoom.in')).toBeNull();
+    expect(commandButton('view.fit.all')).not.toBeNull();
     ctx.contexts.decorations.modes.set('view.zoom', 'focused', [{ kind: 'node', id: 'e-test' }]);
     ctx.contexts.decorations.overlays.set('view.zoom', [{ ref: { kind: 'node', id: 'e-test' }, text: 'Z' }]);
     ctx.contexts.hierarchy.sources.register('view.zoom', () => [{ ref: { kind: 'node', id: 'e-test' }, label: 'Z', anchor: { x: 0, y: 0 } }]);
@@ -126,6 +127,7 @@ describe('frontend principles (enforced)', () => {
     expect(ctx.contexts.hierarchy.targets().some(target => target.label === 'Z')).toBe(false);
     expect(ctx.contexts.keyboard.active()).toBeNull();
     expect(commandButton('view.zoom.in')).toBeNull();
+    expect(commandButton('view.fit.all')).toBeNull();
     ctx.bus.emit('view.zoom.in');
     expect(ctx.contexts.view.get().scale).toBe(before);
   });

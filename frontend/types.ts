@@ -96,7 +96,7 @@ export type NonEmptyArray<T> = [T, ...T[]];
 import { FACT_SUFFIXES, type FactSuffix, Places, type Place, Slots, type SlotName, EntitySlots } from './constants';
 export { FACT_SUFFIXES, Places, Slots, EntitySlots };
 export type { FactSuffix, Place, SlotName };
-export type RawInput = 'click' | 'dblclick' | 'keydown' | 'pointerdown' | 'pointermove' | 'pointerup' | 'wheel' | 'input' | 'change' | 'focusout' | 'paste';
+export type RawInput = 'click' | 'dblclick' | 'contextmenu' | 'keydown' | 'pointerdown' | 'pointermove' | 'pointerup' | 'wheel' | 'input' | 'change' | 'focusout' | 'paste';
 
 // ---------------------------------------------------------------------------
 // Items & extension hooks

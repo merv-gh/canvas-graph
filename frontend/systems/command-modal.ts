@@ -20,6 +20,8 @@ declare module '../types' {
 
 const PLACEHOLDER = 'Search commands and graph items';
 const ALT_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789'.split('');
+const compactViewport = () => globalThis.innerWidth <= 680
+  || globalThis.matchMedia?.('(pointer: coarse)').matches === true;
 
 type Row =
   | { kind: 'command'; id: string; label: string; group: string; shortcut: string }
@@ -34,7 +36,7 @@ export function registerCommandModal(system: Registry) {
   system('commandModal', (ctx) => {
     const { on, emit, contexts, contribute } = ctx;
     contribute({ surface: 'top', command: 'help.open', kind: 'button', text: 'Help', label: 'Commands and shortcuts', order: 99, group: 'help' });
-    contribute({ surface: 'top', command: 'palette.open', kind: 'button', text: 'Search', label: 'Search commands and graph items (P)', slot: Slots.End, order: 100 });
+    contribute({ surface: 'top', command: 'palette.open', kind: 'button', text: 'Tools', label: 'Open commands and graph search', slot: Slots.End, order: 100 });
 
     let query = '';
     let selected = 0;
@@ -49,6 +51,27 @@ export function registerCommandModal(system: Registry) {
       return event.startsWith('pointer') || event === 'wheel' || event === 'dblclick'
         || /\.(start|move|end)$/.test(command.id);
     };
+    /** Mobile Tools is already interaction one. Count the row as interaction
+     * two, then only the picker steps that selection/context cannot seed. */
+    const mobileInteractionCost = (command: CommandSpec) => {
+      if (command.picker) {
+        const values: Record<string, ItemRef> = {};
+        const source = { origin: 'palette' as const };
+        let cost = 2;
+        command.picker.steps.forEach(step => {
+          const seeded = step.seed?.(values, source);
+          if (seeded) values[step.id] = seeded;
+          else cost += 1;
+        });
+        return cost;
+      }
+      return command.form ? 3 : 2;
+    };
+    const mobileCommandUsable = (command: CommandSpec) => {
+      if (command.id === 'editing.edge.create') return ctx.graphs.current.nodes().length >= 2;
+      if (command.id === 'container.add-child') return ctx.graphs.current.itemsOfKind('container').length > 0;
+      return true;
+    };
 
     const visibleCommands = (q = '') => {
       const needle = q.trim().toLowerCase();
@@ -56,6 +79,10 @@ export function registerCommandModal(system: Registry) {
         .filter(command => !command.hidden || (!!needle && isInteractionPhase(command)))
         .filter(command => contexts.commands.isEnabled(command))
         .filter(command => !!needle || command.available?.() !== false)
+        .filter(command => !compactViewport() || mobileCommandUsable(command))
+        // Long-press wheel owns contextual multi-pick routes on phones. Do not
+        // advertise a slower four-tap duplicate in Tools.
+        .filter(command => !compactViewport() || mobileInteractionCost(command) <= 3)
         .filter(command => !needle || `${command.id} ${command.label} ${command.group ?? ''} ${shortcutOf(command)} ${command.input?.on ?? ''}`.toLowerCase().includes(needle));
     };
     // Context-ranked: when something is chosen, groups acting on the current
@@ -119,16 +146,23 @@ export function registerCommandModal(system: Registry) {
       if (row.kind === 'command') {
         el.dataset.command = 'commandModal.run';
         el.dataset.commandId = row.id;
+        if (compactViewport()) {
+          const command = contexts.commands.get(row.id);
+          el.dataset.interactionCost = String(command ? mobileInteractionCost(command) : 2);
+        }
         contexts.templates.text(el, 'id', row.id);
       } else {
         el.dataset.command = 'palette.goto';
         el.dataset.gotoKind = row.ref.kind;
         el.dataset.gotoId = row.ref.id;
+        if (compactViewport()) el.dataset.interactionCost = '2';
         contexts.templates.text(el, 'id', row.ref.kind);
       }
       contexts.templates.text(el, 'label', row.label);
       const alt = altOfRow.get(index);
-      const chip = [alt ? `⌥${alt.toUpperCase()}` : '', row.shortcut].filter(Boolean).join(' · ');
+      const chip = compactViewport()
+        ? ''
+        : [alt ? `⌥${alt.toUpperCase()}` : '', row.shortcut].filter(Boolean).join(' · ');
       if (chip) contexts.templates.text(el, 'shortcut', chip);
       else el.querySelector('kbd')?.remove();
       return el;
@@ -168,15 +202,79 @@ export function registerCommandModal(system: Registry) {
       }
       return fragment;
     };
+    const renderQuickActions = () => {
+      const section = document.createElement('section');
+      section.className = 'palette-quick';
+      const heading = document.createElement('h3');
+      heading.textContent = ctx.selection.selected() ? 'For selection' : 'Quick actions';
+      const actions = document.createElement('div');
+      actions.className = 'palette-quick-grid';
+      const defs = [
+        ['editing.node.create', '+', ctx.selection.selectedNode() ? 'Add connected' : 'Add node'],
+        ['editing.edge.create', '↗', 'Connect'],
+        ['view.fit.all', '⌗', 'Fit canvas'],
+        ['history.undo', '↶', 'Undo'],
+        ['history.redo', '↷', 'Redo'],
+      ] as const;
+      defs.forEach(([id, glyph, label]) => {
+        const command = contexts.commands.get(id);
+        if (!command || !contexts.commands.isEnabled(command) || command.available?.() === false) return;
+        if (!mobileCommandUsable(command)) return;
+        if (mobileInteractionCost(command) > 3) return;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.command = 'commandModal.run';
+        button.dataset.commandId = id;
+        button.dataset.interactionCost = String(mobileInteractionCost(command));
+        const icon = document.createElement('b');
+        icon.textContent = glyph;
+        const copy = document.createElement('span');
+        copy.textContent = label;
+        button.append(icon, copy);
+        actions.append(button);
+      });
+      section.append(heading, actions);
+      return section;
+    };
     const renderPalette = () => {
       const palette = contexts.templates.clone('palette');
       palette.dataset.commandModal = 'palette';
       const input = palette.querySelector('.palette-search');
-      if (input instanceof HTMLInputElement) input.placeholder = PLACEHOLDER;
+      if (input instanceof HTMLInputElement) {
+        input.placeholder = compactViewport() ? 'Find an action or item' : PLACEHOLDER;
+        if (compactViewport()) input.removeAttribute('autofocus');
+      }
+      if (compactViewport()) {
+        palette.classList.add('palette-mobile');
+        palette.prepend(renderQuickActions());
+      }
       contexts.templates.slot(palette, 'commands').append(renderList());
       return palette;
     };
+    const renderTouchHelp = () => {
+      const guide = document.createElement('section');
+      guide.className = 'touch-guide';
+      const rows = [
+        ['Move', 'Drag with two fingers'],
+        ['Zoom', 'Pinch anywhere on canvas'],
+        ['Item actions', 'Hold an item'],
+        ['Connect', 'Hold node → Connect → tap target'],
+        ['Rename', 'Hold item → Rename'],
+        ['Reframe', 'Tap Fit'],
+      ];
+      rows.forEach(([title, detail]) => {
+        const row = document.createElement('div');
+        const label = document.createElement('strong');
+        label.textContent = title;
+        const description = document.createElement('span');
+        description.textContent = detail;
+        row.append(label, description);
+        guide.append(row);
+      });
+      return guide;
+    };
     const renderHelp = () => {
+      if (compactViewport()) return renderTouchHelp();
       const fragment = document.createDocumentFragment();
       const commands = contexts.commands.all()
         .filter(command => !command.hidden && contexts.commands.isEnabled(command))
@@ -357,9 +455,9 @@ export function registerCommandModal(system: Registry) {
       },
     ]);
 
-    const open = () => emit('modal.open', { title: 'Palette', visual: 'command', body: () => renderPalette() });
+    const open = () => emit('modal.open', { title: compactViewport() ? 'Commands' : 'Palette', visual: 'command', body: () => renderPalette() });
     on('palette.open', () => { query = ''; selected = 0; open(); });
-    on('help.open', () => emit('modal.open', { title: 'Commands and shortcuts', visual: 'command', body: () => renderHelp() }));
+    on('help.open', () => emit('modal.open', { title: compactViewport() ? 'Touch guide' : 'Commands and shortcuts', visual: 'command', body: () => renderHelp() }));
     on('palette.nav', ({ delta }) => {
       if (!currentRows.length) return;
       selected = (selected + delta + currentRows.length) % currentRows.length;

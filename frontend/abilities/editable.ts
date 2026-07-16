@@ -1,5 +1,5 @@
 import { itemRefFrom, type Registry } from '../core';
-import { Places } from '../types';
+import { Places, Slots } from '../types';
 import type { CommandSource, ItemRef } from '../types';
 import { ability, action } from './shared';
 import type { Labeled } from './shapes';
@@ -17,13 +17,20 @@ declare module '../types' {
  *  (or Enter while selected) enters edit mode. */
 export const editable = <T extends Labeled>() => ability<T>('editable', [action<T>({
   id: 'item.title.edit',
-  label: 'Edit title',
+  label: 'Rename item',
   paletteCommand: 'item.title.edit',
-  // No per-entity UI — the title slot is plain text by default. The action is
-  // still reachable because paletteCommand `item.title.edit` carries Enter as
-  // its keyboard binding (DX treats input-bound palette commands as a valid
-  // keyboard affordance).
-  ui: [],
+  // Explicit Rename prevents the generic Edit-details inspector from becoming
+  // the accidental title-editing path. Item toolbar and touch action wheel both
+  // derive from this same affordance.
+  ui: [{
+    surface: 'entity',
+    command: 'item.title.edit',
+    kind: 'button',
+    slot: Slots.HeaderEnd,
+    className: 'node-config node-rename',
+    text: 'Rename',
+    label: 'Rename item',
+  }],
 })]);
 
 export function registerEditable(system: Registry) {
@@ -85,7 +92,7 @@ export function registerEditable(system: Registry) {
     contexts.commands.register([
       {
         id: 'item.title.edit',
-        label: 'Edit title',
+        label: 'Rename item',
         group: 'item',
         shortcut: 'Enter',
         // Plain Enter while an item is selected. The selector-based commit

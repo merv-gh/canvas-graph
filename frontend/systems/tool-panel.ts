@@ -171,7 +171,7 @@ export function registerToolPanel(system: Registry) {
         kind.textContent = 'Graph';
         brand.append(name, kind);
         toolbar.prepend(brand);
-        const actions = buttonFor('tool.panel.mobile.toggle', 'Actions', 'Show editing actions');
+        const actions = buttonFor('tool.panel.mobile.toggle', 'Create', 'Show create and file actions');
         actions.className = 'mobile-actions-toggle';
         actions.setAttribute('aria-expanded', mobileOpen ? 'true' : 'false');
         end.prepend(actions);

@@ -76,16 +76,16 @@ describe('layout styles', () => {
     expect(ctx.graphs.current.nodes().map(node => ({ ...node.Position }))).toEqual(radial);
   });
 
-  it('uses V/H/T/R as mode shortcuts and exposes the active style as a pressed control', async () => {
+  it('uses V/H/T/R as mode shortcuts without persistent mode controls', async () => {
     const ctx = bootApp({ autoLayout: false });
     await settle();
     expect(ctx.layout?.active()).toBe('tree');
-    expect(document.querySelector('[data-command="layout.apply.tree"]')?.getAttribute('aria-pressed')).toBe('true');
+    expect(document.querySelector('.tool-panel[data-panel-id="layout"]')).toBeNull();
 
     press('v');
     await settle();
     expect(ctx.layout?.active()).toBe('vertical');
-    expect(document.querySelector('[data-command="layout.apply.vertical"]')?.getAttribute('aria-pressed')).toBe('true');
+    expect(document.querySelector('[data-command="layout.apply.vertical"]')).toBeNull();
     expect(ctx.contexts.commands.get('editing.node.create')?.label).toContain('below');
     expect(ctx.contexts.commands.get('editing.node.create.keep')?.label).toContain('right');
 

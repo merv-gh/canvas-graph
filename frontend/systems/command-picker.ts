@@ -14,6 +14,8 @@ declare module '../types' {
 /** Letter pool. Order matches a US keyboard home-row reach, so the first few
  *  letters are the easiest to hit (matches jump.ts on purpose). */
 const LETTERS = 'asdfghjklqwertyuiopzxcvbnm';
+const compactViewport = () => globalThis.innerWidth <= 680
+  || globalThis.matchMedia?.('(pointer: coarse)').matches === true;
 
 /** Driver for CommandSpec.picker. Walks each PickerStep in order:
  *
@@ -93,7 +95,9 @@ export function registerCommandPicker(system: Registry) {
       const meta = document.createElement('span');
       meta.textContent = total > 1 ? ` (${index + 1}/${total})` : '';
       const hint = document.createElement('em');
-      hint.textContent = ' · Click a highlighted item or press its letter · Esc to cancel';
+      hint.textContent = compactViewport()
+        ? ' · Tap a highlighted item'
+        : ' · Click a highlighted item or press its letter · Esc to cancel';
       el.append(title, meta, hint);
       return el;
     };

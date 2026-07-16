@@ -52,7 +52,7 @@ test('phone starts canvas-first with usable primary commands', async ({ page }) 
   await page.goto('/');
   await expect(page.locator('.graph-navigator')).toHaveAttribute('data-outline-folded', 'true');
   await expect(page.getByRole('button', { name: 'Expand graph navigator' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Show editing actions' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Show create and file actions' })).toBeVisible();
   const navigatorWidth = await page.locator('.graph-navigator').evaluate(element => element.getBoundingClientRect().width);
   expect(navigatorWidth).toBeLessThan(220);
   const toolbar = await page.locator('.tool-panel[data-anchor="top-center"]').boundingBox();
@@ -61,15 +61,13 @@ test('phone starts canvas-first with usable primary commands', async ({ page }) 
   expect(toolbar.x + toolbar.width).toBeLessThanOrEqual(383);
   expect(navigator.y).toBeGreaterThanOrEqual(toolbar.y + toolbar.height + 4);
   expect(navigator.height).toBeLessThan(50);
-  await page.getByRole('button', { name: 'Show editing actions' }).click();
+  await page.getByRole('button', { name: 'Show create and file actions' }).click();
   await expect(page.getByRole('button', { name: 'Add node', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Share', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Search commands and graph items (P)' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open commands and graph search' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Export', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Import', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Share', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Open getting-started guide' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Toggle theme' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
 
@@ -98,22 +96,23 @@ test('edge picker never leaks into a new graph', async ({ page }) => {
   await expect(page.locator('[data-place="stage"] > .empty')).toContainText('No nodes in this graph yet');
 });
 
-test('fit control reports actual zoom after fitting a large document', async ({ page }) => {
+test('fit is the only persistent zoom control', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Open getting-started guide' }).click();
   await page.getByRole('button', { name: /C4 architecture/ }).click();
-  const reset = page.locator('[data-command="view.zoom.reset"]');
-  await expect(reset).not.toHaveText('100%');
-  await expect(reset).toHaveAttribute('aria-label', /current \d+%/);
+  await expect(page.getByRole('button', { name: 'Fit canvas to content' })).toBeVisible();
+  await expect(page.locator('[data-command="view.zoom.in"], [data-command="view.zoom.out"], [data-command="view.zoom.reset"]')).toHaveCount(0);
 });
 
 test('phone fit ignores overlay navigator width', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open getting-started guide' }).click();
+  await page.getByRole('button', { name: 'Open commands and graph search' }).click();
+  await page.getByRole('button', { name: 'Open getting-started guide', exact: true }).click();
   await page.getByRole('button', { name: /C4 architecture/ }).click();
-  const percent = Number((await page.locator('[data-command="view.zoom.reset"]').textContent()).replace('%', ''));
-  expect(percent).toBeGreaterThanOrEqual(42);
+  await page.getByRole('button', { name: 'Fit canvas to content' }).click();
+  const scale = await page.evaluate(() => window.app.contexts.view.get().scale);
+  expect(scale).toBeGreaterThanOrEqual(0.8);
 });
 
 test('phone chrome stays legible and touch-sized', async ({ page }) => {
@@ -122,7 +121,7 @@ test('phone chrome stays legible and touch-sized', async ({ page }) => {
   const navigator = page.getByRole('button', { name: 'Expand graph navigator' });
   const navigatorBox = await navigator.boundingBox();
   expect(navigatorBox.height).toBeGreaterThanOrEqual(36);
-  await page.getByRole('button', { name: 'Show editing actions' }).click();
+  await page.getByRole('button', { name: 'Show create and file actions' }).click();
   const primary = page.getByRole('button', { name: 'Add node', exact: true });
   const primaryBox = await primary.boundingBox();
   expect(primaryBox.height).toBeGreaterThanOrEqual(40);
@@ -130,7 +129,7 @@ test('phone chrome stays legible and touch-sized', async ({ page }) => {
     buttons => buttons.filter(button => button.getClientRects().length).map(button => button.getBoundingClientRect().height),
   );
   expect(Math.min(...touchTargets)).toBeGreaterThanOrEqual(40);
-  await page.getByRole('button', { name: 'Show editing actions' }).click();
+  await page.getByRole('button', { name: 'Show create and file actions' }).click();
   await navigator.click();
   await expect(page.getByRole('button', { name: 'Collapse graph navigator' })).toBeVisible();
 });
@@ -205,10 +204,11 @@ test('selected edges expose a nearby editor with connection actions', async ({ p
   await expect(page.getByRole('button', { name: 'Delete connection' })).toBeVisible();
 });
 
-test('mobile selected-item toolbar stays fully reachable', async ({ page }) => {
+test('mobile selected-item wheel stays fully reachable', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open getting-started guide' }).click();
+  await page.getByRole('button', { name: 'Open commands and graph search' }).click();
+  await page.getByRole('button', { name: 'Open getting-started guide', exact: true }).click();
   await page.getByRole('button', { name: /C4 architecture/ }).click();
   // The reading-scale floor intentionally leaves the far end off-screen.
   // Select it through the addressable navigator, which frames it first.
@@ -216,12 +216,26 @@ test('mobile selected-item toolbar stays fully reachable', async ({ page }) => {
   await page.locator('.graph-nav-item[data-item-kind="node"]')
     .filter({ hasText: 'Payment provider' }).click();
 
-  const toolbar = page.locator('.item-toolbar');
-  await expect(toolbar).toBeVisible();
-  const box = await toolbar.boundingBox();
+  await expect(page.locator('.item-toolbar')).toBeHidden();
+  const node = page.locator('.node').filter({ hasText: 'Payment provider' });
+  await expect(node).toBeVisible();
+  await node.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    element.dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+      clientX: rect.left + rect.width / 2,
+      clientY: rect.top + rect.height / 2,
+      pointerId: 9,
+      pointerType: 'touch',
+    }));
+  });
+  const wheel = page.locator('.item-action-wheel');
+  await expect(wheel).toBeVisible();
+  const box = await wheel.boundingBox();
   expect(box).not.toBeNull();
-  expect(box.x).toBeGreaterThanOrEqual(8);
-  expect(box.x + box.width).toBeLessThanOrEqual(382);
+  expect(box.x).toBeGreaterThanOrEqual(4);
+  expect(box.x + box.width).toBeLessThanOrEqual(386);
 });
 
 test('previous-save recovery stays in command search, not export', async ({ page }) => {
@@ -234,7 +248,7 @@ test('previous-save recovery stays in command search, not export', async ({ page
   await page.getByRole('button', { name: 'Export', exact: true }).click();
   await expect(page.locator('.export-json [data-command="io.backup.restore.request"]')).toHaveCount(0);
   await page.getByRole('button', { name: 'Close dialog' }).click();
-  await page.getByRole('button', { name: 'Search commands and graph items (P)' }).click();
+  await page.getByRole('button', { name: 'Open commands and graph search' }).click();
   await page.getByRole('button', { name: 'Restore previous browser save', exact: true }).click();
   await expect(page.locator('.restore-preview')).toContainText('Current graphs will be replaced');
 });
