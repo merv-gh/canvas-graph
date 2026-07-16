@@ -5,6 +5,18 @@ All notable changes to this project will be documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-07-16
+
+### Added
+
+- Keyboard-first graph authoring and navigation.
+- Nested graphs, layout, selection, sharing, import/export, and local persistence.
+- Command-driven tests, event replay, architecture validation, and local-model DX tools.
+- Static web-app build.
+- First-visit field guide persisted by the `showDemo` cookie.
+- Canonical C4, radial expected-value, and delivery-workflow canvases.
+- Editable Mermaid conversion workbench and direct `?demo=` hosted-demo routes.
+
 ### Changed
 
 - Defined a repeatable 0.1 release gate for types, builds, coverage, and browser tests.
@@ -13,17 +25,5 @@ All notable changes to this project will be documented here. The format follows
 - Scoped 0.1 to the static application; the experimental library remains post-0.1 work.
 - Removed the unused system-design subsystem and split container/debug rendering policy from behavior.
 
-### Added
-
-- First-visit field guide persisted by the `showDemo` cookie.
-- Canonical C4, radial expected-value, and delivery-workflow canvases.
-- Editable Mermaid conversion workbench and direct `?demo=` hosted-demo routes.
-
-## [0.1.0] - Unreleased
-
-### Added
-
-- Keyboard-first graph authoring and navigation.
-- Nested graphs, layout, selection, sharing, import/export, and local persistence.
-- Command-driven tests, event replay, architecture validation, and local-model DX tools.
-- Static web-app build.
+[Unreleased]: https://github.com/merv-gh/canvas-graph/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/merv-gh/canvas-graph/releases/tag/v0.1.0

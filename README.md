@@ -10,13 +10,19 @@ The app is `frontend/`, served at root. Version 0.1 is distributed only as a
 static web build; the experimental embeddable library is outside the first
 release and this repository is intentionally not configured for npm publication.
 
+**Live app:** [merv-gh.github.io/canvas-graph](https://merv-gh.github.io/canvas-graph/)
+
+Version 0.1 supports current Chromium on desktop and touch-sized viewports. Graphs
+are stored in the browser; use JSON export for portable backups. Issues can be
+reported through the [GitHub issue tracker](https://github.com/merv-gh/canvas-graph/issues).
+
 ## Quickstart
 
 ```bash
 npm install
 npm run dev                 # app at http://127.0.0.1:5174
 npm run dx                  # dx task/status menu for local-model fixes
-npx vitest run             # fast jsdom suite (tests/commands/, ~198 tests, <60s)
+npx vitest run             # fast jsdom suite (tests/commands/, <60s)
 npx vitest run -t "<name>" # one test by name — prefer while iterating
 npm run typecheck          # tsc --noEmit
 npm run test:browser       # Playwright (slow; layout/screenshots only)
@@ -32,6 +38,8 @@ Canonical hosted-demo routes are `?demo=c4`, `?demo=math`, and
 `?demo=workflow`. First-time visitors see the in-app guide once; the
 `showDemo=false` cookie suppresses it on later visits, while the Guide command
 always reopens it.
+
+Canvas Graph is available under the [Apache License 2.0](LICENSE).
 
 ## Repo map
 

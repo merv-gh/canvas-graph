@@ -10,7 +10,7 @@ The app is **`frontend/`** Read `frontend/CLAUDE.md` before touching it; `README
 
 ```bash
 npm run dev                    # app at http://127.0.0.1:5174 (alias: dev:frontend)
-npx vitest run                 # fast jsdom suite (tests/commands/, ~545 tests, <60s)
+npx vitest run                 # fast jsdom suite (tests/commands/, <60s)
 npx vitest run -t "<name>"     # one test by name — prefer this while iterating
 npm run test:commands:coverage # + frontend-only V8 coverage (80% line/stmt/func gates)
 npm run typecheck              # tsc --noEmit

@@ -1,12 +1,8 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { deflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { bootApp, settle } from './testkit';
 import { decodeGraph, encodeGraph, mermaidToSnapshot, SHARE_URL_LIMIT, shareUrlTooLarge } from '../../frontend/systems/share';
 import type { GraphSnapshot } from '../../frontend/model';
-
-const RepoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 const sample: GraphSnapshot = {
   schemaVersion: 1,
@@ -75,8 +71,25 @@ describe('mermaid import', () => {
     expect(snapshot!.edges.find(e => e.From === 'A' && e.To === 'C')?.Label?.text).toBe('presign');
   });
 
-  it('imports the real mermaid.txt (mermaid.live pako link)', async () => {
-    const link = readFileSync(join(RepoRoot, 'mermaid.txt'), 'utf8').trim();
+  it('imports a Mermaid Live pako link without an external fixture', async () => {
+    const code = `flowchart LR
+  mobile["Mobile app"] --> api["API gateway"]
+  api --> auth["Auth service"]
+  api --> upload["Upload service"]
+  upload --> photo[("Photo store")]
+  upload --> queue["Work queue"]
+  queue --> worker["Image worker"]
+  worker --> photo
+  worker --> db[("Metadata DB")]
+  photo --> cdn["CDN"]
+  cdn --> mobile
+  api --> metrics["Metrics"]
+  auth --> metrics
+  upload --> metrics
+  worker --> metrics
+  db --> metrics`;
+    const payload = deflateSync(JSON.stringify({ code })).toString('base64url');
+    const link = `https://mermaid.live/edit#pako:${payload}`;
     const snapshot = await mermaidToSnapshot(link);
     expect(snapshot).not.toBeNull();
     expect(snapshot!.nodes.length).toBeGreaterThanOrEqual(10);
