@@ -5,16 +5,18 @@
 //   node dx/cli/apply.mjs --task <id> --apply-for-real # land it (needs approval)
 //   node dx/cli/apply.mjs --task <id> --patch <file>   # gate a specific patch
 //
-// The gate runs in a fresh workspace: full vitest suite + tsc + 80% coverage.
-// "Truly ready" = all three green. Landing also requires the task id in
+// The gate runs in a fresh workspace: full vitest suite + browser layout oracle
+// + tsc + 80% coverage. "Truly ready" = all four green. Landing also requires the task id in
 // dx/tasks/APPROVALS.md (the human gate) unless --force. Landing applies the frontend/
 // change to the repo, relocates the model's test into tests/commands/recorded/,
 // then re-verifies the real repo. Nothing touches the repo without --apply-for-real.
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { createServer } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Browser } from '../ollama-runner/browser.mjs';
 import { Workspace } from '../ollama-runner/workspace.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -62,6 +64,52 @@ function approved(id) {
     .includes(id);
 }
 
+function freePort() {
+  return new Promise((resolvePort, reject) => {
+    const server = createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+      server.close(error => error ? reject(error) : resolvePort(port));
+    });
+  });
+}
+
+async function browserLayoutGate(ws) {
+  const specsDir = join(ws.dir, 'tests', 'commands', 'dx');
+  if (!existsSync(specsDir)) return { ok: true, count: 0, detail: '' };
+  const specs = readdirSync(specsDir)
+    .filter(name => name.endsWith('.layout.json'))
+    .sort();
+  if (!specs.length) return { ok: true, count: 0, detail: '' };
+
+  const port = await freePort();
+  const browser = new Browser(port, join(ws.dir, 'test-results', 'dx-gate'), log);
+  const failures = [];
+  try {
+    await ws.startVite(port);
+    await browser.open();
+    for (const name of specs) {
+      await browser.page.setViewportSize({ width: 1280, height: 800 });
+      await browser.fresh();
+      const spec = JSON.parse(readFileSync(join(specsDir, name), 'utf8'));
+      const verdict = await browser.probe(spec);
+      if (!verdict.pass) {
+        const failed = verdict.results.filter(result => !result.ok)
+          .map(result => `${result.label}: ${result.actual}`).join('; ');
+        failures.push(`${name}: ${failed}`);
+      }
+    }
+  } catch (error) {
+    failures.push(`browser harness: ${error.message}`);
+  } finally {
+    await browser.close();
+    await ws.stopVite();
+  }
+  return { ok: !failures.length, count: specs.length, detail: failures.join('\n') };
+}
+
 const patch = patchPath ? resolve(patchPath) : latestFixedPatch(taskId);
 if (!patch || !existsSync(patch)) fail(`no fixed patch found for "${taskId}" (run the dx first, or pass --patch)`);
 log(`[apply] patch: ${patch.replace(REPO + '/', '')}`);
@@ -78,6 +126,10 @@ const ws = new Workspace(REPO, join(HERE, 'apply-ws'), log);
     const suite = ws.vitest();
     if (!suite.ok) fail(`suite red:\n${suite.output.slice(-1000)}`);
     log('[gate] ✓ suite');
+    log('[gate] browser layout oracle…');
+    const layout = await browserLayoutGate(ws);
+    if (!layout.ok) fail(`browser layout red:\n${layout.detail}`);
+    log(`[gate] ✓ browser layout (${layout.count} spec${layout.count === 1 ? '' : 's'})`);
     log('[gate] typecheck…');
     const types = ws.typecheck();
     if (!types.ok) fail(`typecheck red:\n${types.output.slice(0, 1000)}`);

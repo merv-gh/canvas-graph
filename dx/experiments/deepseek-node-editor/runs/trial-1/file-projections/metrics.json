@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "arm": "file-projections",
+  "run": "trial-1",
+  "model": "deepseek-v4-flash",
+  "worktree": "/Users/user/Documents/AI/entrypoint/.worktrees/ecs-canvas-graph-trial-1/file-projections",
+  "started_at": "2026-07-19T15:52:39.460Z",
+  "api_calls": 23,
+  "tool_calls": 40,
+  "read_calls": 33,
+  "direct_file_reads": 32,
+  "navigation_calls": 1,
+  "edits": 2,
+  "tests": 4,
+  "first_edit": {
+    "tool": "apply_projection",
+    "wall_ms": 149119,
+    "api_calls": 15,
+    "read_calls": 30,
+    "direct_file_reads": 29,
+    "navigation_calls": 1,
+    "usage": {
+      "prompt_tokens": 284793,
+      "completion_tokens": 17655,
+      "total_tokens": 302448,
+      "cached_tokens": 255872,
+      "reasoning_tokens": 9337
+    }
+  },
+  "usage": {
+    "prompt_tokens": 660313,
+    "completion_tokens": 19359,
+    "total_tokens": 679672,
+    "cached_tokens": 628992,
+    "reasoning_tokens": 9950
+  },
+  "outcome": "finished",
+  "wall_ms": 222577,
+  "finished_at": "2026-07-19T15:56:22.037Z",
+  "changed_files": [
+    " M frontend/styles.css",
+    " M frontend/systems/index.ts",
+    "?? EVAL_TASK.md",
+    "?? frontend/systems/automation.ts",
+    "?? node_modules",
+    "?? tests/commands/automation.test.ts"
+  ]
+}

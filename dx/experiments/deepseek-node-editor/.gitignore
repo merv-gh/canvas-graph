@@ -1,0 +1,5 @@
+runs/**/events.jsonl
+runs/**/transcript.json
+runs/**/*.log
+runs/**/final.md
+runs/**/worktrees.json

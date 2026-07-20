@@ -5,11 +5,11 @@
 // Mirrors the jsdom `scenario` {steps, asserts} shape, but evaluates the assert
 // kinds jsdom can't observe against a REAL Playwright page:
 //   focus  — document.activeElement must match (or be inside) a selector
-//   rect   — getBoundingClientRect + display/visibility: visible|hidden|count|in-viewport|width>|height>
+//   rect   — getBoundingClientRect + display/visibility: visible|hidden|count|in-viewport|not-overlap|width>|height>
 //   style  — getComputedStyle property, with optional `pseudo` (::before/::after)
 //   path   — any debug.snapshot() dot-path, read in the real browser
 
-/** Drive {steps} on `page` (commands + bus events), settling a frame between each. */
+/** Drive {steps} on `page` (commands, bus events, and real UI input), settling a frame between each. */
 export async function runLayoutSteps(page, steps = []) {
   for (const step of steps) {
     if (step.command) {
@@ -24,6 +24,30 @@ export async function runLayoutSteps(page, steps = []) {
         else if (typeof frontend.emit === 'function') frontend.emit(name, data ?? undefined);
         else frontend.bus?.emit?.(name, data ?? undefined);
       }, { name: step.event, data: step.data ?? null });
+    } else if (step.focus) {
+      await page.locator(step.focus).focus();
+    } else if (step.click) {
+      await page.locator(step.click).click();
+    } else if (step.fill) {
+      await page.locator(step.fill).fill(String(step.value ?? ''));
+    } else if (step.type) {
+      await page.locator(step.type).pressSequentially(String(step.value ?? ''), { delay: Number(step.delay ?? 0) });
+    } else if (step.press) {
+      await page.keyboard.press(String(step.press));
+    } else if (step.input) {
+      await page.evaluate(({ selector, value }) => {
+        const target = document.querySelector(selector);
+        if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLTextAreaElement)) {
+          throw new Error(`input step target is not an input: ${selector}`);
+        }
+        target.focus({ preventScroll: true });
+        target.value = String(value ?? '');
+        target.dispatchEvent(new InputEvent('input', {
+          bubbles: true,
+          inputType: 'insertText',
+          data: String(value ?? ''),
+        }));
+      }, { selector: step.input, value: step.value ?? '' });
     }
     await page.evaluate(() => new Promise(r => requestAnimationFrame(() => setTimeout(r, 30))));
   }
@@ -67,6 +91,13 @@ export async function evaluateLayoutAsserts(page, asserts = []) {
           if (a.op === 'visible') return { label: `rect ${a.rect} visible`, ok: visible(el), actual: el ? `${Math.round(b.width)}x${Math.round(b.height)}@${Math.round(b.x)},${Math.round(b.y)} vis=${visible(el)}` : 'missing' };
           if (a.op === 'hidden') return { label: `rect ${a.rect} hidden`, ok: !visible(el), actual: el ? `vis=${visible(el)}` : 'missing' };
           if (a.op === 'in-viewport') { const ok = !!b && b.top >= 0 && b.left >= 0 && b.bottom <= innerHeight && b.right <= innerWidth; return { label: `rect ${a.rect} in-viewport`, ok, actual: b ? `@${Math.round(b.x)},${Math.round(b.y)} ${Math.round(b.width)}x${Math.round(b.height)} (vp ${innerWidth}x${innerHeight})` : 'missing' }; }
+          if (a.op === 'not-overlap') {
+            const other = document.querySelector(a.other);
+            const c = other?.getBoundingClientRect();
+            const overlap = !!b && !!c && b.left < c.right && b.right > c.left && b.top < c.bottom && b.bottom > c.top;
+            const actual = b && c ? `${Math.round(b.x)},${Math.round(b.y)} ${Math.round(b.width)}x${Math.round(b.height)} vs ${Math.round(c.x)},${Math.round(c.y)} ${Math.round(c.width)}x${Math.round(c.height)} overlap=${overlap}` : 'missing';
+            return { label: `rect ${a.rect} not-overlap ${a.other}`, ok: !!b && !!c && !overlap, actual };
+          }
           const dim = a.op === 'height>' ? b?.height : b?.width;
           return { label: `rect ${a.rect} ${a.op} ${a.value}`, ok: cmp(dim, 'gt', a.value), actual: b ? `${Math.round(b.width)}x${Math.round(b.height)}` : 'missing' };
         }
@@ -95,7 +126,10 @@ export async function evaluateLayoutAsserts(page, asserts = []) {
 }
 
 /** Convenience: run steps then asserts on a page already navigated to the app. */
-export async function runLayoutProbe(page, { steps = [], asserts = [] } = {}) {
+export async function runLayoutProbe(page, { viewport, steps = [], asserts = [] } = {}) {
+  if (viewport?.width && viewport?.height && typeof page.setViewportSize === 'function') {
+    await page.setViewportSize({ width: Number(viewport.width), height: Number(viewport.height) });
+  }
   await runLayoutSteps(page, steps);
   return evaluateLayoutAsserts(page, asserts);
 }

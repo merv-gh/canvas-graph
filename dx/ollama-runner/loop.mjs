@@ -147,6 +147,7 @@ async function attempt(task, { cycle, n, model, temperature, seed }) {
     // tool palette (red/green share SYSTEM_BASE, so 'red' is correct for both).
     const system = buildSystemPrompt(tools.phase);
     let parseMisses = 0;
+    let modelErrorStrikes = 0;
     let extra = '';
     // Doom-loop breaker: small models repeat an identical failing action forever.
     const callCounts = new Map();
@@ -182,9 +183,18 @@ async function attempt(task, { cycle, n, model, temperature, seed }) {
         reply = await chat.chat({ model, messages, seed: seed + turns, temperature });
       } catch (err) {
         jlog(`model error: ${err.message}`);
+        modelErrorStrikes++;
+        if (/XML syntax error/i.test(err.message) && chat.nativeTools) {
+          chat.nativeTools = false;
+          history.push({ role: 'user', content: 'Your native tool call was malformed. Native tools are now disabled; continue with exactly one JSON tool call: {"name":"...","arguments":{...}}. No XML or prose.' });
+          jlog('native tool protocol malformed — switching to guarded JSON text protocol');
+          continue;
+        }
+        if (modelErrorStrikes >= 3) { outcome = 'fail: model protocol'; jlog('too many model protocol errors'); break; }
         await new Promise(r => setTimeout(r, 5000));
         continue;
       }
+      modelErrorStrikes = 0;
       turns++; phaseTurns++;
 
       // A parked write/edit consumes this reply as its payload: harvest fenced
@@ -250,7 +260,7 @@ async function attempt(task, { cycle, n, model, temperature, seed }) {
       const callKey = name === 'read' ? `read:${args.path}` : `${name}:${JSON.stringify(args)}`;
       const repeats = (callCounts.get(callKey) ?? 0) + 1;
       callCounts.set(callKey, repeats);
-      const limit = name === 'read' ? 5 : 3;
+      const limit = name === 'read' ? 9 : 3;
       if (repeats >= limit && name !== 'run_test') {
         repeatStrikes++;
         if (repeatStrikes >= 3) { outcome = 'looping'; jlog('aborting: identical actions repeated'); break; }
@@ -349,7 +359,8 @@ async function attempt(task, { cycle, n, model, temperature, seed }) {
     writeFileSync(join(attemptDir, 'fix.patch'), diff);
     if (browser) writeFileSync(join(attemptDir, 'console.log'), browser.consoleLogs());
     const minutes = ((Date.now() - startedAt) / 60000).toFixed(1);
-    writeFileSync(join(attemptDir, 'result.json'), JSON.stringify({ task: task.id, cycle, attempt: n, model, seed, outcome, turns, minutes }, null, 2));
+    const usage = chat.usageSnapshot?.() ?? null;
+    writeFileSync(join(attemptDir, 'result.json'), JSON.stringify({ task: task.id, cycle, attempt: n, model, seed, outcome, turns, minutes, usage }, null, 2));
     appendFileSync(reportPath, `| ${task.id} | c${cycle}a${n} | ${model} | ${outcome} | ${turns} | ${minutes} |\n`);
     jlog(`outcome=${outcome} turns=${turns} ${minutes}min`);
     return outcome;

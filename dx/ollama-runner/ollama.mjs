@@ -20,12 +20,12 @@ export const TOOL_SCHEMAS = [
   { name: 'add_graph_export_json', description: 'GREEN: deterministically add graph.export.json, graph.exported {json}, graph serialization, and guarded clipboard write.', parameters: { type: 'object', properties: {} } },
   { name: 'add_container_delete_cascade', description: 'GREEN: deterministically make graph.container.delete delete direct/nested child containers and child nodes through existing owner events.', parameters: { type: 'object', properties: {} } },
   { name: 'run_test', description: 'Run vitest. No path = full suite + typecheck.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'test file path (optional)' } } } },
-  { name: 'app', description: 'Drive the live app. action=command: run a command id. action=snapshot: read state at dot-path (e.g. ui.shell). action=eval: run JS, window.app available. action=screenshot: capture + layout summary.', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['command', 'snapshot', 'eval', 'screenshot'] }, arg: { type: 'string' } }, required: ['action'] } },
+  { name: 'app', description: 'Drive the live app. action=command: run a command id. action=snapshot: read state at dot-path (e.g. ui.shell). action=eval: run JS, window.app available. action=viewport: set WIDTHxHEIGHT. action=screenshot: capture + layout summary including panel overlaps.', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['command', 'snapshot', 'eval', 'viewport', 'screenshot'] }, arg: { type: 'string' } }, required: ['action'] } },
   { name: 'inspect', description: 'App map. what=commands (ids+shortcuts) | events (who fires/handles) | flows (one event\'s path, filter=event name).', parameters: { type: 'object', properties: { what: { type: 'string', enum: ['commands', 'events', 'flows'] }, filter: { type: 'string' } }, required: ['what'] } },
   { name: 'scenario', description: 'Boot app, run steps, check asserts — instant verification. spec={steps:[{command:"id"}|{event:"name",data:{}}],asserts:[{path:"ui.shell.zen",op:"eq",value:true}|{css:".node",op:"count",value:2}|{file:"frontend/styles.css",matches:"regex"}|{command:"id",has:"input.key",value:"i"}]}. ops: eq gt contains truthy falsy count. command-asserts check the command SPEC (shortcuts!).', parameters: { type: 'object', properties: { spec: { type: 'object' } }, required: ['spec'] } },
   { name: 'gen_test', description: 'RED only: a scenario spec whose asserts state DESIRED behavior → writes the red test file for you.', parameters: { type: 'object', properties: { title: { type: 'string' }, spec: { type: 'object' } }, required: ['title', 'spec'] } },
-  { name: 'app_probe', description: 'LAYOUT tasks: measure REAL browser facts jsdom can\'t. spec={steps:[{command:"id"}|{event:"name",data:{}}],asserts:[{focus:".modal input"}|{rect:".node",op:"visible|hidden|count|in-viewport|width>|height>",value:2}|{style:".node-toggle",pseudo:"::before",prop:"content",op:"eq",value:"\\"▾\\""}|{path:"ui.modal.focusedField",op:"eq",value:"title"}]}. Read-only — use to find the failing layout/focus fact.', parameters: { type: 'object', properties: { spec: { type: 'object' } }, required: ['spec'] } },
-  { name: 'gen_layout_test', description: 'RED only, LAYOUT tasks: an app_probe spec whose asserts state DESIRED behavior (failing now) → writes the .layout.json the loop runs through the browser oracle. The harness verifies it currently fails before saving.', parameters: { type: 'object', properties: { title: { type: 'string' }, spec: { type: 'object' } }, required: ['title', 'spec'] } },
+  { name: 'app_probe', description: 'LAYOUT tasks: measure REAL browser facts jsdom can\'t. spec={viewport:{width:390,height:844},steps:[{command:"id"}|{event:"name",data:{}}|{click:"selector"}|{fill:"selector",value:"text"}|{type:"selector",value:"text"}|{press:"Enter"}|{focus:"selector"}|{input:"selector",value:"text"}],asserts:[{focus:".modal input"}|{rect:".node",op:"visible|hidden|count|in-viewport|not-overlap|width>|height>",other:"selector",value:2}|{style:".node-toggle",pseudo:"::before",prop:"content",op:"eq",value:"\\"▾\\""}|{path:"ui.modal.focusedField",op:"eq",value:"title"}]}. Read-only — use to find the failing layout/focus fact.', parameters: { type: 'object', properties: { spec: { type: 'object' } }, required: ['spec'] } },
+  { name: 'gen_layout_test', description: 'RED only, LAYOUT tasks: an app_probe spec whose asserts state DESIRED behavior (failing now) → writes the .layout.json the loop runs through the browser oracle. Steps may use command, event, click, fill, type, press, focus, or input+value. The harness verifies it currently fails before saving.', parameters: { type: 'object', properties: { title: { type: 'string' }, spec: { type: 'object' } }, required: ['title', 'spec'] } },
   { name: 'graph', description: 'Code index → file:line. mode=find (keyword) | callers | callees | file (symbols in file) | tests (coverage of symbol).', parameters: { type: 'object', properties: { mode: { type: 'string', enum: ['find', 'callers', 'callees', 'file', 'tests'] }, query: { type: 'string' } }, required: ['mode', 'query'] } },
   { name: 'projection', description: 'Compressed architecture view from the workspace. name=commands|events|command-ui|flows|data|render; filter narrows to an id/file/origin/entity/field. flows <origin> traces an event origin→handlers→⟳ render leaf (logic/render bugs); data <node|edge|container|item|graph> shows an entity lifecycle; render shows shell fold dataset/snapshot/CSS seams.', parameters: { type: 'object', properties: { name: { type: 'string', enum: ['commands', 'events', 'flows', 'command-ui', 'data', 'render'] }, filter: { type: 'string' } }, required: ['name'] } },
   { name: 'note', description: 'Save a short note to your persistent scratchpad (survives history trimming).', parameters: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] } },
@@ -221,6 +221,18 @@ export class OllamaChat {
     this.cfg = cfg;
     this.log = log;
     this.nativeTools = true; // optimistic; flips off on the first "does not support tools" error
+    this.usage = {
+      calls: 0,
+      promptTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      modelSeconds: 0,
+      byModel: {},
+    };
+  }
+
+  usageSnapshot() {
+    return JSON.parse(JSON.stringify(this.usage));
   }
 
   async chat({ model, messages, seed, temperature }) {
@@ -263,8 +275,25 @@ export class OllamaChat {
     }
 
     const msg = json.message ?? {};
-    const secs = ((Date.now() - started) / 1000).toFixed(1);
+    const elapsedSeconds = (Date.now() - started) / 1000;
+    const secs = elapsedSeconds.toFixed(1);
     const evalTok = json.eval_count ?? '?', promptTok = json.prompt_eval_count ?? '?';
+    const promptTokens = Number.isFinite(json.prompt_eval_count) ? json.prompt_eval_count : 0;
+    const outputTokens = Number.isFinite(json.eval_count) ? json.eval_count : 0;
+    const modelUsage = this.usage.byModel[model] ??= {
+      calls: 0,
+      promptTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      modelSeconds: 0,
+    };
+    for (const target of [this.usage, modelUsage]) {
+      target.calls++;
+      target.promptTokens += promptTokens;
+      target.outputTokens += outputTokens;
+      target.totalTokens += promptTokens + outputTokens;
+      target.modelSeconds = Number((target.modelSeconds + elapsedSeconds).toFixed(3));
+    }
     this.log(`[ollama] ${model} ${secs}s prompt=${promptTok}tok out=${evalTok}tok`);
 
     const call = msg.tool_calls?.[0];

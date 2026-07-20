@@ -27,6 +27,7 @@ npx vitest run -t "<name>" # one test by name — prefer while iterating
 npm run typecheck          # tsc --noEmit
 npm run test:browser       # Playwright (slow; layout/screenshots only)
 npm run release:check      # app build + DX + types + coverage + browser tests
+make experiments           # standalone file-projections experiment suite only
 ```
 
 Verify changes with `npx vitest run` + `npm run typecheck`. Before a release, run
@@ -52,6 +53,7 @@ Canvas Graph is available under the [Apache License 2.0](LICENSE).
 | `dx/cli/` | human entrypoints: status menu, preview, apply, app-aware inspection |
 | `dx/ollama-runner/` | disposable workspaces, Ollama loop, browser/probe tools |
 | `dx/projections/` | editable/read-only architecture views and their generator |
+| `dx/experiments/file-projections/` | maintained cold concept-scoped editing + 99% benchmark |
 | `dx/tasks/` | active queue, approvals, and archived done cards |
 
 **Mental model (one sentence):** frontend is a typed event app where entities choose
@@ -60,6 +62,32 @@ infrastructure, and features choreograph cross-system flows. Imperative event
 names are requests (`graph.node.create`); past-tense names are facts emitted by
 the data owner after the change lands (`graph.node.created`); facts drive redraw.
 Read `frontend/PRINCIPLES.md` before changing frontend.
+
+## Recipe-first feature edits
+
+Every feature starts by improving how the repository explains and applies that class
+of edit. Use the standalone product at
+`/Users/user/Documents/AI/entrypoint/file-projections/bin/fp` (override `FP_BIN`
+for another checkout):
+
+1. Run `fp context "<feature task>" --json`. If it abstains, plan a durable concept
+   with `fp explore artifact-plan -kind concept -name <name> -file <seed> -line <line>`.
+2. Review the concept question, ownership, handoffs, and source anchors before writing
+   production code. Its coverage must include the user-facing adapter, headless/domain
+   backend, composition seam, and focused tests whenever those layers participate.
+3. Save a native `ConceptChange` recipe, then use `fp change plan -change <recipe.json>
+   -out <plan.json>` and `fp change apply -plan <plan.json> -out <result.json>` in a
+   disposable worktree. Never replace this with a custom copy/edit shortcut.
+4. Verify focused tests, typecheck, and the full suite. Add the landed symbols to the
+   concept and rebuild its projection.
+5. Treat every extra discovery read, invalid tool call, or repair as recipe feedback:
+   improve the concept or recipe, rerun the benchmark, and keep the lower-read version.
+
+This is the self-improvement loop: **concept → native validation → concept-scoped edit →
+99% verification → measured friction → better concept**. `make experiments` runs the
+cold strict protocol; the older authored recipe replay is explicitly separate. Individual
+strict stages and the historical replay target are documented in
+[`dx/experiments/file-projections/README.md`](dx/experiments/file-projections/README.md).
 
 ---
 

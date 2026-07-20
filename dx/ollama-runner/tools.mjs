@@ -870,13 +870,22 @@ export class Tools {
     if (!this.writeAllowed(rel)) return this.phaseDenied(rel);
     const { abs } = this.safePath(rel);
     mkdirSync(dirname(abs), { recursive: true });
-    writeFileSync(abs, `${JSON.stringify({ title: title ?? this.task.id, steps: parsed.steps ?? [], asserts: parsed.asserts }, null, 2)}\n`);
+    writeFileSync(abs, `${JSON.stringify({
+      title: title ?? this.task.id,
+      ...(parsed.viewport ? { viewport: parsed.viewport } : {}),
+      steps: parsed.steps ?? [],
+      asserts: parsed.asserts,
+    }, null, 2)}\n`);
     return `wrote ${rel} — layout oracle is RED (${results.filter(r => !r.ok).length}/${results.length} asserts fail):\n${lines.join('\n')}\nNow run_test it to advance to GREEN, then edit frontend/.`;
   }
 
   async tool_app({ action, arg = '' }) {
     if (!this.browser) return 'app tools unavailable (no browser session)';
-    await this.browser.fresh();
+    // A walk is a stateful user journey: reloading before every command erases
+    // the graph and makes later steps report false regressions. RED/GREEN tasks
+    // still reload here so browser observations pick up source edits without
+    // depending on HMR.
+    if (this.phase !== 'walk') await this.browser.fresh();
     if (action === 'command') {
       const r = await this.browser.runCommand(arg);
       const snap = await this.browser.snapshot('ui');
@@ -884,6 +893,7 @@ export class Tools {
     }
     if (action === 'snapshot') return JSON.stringify(await this.browser.snapshot(arg), null, 1);
     if (action === 'eval') return String(await this.browser.evalJs(arg));
+    if (action === 'viewport') return `viewport=${await this.browser.setViewport(arg)}`;
     if (action === 'screenshot') {
       const { summary } = await this.browser.screenshot(this.phase);
       return summary;

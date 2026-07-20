@@ -12,9 +12,11 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { genTest, normalizeScenarioSpec, runProbe, validateGenTestSpec, validateScenarioSpec } from './ollama-runner/probe-client.mjs';
 import { graphQuery } from './ollama-runner/graphdb.mjs';
-import { parseToolFromText } from './ollama-runner/ollama.mjs';
+import { runLayoutSteps } from './ollama-runner/layout-probe.mjs';
+import { OllamaChat, parseToolFromText } from './ollama-runner/ollama.mjs';
 import { Tools } from './ollama-runner/tools.mjs';
 import { Workspace } from './ollama-runner/workspace.mjs';
+import { aggregateUsage, buildWalks, promoteCandidates } from './experiments/deterministic-visual-walks.mjs';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 let passed = 0;
@@ -33,6 +35,47 @@ const graphOk = (name, fn) => {
   if (available) ok(name, fn);
   else { skipped++; console.log(`↷ ${name} (graph.db unavailable)`); }
 };
+
+ok('visual walks: 10 semantic journeys × 10 viewports are deterministic', () => {
+  const first = buildWalks(100);
+  const second = buildWalks(100);
+  assert.equal(first.length, 100);
+  assert.deepEqual(first, second);
+  assert.equal(new Set(first.map(walk => walk.journey.id)).size, 10);
+  assert.equal(new Set(first.map(walk => walk.viewport.label)).size, 10);
+  assert.equal(first[0].id, 'walk-001');
+  assert.equal(first.at(-1).id, 'walk-100');
+});
+
+ok('visual walks: token totals aggregate from structured usage', () => {
+  assert.deepEqual(aggregateUsage([
+    { usage: { calls: 1, promptTokens: 10, outputTokens: 2, totalTokens: 12, modelSeconds: 1.2 } },
+    { usage: { calls: 1, promptTokens: 20, outputTokens: 3, totalTokens: 23, modelSeconds: 2.3 } },
+  ]), { calls: 2, promptTokens: 30, outputTokens: 5, totalTokens: 35, modelSeconds: 3.5 });
+});
+
+ok('visual walks: repeated visual + mechanical evidence creates task and browser oracle', () => {
+  const out = mkdtempSync(join(tmpdir(), 'dx-visual-candidate-'));
+  const selectorA = '.tool-panel[data-panel-id="layout"]';
+  const selectorB = '.tool-panel[data-panel-id="zoom"]';
+  const record = number => ({
+    walkId: `walk-${String(number).padStart(3, '0')}`,
+    journey: 'layout', purpose: 'Use controls', seed: number,
+    viewport: { width: 390, height: 844, label: 'phone' },
+    steps: [{ command: 'editing.node.create' }], stepOutcomes: [], screenshot: join(out, `${number}.png`),
+    verdict: { suspicious: true, confidence: 0.95, category: 'overlap', summary: 'Layout and zoom controls overlap', visibleEvidence: ['layout and zoom buttons overlap in the same area'], userImpact: 'Actions are obscured' },
+    mechanical: { facts: [{ type: 'panel-overlap', severity: 'high', selectors: [selectorA, selectorB], detail: '40x20 px overlap' }] },
+  });
+  try {
+    const candidates = promoteCandidates([record(1), record(2)], out);
+    assert.equal(candidates.length, 1);
+    const test = JSON.parse(readFileSync(join(candidates[0].dir, 'regression.layout.json'), 'utf8'));
+    assert.deepEqual(test.asserts[0], { rect: selectorA, op: 'not-overlap', other: selectorB });
+    assert(existsSync(join(candidates[0].dir, 'TASK.md')));
+  } finally {
+    rmSync(out, { recursive: true, force: true });
+  }
+});
 
 // --- inspect: commands ---
 const commands = runProbe(REPO, { mode: 'commands' });
@@ -444,6 +487,116 @@ const stubWs = (dir) => ({
     try { return { ok: true, output: execFileSync(cmd, args, { cwd: dir, encoding: 'utf8', timeout: timeoutMs, stdio: ['ignore', 'pipe', 'pipe'] }) }; }
     catch (err) { return { ok: false, output: `${err.stdout ?? ''}\n${err.stderr ?? ''}`.trim() }; }
   },
+});
+
+await okAsync('walk app tools preserve state between commands', async () => {
+  let reloads = 0;
+  let nodes = 0;
+  const browser = {
+    async fresh() { reloads++; nodes = 0; },
+    async runCommand(id) {
+      if (id === 'editing.node.create') nodes++;
+      return { ran: true };
+    },
+    async snapshot() { return { rendered: { nodes } }; },
+  };
+  const tools = new Tools({ ws: stubWs(REPO), browser, log: () => {} });
+  tools.phase = 'walk';
+  await tools.tool_app({ action: 'command', arg: 'editing.node.create' });
+  await tools.tool_app({ action: 'command', arg: 'editing.node.create' });
+  assert.equal(reloads, 0, 'walk commands must not reload the in-memory app');
+  assert.equal(nodes, 2, 'the second walk command must observe prior state');
+  tools.phase = 'green';
+  await tools.tool_app({ action: 'snapshot', arg: 'ui' });
+  assert.equal(reloads, 1, 'edit phases must still reload to pick up source changes');
+});
+
+await okAsync('layout oracle routes real focus and input steps', async () => {
+  const calls = [];
+  const page = {
+    locator(selector) {
+      return {
+        async focus() { calls.push({ kind: 'focus', selector }); },
+        async click() { calls.push({ kind: 'click', selector }); },
+        async fill(value) { calls.push({ kind: 'fill', selector, value }); },
+        async pressSequentially(value, options) { calls.push({ kind: 'type', selector, value, options }); },
+      };
+    },
+    keyboard: { async press(key) { calls.push({ kind: 'press', key }); } },
+    async evaluate(fn, arg) {
+      if (arg?.selector) {
+        calls.push({ kind: 'input', ...arg, source: fn.toString() });
+      } else {
+        calls.push({ kind: 'settle' });
+      }
+    },
+  };
+  await runLayoutSteps(page, [
+    { focus: '.properties input[data-field="title"]' },
+    { click: '[data-command="palette.open"]' },
+    { fill: '.palette-search', value: 'layout' },
+    { type: '.properties input[data-field="title"]', value: ' AB', delay: 5 },
+    { press: 'Enter' },
+    { input: '.properties input[data-field="title"]', value: 'Node AB' },
+  ]);
+  assert(calls.some(call => call.kind === 'focus' && call.selector.includes('data-field')));
+  const input = calls.find(call => call.kind === 'input');
+  assert.equal(input?.value, 'Node AB');
+  assert(input?.source.includes("new InputEvent('input'"), input?.source);
+  assert(calls.some(call => call.kind === 'click' && call.selector.includes('palette.open')));
+  assert(calls.some(call => call.kind === 'fill' && call.value === 'layout'));
+  assert(calls.some(call => call.kind === 'type' && call.value === ' AB'));
+  assert(calls.some(call => call.kind === 'press' && call.key === 'Enter'));
+});
+
+await okAsync('ollama usage is aggregated without log reconstruction', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    ok: true,
+    async json() {
+      return { message: { content: '{"name":"done","arguments":{"summary":"ok"}}' }, prompt_eval_count: 120, eval_count: 30 };
+    },
+  });
+  try {
+    const chat = new OllamaChat({ url: 'http://unused', temperature: 0, numCtx: 1024, timeoutMs: 1000, think: false });
+    await chat.chat({ model: 'qwen3.5:9b', messages: [{ role: 'user', content: 'x' }], seed: 1 });
+    await chat.chat({ model: 'qwen3.5:9b', messages: [{ role: 'user', content: 'y' }], seed: 2 });
+    const usage = chat.usageSnapshot();
+    assert.equal(usage.calls, 2);
+    assert.equal(usage.promptTokens, 240);
+    assert.equal(usage.outputTokens, 60);
+    assert.equal(usage.totalTokens, 300);
+    assert.equal(usage.byModel['qwen3.5:9b'].totalTokens, 300);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+await okAsync('generated layout tests preserve their viewport', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'dx-layout-'));
+  const browser = {
+    async fresh() {},
+    async probe() {
+      return { pass: false, results: [{ ok: false, label: 'overlap', actual: true }] };
+    },
+  };
+  try {
+    const tools = new Tools({ ws: stubWs(dir), browser, log: () => {} });
+    tools.phase = 'red';
+    tools.task = { id: 'mobile-overlap' };
+    const result = await tools.tool_gen_layout_test({
+      title: 'mobile overlap',
+      spec: {
+        viewport: { width: 390, height: 844 },
+        asserts: [{ rect: '.layout', op: 'not-overlap', other: '.zoom' }],
+      },
+    });
+    assert(result.includes('layout oracle is RED'), result);
+    const saved = JSON.parse(readFileSync(join(dir, 'tests/commands/dx/mobile-overlap.layout.json'), 'utf8'));
+    assert.deepEqual(saved.viewport, { width: 390, height: 844 });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 // --- pure fs tools (instant, no boot) ---
