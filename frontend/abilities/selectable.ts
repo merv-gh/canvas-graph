@@ -104,7 +104,10 @@ export function registerSelectable(system: Registry) {
         event: 'selection.node.select',
         group: 'selection',
         shortcut: 'Tab',
-        input: { on: 'keydown', key: 'Tab', prevent: true },
+        input: {
+          on: 'keydown', key: 'Tab', prevent: true,
+          when: event => !(event.target as Element).closest('input, textarea, select, [contenteditable="true"], [contenteditable="plaintext-only"]'),
+        },
         available: () => graphs.current.nodes().length > 0,
         payload: () => ({ id: nextNodeId() }),
       },
@@ -114,7 +117,10 @@ export function registerSelectable(system: Registry) {
         event: 'selection.node.select',
         group: 'selection',
         shortcut: 'Shift+Tab',
-        input: { on: 'keydown', key: 'Tab', shift: true, prevent: true },
+        input: {
+          on: 'keydown', key: 'Tab', shift: true, prevent: true,
+          when: event => !(event.target as Element).closest('input, textarea, select, [contenteditable="true"], [contenteditable="plaintext-only"]'),
+        },
         available: () => graphs.current.nodes().length > 0,
         payload: () => ({ id: previousNodeId() }),
       },

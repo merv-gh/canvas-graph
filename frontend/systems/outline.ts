@@ -232,6 +232,7 @@ export function registerOutline(system: Registry) {
         const head = el('div', 'requirements-nav-attribute-head');
         const fold = el('button', 'requirements-nav-fold', open ? '⊟' : '⊞');
         fold.type = 'button';
+        fold.dataset.command = 'fold.toggle';
         fold.dataset.foldId = foldId;
         fold.setAttribute('aria-expanded', open ? 'true' : 'false');
         fold.setAttribute('aria-label', `${open ? 'Fold' : 'Open'} ${attribute.id} ${attribute.name}`);
@@ -361,6 +362,7 @@ export function registerOutline(system: Registry) {
       const head = el('div', 'graph-nav-card-head');
       const fold = el('button', 'graph-nav-fold', open ? '⊟' : '⊞');
       fold.type = 'button';
+      fold.dataset.command = 'fold.toggle';
       fold.dataset.foldId = graphFoldId(graph.id);
       fold.setAttribute('aria-label', `${open ? 'Collapse' : 'Expand'} ${graphName(graph)}`);
       const choose = el('button', 'graph-nav-choose');
@@ -395,6 +397,10 @@ export function registerOutline(system: Registry) {
       const head = el('div', 'outline-panel-head');
       const fold = el('button', 'graph-navigator-toggle', collapsed ? 'Graphs' : '×');
       fold.type = 'button';
+      // Click commands dispatch synchronously. Without an explicit command this
+      // control depended on coalesced generic input and could appear inert in
+      // background/browser tabs.
+      fold.dataset.command = 'fold.toggle';
       fold.dataset.foldId = PANEL_FOLD_ID;
       fold.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
       fold.setAttribute('aria-label', collapsed ? 'Expand graph navigator' : 'Collapse graph navigator');

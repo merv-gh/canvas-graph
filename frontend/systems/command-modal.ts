@@ -35,7 +35,7 @@ type Row =
 export function registerCommandModal(system: Registry) {
   system('commandModal', (ctx) => {
     const { on, emit, contexts, contribute } = ctx;
-    contribute({ surface: 'top', command: 'help.open', kind: 'button', text: 'Help', label: 'Commands and shortcuts', order: 99, group: 'help' });
+    contribute({ surface: 'top', command: 'help.open', kind: 'button', text: 'Help', label: 'Commands and shortcuts', slot: Slots.End, order: 99 });
     contribute({ surface: 'top', command: 'palette.open', kind: 'button', text: 'Tools', label: 'Open commands and graph search', slot: Slots.End, order: 100 });
 
     let query = '';

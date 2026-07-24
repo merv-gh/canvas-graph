@@ -24,3 +24,7 @@ dist-lib/graph-viewer.js
 dx/bench
 dx/cli/preview-ws/frontend/*
 /todo.md
+.agents
+.skills
+.kilocode
+.qwen
