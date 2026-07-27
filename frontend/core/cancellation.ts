@@ -14,6 +14,9 @@ export type Cancellable = {
   /** When false, a stage background-click does NOT cancel this (only Escape
    *  does). Zen mode uses this so it persists until an explicit exit. */
   background?: boolean;
+  /** Active mode owns bare pointer gestures (draw, erase, placement). Generic
+   * input systems can yield without importing that mode's module state. */
+  blocksPointer?: boolean;
 };
 
 /** First-class cancellation. Any system that has an "active mode" (modal open,
@@ -26,6 +29,10 @@ export type Cancellable = {
  *  the next. Predictable and easy to test. */
 export function cancellationContext(bus: Bus) {
   const handlers: Cancellable[] = [];
+  const orderedActive = () => handlers
+    .map((handler, index) => ({ handler, index }))
+    .filter(({ handler }) => handler.active())
+    .sort((a, b) => (b.handler.priority ?? 0) - (a.handler.priority ?? 0) || b.index - a.index);
   bus.on('app.cancel', (payload) => {
     const fromBackground = payload?.source === 'background';
     let chosen: Cancellable | null = null;
@@ -45,6 +52,12 @@ export function cancellationContext(bus: Bus) {
         if (i >= 0) handlers.splice(i, 1);
       };
     },
+    /** Explicit pointer/select mode exits every pointer-owning interaction at once. */
+    cancelPointerModes() {
+      orderedActive().filter(({ handler }) => handler.blocksPointer).forEach(({ handler }) => {
+        if (handler.active()) handler.cancel();
+      });
+    },
     unregisterOrigin(origin: string) {
       for (let i = handlers.length - 1; i >= 0; i--) {
         if (handlers[i].origin === origin) handlers.splice(i, 1);
@@ -54,5 +67,7 @@ export function cancellationContext(bus: Bus) {
     active: () => handlers.filter(handler => handler.active()).map(handler => handler.origin),
     /** Devtools/test surface — every registered cancellable's origin. */
     all: () => handlers.map(handler => handler.origin),
+    blocksPointer: () => handlers.some(handler => handler.blocksPointer && handler.active()),
+    blocksBackground: () => handlers.some(handler => handler.background === false && handler.active()),
   };
 }

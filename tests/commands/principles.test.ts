@@ -55,6 +55,41 @@ describe('frontend principles (enforced)', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('systems do not import runtime state from peer systems', () => {
+    const allowed = new Set([
+      'debug.ts->debug-views',       // pure DOM builders
+      'node-autosize.ts->text-layout', // pure text measurement helper
+      'palette.ts->presets',        // pure preset catalog/IO functions; no module state
+      'containers.ts->container-entity', // pure entity definition + validation helpers
+    ]);
+    const offenders: string[] = [];
+    const dir = join(Frontend, 'systems');
+    for (const file of readdirSync(dir).filter(name => name.endsWith('.ts') && name !== 'index.ts')) {
+      const source = readFileSync(join(dir, file), 'utf8');
+      const imports = source.matchAll(/import\s+([^;]+?)\s+from\s+['"]\.\/([^'"]+)['"];/g);
+      for (const match of imports) {
+        if (match[1].trim().startsWith('type ')) continue;
+        const key = `${file}->${match[2]}`;
+        if (!allowed.has(key)) offenders.push(key);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('node type catalog is unique, categorized, and uses known visual primitives', () => {
+    const ctx = bootApp();
+    const defs = ctx.model.nodeTypes();
+    expect(new Set(defs.map(def => def.id)).size).toBe(defs.length);
+    expect(defs.every(def => def.id && def.label && def.category && def.visual)).toBe(true);
+    expect(ctx.contexts.dx.run().filter(issue => issue.rule.startsWith('node-type.'))).toEqual([]);
+  });
+
+  it('creation defaults have one exclusive runtime owner per item kind', () => {
+    const ctx = bootApp();
+    expect(ctx.contexts.storage.defaultOwners()).toEqual([{ kind: 'node', origin: 'palette' }]);
+    expect(() => ctx.contexts.storage.claimDefaults('node', 'probe')).toThrow(/Default owner conflict/);
+  });
+
   // PRINCIPLE 2 — Systems are self-sufficient. Disabling any single non-core system
   // must not break boot. We exercise the full system flag matrix one-off-at-a-time.
   it('every system boots when disabled one-at-a-time', async () => {

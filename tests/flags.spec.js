@@ -29,13 +29,15 @@ test('disabling an ability removes its commands and entity affordances', async (
   const collapseCmd = await page.evaluate(() => !!window.app.contexts.commands.get('node.collapse.toggle'));
   expect(collapseCmd).toBe(false);
   await page.getByRole('button', { name: 'Add node', exact: true }).click();
+  await page.locator('[data-place="stage"]').click({ position: { x: 500, y: 350 } });
   const collapseBtn = await page.locator('.node [data-command="node.collapse.toggle"]').count();
   expect(collapseBtn).toBe(0);
 });
 
 test('all flags on: baseline affordances exist', async ({ page }) => {
   await goWithFlags(page);
-  await expect(page.locator('.toolbar button[data-command="editing.node.create"]')).toBeVisible();
+  await expect(page.locator('.toolbar button[data-command="palette.place.activate"]')).toBeVisible();
+  await page.getByLabel('More actions').click();
   await expect(page.locator('.toolbar button[data-command="palette.open"]')).toBeVisible();
   await expect(page.locator('.toolbar button[data-command="view.fit.all"]')).toBeVisible();
   await expect(page.locator('.toolbar button[data-command="view.zoom.in"]')).toHaveCount(0);

@@ -1,13 +1,17 @@
 import type { Registry } from '../core';
 import { Places } from '../types';
 
+declare module '../types' {
+  interface CustomEvents { 'canvas.select': void }
+}
+
 /** Zen = fold the whole app shell (hide top), leaving only the canvas —
  *  the same fold concept (Principle 18) applied to the app target: "less detail
  *  on everything". Toggle with `\` (it's the only exit once panels are hidden). */
 const ZEN_FOLD_ID = 'shell.zen';
 
 export function registerMain(system: Registry) {
-  system('main', ({ on, emit, contexts, origin }) => {
+  system('main', ({ on, emit, contexts, origin, contribute }) => {
     // Escape exits zen mode through the shared cancellation stack. `background:
     // false` keeps zen active on canvas clicks — it persists until an explicit
     // exit (`\` or Escape), so the faded panels don't pop back on a stray click.
@@ -28,6 +32,11 @@ export function registerMain(system: Registry) {
     };
     contexts.commands.register([
       {
+        id: 'canvas.select',
+        label: 'Select mode',
+        group: 'view',
+      },
+      {
         id: 'view.zen',
         label: 'Toggle zen mode',
         event: 'fold.toggle',
@@ -37,6 +46,12 @@ export function registerMain(system: Registry) {
         payload: () => ({ id: ZEN_FOLD_ID }),
       },
     ]);
+    on('canvas.select', () => contexts.cancellation.cancelPointerModes());
+    contribute({
+      surface: 'top', command: 'canvas.select', kind: 'button', icon: 'select', label: 'Select mode',
+      className: 'canvas-mode-tool canvas-select-tool', active: () => !contexts.cancellation.blocksPointer(),
+      order: 5, group: 'mode',
+    });
     on('app.start', () => { emit('render.shell'); syncShellFold(); });
     on('fold.changed', ({ id }) => { if (id === ZEN_FOLD_ID) syncShellFold(); });
   }, { requires: ['render'] });

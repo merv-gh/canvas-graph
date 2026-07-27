@@ -1,6 +1,7 @@
-import { itemParentAttr, itemRefFrom, type Registry } from '../core';
+import { iconNode, itemParentAttr, itemRefFrom, setIcon, type Registry } from '../core';
 import { Places, Slots } from '../types';
 import type {
+  IconName,
   Id,
   ItemRef,
   PropertyDef,
@@ -13,6 +14,7 @@ declare module '../types' {
   interface CustomEvents {
     'item.properties.open': ItemRef;
     'properties.item.input': { ref: ItemRef; field: string; value: string };
+    'properties.item.choice': { ref: ItemRef; field: string; value: string };
     'properties.item.toggle': { ref: ItemRef; field: string; checked: boolean };
     'properties.title.input': { ref: ItemRef; value: string };
     'properties.title.finish': { ref: ItemRef };
@@ -20,6 +22,7 @@ declare module '../types' {
     'properties.sections.input': { ref: ItemRef; value: string };
     'properties.sections.add': { ref: ItemRef };
     'properties.sections.remove': { ref: ItemRef; index: number };
+    'properties.group.toggle': { ref: ItemRef; group: string; open: boolean };
   }
 }
 
@@ -32,7 +35,7 @@ type ContainerLike = {
 const childKey = (ref: ItemRef) => `${ref.kind}:${ref.id}`;
 
 /** Configurable — any entity with declared `properties` can have this. The
- *  properties modal is rendered from `EntityDef.properties` and dispatch
+ *  selection inspector is rendered from `EntityDef.properties` and dispatch
  *  is generic: configurable emits `item.update` with the patch and the
  *  storage system for the ref's kind applies it. */
 export const configurable = <T extends Identified>() => ability<T>('configurable', [action<T>({
@@ -51,23 +54,26 @@ export const configurable = <T extends Identified>() => ability<T>('configurable
 })]);
 
 export function registerConfigurable(system: Registry) {
-  system('ability.configurable', ({ on, emit, contexts, graphs, model, selection }) => {
+  system('ability.configurable', ({ on, emit, contexts, graphs, model, selection, declarePanel }) => {
     const formRef = (target?: Element | null): ItemRef =>
       itemRefFrom(target?.closest('.properties')) ?? { kind: 'node', id: '' };
     const item = (ref: ItemRef) => graphs.current.getItem(ref);
     const entityDef = (ref: ItemRef) => model.entity<unknown, unknown>(ref.kind);
     const sectionValues = (root: Element) => [...root.querySelectorAll<HTMLInputElement>('[data-section-input]')]
       .map(input => input.value.trim()).filter(Boolean);
-    const actionButton = (label: string, command: string, icon: string, attrs: Record<string, string> = {}, active?: boolean) => {
+    const expandedGroups = new Set<string>();
+    const expandedGroupKey = (ref: ItemRef, group: string) => `${ref.kind}:${ref.id}:${group}`;
+    const actionButton = (label: string, command: string, icon: IconName, attrs: Record<string, string> = {}, active?: boolean) => {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = `context-action context-action-card${active ? ' active' : ''}`;
       button.dataset.command = command;
+      button.setAttribute('aria-label', label);
       if (active !== undefined) button.setAttribute('aria-pressed', active ? 'true' : 'false');
       Object.entries(attrs).forEach(([key, value]) => { button.dataset[key] = value; });
       const glyph = document.createElement('span');
       glyph.className = 'context-action-icon';
-      glyph.textContent = icon;
+      glyph.append(iconNode(icon));
       const text = document.createElement('strong');
       text.textContent = label;
       button.append(glyph, text);
@@ -90,30 +96,49 @@ export function registerConfigurable(system: Registry) {
       if (ref.kind === 'node') {
         const type = (current as { NodeType?: string }).NodeType ?? 'text';
         actions.append(actionGroup('Shape', [
-          actionButton('Text', 'node.type.text', 'T', {}, type === 'text'),
-          actionButton('Box', 'node.type.square', '□', {}, type === 'square'),
-          actionButton('Circle', 'node.type.circle', '○', {}, type === 'circle'),
+          actionButton('Text', 'node.type.text', 'text', {}, type === 'text'),
+          actionButton('Box', 'node.type.square', 'node', {}, type === 'square'),
+          actionButton('Circle', 'node.type.circle', 'circle', {}, type === 'circle'),
         ]));
+        const itemActions = [
+          actionButton('Convert to container', 'node.convert.container', 'container'),
+          actionButton('Group', 'selection.group', 'group'),
+          actionButton('Delete', 'selection.item.delete', 'trash'),
+        ];
+        if (graphs.current.itemsOfKind('ink').length) itemActions.unshift(actionButton('Select drawings', 'ink.select.all', 'draw'));
+        if (type === 'toggle') itemActions.unshift(actionButton(
+          (current as { ToggleState?: boolean }).ToggleState ? 'Turn off' : 'Turn on',
+          'node.toggle.state', 'toggle',
+        ));
+        if (contexts.commands.get('palette.custom-type.create')) itemActions.splice(itemActions.length - 1, 0,
+          actionButton('Save as type', 'palette.custom-type.create', 'star'));
+        actions.append(actionGroup('Actions', itemActions));
       }
       if (ref.kind === 'edge') {
         actions.append(actionGroup('Connection', [
-          actionButton('Reverse direction', 'graph.edge.reverse', '⇄'),
-          actionButton('Delete connection', 'graph.edge.delete', '×'),
+          actionButton('Reverse direction', 'graph.edge.reverse', 'reverse'),
+          actionButton('Delete connection', 'graph.edge.delete', 'trash'),
         ]));
       }
       if (ref.kind === 'container') {
-        actions.append(actionGroup('Boundary', [
-          actionButton('Ungroup, keep contents', 'container.ungroup', '⊟'),
-          actionButton('Delete…', 'container.delete.request', '×'),
-        ]));
+        const boundaryActions = [
+          actionButton('Convert to node', 'container.convert.node', 'node'),
+          actionButton('Fold / unfold', 'item.collapse.toggle', 'collapse'),
+          actionButton('Delete…', 'container.delete.request', 'trash'),
+        ];
+        const currentContainer = graphs.current.getItem<{ Children?: ItemRef[] }>(ref);
+        if (currentContainer?.Children?.length) {
+          boundaryActions.unshift(actionButton('Ungroup, keep contents', 'container.ungroup', 'ungroup'));
+        }
+        actions.append(actionGroup('Boundary', boundaryActions));
       }
       const parent = contexts.hierarchy.parentRefOf(ref);
       const container = parent?.kind === 'container' ? graphs.current.getItem<ContainerLike>(parent) : null;
       if (parent?.kind === 'container' && container) {
-        const placement = [actionButton('Move out', 'container.remove-child', '↗')];
+        const placement = [actionButton('Move out', 'container.remove-child', 'move-out')];
         container.Sections?.forEach(section => {
           const active = container.ChildSections?.[childKey(ref)] === section.id;
-          placement.push(actionButton(section.title, 'container.child.section.set', active ? '✓' : '→', {
+          placement.push(actionButton(section.title, 'container.child.section.set', active ? 'check' : 'move-out', {
             containerId: parent.id,
             childKind: ref.kind,
             childId: ref.id,
@@ -131,8 +156,12 @@ export function registerConfigurable(system: Registry) {
       const label = (current as { Label?: { text?: string } }).Label?.text?.trim();
       if (ref.kind === 'edge' && !label) {
         const edge = current as { From?: Id; To?: Id };
-        const from = edge.From ? graphs.current.getNode(edge.From)?.Label.text : undefined;
-        const to = edge.To ? graphs.current.getNode(edge.To)?.Label.text : undefined;
+        const endpointLabel = (id?: Id) => {
+          const endpointRef = id ? graphs.current.refById(id) : undefined;
+          return endpointRef ? graphs.current.getItem<{ Label?: { text?: string } }>(endpointRef)?.Label?.text : undefined;
+        };
+        const from = endpointLabel(edge.From);
+        const to = endpointLabel(edge.To);
         input.value = from && to ? `${from} → ${to}` : 'Connection';
       } else {
         input.value = label || 'Untitled';
@@ -141,7 +170,6 @@ export function registerConfigurable(system: Registry) {
       input.dataset.itemKind = ref.kind;
       input.dataset.itemId = ref.id;
       input.setAttribute('aria-label', 'Item title');
-      input.autofocus = true;
       input.spellcheck = false;
       return input;
     };
@@ -161,7 +189,7 @@ export function registerConfigurable(system: Registry) {
       remove.dataset.command = 'properties.sections.remove';
       remove.dataset.sectionIndex = `${index}`;
       remove.setAttribute('aria-label', `Remove section ${index + 1}`);
-      remove.textContent = '×';
+      setIcon(remove, 'trash');
       row.append(order, input, remove);
       return row;
     };
@@ -174,14 +202,18 @@ export function registerConfigurable(system: Registry) {
       const axis = String(axisProp?.value(current) ?? 'rows');
       const axisRow = document.createElement('div');
       axisRow.className = 'property-axis-choice';
-      ([['columns', '↔', 'Side by side'], ['rows', '↕', 'Stacked']] as const).forEach(([value, glyph, label]) => {
+      ([['columns', 'layout-columns', 'Side by side'], ['rows', 'layout-rows', 'Stacked']] as const).forEach(([value, icon, label]) => {
         const button = document.createElement('button');
         button.type = 'button';
         button.dataset.command = 'properties.structure.axis';
         button.dataset.axis = value;
         button.className = axis === value ? 'active' : '';
         button.setAttribute('aria-pressed', axis === value ? 'true' : 'false');
-        button.innerHTML = `<b>${glyph}</b><span>${label}</span>`;
+        const visual = document.createElement('b');
+        visual.append(iconNode(icon));
+        const text = document.createElement('span');
+        text.textContent = label;
+        button.append(visual, text);
         axisRow.append(button);
       });
       const list = document.createElement('div');
@@ -217,23 +249,26 @@ export function registerConfigurable(system: Registry) {
         (byGroup.get(group) ?? byGroup.set(group, []).get(group)!).push(prop);
       });
       byGroup.forEach((props, group) => {
-        if (ref.kind === 'edge' && group !== 'default') {
-          const details = document.createElement('details');
-          details.className = 'property-advanced-group';
-          const summary = document.createElement('summary');
-          summary.textContent = group;
+        if (group !== 'default') {
+          const advanced = document.createElement('section');
+          advanced.className = 'property-advanced-group';
+          advanced.dataset.propertyGroup = group;
+          const open = expandedGroups.has(expandedGroupKey(ref, group));
+          advanced.dataset.open = open ? 'true' : 'false';
+          const toggle = document.createElement('button');
+          toggle.type = 'button';
+          toggle.className = 'property-advanced-toggle';
+          toggle.dataset.command = 'properties.group.toggle';
+          toggle.textContent = group;
+          toggle.setAttribute('aria-label', `Toggle ${group} properties`);
+          toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
           const body = document.createElement('div');
           body.className = 'property-advanced-fields';
+          body.hidden = !open;
           props.forEach(prop => body.append(contexts.properties.render(prop, current)));
-          details.append(summary, body);
-          fields.append(details);
+          advanced.append(toggle, body);
+          fields.append(advanced);
           return;
-        }
-        if (group !== 'default') {
-          const heading = document.createElement('div');
-          heading.className = 'property-group';
-          heading.textContent = group;
-          fields.append(heading);
         }
         props.forEach(prop => fields.append(contexts.properties.render(prop, current)));
       });
@@ -252,6 +287,47 @@ export function registerConfigurable(system: Registry) {
       emit('item.update', { ref, patch });
     };
     const selected = () => selection.selected();
+    let inspectorRedrawQueued = false;
+    const queueInspectorRedraw = () => {
+      if (inspectorRedrawQueued) return;
+      inspectorRedrawQueued = true;
+      queueMicrotask(() => {
+        inspectorRedrawQueued = false;
+        emit('tool.panel.redraw', { id: 'properties' });
+      });
+    };
+    const inspectorRoot = () => contexts.places.el(Places.Left)
+      ?.querySelector<HTMLElement>('[data-panel-id="properties"]');
+    const inspectable = () => {
+      const ref = selected();
+      if (!ref) return undefined;
+      const current = item(ref);
+      const entity = entityDef(ref);
+      const properties = entity?.properties ?? [];
+      return current && entity && properties.length ? { ref, current, entity, properties } : undefined;
+    };
+    const renderInspector = () => {
+      const target = inspectable();
+      if (!target) return document.createElement('div');
+      const root = document.createElement('aside');
+      root.className = 'properties-inspector';
+      root.setAttribute('aria-label', `${target.entity.label} properties`);
+      const header = document.createElement('header');
+      const kind = document.createElement('span');
+      kind.textContent = target.entity.label;
+      header.append(kind, titleView(target.ref, target.current));
+      const scroll = document.createElement('div');
+      scroll.className = 'properties-inspector-scroll';
+      scroll.dataset.nativeScroll = '';
+      scroll.append(renderProperties(target.ref, target.current, target.properties));
+      root.append(header, scroll);
+      return root;
+    };
+
+    declarePanel({
+      id: 'properties', anchor: 'top-left', place: Places.Left, movable: false, layout: 'custom', render: renderInspector, order: 2,
+      mountWhen: () => selection.selectedAll().length === 1 && !!inspectable(),
+    });
 
     contexts.commands.register([
       {
@@ -290,6 +366,27 @@ export function registerConfigurable(system: Registry) {
       {
         id: 'properties.sections.remove', label: 'Remove container section', group: 'properties', hidden: true,
         payload: ({ target }) => ({ ref: formRef(target), index: Number((target as HTMLElement).closest('[data-section-index]')?.getAttribute('data-section-index') ?? -1) }),
+      },
+      {
+        id: 'properties.group.toggle', label: 'Expand or collapse property group', group: 'properties', hidden: true,
+        payload: ({ target }) => {
+          const advanced = target?.closest<HTMLElement>('.property-advanced-group');
+          return {
+            ref: formRef(advanced),
+            group: advanced?.dataset.propertyGroup ?? '',
+            open: advanced?.dataset.open !== 'true',
+          };
+        },
+      },
+      {
+        id: 'properties.item.choice',
+        label: 'Choose item property',
+        group: 'properties',
+        hidden: true,
+        payload: ({ target }) => {
+          const choice = (target as HTMLElement).closest<HTMLElement>('[data-field][data-value]');
+          return { ref: formRef(choice), field: choice?.dataset.field ?? '', value: choice?.dataset.value ?? '' };
+        },
       },
       {
         id: 'properties.item.input',
@@ -335,32 +432,52 @@ export function registerConfigurable(system: Registry) {
       const entity = entityDef(ref);
       const properties = entity?.properties ?? [];
       if (!current || !entity || !properties.length) return;
-      emit('modal.open', {
-        title: entity.label,
-        titleView: titleView(ref, current),
-        visual: 'properties',
-        body: () => renderProperties(ref, current, properties),
-      });
+      // Edit is an explicit reveal intent: a persisted collapsed workspace must
+      // not make the command appear inert.
+      if (!contexts.fold.isOpen('outline.panel')) contexts.fold.set('outline.panel', true);
+      if (selected()?.kind !== ref.kind || selected()?.id !== ref.id) emit('selection.item.select', ref);
+      emit('tool.panel.redraw', { id: 'properties' });
+      queueMicrotask(() => inspectorRoot()?.querySelector<HTMLInputElement>('[data-item-modal-title]')?.focus());
     });
     on('properties.title.input', ({ ref, value }) => applyProperty(ref, ref.kind === 'edge' ? 'label' : 'title', value));
     on('properties.title.finish', ({ ref }) => {
-      const title = contexts.places.el(Places.Modal)?.querySelector<HTMLInputElement>('[data-item-modal-title]');
+      const title = inspectorRoot()?.querySelector<HTMLInputElement>('[data-item-modal-title]');
       const titleRef = itemRefFrom(title);
       if (titleRef?.kind === ref.kind && titleRef.id === ref.id) title?.blur();
     });
     on('properties.item.input', ({ ref, field, value }) => applyProperty(ref, field, value));
+    on('properties.item.choice', ({ ref, field, value }) => {
+      applyProperty(ref, field, value);
+      inspectorRoot()?.querySelectorAll<HTMLElement>(`[data-field="${field}"][data-value]`).forEach(choice => {
+        choice.setAttribute('aria-pressed', choice.dataset.value === value ? 'true' : 'false');
+      });
+    });
     on('properties.item.toggle', ({ ref, field, checked }) => applyProperty(ref, field, checked));
     on('properties.structure.axis', ({ ref, value }) => {
       applyProperty(ref, 'sectionAxis', value);
-      contexts.places.el('modal')?.querySelectorAll<HTMLElement>('[data-axis]').forEach(button => {
+      inspectorRoot()?.querySelectorAll<HTMLElement>('[data-axis]').forEach(button => {
         const active = button.dataset.axis === value;
         button.classList.toggle('active', active);
         button.setAttribute('aria-pressed', active ? 'true' : 'false');
       });
     });
     on('properties.sections.input', ({ ref, value }) => applyProperty(ref, 'sections', value));
+    on('properties.group.toggle', ({ ref, group, open }) => {
+      if (!group) return;
+      const key = expandedGroupKey(ref, group);
+      if (open) expandedGroups.add(key);
+      else expandedGroups.delete(key);
+      const advanced = [...(inspectorRoot()?.querySelectorAll<HTMLElement>('.property-advanced-group') ?? [])]
+        .find(candidate => candidate.dataset.propertyGroup === group);
+      if (advanced) {
+        advanced.dataset.open = open ? 'true' : 'false';
+        advanced.querySelector('.property-advanced-toggle')?.setAttribute('aria-expanded', open ? 'true' : 'false');
+        const body = advanced.querySelector<HTMLElement>('.property-advanced-fields');
+        if (body) body.hidden = !open;
+      }
+    });
     on('properties.sections.add', ({ ref }) => {
-      const list = contexts.places.el('modal')?.querySelector<HTMLElement>('[data-section-list]');
+      const list = inspectorRoot()?.querySelector<HTMLElement>('[data-section-list]');
       if (!list) return;
       list.append(sectionRow(`Section ${list.children.length + 1}`, list.children.length));
       applyProperty(ref, 'sections', sectionValues(list).join('\n'));
@@ -368,7 +485,7 @@ export function registerConfigurable(system: Registry) {
       list.lastElementChild?.querySelector<HTMLInputElement>('input')?.focus();
     });
     on('properties.sections.remove', ({ ref, index }) => {
-      const list = contexts.places.el('modal')?.querySelector<HTMLElement>('[data-section-list]');
+      const list = inspectorRoot()?.querySelector<HTMLElement>('[data-section-list]');
       if (!list || list.children.length <= 1 || index < 0) return;
       list.children[index]?.remove();
       [...list.children].forEach((row, next) => {
@@ -380,13 +497,11 @@ export function registerConfigurable(system: Registry) {
       });
       applyProperty(ref, 'sections', sectionValues(list).join('\n'));
     });
-    const closeDeletedInspector = (ref: ItemRef) => {
-      const open = contexts.places.el('modal')?.querySelector<HTMLElement>('.properties');
-      const openRef = itemRefFrom(open);
-      if (openRef?.kind === ref.kind && openRef.id === ref.id) emit('modal.close');
-    };
-    on('graph.node.deleted', ({ id }) => closeDeletedInspector({ kind: 'node', id }));
-    on('graph.edge.deleted', ({ id }) => closeDeletedInspector({ kind: 'edge', id }));
-    on('container.deleted', ({ id }) => closeDeletedInspector({ kind: 'container', id }));
-  }, { requires: ['ability.selectable', 'modal'] });
+    on('selection.changed', () => {
+      queueInspectorRedraw();
+    });
+    on('ink.stroke.completed', () => emit('tool.panel.redraw', { id: 'properties' }));
+    on('ink.stroke.deleted', () => emit('tool.panel.redraw', { id: 'properties' }));
+    on('graph.switched', () => emit('tool.panel.redraw', { id: 'properties' }));
+  }, { requires: ['ability.selectable', 'tool.panel'] });
 }

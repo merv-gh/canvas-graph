@@ -9,7 +9,7 @@ import { estimateTextSize } from './text-layout';
  *  node; if the current size differs from that, the user dragged the resize
  *  handle and we stop touching it. Text edits on an auto-sized node re-fit it. */
 export function registerNodeAutosize(system: Registry) {
-  system('node.autosize', ({ on, emit, graphs }) => {
+  system('node.autosize', ({ on, emit, graphs, model }) => {
     const autoSized = new Map<string, { w: number; h: number }>();
     const sameSize = (a?: { w: number; h: number }, b?: { w: number; h: number }) =>
       !!a && !!b && a.w === b.w && a.h === b.h;
@@ -20,6 +20,10 @@ export function registerNodeAutosize(system: Registry) {
     const apply = (id: string) => {
       const node = graphs.current.getNode(id);
       if (!node) return;
+      if (model.nodeType(node.NodeType)?.autoSize === false) return;
+      // Operators and diamonds have geometry-owned bounds; text fitting would
+      // balloon them. Their size is owned by node-visuals' SHAPE_SIZE.
+      if (node.NodeType === 'operator' || node.NodeType === 'diamond') return;
       const prev = autoSized.get(id);
       // Manual resize detected — current size is not what we last set. Back off.
       if (node.Size && prev && !sameSize(node.Size, prev)) return;

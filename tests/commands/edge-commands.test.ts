@@ -235,4 +235,52 @@ describe('frontend edge commands (picker-driven)', () => {
     expect(ctx.graphs.current.edges()).toHaveLength(0);
     expect(ctx.selection.selected()).toBeNull();
   });
+
+  it('sets the edge kind via palette command; arrowless kinds drop the marker', async () => {
+    const ctx = bootApp({ autoLayout: false });
+    await settle();
+    const source = createNode(ctx, 'A');
+    const target = createNode(ctx, 'B');
+    ctx.bus.emit('graph.edge.create', { From: source.id, To: target.id });
+    await settle();
+    const edge = ctx.graphs.current.edges()[0];
+
+    // Unavailable without an edge selection.
+    expect(runCommand(ctx, 'edge.kind.plain')).toBe(false);
+
+    ctx.bus.emit('selection.item.select', { kind: 'edge', id: edge.id });
+    await settle();
+    expect(runCommand(ctx, 'edge.kind.plain')).toBe(true);
+    await settle();
+    expect(ctx.graphs.current.edges()[0].EdgeKind).toBe('plain');
+    const plainLine = document.querySelector(`.edges [data-item-id="${edge.id}"].edge-line`)!;
+    expect(plainLine.classList.contains('edge-kind-plain')).toBe(true);
+    expect(plainLine.getAttribute('marker-end')).toBeNull();
+
+    expect(runCommand(ctx, 'edge.kind.residual')).toBe(true);
+    await settle();
+    expect(ctx.graphs.current.edges()[0].EdgeKind).toBe('residual');
+    const residualLine = document.querySelector(`.edges [data-item-id="${edge.id}"].edge-line`)!;
+    expect(residualLine.getAttribute('marker-end')).toBe('url(#edge-arrow)');
+  });
+
+  it('round-trips new edge kinds through the snapshot and the Kind property', async () => {
+    const ctx = bootApp({ autoLayout: false });
+    await settle();
+    const source = createNode(ctx, 'A');
+    const target = createNode(ctx, 'B');
+    ctx.bus.emit('graph.edge.create', { From: source.id, To: target.id });
+    await settle();
+    const edge = ctx.graphs.current.edges()[0];
+
+    // The properties-inspector Kind control patches through item.update.
+    ctx.bus.emit('item.update', { ref: { kind: 'edge', id: edge.id }, patch: { EdgeKind: 'dashed' } });
+    await settle();
+    expect(ctx.graphs.current.edges()[0].EdgeKind).toBe('dashed');
+
+    const snapshot = ctx.graphs.current.snapshot();
+    expect(snapshot.edges[0].EdgeKind).toBe('dashed');
+    ctx.graphs.current.replace(snapshot);
+    expect(ctx.graphs.current.edges()[0].EdgeKind).toBe('dashed');
+  });
 });

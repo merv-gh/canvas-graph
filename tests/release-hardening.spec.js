@@ -6,14 +6,19 @@ const streamText = async download => {
   for await (const chunk of stream) chunks.push(chunk);
   return Buffer.concat(chunks).toString('utf8');
 };
+const clickMore = async (page, name) => {
+  const details = page.locator('.toolbar-overflow');
+  if (!(await details.evaluate(element => element.open))) await page.getByLabel('More actions').click();
+  await page.getByRole('button', { name, exact: true }).click();
+};
 
 test('JSON export and import round-trip the complete graph', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open getting-started guide' }).click();
-  await page.getByRole('button', { name: /C4 architecture/ }).click();
+  await clickMore(page, 'Open getting-started guide');
+  await page.getByRole('button', { name: /C4 · Online shop/ }).click();
   const before = await page.evaluate(() => window.app.graphs.current.snapshot());
 
-  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await clickMore(page, 'Export');
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Canvas Graph JSON' }).click();
   const download = await downloadPromise;
@@ -26,7 +31,7 @@ test('JSON export and import round-trip the complete graph', async ({ page }) =>
   await expect.poll(() => page.evaluate(() => window.app.graphs.current.nodes().length))
     .toBe(before.nodes.length + 1);
 
-  await page.getByRole('button', { name: 'Import', exact: true }).click();
+  await clickMore(page, 'Import');
   await page.getByRole('textbox', { name: 'Graph JSON or Mermaid source' }).fill(JSON.stringify(exported));
   await page.getByRole('button', { name: 'Preview import' }).click();
   await expect(page.getByRole('dialog', { name: 'Review JSON import' })).toContainText(`${before.nodes.length} nodes`);
@@ -36,9 +41,11 @@ test('JSON export and import round-trip the complete graph', async ({ page }) =>
 });
 
 test('edge picker owns keyboard focus, preserves graph name, and restores focus', async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 800 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Add node', exact: true }).click();
   await page.getByRole('button', { name: 'Add node', exact: true }).click();
+  await page.getByRole('button', { name: 'Expand graph navigator', exact: true }).click();
   const name = page.getByRole('textbox', { name: 'Current graph name' });
   const originalName = await name.inputValue();
   await name.focus();
@@ -50,7 +57,7 @@ test('edge picker owns keyboard focus, preserves graph name, and restores focus'
 
   await expect(name).toHaveValue(originalName);
   await expect(page.locator('.edge-line')).toHaveCount(1);
-  await expect.poll(() => page.evaluate(() => document.activeElement?.textContent?.trim())).toBe('Connect');
+  await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute('aria-label'))).toBe('Connect');
 });
 
 test('canvas nodes expose names and retain DOM focus during keyboard navigation', async ({ page }) => {
@@ -104,7 +111,7 @@ test('expanded navigator never covers the desktop command bar', async ({ page })
 
 test('light onboarding keeps its dialog label visible', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open getting-started guide' }).click();
+  await clickMore(page, 'Open getting-started guide');
   await expect(page.locator('.modal-layer[data-visual="onboarding"] .modal-head'))
     .toHaveCSS('color', 'rgb(110, 110, 110)');
   await expect(page.getByText('Start here', { exact: true })).toBeVisible();
@@ -113,9 +120,8 @@ test('light onboarding keeps its dialog label visible', async ({ page }) => {
 test('far mobile overview favors readable titles over clipped descriptions', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open commands and graph search' }).click();
-  await page.getByRole('button', { name: 'Open getting-started guide', exact: true }).click();
-  await page.getByRole('button', { name: /C4 architecture/ }).click();
+  await page.evaluate(() => window.app.contexts.commands.run('onboarding.open'));
+  await page.getByRole('button', { name: /C4 · Online shop/ }).click();
   // Fit deliberately stops at the 80% reading floor. Exercise semantic zoom
   // through the explicit zoom command instead of requiring Fit to violate it.
   await page.keyboard.press('-');
@@ -131,13 +137,16 @@ test('far mobile overview favors readable titles over clipped descriptions', asy
 
 test('node, container, and edge selections remain unmistakable in grayscale', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open getting-started guide' }).click();
-  await page.getByRole('button', { name: /C4 architecture/ }).click();
+  await clickMore(page, 'Open getting-started guide');
+  await page.getByRole('button', { name: /C4 · Online shop/ }).click();
   await page.getByRole('button', { name: 'Expand graph navigator' }).click();
 
+  const node = page.locator('.node').first();
+  const unselectedBackground = await node.evaluate(element => getComputedStyle(element).backgroundColor);
   await page.locator('.graph-nav-item[data-item-kind="node"]').first().click();
   await expect(page.locator('.node.selected')).toHaveCSS('outline-width', '3px');
   await expect(page.locator('.node.selected')).toHaveCSS('outline-style', 'solid');
+  expect(await node.evaluate(element => getComputedStyle(element).backgroundColor)).toBe(unselectedBackground);
 
   await page.locator('.graph-nav-item[data-item-kind="container"]').first().click();
   await expect(page.locator('.container.selected')).toHaveCSS('outline-width', '3px');

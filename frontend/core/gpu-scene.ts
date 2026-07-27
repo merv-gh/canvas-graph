@@ -1,4 +1,5 @@
 import type { Graph } from '../model/graph';
+import type { Position, Size } from '../types';
 import { intersectRectBoundary } from './geometry';
 
 /** gpu-scene — pure CPU side of the WebGPU stage painter: flatten the graph
@@ -70,8 +71,10 @@ export function buildScene(
 
   let e = 0;
   for (const edge of edges) {
-    const from = graph.getNode(edge.From);
-    const to = graph.getNode(edge.To);
+    const fromRef = graph.refById(edge.From);
+    const toRef = graph.refById(edge.To);
+    const from = fromRef ? graph.getItem<{ Position?: Position; Size: Size }>(fromRef) : undefined;
+    const to = toRef ? graph.getItem<{ Position?: Position; Size: Size }>(toRef) : undefined;
     if (!from?.Position || !to?.Position) continue;
     const tip = intersectRectBoundary(from.Position, to.Position, { w: to.Size.w / 2, h: to.Size.h / 2 });
     const base = e * EDGE_FLOATS;

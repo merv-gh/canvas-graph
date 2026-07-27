@@ -28,3 +28,6 @@ dx/cli/preview-ws/frontend/*
 .skills
 .kilocode
 .qwen
+.codex
+.playwright-mcp
+design

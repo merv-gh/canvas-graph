@@ -16,7 +16,7 @@ export function registerCommandForm(system: Registry) {
   system('commandForm', ({ on, emit, forward, contexts }) => {
     const collectValues = (root: HTMLElement) => {
       const values: Record<string, string> = {};
-      root.querySelectorAll<HTMLInputElement>('[data-form-field]')
+      root.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-form-field]')
         .forEach(input => { values[input.dataset.formField!] = input.value.trim(); });
       return values;
     };
@@ -27,6 +27,31 @@ export function registerCommandForm(system: Registry) {
     };
     const formField = (commandId: string, field: CommandFormField, value = '') => {
       const label = document.createElement('label');
+      const options = field.options?.() ?? [];
+      if (field.input === 'hidden') {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.dataset.formField = field.id;
+        input.name = field.id;
+        input.value = value;
+        return input;
+      }
+      if (field.input === 'select') {
+        const select = document.createElement('select');
+        select.dataset.formField = field.id;
+        select.name = field.id;
+        select.required = field.required !== false;
+        options.forEach(option => {
+          const item = document.createElement('option');
+          item.value = option.value;
+          item.textContent = option.label;
+          select.append(item);
+        });
+        select.value = value;
+        if (field.autofocus) select.autofocus = true;
+        label.append(field.label, select);
+        return label;
+      }
       const input = document.createElement('input');
       input.dataset.formField = field.id;
       input.name = field.id;
@@ -35,7 +60,6 @@ export function registerCommandForm(system: Registry) {
       input.placeholder = field.placeholder ?? '';
       if (field.autofocus) input.autofocus = true;
       label.append(field.label, input);
-      const options = field.options?.() ?? [];
       if (!options.length) return label;
       const list = document.createElement('datalist');
       list.id = fieldId(commandId, field);
@@ -80,7 +104,7 @@ export function registerCommandForm(system: Registry) {
       label: 'Submit command form',
       group: 'modal',
       hidden: true,
-      input: { on: 'keydown', key: 'Enter', selector: '.command-form input', prevent: true, stop: true },
+      input: { on: 'keydown', key: 'Enter', selector: '.command-form input, .command-form select', prevent: true, stop: true },
       payload: ({ target }) => {
         const root = target?.closest('[data-command-form]') as HTMLElement | null;
         return { commandId: root?.dataset.commandForm ?? '', values: root ? collectValues(root) : {} };

@@ -9,11 +9,14 @@ import type {
 } from '../types';
 import {
   createContainerEntity,
+  containerDefaultSize,
   DEFAULT_CONTAINER_SIZE,
   firstSectionId,
   sanitizeContainerSections,
+  sanitizeLegend,
   type Container,
   type ContainerPatch,
+  type ContainerType,
   type SectionAxis,
 } from './container-entity';
 
@@ -33,7 +36,7 @@ import {
 declare module '../types' {
   interface CustomItemKinds { container: unknown }
   interface CustomEvents {
-    'editing.container.create': { Label?: { text: string }; at?: Position };
+    'editing.container.create': { Label?: { text: string }; at?: Position; Size?: Size; AutoFit?: boolean; ContainerType?: ContainerType; Color?: import('../model').NodeColor };
     'container.created': { id: Id };
     'container.updated': { id: Id };
     'container.delete.request': { id: Id; confirm?: boolean };
@@ -97,10 +100,14 @@ export function registerContainers(system: Registry) {
         Position: { ...container.Position },
         Size: { ...container.Size },
         AutoFit: container.AutoFit,
+        ContainerType: container.ContainerType,
+        Color: container.Color,
         Sections: container.Sections?.map(section => ({ ...section })),
         SectionAxis: container.SectionAxis,
         ChildSections: { ...(container.ChildSections ?? {}) },
         Children: container.Children.map(child => ({ ...child, parent: child.parent ? [...child.parent] : undefined })),
+        Legend: container.Legend?.map(entry => ({ ...entry })),
+        Multiplier: container.Multiplier,
       }));
       const restore = (value: ContainerSnapshot[] | undefined) => {
         restoring = true;
@@ -117,10 +124,16 @@ export function registerContainers(system: Registry) {
               Position: { ...input.Position },
               Size: { ...input.Size },
               AutoFit: input.AutoFit,
+              ContainerType: input.ContainerType,
+              Color: input.Color,
               Sections: input.Sections?.map(section => ({ ...section })) ?? [],
               SectionAxis: input.SectionAxis ?? 'rows',
               ChildSections: { ...(input.ChildSections ?? {}) },
               Children: [],
+              // Keep an empty legend as `undefined`, not `[]`, so a
+              // legend-free container round-trips to an identical snapshot.
+              Legend: sanitizeLegend(input.Legend).length ? sanitizeLegend(input.Legend) : undefined,
+              Multiplier: typeof input.Multiplier === 'string' && input.Multiplier.trim() ? input.Multiplier : undefined,
             });
             const sequence = Number.parseInt(input.id.replace(/^\D+/, ''), 10);
             if (Number.isFinite(sequence)) next = Math.max(next, sequence + 1);
@@ -157,10 +170,24 @@ export function registerContainers(system: Registry) {
       rect: Rect;
       weights: number[];
     } | null = null;
+    let dropRef: ItemRef | null = null;
+    let dropTargetId: Id | null = null;
     const containerOfChild = (childRef: ItemRef) => {
       const parent = nestHere().parentRefOf(childRef);
       return parent?.kind === 'container' ? containersHere().get(parent.id) ?? null : null;
     };
+    const setDropTarget = (id: Id | null) => {
+      if (dropTargetId === id) return;
+      dropTargetId = id;
+      contexts.places.el(Places.Stage)?.querySelectorAll<HTMLElement>('.container[data-item-id]')
+        .forEach(element => element.classList.toggle('drop-target', element.dataset.itemId === id));
+    };
+    const dropCandidate = (ref: ItemRef, point: Position) => [...containersHere().values()]
+      .filter(container => !(ref.kind === 'container' && container.id === ref.id))
+      .filter(container => !nestHere().isAncestorOrSelf(ref, { kind: 'container', id: container.id }))
+      .map(container => ({ container, rect: visualRect(container) }))
+      .filter(({ rect }) => point.x >= rect.x && point.x <= rect.x + rect.w && point.y >= rect.y && point.y <= rect.y + rect.h)
+      .sort((a, b) => a.rect.w * a.rect.h - b.rect.w * b.rect.h)[0]?.container ?? null;
     const assignChildSection = (c: Container, childRef: ItemRef, sectionId?: Id) => {
       sanitizeContainerSections(c);
       if (!c.Sections?.length) return false;
@@ -232,11 +259,18 @@ export function registerContainers(system: Registry) {
     const folded = (c: Container) => contexts.fold.folded(itemFoldId({ kind: 'container', id: c.id }, graphs.current.id));
     /** The expanded rect (children union + padding, or a default/manual box).
      *  Independent of fold state, so the folded badge can center on it. */
+    const minimumRect = (rect: Rect, size: Size): Rect => {
+      const center = rectCenter(rect);
+      const w = Math.max(rect.w, size.w);
+      const h = Math.max(rect.h, size.h);
+      return { x: center.x - w / 2, y: center.y - h / 2, w, h };
+    };
     const expandedRect = (c: Container): Rect => {
       if (c.AutoFit === false || c.Sections?.length) return boundsOf(c)!;
       const kids = c.Children.map(childBounds).filter((r): r is Rect => !!r);
-      if (!kids.length) return boundsOf({ Position: c.Position, Size: DEFAULT_CONTAINER_SIZE })!;
-      return expandRect(kids.reduce(unionRect), PADDING, LABEL_BAND);
+      const minimum = containerDefaultSize(c.ContainerType);
+      if (!kids.length) return boundsOf({ Position: c.Position, Size: minimum })!;
+      return minimumRect(expandRect(kids.reduce(unionRect), PADDING, LABEL_BAND), minimum);
     };
     const visualRect = (c: Container | null): Rect => {
       if (!c) return boundsOf({ Position: { x: 0, y: 0 }, Size: DEFAULT_CONTAINER_SIZE })!;
@@ -310,9 +344,10 @@ export function registerContainers(system: Registry) {
         label: 'Ungroup and keep contents',
         group: 'container',
         available: source => {
-          const fromDom = !!source?.target?.closest('[data-item-kind="container"]') && !!itemIdFrom(source?.target);
+          const fromDom = source?.target?.closest('[data-item-kind="container"]')?.getAttribute('data-item-id');
           const ref = selection.selected();
-          return fromDom || ref?.kind === 'container';
+          const id = fromDom ?? (ref?.kind === 'container' ? ref.id : undefined);
+          return !!id && (containersHere().get(id)?.Children.length ?? 0) > 0;
         },
         payload: source => {
           const fromDom = source.target?.closest('[data-item-kind="container"]')?.getAttribute('data-item-id');
@@ -474,7 +509,10 @@ export function registerContainers(system: Registry) {
         id, kind: 'container',
         Label: draft.Label ?? { text: id },
         Position: draft.at ?? { x: 0, y: 0 },
-        Size: { ...DEFAULT_CONTAINER_SIZE },
+        ...(draft.Size ? { Size: { ...draft.Size } } : { Size: containerDefaultSize(draft.ContainerType) }),
+        AutoFit: draft.AutoFit,
+        ContainerType: draft.ContainerType,
+        Color: draft.Color,
         Sections: [],
         SectionAxis: 'rows',
         ChildSections: {},
@@ -579,7 +617,7 @@ export function registerContainers(system: Registry) {
       const here = containersHere();
       const nest = nestHere();
       const container = here.get(id);
-      if (!container) return;
+      if (!container || !container.Children.length) return;
       const parent = nest.parentRefOf({ kind: 'container', id });
       const children = [...container.Children];
       children.forEach(child => {
@@ -602,6 +640,9 @@ export function registerContainers(system: Registry) {
       const nest = nestHere();
       const c = here.get(id);
       if (!c) return;
+      // Containers are valid edge endpoints. Explicit deletion owns the same
+      // incident-relation cleanup as graph.node.delete.
+      graphs.current.edgesOf(id).forEach(edge => emit('graph.edge.delete', { id: edge.id }));
       // Delete owned children before deleting this container. Nested containers
       // recurse through the same owner event; nodes use graph.node.delete so
       // graph.ts still owns node/incident-edge cleanup.
@@ -701,6 +742,28 @@ export function registerContainers(system: Registry) {
       emit('container.children.changed', { id: c.id });
     });
     on('container.section.resize.end', () => { sectionResize = null; });
+    on('drag.item.start', ({ ref }) => {
+      if (ref.kind !== 'node' && ref.kind !== 'container') return;
+      dropRef = ref;
+      setDropTarget(null);
+    });
+    on('drag.item.move', ({ x, y }) => {
+      if (!dropRef) return;
+      const point = contexts.view.clientToSpace(Places.Stage, { x, y });
+      setDropTarget(dropCandidate(dropRef, point)?.id ?? null);
+    });
+    on('drag.item.end', () => {
+      const ref = dropRef;
+      const targetId = dropTargetId;
+      dropRef = null;
+      setDropTarget(null);
+      if (!ref || !targetId) return;
+      const current = nestHere().parentRefOf(ref);
+      if (current?.kind === 'container' && current.id === targetId) return;
+      emit('container.add-child', { containerId: targetId, childRef: ref });
+      const target = containersHere().get(targetId);
+      if (target) emit('app.notice', { message: `Moved into “${target.Label.text}”.` });
+    });
     on('graph.node.deleted', ({ id }) => {
       const ref = { kind: 'node', id } as ItemRef;
       const parentId = nestHere().remove(ref);
@@ -722,6 +785,7 @@ export function registerContainers(system: Registry) {
       const oldPos = { ...c.Position };
       Object.assign(c, p);
       if (p.Sections || p.SectionAxis || p.ChildSections) sanitizeContainerSections(c);
+      if ('Legend' in p) { const legend = sanitizeLegend(p.Legend); c.Legend = legend.length ? legend : undefined; }
       // Drag cascade: when the container moves, children move with it.
       if (p.Position && (p.Position.x !== oldPos.x || p.Position.y !== oldPos.y)) {
         const dx = p.Position.x - oldPos.x;
@@ -736,7 +800,6 @@ export function registerContainers(system: Registry) {
       if (p.Sections || p.SectionAxis || p.ChildSections) emit('container.children.changed', { id: c.id });
     });
 
-    contribute({ surface: 'top', command: 'editing.container.create', kind: 'button', text: 'Add container', order: 17, group: 'edit' });
 
     return () => {
       offEntity();

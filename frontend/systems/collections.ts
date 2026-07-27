@@ -14,6 +14,8 @@ export function registerCollections(system: Registry) {
         command: collectionCreateCommand(coll),
         kind: 'button',
         text: coll.toolbar?.text ?? `+ ${coll.entity?.label ?? coll.kind}`,
+        icon: coll.toolbar?.icon,
+        label: coll.kind === 'node' ? 'Add node' : coll.kind === 'edge' ? 'Connect' : undefined,
         order: coll.toolbar?.order,
         // Node/edge creation belongs to the "graph editing" cluster; the graph
         // (document) switcher stays loose.

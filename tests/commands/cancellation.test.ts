@@ -74,10 +74,24 @@ describe('first-class cancellation', () => {
     expect(active).toContain('ability.selectable');
   });
 
+  it('select mode exits pointer tools without clearing the selection', async () => {
+    const ctx = bootApp();
+    ctx.graphs.current.createNode({ Label: { text: 'A' } });
+    ctx.bus.emit('selection.node.select', { id: 'e1' });
+    runCommand(ctx, 'ink.toggle');
+    await settle();
+    expect(ctx.contexts.cancellation.blocksPointer()).toBe(true);
+
+    runCommand(ctx, 'canvas.select');
+    await settle();
+    expect(ctx.contexts.cancellation.blocksPointer()).toBe(false);
+    expect(ctx.selection.selected()).toEqual({ kind: 'node', id: 'e1' });
+  });
+
   it('modal blocks background hotkeys until closed', async () => {
     const ctx = bootApp();
     ctx.graphs.current.createNode({ Label: { text: 'seed' } });
-    ctx.bus.emit('item.properties.open', { kind: 'node', id: 'e1' });
+    ctx.bus.emit('modal.open', { title: 'Blocking task', body: () => document.createElement('p') });
     await settle();
     expect(document.querySelector('.modal-layer')).not.toBeNull();
     const before = ctx.graphs.current.nodes().length;
@@ -98,7 +112,7 @@ describe('first-class cancellation', () => {
   it('clicks on background data-command buttons are blocked while modal is open', async () => {
     const ctx = bootApp();
     ctx.graphs.current.createNode({ Label: { text: 'seed' } });
-    ctx.bus.emit('item.properties.open', { kind: 'node', id: 'e1' });
+    ctx.bus.emit('modal.open', { title: 'Blocking task', body: () => document.createElement('p') });
     await settle();
     const before = ctx.graphs.current.nodes().length;
 

@@ -11,10 +11,12 @@
 - `cancellation.ts` — Cancellable registry; Escape routes to highest-priority active.
 - `view.ts` — pan/zoom math, screen⟷space, visibleRect.
 - `geometry.ts` — rect union/expand/center helpers.
+- `pointer-gesture.ts` — low-level pointer tracking + shared move-intent predicate; gesture systems keep their own mode state.
+- `markdown.ts` — safe Markdown block parse/render (`parseMarkdown`, `renderMarkdown`, `markdownPlainText`) + `parseMarkdownOutline` (headings + indent-nested lists → outline entries for import).
 - `storage.ts` — `item.update` dispatcher: kind → registered patch handler.
 - `io.ts` — persistence adapter (`localStorageIo` / `memoryIo`), STORAGE_KEYS.
 - `flags.ts` — feature flags (+ persisted overrides, kinds, requires).
-- `model-registry.ts` — entity/collection registration + resolution (live, flag-filtered).
+- `model-registry.ts` — entity/collection/node-type registration + resolution (live, flag-filtered).
 - `collection-commands.ts` — collection → derived command ids.
 - `templates.ts` — `<template id="tpl-*">` clone/slot/text + emptyState/kbdHint.
 - `dom.ts` / `item-ref.ts` — `data-item-*` tagging/parsing; ref equality.

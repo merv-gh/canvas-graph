@@ -95,14 +95,19 @@ const guideView = () => {
   examples.className = 'onboarding-examples';
   const examplesHead = document.createElement('div');
   examplesHead.className = 'onboarding-section-head';
-  examplesHead.innerHTML = '<strong>Four editable examples</strong><span>Open one, then edit every part.</span>';
+  examplesHead.innerHTML = '<strong>One canonical example per collection</strong><span>Open one, then edit every part.</span>';
   const grid = document.createElement('div');
   grid.className = 'onboarding-example-grid';
   grid.append(
-    example('demo.render-c4', 'c4', 'C4 architecture', 'Nested systems, containers, and ownership'),
-    example('demo.render-math', 'radial', 'Expected value', 'A radial map from intuition to formula'),
-    example('demo.render-workflow', 'sequence', 'Delivery workflow', 'A sequence with review and a return loop'),
-    example('demo.render-game', 'list', 'Game design map', 'A detailed vertical list with connected nesting'),
+    example('demo.render-math', 'radial', 'Basic · Expected value', 'Generic shapes explain one concept cleanly'),
+    example('demo.render-kimi-k2', 'sequence', 'Architecture · Kimi K2', 'Canonical MLA + sparse MoE backbone'),
+    example('demo.render-workflow', 'sequence', 'Jira · Issue lifecycle', 'Exact statuses and transition labels'),
+    example('demo.render-flowchart', 'sequence', 'Flowchart · Order decision', 'Input, decision, branches, and terminators'),
+    example('demo.render-mindmap', 'radial', 'Mindmap · Product launch', 'Central idea, colored branches, concise leaves'),
+    example('demo.render-c4', 'c4', 'C4 · Online shop', 'Nested systems, containers, components, and externals'),
+    example('demo.render-uml', 'c4', 'UML · Order model', 'Classes, members, and typed relations'),
+    example('demo.render-outline', 'list', 'Outline · Launch plan', 'Nested headings and actionable list items'),
+    example('demo.render-agent-observability', 'sequence', 'Autonomous systems · Run report', 'Agents, lanes, artifacts, metrics, switches, and approval gates'),
   );
   examples.append(examplesHead, grid);
 
@@ -113,7 +118,10 @@ const guideView = () => {
   mermaidTitle.textContent = 'Already use Mermaid?';
   const mermaidHint = document.createElement('p');
   mermaidHint.textContent = 'Edit this flowchart, validate it, then review the replacement before importing.';
-  mermaidCopy.append(mermaidTitle, mermaidHint);
+  const markdownHint = document.createElement('p');
+  markdownHint.className = 'onboarding-markdown-hint';
+  markdownHint.textContent = 'Markdown outlines work too: paste headings and nested lists into the top-bar Import to map them as nested nodes.';
+  mermaidCopy.append(mermaidTitle, mermaidHint, markdownHint);
   const textarea = document.createElement('textarea');
   textarea.className = 'onboarding-mermaid-source';
   textarea.value = MERMAID_EXAMPLE;
@@ -147,7 +155,7 @@ export function registerOnboarding(system: Registry) {
         },
       },
     ]);
-    contribute({ surface: 'top', command: 'onboarding.open', kind: 'button', text: 'Guide', label: 'Open getting-started guide', slot: Slots.End, order: 75 });
+    contribute({ surface: 'top', command: 'onboarding.open', kind: 'button', icon: 'help', text: 'Guide', label: 'Open getting-started guide', slot: Slots.End, order: 75, group: 'overflow' });
 
     const open = () => {
       guideOpen = true;

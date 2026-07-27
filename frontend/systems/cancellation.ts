@@ -27,7 +27,9 @@ export function registerCancellation(system: Registry) {
         event: 'app.cancel',
         group: 'app',
         hidden: true,
-        input: { on: 'pointerdown', selector: `[data-place="${Places.Stage}"]`, when: isStageSurface },
+        // While ink draw mode is on, a stage pointerdown is the start of a
+        // stroke, not a cancel gesture (Escape still exits the mode).
+        input: { on: 'pointerdown', selector: `[data-place="${Places.Stage}"]`, when: (event, stage) => isStageSurface(event, stage) && !contexts.cancellation.blocksBackground() },
         payload: () => ({ source: 'background' }),
       },
     ]);

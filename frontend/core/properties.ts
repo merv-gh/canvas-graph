@@ -1,4 +1,12 @@
-import type { PropertyDef, PropertyRenderer } from '../types';
+import type { IconName, PropertyDef, PropertyRenderer } from '../types';
+import { iconNode } from './icons';
+
+const placementIcon: Record<string, IconName> = {
+  inside: 'placement-inside',
+  below: 'placement-below',
+  right: 'placement-right',
+  hidden: 'placement-hidden',
+};
 
 /** Property input registry — turns `prop.input` (a string) into an HTMLElement.
  *  Default renderers for 'text', 'number', 'checkbox', 'textarea', and 'select'
@@ -6,6 +14,41 @@ import type { PropertyDef, PropertyRenderer } from '../types';
  *  touching configurable. */
 export function propertiesContext() {
   const renderers = new Map<string, PropertyRenderer<unknown>>();
+  const choiceRender = <T,>(kind: 'swatches' | 'segments' | 'placement') =>
+    (prop: PropertyDef<T>, item: T): HTMLElement => {
+      const group = document.createElement('fieldset');
+      group.className = `property-choice property-choice-${kind}`;
+      const legend = document.createElement('legend');
+      legend.textContent = prop.label;
+      const choices = document.createElement('div');
+      choices.className = 'property-choice-options';
+      const current = String(prop.value(item));
+      (prop.options ?? []).forEach(option => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.command = 'properties.item.choice';
+        button.dataset.field = prop.id;
+        button.dataset.value = option.value;
+        button.dataset.optionValue = option.value || 'automatic';
+        button.setAttribute('aria-label', `${prop.label}: ${option.label}`);
+        button.setAttribute('aria-pressed', option.value === current ? 'true' : 'false');
+        if (option.icon) {
+          const icon = document.createElement('span');
+          icon.className = 'property-choice-icon';
+          icon.setAttribute('aria-hidden', 'true');
+          if (kind === 'placement' && placementIcon[option.value]) icon.append(iconNode(placementIcon[option.value]));
+          else icon.textContent = option.icon;
+          button.append(icon);
+        }
+        const label = document.createElement('span');
+        label.className = 'property-choice-label';
+        label.textContent = option.label;
+        button.append(label);
+        choices.append(button);
+      });
+      group.append(legend, choices);
+      return group;
+    };
   const defaultRender = <T,>(prop: PropertyDef<T>, item: T): HTMLElement => {
     const label = document.createElement('label');
     if (prop.input === 'textarea') {
@@ -51,6 +94,9 @@ export function propertiesContext() {
   renderers.set('checkbox', defaultRender as PropertyRenderer<unknown>);
   renderers.set('textarea', defaultRender as PropertyRenderer<unknown>);
   renderers.set('select', defaultRender as PropertyRenderer<unknown>);
+  renderers.set('swatches', choiceRender('swatches') as PropertyRenderer<unknown>);
+  renderers.set('segments', choiceRender('segments') as PropertyRenderer<unknown>);
+  renderers.set('placement', choiceRender('placement') as PropertyRenderer<unknown>);
   return {
     register(name: string, render: PropertyRenderer) { renderers.set(name, render); },
     has(name: string) { return renderers.has(name); },

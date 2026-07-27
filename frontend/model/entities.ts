@@ -2,8 +2,9 @@ import { clamp, semanticTitle } from '../core';
 import { expandRect, intersectRectBoundary } from '../core/geometry';
 import { renderMarkdown } from '../core/markdown';
 import { collapsible, configurable, draggable, editable, nudgeable, selectable } from '../abilities';
-import type { DataScale, EdgeKind, Graph, GraphEdge, GraphNode, NodeEntity, EdgePatch, NodePatch, NodeType } from './graph';
+import type { DataScale, DescriptionPlacement, EdgeKind, Graph, GraphEdge, GraphNode, NodeEntity, EdgePatch, NodeColor, NodeFill, NodePatch, NodeType } from './graph';
 import type { EntityDef, EntityRenderCtx, EntityRenderer, ItemRef, Position, PropertyDef, Rect, Size } from '../types';
+import { isNodeType, NODE_TYPES, nodeTypeLabel } from './node-types';
 
 /** Built-in entity declarations — what a graph / node / edge *is*: its label,
  *  abilities, properties, and renderer. Behavior (commands, storage handlers,
@@ -21,30 +22,46 @@ const svg = <K extends keyof SVGElementTagNameMap>(name: K, attrs: Record<string
 
 const property = <T, Patch>(def: PropertyDef<T, Patch>) => def;
 const entityDef = <T, Patch = unknown>(kind: string, def: Omit<EntityDef<T, Patch>, 'kind'>): EntityDef<T, Patch> => ({ kind, ...def });
-const NODE_TYPES: { value: NodeType; label: string }[] = [
-  { value: 'text', label: 'Text' },
-  { value: 'square', label: 'Box' },
-  { value: 'circle', label: 'Circle' },
-  { value: 'user-input', label: 'User input' },
-  { value: 'gateway', label: 'Gateway' },
-  { value: 'service', label: 'Service' },
-  { value: 'database', label: 'Database' },
-  { value: 'kafka', label: 'Kafka' },
-  { value: 'index', label: 'Index' },
-  { value: 'cache', label: 'Cache' },
-  { value: 'rate-limit', label: 'Rate limiter' },
-  { value: 'circuit-breaker', label: 'Circuit breaker' },
+export const NODE_COLORS: { value: NodeColor; label: string }[] = [
+  { value: 'gray', label: 'Gray' },
+  { value: 'red', label: 'Red' },
+  { value: 'orange', label: 'Orange' },
+  { value: 'yellow', label: 'Yellow' },
+  { value: 'green', label: 'Green' },
+  { value: 'blue', label: 'Blue' },
+  { value: 'purple', label: 'Purple' },
+  { value: 'pink', label: 'Pink' },
 ];
-const isNodeType = (value: unknown): value is NodeType =>
-  NODE_TYPES.some(option => option.value === value);
-const EDGE_KINDS: { value: EdgeKind; label: string }[] = [
+export const isNodeColor = (value: unknown): value is NodeColor =>
+  NODE_COLORS.some(option => option.value === value);
+export const NODE_FILLS: { value: NodeFill; label: string }[] = [
+  { value: 'soft', label: 'Soft tint' },
+  { value: 'solid', label: 'Solid' },
+  { value: 'none', label: 'None' },
+];
+export const isNodeFill = (value: unknown): value is NodeFill =>
+  NODE_FILLS.some(option => option.value === value);
+export const EDGE_KINDS: { value: EdgeKind; label: string }[] = [
   { value: 'sync', label: 'Sync request' },
   { value: 'async', label: 'Async request' },
   { value: 'read', label: 'Read' },
   { value: 'write', label: 'Write' },
+  { value: 'plain', label: 'Plain line' },
+  { value: 'dashed', label: 'Dashed link' },
+  { value: 'residual', label: 'Residual / skip' },
 ];
-const isEdgeKind = (value: unknown): value is EdgeKind =>
+export const isEdgeKind = (value: unknown): value is EdgeKind =>
   EDGE_KINDS.some(option => option.value === value);
+/** Diagram-line kinds render without an arrowhead (plain connector reading). */
+const ARROWLESS_KINDS: readonly EdgeKind[] = ['plain', 'dashed'];
+const DESC_PLACEMENTS: { value: DescriptionPlacement; label: string; icon: string }[] = [
+  { value: 'inside', label: 'Inside', icon: '▣' },
+  { value: 'below', label: 'Below', icon: '▱\n━' },
+  { value: 'right', label: 'Right', icon: '▯ ┃' },
+  { value: 'hidden', label: 'Hidden', icon: '◫̸' },
+];
+const isDescPlacement = (value: unknown): value is DescriptionPlacement =>
+  DESC_PLACEMENTS.some(option => option.value === value);
 const DATA_SCALES: { value: DataScale; label: string }[] = [
   { value: 'small', label: 'Small' },
   { value: 'medium', label: 'Medium' },
@@ -53,7 +70,7 @@ const DATA_SCALES: { value: DataScale; label: string }[] = [
 ];
 const isDataScale = (value: unknown): value is DataScale =>
   DATA_SCALES.some(option => option.value === value);
-const typeLabel = (type: NodeType) => NODE_TYPES.find(option => option.value === type)?.label ?? type;
+const typeLabel = nodeTypeLabel;
 const numberPatch = <T, K extends string>(key: K, value: unknown) => {
   const n = Number(value);
   return value === '' || !Number.isFinite(n) ? { [key]: undefined } as T : { [key]: n } as T;
@@ -69,10 +86,12 @@ export const graphEntity: EntityDef<Graph> = entityDef<Graph>('graph', {
  *  Collapsed container, the endpoint snaps to the outermost collapsed
  *  ancestor's visual rect. Otherwise it's the node itself. Returns null when
  *  neither resolves (orphaned edge — render skips it). */
-const resolveEndpoint = (nodeRef: { kind: 'node'; id: string }, ctx: { graph: { getItem(ref: ItemRef): unknown }; parentChain(ref: ItemRef): ItemRef[]; isFolded(ref: ItemRef): boolean; boundsOf(ref: ItemRef): Rect | null }):
+const resolveEndpoint = (id: string, ctx: { graph: { getItem(ref: ItemRef): unknown; refById(id: string): ItemRef | undefined }; parentChain(ref: ItemRef): ItemRef[]; isFolded(ref: ItemRef): boolean; boundsOf(ref: ItemRef): Rect | null }):
   | { ref: ItemRef; center: { x: number; y: number }; half: { w: number; h: number } }
   | null => {
-  const chain = ctx.parentChain(nodeRef);
+  const endpointRef = ctx.graph.refById(id);
+  if (!endpointRef) return null;
+  const chain = ctx.parentChain(endpointRef);
   // Outermost folded ancestor wins — pick the highest-level visible boundary.
   const collapsed = chain.find(a => ctx.isFolded(a));
   if (collapsed) {
@@ -84,9 +103,13 @@ const resolveEndpoint = (nodeRef: { kind: 'node'; id: string }, ctx: { graph: { 
       half: { w: rect.w / 2, h: rect.h / 2 },
     };
   }
-  const node = ctx.graph.getItem(nodeRef) as NodeEntity | undefined;
-  if (!node?.Position) return null;
-  return { ref: nodeRef, center: node.Position, half: { w: node.Size.w / 2, h: node.Size.h / 2 } };
+  const rect = ctx.boundsOf(endpointRef);
+  if (!rect) return null;
+  return {
+    ref: endpointRef,
+    center: { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 },
+    half: { w: rect.w / 2, h: rect.h / 2 },
+  };
 };
 
 export const EDGE_LABEL_FONT_SIZE = 13;
@@ -187,13 +210,20 @@ const edgeRenderer: EntityRenderer<GraphEdge> = {
         if (!seen.has(k)) { seen.add(k); edges.push(e); }
       }
     }
+    // Non-node endpoints are extension-owned and not part of the node spatial
+    // index. Include their relations; draw() still rejects missing endpoints.
+    g.edges().forEach(e => {
+      if (seen.has(e.id)) return;
+      const from = g.refById(e.From), to = g.refById(e.To);
+      if (from?.kind !== 'node' || to?.kind !== 'node') { seen.add(e.id); edges.push(e); }
+    });
     // Edge hidden-by-fold: an edge is visible when at least one endpoint is.
     // Individual endpoint collapse is handled by resolveEndpoint in draw().
     return edges;
   },
   draw(edge, ctx) {
-    const from = resolveEndpoint({ kind: 'node', id: edge.From }, ctx);
-    const to = resolveEndpoint({ kind: 'node', id: edge.To }, ctx);
+    const from = resolveEndpoint(edge.From, ctx);
+    const to = resolveEndpoint(edge.To, ctx);
     if (!from || !to) return null;
     // Self-loop after collapse (both endpoints inside the same collapsed
     // container) — hide the edge to avoid the degenerate visual.
@@ -209,6 +239,7 @@ const edgeRenderer: EntityRenderer<GraphEdge> = {
     // a real kind — fall back to 'sync' for styling so the class stays valid.
     const edgeKind = isEdgeKind(edge.EdgeKind) ? edge.EdgeKind : 'sync';
     g.setAttribute('class', `edge edge-kind-${edgeKind}`);
+    if (edge.Color) g.dataset.edgeColor = edge.Color;
     const titleText = semanticTitle(edge);
     if (titleText) {
       const title = svg('title', {});
@@ -222,7 +253,8 @@ const edgeRenderer: EntityRenderer<GraphEdge> = {
       return el;
     };
     g.append(line('edge-hit', from.center.x, from.center.y, to.center.x, to.center.y, { tabindex: -1 }));
-    g.append(line('edge-line', tipAtSource.x, tipAtSource.y, tipAtTarget.x, tipAtTarget.y, { 'marker-end': 'url(#edge-arrow)' }));
+    g.append(line('edge-line', tipAtSource.x, tipAtSource.y, tipAtTarget.x, tipAtTarget.y,
+      ARROWLESS_KINDS.includes(edgeKind) ? {} : { 'marker-end': 'url(#edge-arrow)' }));
     const label = edge.Label?.text;
     if (label) {
       const geometry = renderedEdgeLabelGeometry(label, tipAtSource, tipAtTarget, edge.id, ctx);
@@ -264,8 +296,8 @@ const edgeRenderer: EntityRenderer<GraphEdge> = {
    *  it. Uses the same endpoint resolution as draw (incl. collapsed-container
    *  substitution), so the fast path can't drift from the slow one. */
   reposition(el, edge, ctx) {
-    const from = resolveEndpoint({ kind: 'node', id: edge.From }, ctx);
-    const to = resolveEndpoint({ kind: 'node', id: edge.To }, ctx);
+    const from = resolveEndpoint(edge.From, ctx);
+    const to = resolveEndpoint(edge.To, ctx);
     // Degenerate (missing / same collapsed ancestor): leave the element — the
     // next non-position change full-draws it into the right shape.
     if (!from || !to || (from.ref.kind === to.ref.kind && from.ref.id === to.ref.id)) return;
@@ -303,6 +335,17 @@ export const edgeEntity: EntityDef<GraphEdge, EdgePatch> = entityDef<GraphEdge, 
       id: 'label', label: 'Label', input: 'text',
       value: edge => edge.Label?.text ?? '',
       patch: (_edge, value) => ({ Label: { text: String(value) } }),
+    }),
+    property<GraphEdge, EdgePatch>({
+      id: 'edgeKind', label: 'Kind', input: 'segments', options: EDGE_KINDS,
+      value: edge => (isEdgeKind(edge.EdgeKind) ? edge.EdgeKind : 'sync'),
+      patch: (_edge, value) => isEdgeKind(value) ? { EdgeKind: value } : undefined,
+    }),
+    property<GraphEdge, EdgePatch>({
+      id: 'color', label: 'Color', input: 'swatches',
+      options: [{ value: '', label: 'Default' }, ...NODE_COLORS],
+      value: edge => edge.Color ?? '',
+      patch: (_edge, value) => value === '' || isNodeColor(value) ? { Color: value || undefined } : undefined,
     }),
   ],
 });
@@ -344,6 +387,8 @@ const nodeRenderer: EntityRenderer<GraphNode> = {
     const pos = node.Position ?? { x: 0, y: 0 };
     const ref = ctx.refOf(node.id);
     const nodeType = node.NodeType ?? 'text';
+    const nodeTypeDef = ctx.nodeType(nodeType);
+    const nodeVisual = nodeTypeDef?.visual ?? 'card';
     const description = node.Description?.trim() ?? '';
     const meta = [
       node.ExpectedRps != null ? `${node.ExpectedRps}/s` : '',
@@ -352,7 +397,7 @@ const nodeRenderer: EntityRenderer<GraphNode> = {
     ].filter(Boolean).join(' · ');
     ctx.tagItem(el, ref);
     el.tabIndex = -1;
-    el.setAttribute('role', 'button');
+    el.setAttribute('role', nodeVisual === 'switch' ? 'group' : 'button');
     const editHint = globalThis.innerWidth <= 680 ? 'Hold for actions.' : 'Press Enter to edit.';
     el.setAttribute('aria-label', `${node.Label.text || 'Untitled'}; ${typeLabel(nodeType)} node. ${editHint}`);
     ctx.applyItemModes(el, ref);
@@ -361,11 +406,31 @@ const nodeRenderer: EntityRenderer<GraphNode> = {
     renderedNodeSizes.set(node, renderedSize);
     el.classList.toggle('collapsed', collapsed);
     el.classList.add(`node-type-${nodeType}`);
+    el.classList.add(`node-visual-${nodeVisual}`);
     el.classList.toggle('has-description', !!description);
     if (description) el.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
     el.classList.toggle('semantic-big-data', node.DataScale === 'big' || node.DataScale === 'huge');
     el.classList.toggle('semantic-stale-risk', node.FreshnessMs != null && node.FreshnessMs > 60_000);
     el.dataset.nodeType = nodeType;
+    el.dataset.nodeVisual = nodeVisual;
+    if (nodeVisual === 'switch') {
+      el.dataset.toggleState = node.ToggleState ? 'on' : 'off';
+      const control = document.createElement('button');
+      control.type = 'button';
+      control.className = 'node-switch-control';
+      control.dataset.command = 'node.toggle.state';
+      control.setAttribute('role', 'switch');
+      control.setAttribute('aria-checked', node.ToggleState ? 'true' : 'false');
+      control.setAttribute('aria-label', `${node.ToggleState ? 'Turn off' : 'Turn on'} ${node.Label.text || 'switch'}`);
+      control.append(document.createElement('span'));
+      el.append(control);
+    }
+    if (node.Color) el.dataset.nodeColor = node.Color;
+    // Fill + border are data-driven so any type (built-in or future
+    // user-defined) styles without its own CSS. Absent → the type's own look.
+    if (node.Fill) el.dataset.fill = node.Fill;
+    if (node.BorderColor) el.dataset.borderColor = node.BorderColor;
+    if (node.DescriptionPlacement) el.dataset.descPlacement = node.DescriptionPlacement;
     if (node.DataScale) el.dataset.dataScale = node.DataScale;
     const titleText = semanticTitle(node);
     if (titleText) el.title = titleText;
@@ -373,7 +438,7 @@ const nodeRenderer: EntityRenderer<GraphNode> = {
     el.style.top = `${pos.y}px`;
     el.style.width = `${renderedSize.w}px`;
     el.style.height = `${renderedSize.h}px`;
-    ctx.templateText(el, 'type', typeLabel(nodeType));
+    ctx.templateText(el, 'type', nodeTypeDef?.label ?? typeLabel(nodeType));
     ctx.templateText(el, 'metrics', meta);
     ctx.templateText(el, 'title', node.Label.text);
     ctx.templateSlot(el, 'description').replaceChildren(renderMarkdown(description));
@@ -417,6 +482,26 @@ export const nodeEntity: EntityDef<GraphNode, NodePatch> = entityDef<GraphNode, 
       id: 'nodeType', label: 'Type', input: 'select', options: NODE_TYPES,
       value: node => node.NodeType ?? 'text',
       patch: (_node, value) => isNodeType(value) ? { NodeType: value } : undefined,
+    }),
+    property<GraphNode, NodePatch>({
+      id: 'color', label: 'Color', input: 'swatches',
+      options: [{ value: '', label: 'Default (by type)' }, ...NODE_COLORS],
+      value: node => node.Color ?? '',
+      patch: (_node, value) => value === '' ? { Color: undefined } : isNodeColor(value) ? { Color: value } : undefined,
+    }),
+    property<GraphNode, NodePatch>({
+      id: 'fill', label: 'Fill', input: 'segments', options: NODE_FILLS,
+      value: node => node.Fill ?? 'soft',
+      patch: (_node, value) => isNodeFill(value) ? { Fill: value } : undefined,
+    }),
+    property<GraphNode, NodePatch>({
+      id: 'borderColor', label: 'Border', input: 'swatches',
+      options: [{ value: '', label: 'Match color' }, { value: 'none', label: 'None' }, ...NODE_COLORS],
+      value: node => node.BorderColor ?? '',
+      patch: (_node, value) =>
+        value === '' ? { BorderColor: undefined }
+          : value === 'none' ? { BorderColor: 'none' }
+          : isNodeColor(value) ? { BorderColor: value } : undefined,
     }),
     // property<GraphNode, NodePatch>({
     //   id: 'expectedRps', label: 'Expected rps', input: 'number', min: 0, step: 10, group: 'Performance',
@@ -477,6 +562,14 @@ export const nodeEntity: EntityDef<GraphNode, NodePatch> = entityDef<GraphNode, 
       id: 'description', label: 'Markdown description', input: 'textarea', rows: 6, group: 'Content',
       value: node => node.Description ?? '',
       patch: (_node, value) => ({ Description: String(value) }),
+    }),
+    property<GraphNode, NodePatch>({
+      id: 'descPlacement', label: 'Description placement', input: 'placement', group: 'Content',
+      options: DESC_PLACEMENTS,
+      value: node => node.DescriptionPlacement ?? 'inside',
+      patch: (_node, value) =>
+        value === 'inside' ? { DescriptionPlacement: undefined }
+          : isDescPlacement(value) ? { DescriptionPlacement: value } : undefined,
     }),
     property<GraphNode, NodePatch>({
       id: 'width', label: 'Width', input: 'number', min: 96, step: 8,

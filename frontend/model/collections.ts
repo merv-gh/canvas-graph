@@ -20,13 +20,15 @@ export const appCollections = [
     label: 'Nodes',
     kind: 'node',
     items: ctx => ctx.graphs.current.nodes(),
-    toolbar: { text: 'Add node', order: 10 },
+    // Palette owns the pointer Add Node mode because it carries the active
+    // catalog type/style. Keyboard A remains the collection create command.
+    toolbar: false,
   }),
   collection<EdgeEntity>({
     id: 'edges',
     label: 'Edges',
     kind: 'edge',
     items: ctx => ctx.graphs.current.edges(),
-    toolbar: { text: 'Connect', order: 15 },
+    toolbar: { text: 'Connect', icon: 'connect', order: 15 },
   }),
 ];

@@ -46,7 +46,9 @@ export { decorationsContext, type DecorationsApi, type ItemMode, type Overlay } 
 export { hierarchyContext, createNesting, type HierarchyApi, type HierarchyItem, type HierarchySource, type HierarchyParent, type HierarchyNode, type NestApi } from './core/hierarchy';
 export { keyboardCaptureContext, type KeyboardCapture } from './core/keyboard';
 export { clamp, nodeRect, rectsIntersect, clientPoint, isStageSurface } from './core/view';
+export { pointerGesture } from './core/pointer-gesture';
 export { emptyState, kbdHint } from './core/templates';
+export { iconNode, setIcon } from './core/icons';
 export { grouped } from './core/util';
 export { factScope } from './core/redraw';
 export { createModelRegistry } from './core/model-registry';

@@ -233,7 +233,7 @@ export function inputRouter(commands: ReturnType<typeof commandsContext>, perf?:
         if (frameLoop && COALESCE.has(event.type)) {
           if (event.type === 'wheel') {
             const target = event.target instanceof Element ? event.target : null;
-            if (target?.closest(stageSelector)) event.preventDefault();
+            if (target?.closest(stageSelector) && !target.closest('[data-native-scroll]')) event.preventDefault();
           }
           // [data-command] button clicks dispatch synchronously — toolbar
           // buttons feel instant.

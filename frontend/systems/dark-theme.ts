@@ -63,10 +63,12 @@ export function registerDarkTheme(system: Registry) {
       surface: 'top',
       command: 'theme.toggle',
       kind: 'button',
+      icon: 'theme',
       text: 'Theme',
       label: 'Toggle theme',
       className: 'theme-toggle',
       slot: 'end',
+      group: 'overflow',
       order: 78,
     });
   }, { requires: ['render'] });

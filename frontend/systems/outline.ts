@@ -1,4 +1,4 @@
-import { edgeRef, itemFoldId, nodeRef, refKey, tagItem, type Registry } from '../core';
+import { edgeRef, iconNode, itemFoldId, nodeRef, refKey, tagItem, type Registry } from '../core';
 import {
   emptyRequirementsFilters,
   requirementsCapabilityPasses,
@@ -37,6 +37,7 @@ declare module '../types' {
 }
 
 const PANEL_FOLD_ID = 'outline.panel';
+const GRAPH_SECTION_FOLD_ID = 'outline.workspace.graphs';
 const graphFoldId = (id: Id) => `outline.graph.${id}`;
 const graphName = (graph: Graph) => graph.name;
 
@@ -297,10 +298,14 @@ export function registerOutline(system: Registry) {
       const requirements = requirementsMapOf(graph);
       if (requirements) return requirementsItems(graph, requirements);
       const group = el('div', 'graph-nav-tree');
+      const endpointLabel = (id: Id) => {
+        const ref = graph.refById(id);
+        return (ref ? graph.getItem<{ Label?: { text?: string } }>(ref)?.Label?.text : undefined) ?? id;
+      };
       const nodes = graph.nodes().filter(node => matches(`${node.Label.text} ${node.id} ${descriptiveText(node)}`));
       const edges = graph.edges().filter(edge => {
-        const from = graph.getNode(edge.From)?.Label.text ?? edge.From;
-        const to = graph.getNode(edge.To)?.Label.text ?? edge.To;
+        const from = endpointLabel(edge.From);
+        const to = endpointLabel(edge.To);
         return matches(`${edge.Label?.text ?? ''} ${from} ${to} ${edge.id} ${descriptiveText(edge)}`);
       });
       const allContainers = containersOf(graph);
@@ -324,8 +329,8 @@ export function registerOutline(system: Registry) {
         node.Description?.trim() || nodeTypeLabel(node.NodeType),
       ));
       section('Connections', edges, edge => {
-        const from = graph.getNode(edge.From)?.Label.text ?? edge.From;
-        const to = graph.getNode(edge.To)?.Label.text ?? edge.To;
+        const from = endpointLabel(edge.From);
+        const to = endpointLabel(edge.To);
         const label = edge.Label?.text?.trim();
         return itemRow(graph, edgeRef(edge.id), label || `${from} → ${to}`, label ? `${from} → ${to}` : 'Connection');
       });
@@ -395,7 +400,8 @@ export function registerOutline(system: Registry) {
       const wrapper = el('aside', 'outline-panel graph-navigator');
       wrapper.dataset.outlineFolded = collapsed ? 'true' : 'false';
       const head = el('div', 'outline-panel-head');
-      const fold = el('button', 'graph-navigator-toggle', collapsed ? 'Graphs' : '×');
+      const fold = el('button', 'graph-navigator-toggle');
+      fold.append(iconNode('menu'));
       fold.type = 'button';
       // Click commands dispatch synchronously. Without an explicit command this
       // control depended on coalesced generic input and could appear inert in
@@ -412,20 +418,30 @@ export function registerOutline(system: Registry) {
       title.dataset.graphId = graphs.current.id;
       title.setAttribute('aria-label', 'Current graph name');
       title.setAttribute('title', graphName(graphs.current));
-      if (collapsed) title.setAttribute('title', `${graphName(graphs.current)} — click Graphs to browse documents`);
+      if (collapsed) title.setAttribute('title', `${graphName(graphs.current)} — open workspace drawer`);
       title.spellcheck = false;
       head.append(fold, title);
       wrapper.append(head);
       if (collapsed) return wrapper;
 
       const body = el('div', 'outline-panel-body');
-      const searchRow = el('div', 'graph-nav-search-row');
+      const searchRow = el('div', 'graph-nav-search-row workspace-search-row');
       const search = el('input', 'graph-nav-search') as HTMLInputElement;
       search.type = 'search';
-      search.placeholder = 'Search graphs and items';
+      search.placeholder = 'Search graphs, items, and node types';
       search.value = query;
       search.dataset.graphNavSearch = '';
-      search.setAttribute('aria-label', 'Filter graph navigator');
+      search.setAttribute('aria-label', 'Search graphs, items, and node types');
+      searchRow.append(search);
+      body.append(searchRow);
+      const graphSection = el('section', 'workspace-drawer-section graph-workspace-section');
+      const graphSectionOpen = contexts.fold.isOpen(GRAPH_SECTION_FOLD_ID);
+      const graphSectionToggle = el('button', 'workspace-drawer-section-toggle', `${graphSectionOpen ? '⌄' : '›'} Graph`);
+      graphSectionToggle.type = 'button';
+      graphSectionToggle.dataset.command = 'fold.toggle';
+      graphSectionToggle.dataset.foldId = GRAPH_SECTION_FOLD_ID;
+      graphSectionToggle.setAttribute('aria-expanded', graphSectionOpen ? 'true' : 'false');
+      const graphActions = el('div', 'graph-nav-actions');
       const create = el('button', 'graph-nav-create', 'New graph');
       create.type = 'button';
       create.dataset.command = 'graph.create';
@@ -433,14 +449,14 @@ export function registerOutline(system: Registry) {
       duplicateCurrent.type = 'button';
       duplicateCurrent.dataset.command = 'graph.duplicate';
       duplicateCurrent.dataset.itemId = graphs.current.id;
-      searchRow.append(search, create, duplicateCurrent);
+      graphActions.append(create, duplicateCurrent);
       if (graphs.all().length > 1) {
         const deleteCurrent = el('button', 'graph-nav-delete-current', 'Delete');
         deleteCurrent.type = 'button';
         deleteCurrent.dataset.command = 'graph.delete';
         deleteCurrent.dataset.itemId = graphs.current.id;
         deleteCurrent.setAttribute('aria-label', `Delete ${graphName(graphs.current)}`);
-        searchRow.append(deleteCurrent);
+        graphActions.append(deleteCurrent);
       }
       const list = el('div', 'graph-nav-list');
       const current = el('section', 'graph-nav-current');
@@ -456,7 +472,9 @@ export function registerOutline(system: Registry) {
         clear.dataset.command = 'outline.search.clear';
         current.replaceChildren(clear);
       }
-      body.append(searchRow, list);
+      graphSection.append(graphSectionToggle);
+      if (graphSectionOpen) graphSection.append(graphActions, list);
+      body.append(graphSection);
       wrapper.append(body);
       return wrapper;
     };

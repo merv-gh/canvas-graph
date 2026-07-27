@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bootApp, runCommand, settle } from './testkit';
+import type { InkStroke } from '../../frontend/systems/ink';
 
 const waitForHistory = async () => {
   await new Promise(resolve => setTimeout(resolve, 150));
@@ -68,5 +69,28 @@ describe('document history', () => {
     expect(runCommand(ctx, 'history.redo')).toBe(true);
     await settle();
     expect(ctx.graphs.current.itemsOfKind<any>('container')[0].Size.w).toBe(720);
+  });
+
+  it('undoes and redoes a completed ink stroke', async () => {
+    const ctx = bootApp({ dx: false, demo: false, debug: false, autoLayout: false });
+    await settle();
+    runCommand(ctx, 'ink.toggle');
+    ctx.bus.emit('ink.stroke.start', { point: { x: 10, y: 10 } });
+    ctx.bus.emit('ink.stroke.move', { point: { x: 40, y: 30 } });
+    // A pause mid-gesture must not checkpoint a partial stroke.
+    await waitForHistory();
+    expect(runCommand(ctx, 'history.undo')).toBe(false);
+    ctx.bus.emit('ink.stroke.end');
+    await waitForHistory();
+    expect(ctx.graphs.current.itemsOfKind<InkStroke>('ink')).toHaveLength(1);
+
+    expect(runCommand(ctx, 'history.undo')).toBe(true);
+    await settle();
+    expect(ctx.graphs.current.itemsOfKind<InkStroke>('ink')).toHaveLength(0);
+
+    expect(runCommand(ctx, 'history.redo')).toBe(true);
+    await settle();
+    expect(ctx.graphs.current.itemsOfKind<InkStroke>('ink')).toHaveLength(1);
+    expect(document.querySelector('.ink-path')).not.toBeNull();
   });
 });

@@ -14,8 +14,10 @@ import { registerDemo } from './demo';
 import { registerDx } from './dx';
 import { registerFoldable } from './foldable';
 import { registerFocus } from './focus';
+import { registerGhostNode } from './ghost-node';
 import { registerGraph } from './graph';
 import { registerHistory } from './history';
+import { registerInk } from './ink';
 import { registerInput } from './input';
 import { registerIo } from './io';
 import { registerJump } from './jump';
@@ -29,6 +31,8 @@ import { registerNodeVisuals } from './node-visuals';
 import { registerOnboarding } from './onboarding';
 import { registerOutline } from './outline';
 import { registerPerfPanel } from './perf-panel';
+import { registerPresets } from './presets';
+import { registerPalette } from './palette';
 import { registerRender } from './render';
 import { registerRenderStage } from './render-stage';
 import { registerRenderStageGpu } from './render-stage-gpu';
@@ -68,11 +72,19 @@ export function registerSystems(system: Registry) {
   registerGraph(system);
   registerViewZoom(system);
   registerViewPan(system);
+  // Ink registers before marquee so its draw-mode pointerdown wins the input
+  // router; marquee also yields through the generic pointer-mode claim.
+  registerInk(system);
   registerMarquee(system);
   registerFocus(system);
   registerLayout(system);
+  registerPresets(system);
+  // Palette registers after presets so its explicit arm is the final default
+  // patch while imported/demo nodes marked styleExplicit remain untouched.
+  registerPalette(system);
   registerContextActions(system);
   registerItemToolbar(system);
+  registerGhostNode(system);
   registerNodeVisuals(system);
   registerNodeAutosize(system);
   registerContainers(system);

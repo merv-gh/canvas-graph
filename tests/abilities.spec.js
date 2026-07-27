@@ -35,6 +35,7 @@ test('frontend centralizes DOM input listeners and keeps explicit lifecycle exce
 
 test('frontend help rejects duplicate shortcuts without saving', async ({ page }) => {
   await page.goto('/');
+  await page.getByLabel('More actions').click();
   await page.locator('[data-command="help.open"]').click();
 
   const helpShortcut = page.locator('.shortcut-edit[data-shortcut-command="help.open"]');
@@ -71,11 +72,13 @@ test('frontend configurable ability opens node properties', async ({ page }) => 
   await expect(toolbar.locator('[data-command="item.collapse.toggle"]')).toHaveCount(0);
   await toolbar.locator('[data-command="item.properties.open"]').click();
 
-  await expect(page.locator('.modal-layer[data-visual="properties"]')).toBeVisible();
+  await expect(page.locator('.properties-inspector')).toBeVisible();
+  await expect(page.locator('.modal-layer[data-visual="properties"]')).toHaveCount(0);
   await expect(page.locator('.context-actions')).toBeVisible();
 
   await page.getByLabel('Item title').fill('Configured');
   await expect(node.locator('.node-title')).toHaveText('Configured');
+  await page.locator('.property-advanced-group').filter({ hasText: 'Content' }).locator('.property-advanced-toggle').click();
   await page.locator('.properties [data-field="description"]').fill([
     '### Details',
     'A *rendered* paragraph.',
@@ -97,7 +100,6 @@ test('frontend configurable ability opens node properties', async ({ page }) => 
   await expect(page.locator('.properties [data-field="height"]')).toHaveCount(0);
 
   await expect(page.locator('.properties [data-field="collapsed"]')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Close' }).click();
   await expect(toolbar.locator('[data-command="item.collapse.toggle"]')).toHaveText('⊟');
   await toolbar.locator('[data-command="item.collapse.toggle"]').click();
   await expect(node).toHaveClass(/collapsed/);

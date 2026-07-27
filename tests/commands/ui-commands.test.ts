@@ -13,10 +13,10 @@ describe('frontend UI command surfaces', () => {
     await createNodes(ctx, 2);
 
     // Graph-editing actions cluster in the top bar's `edit` group.
-    expect(document.querySelector('.tool-panel[data-panel-id="top"] .tool-group[data-group="edit"] [data-command="editing.node.create"]')?.textContent).toBe('Add node');
+    expect(document.querySelector('.tool-panel[data-panel-id="top"] .tool-group[data-group="edit"] [data-command="editing.node.create"] .ui-icon')).not.toBeNull();
     expect(document.querySelectorAll('.tool-panel[data-panel-id="top"]')).toHaveLength(1);
     expect(document.querySelector('.top > .tool-panel[data-panel-id="top"]')).not.toBeNull();
-    expect(document.querySelector('.tool-panel[data-panel-id="top"] .tool-group[data-group="edit"] [data-command="editing.edge.create"]')?.textContent).toBe('Connect');
+    expect(document.querySelector('.tool-panel[data-panel-id="top"] .tool-group[data-group="edit"] [data-command="editing.edge.create"] .ui-icon')).not.toBeNull();
     // Layout stays command/palette reachable without occupying the canvas.
     expect(document.querySelector('.tool-panel[data-panel-id="layout"]')).toBeNull();
     expect(ctx.contexts.commands.get('layout.apply.vertical')).toBeTruthy();
@@ -24,8 +24,8 @@ describe('frontend UI command surfaces', () => {
     expect(ctx.contexts.commands.get('layout.apply.tree')).toBeTruthy();
     expect(ctx.contexts.commands.get('layout.apply.radial')).toBeTruthy();
     expect(document.querySelector('.tool-panel[data-panel-id="top"] [data-command="layout.apply.tree"]')).toBeNull();
-    // Search icon lives in the trailing (right) toolbar slot.
-    expect(document.querySelector('.top-tool-panel .toolbar-end [data-command="palette.open"]')).not.toBeNull();
+    // Commands lives in the trailing overflow instead of competing with editing.
+    expect(document.querySelector('.top-tool-panel .toolbar-overflow-menu [data-command="palette.open"]')).not.toBeNull();
     // Release document navigator is present; the event log remains absent.
     expect(document.querySelector('.graph-navigator')).not.toBeNull();
     expect(document.querySelector('.top-tool-panel .hamburger')).toBeNull();
@@ -38,7 +38,7 @@ describe('frontend UI command surfaces', () => {
     ctx.contexts.view.set({ x: 24, y: -18, scale: 1.17 });
     ctx.bus.emit('view.changed', ctx.contexts.view.get());
     await settle();
-    expect(document.querySelector('[data-command="view.fit.all"]')?.textContent).toBe('Fit');
+    expect(document.querySelector('[data-command="view.fit.all"] .ui-icon')).not.toBeNull();
     expect(document.querySelector('[data-command="view.zoom.in"]')).toBeNull();
     expect(document.querySelector('[data-command="view.zoom.out"]')).toBeNull();
     expect(document.querySelector('[data-command="view.zoom.reset"]')).toBeNull();

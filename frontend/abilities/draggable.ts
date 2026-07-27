@@ -43,10 +43,15 @@ export function registerDraggable(system: Registry) {
       const t0 = perf.enabled() ? performance.now() : 0;
       const pointer = contexts.view.clientToSpace(Places.Stage, p);
       const Position = { x: d.start.x + pointer.x - d.pointer.x, y: d.start.y + pointer.y - d.pointer.y };
-      // Silent store write — no item.update, no storage handler dispatch.
-      graphs.current.updateNode(d.ref.id, { Position });
-      const gid = graphs.current.id;
-      emit('graph.node.updated', { graphId: gid, id: d.ref.id, patch: { Position }, visual: true });
+      if (d.ref.kind === 'node') {
+        // Hot node path stays direct: no generic storage dispatch per frame.
+        graphs.current.updateNode(d.ref.id, { Position });
+        emit('graph.node.updated', { graphId: graphs.current.id, id: d.ref.id, patch: { Position }, visual: true });
+      } else {
+        // Plugin entities (containers today) own their storage. Generic update
+        // makes their advertised draggable ability real and preserves cascades.
+        emit('item.update', { ref: d.ref, patch: { Position } });
+      }
       if (perf.enabled()) {
         perf.count('Drag.move');
         perf.sample('Drag.move.ms', performance.now() - t0);
@@ -59,7 +64,7 @@ export function registerDraggable(system: Registry) {
         label: 'Start drag',
         group: 'drag',
         hidden: true,
-        input: { on: 'pointerdown', selector: '[data-drag-handle]', when: event => !(event.target as Element).closest('[data-command]'), prevent: true },
+        input: { on: 'pointerdown', selector: '[data-drag-handle]', when: event => !(event.target as Element).closest('.stage.ink-erasing, [data-command]'), prevent: true },
         payload: ({ event, target }) => {
           const e = event as PointerEvent;
           // Pointer capture keeps pointermove firing even after the pointer
@@ -102,8 +107,9 @@ export function registerDraggable(system: Registry) {
       }
       // Single item.update on drop — fires facts, syncs storage / outline / hierarchy.
       if (d) {
-        const node = graphs.current.getNode(d.ref.id) as Positioned | undefined;
-        if (node?.Position) emit('item.update', { ref: d.ref, patch: { Position: node.Position } });
+        const item = graphs.current.getItem(d.ref) as Positioned | undefined;
+        if (item?.Position && d.ref.kind === 'node') emit('item.update', { ref: d.ref, patch: { Position: item.Position } });
+        if (item?.Position) emit('drag.item.moved', { ref: d.ref });
       }
       drag = null;
       pending = null;

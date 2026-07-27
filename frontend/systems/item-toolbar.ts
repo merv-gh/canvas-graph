@@ -1,4 +1,4 @@
-import { clamp, itemFoldId, itemRefFrom, tagItem, uiValue, type Registry } from '../core';
+import { clamp, itemFoldId, itemRefFrom, setIcon, tagItem, uiValue, type Registry } from '../core';
 import { Places, Slots } from '../types';
 import type { ActionDef, AffordanceDef, EntityDef, ItemRef, Position } from '../types';
 
@@ -106,6 +106,16 @@ export function registerItemToolbar(system: Registry) {
       append(Slots.Drag, 'handler', '⋮⋮', 'node-drag-handle');
       append(Slots.HeaderStart, 'button');
       append(Slots.HeaderEnd, 'button');
+      if (ref.kind === 'node' || ref.kind === 'container') {
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'node-action node-remove';
+        remove.dataset.command = ref.kind === 'node' ? 'graph.node.delete' : 'graph.container.delete';
+        remove.setAttribute('aria-label', `Delete ${ref.kind}`);
+        remove.title = `Delete ${ref.kind}`;
+        setIcon(remove, 'trash');
+        wrapper.append(remove);
+      }
       return wrapper;
     };
 
@@ -119,14 +129,19 @@ export function registerItemToolbar(system: Registry) {
       ];
       const contextual = ref.kind === 'node'
         ? [
+            ...(graphs.current.getNode(ref.id)?.NodeType === 'toggle'
+              ? [{ command: 'node.toggle.state', glyph: '◉', label: graphs.current.getNode(ref.id)?.ToggleState ? 'Turn off' : 'Turn on' }]
+              : []),
             { command: 'item.action.add', glyph: '+', label: 'Add connected' },
             { command: 'editing.edge.create', glyph: '↗', label: 'Connect' },
+            { command: 'node.convert.container', glyph: '▣', label: 'To container' },
             { command: 'item.collapse.toggle', glyph: '−', label: 'Fold' },
           ]
         : ref.kind === 'edge'
           ? [{ command: 'graph.edge.reverse', glyph: '⇄', label: 'Reverse' }]
           : [
               { command: 'editing.node.create', glyph: '+', label: 'Add node' },
+              { command: 'container.convert.node', glyph: '□', label: 'To node' },
               { command: 'item.collapse.toggle', glyph: '−', label: 'Fold' },
             ];
       const actions: WheelAction[] = [
@@ -224,7 +239,7 @@ export function registerItemToolbar(system: Registry) {
             const touchLike = pointer.pointerType === 'touch'
               || (globalThis.innerWidth <= 680 && pointer.pointerType !== 'mouse');
             return touchLike
-              && !(event.target as Element).closest('[data-command], [data-drag-handle], [data-resize-handle], input, textarea, select');
+              && !(event.target as Element).closest('.tool-panel, .item-toolbar, .modal-layer, [data-command], [data-drag-handle], [data-resize-handle], input, textarea, select');
           },
         },
         payload: ({ event, target }) => {
@@ -245,7 +260,10 @@ export function registerItemToolbar(system: Registry) {
       },
       {
         id: 'item.action.context', label: 'Open item action wheel', event: 'item.action.open', group: 'item', hidden: true,
-        input: { on: 'contextmenu', selector: '[data-item-kind][data-item-id]', prevent: true, stop: true },
+        input: {
+          on: 'contextmenu', selector: '[data-item-kind][data-item-id]', prevent: true, stop: true,
+          when: ({ target }) => !(target as Element | null)?.closest('.tool-panel, .item-toolbar, .modal-layer'),
+        },
         payload: ({ event, target }) => {
           const ref = itemRefFrom(target);
           const pointer = event as MouseEvent;

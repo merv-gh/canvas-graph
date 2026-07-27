@@ -162,6 +162,28 @@ describe('frontend choose — multi-item set + bulk actions', () => {
     expect(ctx.selection.selected()).toEqual({ kind: 'container', id: cid });
   });
 
+  it('wraps one selected item; groups do not require two children', async () => {
+    const ctx = bootApp();
+    await settle();
+    const node = ctx.graphs.current.createNode({ Label: { text: 'Only child' } });
+    ctx.bus.emit('selection.item.select', { kind: 'node', id: node.id });
+    await settle();
+
+    expect(runCommand(ctx, 'selection.group')).toBe(true);
+    await settle();
+    expect(containers(ctx)).toHaveLength(1);
+    expect(containers(ctx)[0].Children).toEqual([{ kind: 'node', id: node.id }]);
+  });
+
+  it('creates an empty container through the same group command without a selection', async () => {
+    const ctx = bootApp();
+    await settle();
+    expect(runCommand(ctx, 'selection.group')).toBe(true);
+    await settle();
+    expect(containers(ctx)).toHaveLength(1);
+    expect(containers(ctx)[0].Children).toEqual([]);
+  });
+
   it('follow grows the set one hop along edges', async () => {
     const ctx = bootApp();
     await settle();

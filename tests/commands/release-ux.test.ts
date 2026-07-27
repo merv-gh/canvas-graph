@@ -18,12 +18,16 @@ describe('release UX', () => {
   it('turns the empty canvas placeholder into the first-node action', async () => {
     const ctx = bootApp();
     await settle();
+    runCommand(ctx, 'ink.toggle');
+    await settle();
+    expect(document.querySelector('.stage')?.classList.contains('ink-drawing')).toBe(true);
     const empty = document.querySelector('.stage .empty-action')!;
     expect(empty.getAttribute('role')).toBe('button');
-    expect(empty.getAttribute('data-command')).toBe('editing.node.create');
+    expect(empty.getAttribute('data-command')).toBe('canvas.empty.create');
     click(empty);
     await settle();
     expect(ctx.graphs.current.nodes()).toHaveLength(1);
+    expect(document.querySelector('.stage')?.classList.contains('ink-drawing')).toBe(false);
   });
 
   it('shows an editable current name, newest graphs first, and filters nested graph items', async () => {
@@ -223,6 +227,8 @@ describe('release UX', () => {
     const node = ctx.graphs.current.nodes()[0];
     ctx.bus.emit('item.context.open', { kind: 'node', id: node.id });
     await settle();
+    expect(document.querySelector('.tool-panel[data-panel-id="properties"]')).not.toBeNull();
+    expect(document.querySelector('.modal-layer')).toBeNull();
     expect(document.querySelector('.context-actions')).not.toBeNull();
     expect(document.querySelector('[data-size-axis]')).toBeNull();
     expect(document.querySelector('.properties [data-field="width"]')).toBeNull();

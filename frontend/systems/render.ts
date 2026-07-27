@@ -133,7 +133,8 @@ export function registerRender(system: Registry) {
         pendingFocusRef = null;
         return;
       }
-      const item = contexts.places.el(Places.Stage)?.querySelector(itemSelector(pendingFocusRef));
+      const item = [...(contexts.places.el(Places.Stage)?.querySelectorAll(itemSelector(pendingFocusRef)) ?? [])]
+        .find(candidate => !candidate.closest('.tool-panel, .item-toolbar'));
       pendingFocusRef = null;
       const focusable = item as (Element & { focus?: (options?: FocusOptions) => void }) | null;
       if (typeof focusable?.focus === 'function') focusable.focus({ preventScroll: true });

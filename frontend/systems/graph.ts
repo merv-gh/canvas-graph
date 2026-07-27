@@ -11,7 +11,7 @@ import {
 } from '../model';
 import { edgeRef, itemIdFrom, nodeRef, type Registry } from '../core';
 import { Places } from '../types';
-import type { Id } from '../types';
+import type { Id, ItemRef } from '../types';
 
 /** graph — the *behavior* of the built-in domain. The node / edge / graph
  *  entity declarations live in `model/entities.ts`; this system owns their
@@ -44,7 +44,7 @@ declare module '../types' {
     'graph.rename': { id: Id; name: string };
     'graph.renamed': { id: Id; name: string };
     'graph.node.create': NodeDraft & CreateHints;
-    'graph.node.created': { graphId: Id; id: Id; hints?: CreateHints };
+    'graph.node.created': { graphId: Id; id: Id; hints?: CreateHints; styleExplicit?: boolean };
     'graph.node.update': { id: Id; patch: NodePatch };
     'graph.node.updated': { graphId: Id; id: Id; patch?: NodePatch; visual?: boolean };
     'graph.node.delete': { id: Id };
@@ -62,7 +62,7 @@ const nextGraphId = (graphs: GraphStore) =>
   graphs.all().find(g => g.id !== graphs.current.id)?.id ?? `g${graphs.all().length + 1}`;
 
 export function registerGraph(system: Registry) {
-  system('graph', ({ on, emit, graphs, contexts, selection, origin, contribute }) => {
+  system('graph', ({ on, emit, graphs, contexts, model, selection, origin, contribute }) => {
     let pendingGraphDelete: Id | null = null;
     let pendingRename: { id: Id; timer: ReturnType<typeof setTimeout> } | null = null;
     const flushRename = () => {
@@ -484,13 +484,20 @@ export function registerGraph(system: Registry) {
     // silently redefine the graph's coordinate centre.
     const safeCreationPoint = () => contexts.view.spaceCenter(Places.Stage);
     on('graph.node.create', draft => {
-      const { relativeTo, keepFocus, connectFrom, connectKind, ...store } = draft as typeof draft & CreateHints;
+      const { relativeTo, keepFocus, connectFrom, connectKind, keepView, ...store } = draft as typeof draft & CreateHints;
+      const typeDef = model.nodeType(store.NodeType ?? 'text');
+      if (!store.Size && typeDef?.defaultSize) store.Size = { ...typeDef.defaultSize };
+      const styleExplicit = store.NodeType !== undefined || store.Color !== undefined
+        || store.Fill !== undefined || store.BorderColor !== undefined;
       const anchorNode = relativeTo ? graphs.current.getNode(relativeTo) : (selection.selectedNode() as GraphNode | undefined);
       const node = graphs.current.createNode(store, {
         at: safeCreationPoint(),
         nearPosition: anchorNode?.Position,
       });
-      emit('graph.node.created', { graphId: graphs.current.id, id: node.id, hints: { keepFocus, connectFrom, connectKind, relativeTo } });
+      emit('graph.node.created', {
+        graphId: graphs.current.id, id: node.id, styleExplicit,
+        hints: { keepFocus, connectFrom, connectKind, relativeTo, keepView },
+      });
     });
     on('graph.node.update', ({ id, patch }) => {
       if (graphs.current.updateNode(id, patch)) emit('graph.node.updated', { graphId: graphs.current.id, id, patch });
@@ -504,7 +511,7 @@ export function registerGraph(system: Registry) {
     });
     on('graph.edge.create', draft => {
       if (!draft.From || !draft.To || draft.From === draft.To) return;
-      if (!graphs.current.getNode(draft.From) || !graphs.current.getNode(draft.To)) return;
+      if (!graphs.current.refById(draft.From) || !graphs.current.refById(draft.To)) return;
       const edge = graphs.current.createEdge(draft);
       emit('graph.edge.created', { graphId: graphs.current.id, id: edge.id, edge });
     });
@@ -529,21 +536,32 @@ export function registerGraph(system: Registry) {
         anchor: node.Position ?? { x: 0, y: 0 },
       }));
       const edges = graphs.current.edges().flatMap(edge => {
-        const from = graphs.current.getNode(edge.From);
-        const to = graphs.current.getNode(edge.To);
-        if (!from?.Position || !to?.Position) return [];
+        const fromRef = graphs.current.refById(edge.From);
+        const toRef = graphs.current.refById(edge.To);
+        const endpointAnchor = (ref: ItemRef | undefined) => {
+          if (!ref) return null;
+          const item = graphs.current.getItem<{ Position?: { x: number; y: number } }>(ref);
+          const bounds = item && model.entity(ref.kind)?.render?.bounds?.(item as never);
+          if (bounds) return { x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 };
+          return item?.Position ?? null;
+        };
+        const from = endpointAnchor(fromRef);
+        const to = endpointAnchor(toRef);
+        if (!from || !to) return [];
+        const fromLabel = fromRef ? (graphs.current.getItem<{ Label?: { text?: string } }>(fromRef)?.Label?.text || edge.From) : edge.From;
+        const toLabel = toRef ? (graphs.current.getItem<{ Label?: { text?: string } }>(toRef)?.Label?.text || edge.To) : edge.To;
         return [{
           ref: edgeRef(edge.id),
-          label: edge.Label?.text || `${from.Label.text} to ${to.Label.text}`,
+          label: edge.Label?.text || `${fromLabel} to ${toLabel}`,
           anchor: {
-            x: (from.Position.x + to.Position.x) / 2,
-            y: (from.Position.y + to.Position.y) / 2,
+            x: (from.x + to.x) / 2,
+            y: (from.y + to.y) / 2,
           },
         }];
       });
       return [...nodes, ...edges];
     });
-    contribute({ surface: 'top', command: 'graph.export.json', kind: 'button', text: 'Export', order: 22, group: 'file' });
+    contribute({ surface: 'top', command: 'graph.export.json', kind: 'button', icon: 'export', text: 'Export', order: 22, group: 'overflow' });
     return () => {
       if (pendingRename) clearTimeout(pendingRename.timer);
       offTargets();

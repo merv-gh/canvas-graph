@@ -16,6 +16,19 @@ const waitCamera = async () => {
 };
 
 describe('frontend node commands', () => {
+  it('deletes the selected node from its local toolbar', async () => {
+    const ctx = bootApp();
+    runCommand(ctx, 'editing.node.create');
+    await settle();
+
+    const remove = document.querySelector<HTMLButtonElement>('.item-toolbar [data-command="graph.node.delete"]');
+    expect(remove?.getAttribute('aria-label')).toBe('Delete node');
+    remove?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await settle();
+
+    expect(ctx.graphs.current.nodes()).toHaveLength(0);
+  });
+
   it('offers fold only for described nodes and clears stale fold state with the description', async () => {
     const ctx = bootApp();
     runCommand(ctx, 'editing.node.create');
@@ -95,10 +108,29 @@ describe('frontend node commands', () => {
     await settle();
     expect(ctx.graphs.current.nodes()).toHaveLength(1);
 
-    commandButton('editing.node.create')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    commandButton('palette.place.activate')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    document.querySelector<HTMLElement>('[data-place="stage"]')?.dispatchEvent(new MouseEvent('click', {
+      bubbles: true, cancelable: true, clientX: 500, clientY: 350,
+    }));
     await settle();
     expect(ctx.graphs.current.nodes()).toHaveLength(2);
     expect(ctx.graphs.current.edges()).toHaveLength(0);
+  });
+
+  it('keeps the camera fixed when a node is created by pointer', async () => {
+    const ctx = bootApp();
+    await settle();
+    const before = ctx.contexts.view.get();
+    const fits: string[] = [];
+    ctx.bus.on('view.fit.all', () => fits.push('all'));
+    ctx.bus.on('view.fit.item', () => fits.push('item'));
+
+    expect(runCommand(ctx, 'editing.node.create', { origin: 'pointer' })).toBe(true);
+    await settle();
+
+    expect(ctx.graphs.current.nodes()).toHaveLength(1);
+    expect(ctx.contexts.view.get()).toEqual(before);
+    expect(fits).toEqual([]);
   });
 
   it('centres the graph after attached placement lands offscreen', async () => {
@@ -213,6 +245,32 @@ describe('frontend node commands', () => {
 
     expect(ctx.graphs.current.nodes()[0].Label.text).toBe('Inspector title');
     expect(document.activeElement).not.toBe(title);
+  });
+
+  it('uses direct visual controls for color, fill, border, and description placement', async () => {
+    const ctx = bootApp();
+    runCommand(ctx, 'editing.node.create');
+    await settle();
+    expect(runCommand(ctx, 'item.properties.open')).toBe(true);
+    await settle();
+
+    expect(document.querySelector('.properties select[data-field]')).toBeNull();
+    expect(document.querySelectorAll('.property-choice-swatches')).toHaveLength(2);
+    expect(document.querySelectorAll('.property-choice-placement button')).toHaveLength(4);
+    const color = document.querySelector<HTMLElement>('[data-field="color"][data-value="red"]')!;
+    const fill = document.querySelector<HTMLElement>('[data-field="fill"][data-value="solid"]')!;
+    const placement = document.querySelector<HTMLElement>('[data-field="descPlacement"][data-value="below"]')!;
+    expect(runCommand(ctx, 'properties.item.choice', { target: color })).toBe(true);
+    expect(runCommand(ctx, 'properties.item.choice', { target: fill })).toBe(true);
+    expect(runCommand(ctx, 'properties.item.choice', { target: placement })).toBe(true);
+    await settle();
+
+    expect(ctx.graphs.current.nodes()[0]).toMatchObject({
+      Color: 'red', Fill: 'solid', DescriptionPlacement: 'below',
+    });
+    expect(color.getAttribute('aria-pressed')).toBe('true');
+    expect(fill.getAttribute('aria-pressed')).toBe('true');
+    expect(placement.getAttribute('aria-pressed')).toBe('true');
   });
 
   it('preserves existing positions when nodes are added or deleted', async () => {

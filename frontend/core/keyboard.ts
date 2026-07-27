@@ -50,11 +50,20 @@ export function keyboardCaptureContext() {
       };
       const keyHandler = options.onKey ? (event: KeyboardEvent) => options.onKey!(event, capture) : null;
       const inputHandler = options.onInput ? (event: Event) => options.onInput!(event, capture) : null;
+      // Exclusive capture must survive focus theft: a modal closing right
+      // after the capture starts (palette → picker) restores focus elsewhere,
+      // which would silently disconnect the keyboard. Re-take focus while the
+      // capture is still the active one.
+      const blurHandler = () => {
+        setTimeout(() => { if (active === capture) capture.focus(); }, 0);
+      };
       if (keyHandler) input.addEventListener('keydown', keyHandler);
       if (inputHandler) input.addEventListener('input', inputHandler);
+      input.addEventListener('blur', blurHandler);
       teardowns.set(capture, () => {
         if (keyHandler) input.removeEventListener('keydown', keyHandler);
         if (inputHandler) input.removeEventListener('input', inputHandler);
+        input.removeEventListener('blur', blurHandler);
       });
       active = capture;
       capture.focus();

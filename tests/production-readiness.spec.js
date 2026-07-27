@@ -3,24 +3,29 @@ const { test, expect } = require('@playwright/test');
 const expectModelNodeCount = async (page, count) => {
   await expect.poll(() => page.evaluate(() => window.app.graphs.current.nodes().length)).toBe(count);
 };
+const openMore = async page => {
+  const details = page.locator('.toolbar-overflow');
+  if (!(await details.evaluate(element => element.open))) await page.getByLabel('More actions').click();
+};
+const clickMore = async (page, name) => { await openMore(page); await page.getByRole('button', { name, exact: true }).click(); };
 
 test('nested C4 document survives reload and share', async ({ page, context }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open getting-started guide' }).click();
-  await page.getByRole('button', { name: /C4 architecture/ }).click();
-  await expect(page.locator('.container')).toHaveCount(2);
+  await clickMore(page, 'Open getting-started guide');
+  await page.getByRole('button', { name: /C4 · Online shop/ }).click();
+  await expect(page.locator('.container')).toHaveCount(4);
   await expectModelNodeCount(page, 5);
   await expect(page.locator('.save-state')).toHaveCount(0);
 
   await page.reload();
-  await expect(page.locator('.container')).toHaveCount(2);
+  await expect(page.locator('.container')).toHaveCount(4);
   await expectModelNodeCount(page, 5);
 
-  await page.getByRole('button', { name: 'Share', exact: true }).click();
+  await clickMore(page, 'Share');
   const url = await page.getByRole('textbox', { name: 'Share link', exact: true }).inputValue();
   const copy = await context.newPage();
   await copy.goto(url);
-  await expect(copy.locator('.container')).toHaveCount(2);
+  await expect(copy.locator('.container')).toHaveCount(4);
   await expectModelNodeCount(copy, 5);
 });
 
@@ -29,7 +34,7 @@ test('Mermaid import validates, previews, and remains undoable', async ({ page }
   await page.getByRole('button', { name: 'Add node', exact: true }).click();
   await expect(page.locator('.node')).toHaveCount(1);
 
-  await page.getByRole('button', { name: 'Open getting-started guide' }).click();
+  await clickMore(page, 'Open getting-started guide');
   await page.getByLabel('Mermaid flowchart source').fill('flowchart LR\nA -->');
   await page.getByRole('button', { name: 'Preview import' }).click();
   await expect(page.locator('.import-preview')).toHaveCount(0);
@@ -63,6 +68,7 @@ test('phone starts canvas-first with usable primary commands', async ({ page }) 
   expect(navigator.height).toBeLessThan(50);
   await page.getByRole('button', { name: 'Show create and file actions' }).click();
   await expect(page.getByRole('button', { name: 'Add node', exact: true })).toBeVisible();
+  await openMore(page);
   await expect(page.getByRole('button', { name: 'Share', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Open commands and graph search' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Export', exact: true })).toBeVisible();
@@ -98,8 +104,8 @@ test('edge picker never leaks into a new graph', async ({ page }) => {
 
 test('fit is the only persistent zoom control', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open getting-started guide' }).click();
-  await page.getByRole('button', { name: /C4 architecture/ }).click();
+  await clickMore(page, 'Open getting-started guide');
+  await page.getByRole('button', { name: /C4 · Online shop/ }).click();
   await expect(page.getByRole('button', { name: 'Fit canvas to content' })).toBeVisible();
   await expect(page.locator('[data-command="view.zoom.in"], [data-command="view.zoom.out"], [data-command="view.zoom.reset"]')).toHaveCount(0);
 });
@@ -107,9 +113,8 @@ test('fit is the only persistent zoom control', async ({ page }) => {
 test('phone fit ignores overlay navigator width', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open commands and graph search' }).click();
-  await page.getByRole('button', { name: 'Open getting-started guide', exact: true }).click();
-  await page.getByRole('button', { name: /C4 architecture/ }).click();
+  await page.evaluate(() => window.app.contexts.commands.run('onboarding.open'));
+  await page.getByRole('button', { name: /C4 · Online shop/ }).click();
   await page.getByRole('button', { name: 'Fit canvas to content' }).click();
   const scale = await page.evaluate(() => window.app.contexts.view.get().scale);
   expect(scale).toBeGreaterThanOrEqual(0.8);
@@ -136,7 +141,7 @@ test('phone chrome stays legible and touch-sized', async ({ page }) => {
 
 test('export dialog exposes backup and image formats', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await clickMore(page, 'Export');
   await expect(page.getByRole('button', { name: 'Canvas Graph JSON' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'SVG' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'PNG' })).toBeVisible();
@@ -145,7 +150,7 @@ test('export dialog exposes backup and image formats', async ({ page }) => {
 test('SVG and PNG exports produce downloadable files', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Add node', exact: true }).click();
-  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await clickMore(page, 'Export');
   const svgDownload = page.waitForEvent('download');
   await page.getByRole('button', { name: 'SVG' }).click();
   expect((await svgDownload).suggestedFilename()).toMatch(/\.svg$/);
@@ -172,8 +177,8 @@ test('deleting a graph requires explicit confirmation', async ({ page }) => {
 
 test('deleting a populated container warns and offers ungroup', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open getting-started guide' }).click();
-  await page.getByRole('button', { name: /C4 architecture/ }).click();
+  await clickMore(page, 'Open getting-started guide');
+  await page.getByRole('button', { name: /C4 · Online shop/ }).click();
   // Oversized Fit deliberately leaves lower content off-screen at 80%.
   // Address the container through the navigator, which also frames it before
   // exposing contextual deletion.
@@ -185,14 +190,14 @@ test('deleting a populated container warns and offers ungroup', async ({ page })
   await expect(page.locator('.container-delete-preview')).toContainText('cannot be undone');
   await expect(page.locator('.container-delete-preview')).toContainText('Ungroup and keep contents');
   await page.getByRole('button', { name: 'Keep container' }).click();
-  await expect(page.locator('.container')).toHaveCount(2);
+  await expect(page.locator('.container')).toHaveCount(4);
   await expectModelNodeCount(page, 5);
 });
 
 test('selected edges expose a nearby editor with connection actions', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open getting-started guide' }).click();
-  await page.getByRole('button', { name: /C4 architecture/ }).click();
+  await clickMore(page, 'Open getting-started guide');
+  await page.getByRole('button', { name: /C4 · Online shop/ }).click();
   // At fit-to-document zoom, the navigator is the reliable, intended route
   // for selecting a fine connection without pixel-level hit testing.
   await page.getByRole('button', { name: 'Expand graph navigator' }).click();
@@ -207,9 +212,8 @@ test('selected edges expose a nearby editor with connection actions', async ({ p
 test('mobile selected-item wheel stays fully reachable', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open commands and graph search' }).click();
-  await page.getByRole('button', { name: 'Open getting-started guide', exact: true }).click();
-  await page.getByRole('button', { name: /C4 architecture/ }).click();
+  await page.evaluate(() => window.app.contexts.commands.run('onboarding.open'));
+  await page.getByRole('button', { name: /C4 · Online shop/ }).click();
   // The reading-scale floor intentionally leaves the far end off-screen.
   // Select it through the addressable navigator, which frames it first.
   await page.getByRole('button', { name: 'Expand graph navigator' }).click();
@@ -245,9 +249,10 @@ test('previous-save recovery stays in command search, not export', async ({ page
   await page.getByRole('button', { name: 'Add node', exact: true }).click();
   await page.waitForTimeout(400);
   await expect(page.locator('.save-state')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await clickMore(page, 'Export');
   await expect(page.locator('.export-json [data-command="io.backup.restore.request"]')).toHaveCount(0);
   await page.getByRole('button', { name: 'Close dialog' }).click();
+  await openMore(page);
   await page.getByRole('button', { name: 'Open commands and graph search' }).click();
   await page.getByRole('button', { name: 'Restore previous browser save', exact: true }).click();
   await expect(page.locator('.restore-preview')).toContainText('Current graphs will be replaced');

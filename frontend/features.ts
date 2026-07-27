@@ -1,4 +1,4 @@
-import { nodeRect, type Registry } from './core';
+import { itemRefFrom, nodeRect, nodeRef, refKey, type Registry } from './core';
 import type { CreateHints, EdgeCreateDraft, NodeDraft } from './model';
 import { Places } from './types';
 
@@ -6,6 +6,8 @@ declare module './types' {
   interface CustomEvents {
     'editing.node.create': NodeDraft & CreateHints;
     'editing.edge.create': EdgeCreateDraft;
+    'node.convert.container': { id: string };
+    'container.convert.node': { id: string };
   }
 }
 
@@ -14,6 +16,121 @@ declare module './types' {
    that turns data mutations into coalesced redraws. If a feature is just "X happened → redraw",
    delete the listener; it's already handled. */
 export function registerFeatures(feature: Registry) {
+  feature('nodeToContainer', ({ on, emit, contexts, graphs, selection }) => {
+    const nodeId = (target?: Element | null) => {
+      const ref = itemRefFrom(target) ?? selection.selected();
+      return ref?.kind === 'node' ? ref.id : undefined;
+    };
+    contexts.commands.register([
+      {
+        id: 'node.convert.container',
+        label: 'Convert node to container',
+        group: 'container',
+        available: source => !!nodeId(source?.target),
+        payload: source => ({ id: nodeId(source.target) ?? '' }),
+      },
+      {
+        id: 'container.convert.node',
+        label: 'Convert container to node',
+        group: 'container',
+        available: source => {
+          const ref = itemRefFrom(source?.target) ?? selection.selected();
+          return ref?.kind === 'container';
+        },
+        payload: source => {
+          const ref = itemRefFrom(source.target) ?? selection.selected();
+          return { id: ref?.kind === 'container' ? ref.id : '' };
+        },
+      },
+    ]);
+    on('node.convert.container', ({ id }) => {
+      const node = graphs.current.getNode(id);
+      if (!node) return;
+      const ref = nodeRef(id);
+      const parent = contexts.hierarchy.parentRefOf(ref);
+      const parentContainer = parent?.kind === 'container'
+        ? graphs.current.getItem<{ ChildSections?: Record<string, string> }>(parent)
+        : undefined;
+      const sectionId = parentContainer?.ChildSections?.[refKey(ref)];
+      const incident = graphs.current.edgesOf(id).map(edge => ({ id: edge.id, From: edge.From, To: edge.To }));
+      let offCreated = () => {};
+      offCreated = on('container.created', ({ id: containerId }) => {
+        offCreated();
+        incident.forEach(edge => emit('graph.edge.update', {
+          id: edge.id,
+          patch: {
+            ...(edge.From === id ? { From: containerId } : {}),
+            ...(edge.To === id ? { To: containerId } : {}),
+          },
+        }));
+        if (parent?.kind === 'container') emit('container.add-child', {
+          containerId: parent.id,
+          childRef: { kind: 'container', id: containerId },
+          sectionId,
+        });
+      });
+      emit('editing.container.create', {
+        Label: { text: node.Label.text },
+        at: node.Position ? { ...node.Position } : { x: 0, y: 0 },
+        Size: { w: Math.max(220, node.Size.w), h: Math.max(140, node.Size.h) },
+        AutoFit: false,
+        Color: node.Color,
+      });
+      // Endpoint ids have moved before deletion, so node cleanup cannot
+      // cascade the preserved relations.
+      emit('graph.node.delete', { id });
+    });
+    on('container.convert.node', ({ id }) => {
+      const container = graphs.current.getItem<{
+        Label: { text: string };
+        Position: { x: number; y: number };
+        Color?: NodeDraft['Color'];
+        Children?: unknown[];
+      }>({ kind: 'container', id });
+      if (!container) return;
+      const ref = { kind: 'container' as const, id };
+      const parent = contexts.hierarchy.parentRefOf(ref);
+      const parentContainer = parent?.kind === 'container'
+        ? graphs.current.getItem<{ ChildSections?: Record<string, string> }>(parent)
+        : undefined;
+      const sectionId = parentContainer?.ChildSections?.[refKey(ref)];
+      const incident = graphs.current.edgesOf(id).map(edge => ({ id: edge.id, From: edge.From, To: edge.To }));
+      let convertedNodeId = '';
+      let offCreated = () => {};
+      offCreated = on('graph.node.created', ({ id: nodeId }) => {
+        offCreated();
+        convertedNodeId = nodeId;
+        incident.forEach(edge => emit('graph.edge.update', {
+          id: edge.id,
+          patch: {
+            ...(edge.From === id ? { From: nodeId } : {}),
+            ...(edge.To === id ? { To: nodeId } : {}),
+          },
+        }));
+        if (parent?.kind === 'container') emit('container.add-child', {
+          containerId: parent.id,
+          childRef: nodeRef(nodeId),
+          sectionId,
+        });
+      });
+      const childCount = container.Children?.length ?? 0;
+      emit('graph.node.create', {
+        Label: { text: container.Label.text },
+        Position: { ...container.Position },
+        NodeType: 'square',
+        Color: container.Color,
+        keepView: true,
+      });
+      if (childCount) emit('container.ungroup', { id });
+      else emit('graph.container.delete', { id });
+      if (convertedNodeId) emit('selection.item.select', nodeRef(convertedNodeId));
+      if (childCount) emit('app.notice', {
+        message: `Converted to node; released ${childCount} contained item${childCount === 1 ? '' : 's'}.`,
+        level: 'info',
+      });
+    });
+  }, { requires: ['graph', 'containers'] });
+
   // System-design feature disabled for release. Graph share/import (`?g=`, `?in=`,
   // mermaid paste) now lives in `systems/share.ts`, decoupled from it.
   feature('nodeLifecycle', (ctx) => {
@@ -49,7 +166,7 @@ export function registerFeatures(feature: Registry) {
         shortcut: 'A',
         input: { on: 'keydown', key: 'a', prevent: true },
         payload: source => source.origin === 'pointer'
-          ? { Label: { text: `Node ${graphs.current.nodes().length + 1}` } }
+          ? { Label: { text: `Node ${graphs.current.nodes().length + 1}` }, keepView: true }
           : attachedDraft(false),
       },
       {
@@ -76,7 +193,7 @@ export function registerFeatures(feature: Registry) {
         emit('focus.node.focus', { id });
       }
       if (hints?.connectFrom) emit('graph.edge.create', { From: hints.connectFrom, To: id, EdgeKind: hints.connectKind });
-      if (createdNodeIsOffscreen(id)) emit('view.fit.item', { kind: 'node', id });
+      if (!hints?.keepView && createdNodeIsOffscreen(id)) emit('view.fit.item', { kind: 'node', id });
     });
   }, { requires: ['graph', 'ability.selectable', 'focus'] });
   feature('edgeLifecycle', ({ on, emit, contexts, graphs, selection }) => {
@@ -142,7 +259,7 @@ export function registerFeatures(feature: Registry) {
         emit('view.fit.all');
       });
     };
-    on('graph.node.created', scheduleFit);
+    on('graph.node.created', ({ hints }) => { if (!hints?.keepView) scheduleFit(); });
     on('container.children.changed', ({ id }) => emit('layout.apply.sections', { id }));
   }, { requires: ['graph', 'layout'] });
 }

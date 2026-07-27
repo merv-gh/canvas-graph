@@ -1,12 +1,19 @@
 const fs = require('fs');
 const path = require('path');
 const { test, expect } = require('@playwright/test');
+const clickMore = async (page, name) => {
+  const details = page.locator('.toolbar-overflow');
+  if (!(await details.evaluate(element => element.open))) await page.getByLabel('More actions').click();
+  await page.getByRole('button', { name, exact: true }).click();
+};
 
-test('release chrome stays flat and the empty action does not move on hover', async ({ page }) => {
+test('release chrome stays borderless and the empty action does not move on hover', async ({ page }) => {
   const css = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'styles.css'), 'utf8');
-  expect(css).not.toMatch(/box-shadow|--shadow/);
-  expect(css).not.toMatch(/gradient\(/);
+  // Node *content* tints (ML block types + the `data-node-color` palette) are
+  // user data, not chrome — the monochrome rule covers the product surface.
+  const contentTints = new Set(['7c3aed', '2563eb', 'dc2626', 'd97706', '059669', 'ea580c', 'ca8a04', '16a34a', 'db2777']);
   for (const [, raw] of css.matchAll(/#([0-9a-f]{3,8})\b/gi)) {
+    if (contentTints.has(raw.toLowerCase())) continue;
     const hex = raw.length === 3 || raw.length === 4
       ? raw.slice(0, 3).split('').map(channel => channel + channel)
       : raw.slice(0, 6).match(/.{2}/g);
@@ -29,9 +36,13 @@ test('release chrome stays flat and the empty action does not move on hover', as
   const after = await empty.boundingBox();
   expect(after).toEqual(before);
 
-  const elevated = await page.locator('*').evaluateAll(elements =>
-    elements.filter(element => getComputedStyle(element).boxShadow !== 'none').length);
-  expect(elevated).toBe(0);
+  const chrome = await page.locator('.tool-panel[data-anchor="top-center"], .graph-navigator').evaluateAll(elements =>
+    elements.map(element => {
+      const style = getComputedStyle(element);
+      return { border: style.borderWidth, shadow: style.boxShadow };
+    }));
+  expect(chrome.every(item => item.border === '0px')).toBe(true);
+  expect(chrome.some(item => item.shadow !== 'none')).toBe(true);
 });
 
 test('light and dark UI are grayscale and editable text uses one underline', async ({ page }) => {
@@ -49,9 +60,10 @@ test('light and dark UI are grayscale and editable text uses one underline', asy
   });
 
   expectGrayscale(await colors());
-  await page.getByRole('button', { name: 'Toggle theme' }).click();
+  await clickMore(page, 'Toggle theme');
   expectGrayscale(await colors());
 
+  await page.getByRole('button', { name: 'Expand graph navigator', exact: true }).click();
   const title = page.getByRole('textbox', { name: 'Current graph name' });
   const resting = await title.evaluate(element => {
     const style = getComputedStyle(element);
@@ -63,7 +75,7 @@ test('light and dark UI are grayscale and editable text uses one underline', asy
     .not.toBe('rgba(0, 0, 0, 0)');
 });
 
-test('first node and every creation fit share the exact stage centre', async ({ page }) => {
+test('first node starts at centre and later pointer creation keeps the camera stable', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'New graph', exact: true }).click();
   const stageCentre = () => page.locator('.stage').evaluate(element => {
@@ -83,19 +95,15 @@ test('first node and every creation fit share the exact stage centre', async ({ 
     return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
   })).toEqual(await stageCentre());
 
+  const camera = await page.evaluate(() => window.app.contexts.view.get());
   await page.getByRole('button', { name: 'Add node', exact: true }).click();
   await expect(page.locator('.node')).toHaveCount(2);
-  await expect.poll(() => page.locator('.node').evaluateAll(nodes => {
-    const rects = nodes.map(node => node.getBoundingClientRect());
-    return {
-      x: (Math.min(...rects.map(rect => rect.left)) + Math.max(...rects.map(rect => rect.right))) / 2,
-      y: (Math.min(...rects.map(rect => rect.top)) + Math.max(...rects.map(rect => rect.bottom))) / 2,
-    };
-  })).toEqual(await stageCentre());
+  await expect.poll(() => page.evaluate(() => window.app.contexts.view.get())).toEqual(camera);
+  await expect(page.locator('.node').nth(1)).toBeVisible();
 
   const toolbar = await page.locator('.node-toolbar').boundingBox();
   expect(toolbar.height).toBeLessThanOrEqual(32);
-  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await clickMore(page, 'Export');
   await expect(page.getByRole('button', { name: 'Close dialog' })).toHaveText('×');
 });
 

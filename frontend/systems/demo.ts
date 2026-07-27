@@ -1,5 +1,7 @@
 import { introspect, type IntrospectKind, type IntrospectRef, type Registry } from '../core';
+import type { EdgeKind, NodeColor, NodeType } from '../model/graph';
 import type { Id, ItemRef } from '../types';
+import type { ContainerType } from './container-entity';
 
 declare module '../types' {
   interface CustomEvents {
@@ -7,8 +9,15 @@ declare module '../types' {
     'demo.run-c4': void;
     'demo.run-math': void;
     'demo.run-workflow': void;
+    'demo.run-flowchart': void;
+    'demo.run-mindmap': void;
     'demo.run-game': void;
-    'demo.loaded': { id: 'c4' | 'math' | 'workflow' | 'game' };
+    'demo.run-uml': void;
+    'demo.run-outline': void;
+    'demo.run-transformer': void;
+    'demo.run-kimi-k2': void;
+    'demo.run-agent-observability': void;
+    'demo.loaded': { id: 'c4' | 'math' | 'workflow' | 'flowchart' | 'mindmap' | 'game' | 'uml' | 'outline' | 'transformer' | 'kimi-k2' | 'agent-observability' };
   }
 }
 
@@ -41,14 +50,56 @@ export function registerDemo(system: Registry) {
       },
       {
         id: 'demo.render-workflow',
-        label: 'Open sequenced delivery workflow',
+        label: 'Open Jira issue workflow example',
         event: 'demo.run-workflow',
+        group: 'demo',
+      },
+      {
+        id: 'demo.render-flowchart',
+        label: 'Open canonical flowchart example',
+        event: 'demo.run-flowchart',
+        group: 'demo',
+      },
+      {
+        id: 'demo.render-mindmap',
+        label: 'Open canonical mindmap example',
+        event: 'demo.run-mindmap',
         group: 'demo',
       },
       {
         id: 'demo.render-game',
         label: 'Open vertical nested Game design map',
         event: 'demo.run-game',
+        group: 'demo',
+      },
+      {
+        id: 'demo.render-uml',
+        label: 'Open UML class map example',
+        event: 'demo.run-uml',
+        group: 'demo',
+      },
+      {
+        id: 'demo.render-outline',
+        label: 'Open nested outline example',
+        event: 'demo.run-outline',
+        group: 'demo',
+      },
+      {
+        id: 'demo.render-transformer',
+        label: 'Open Transformer architecture example',
+        event: 'demo.run-transformer',
+        group: 'demo',
+      },
+      {
+        id: 'demo.render-kimi-k2',
+        label: 'Open Kimi K2 architecture example',
+        event: 'demo.run-kimi-k2',
+        group: 'demo',
+      },
+      {
+        id: 'demo.render-agent-observability',
+        label: 'Open multi-agent observability report example',
+        event: 'demo.run-agent-observability',
         group: 'demo',
       },
     ]);
@@ -76,8 +127,8 @@ export function registerDemo(system: Registry) {
     // Canonical demos need their authored layout to win after that generic
     // pass, and fitting must use those final positions.
     const finishDemo = (
-      layout: 'layout.apply.tidy' | 'layout.apply.radial' | 'layout.apply.vertical' | null,
-      id?: 'c4' | 'math' | 'workflow' | 'game',
+      layout: 'layout.apply.tidy' | 'layout.apply.radial' | 'layout.apply.vertical' | 'layout.apply.horizontal' | 'layout.apply.tree' | null,
+      id?: 'c4' | 'math' | 'workflow' | 'flowchart' | 'mindmap' | 'game' | 'uml' | 'outline' | 'transformer' | 'kimi-k2' | 'agent-observability',
       arrange?: () => void,
     ) => {
       queueMicrotask(() => {
@@ -96,9 +147,16 @@ export function registerDemo(system: Registry) {
       if (!id) return;
       emit('item.update', { ref: { kind: 'container', id }, patch: { Position, Size, AutoFit: false } });
     };
-    const makeContainer = (title: string, at: { x: number; y: number }, sections: string[], axis: 'rows' | 'columns' = 'rows') => {
+    const makeContainer = (
+      title: string,
+      at: { x: number; y: number },
+      sections: string[],
+      axis: 'rows' | 'columns' = 'rows',
+      ContainerType?: ContainerType,
+      Color?: NodeColor,
+    ) => {
       const before = new Set(containerIds());
-      emit('editing.container.create', { Label: { text: title }, at });
+      emit('editing.container.create', { Label: { text: title }, at, ContainerType, Color });
       const id = containerIds().find(candidate => !before.has(candidate));
       if (id) {
         emit('item.update', {
@@ -111,12 +169,35 @@ export function registerDemo(system: Registry) {
       }
       return id;
     };
-    const makeNode = (label: string, nodeType: 'text' | 'square' | 'circle', description: string, containerId?: string, sectionId?: string) => {
+    // Per-type authored sizes; shapes and system types keep the 118px default.
+    const NODE_SIZES: Partial<Record<NodeType, { w: number; h: number }>> = {
+      text: { w: 190, h: 108 },
+      'uml-class': { w: 250, h: 170 },
+      'list-item': { w: 240, h: 48 },
+      'section-header': { w: 280, h: 64 },
+      input: { w: 220, h: 64 },
+      output: { w: 220, h: 64 },
+      embedding: { w: 220, h: 72 },
+      dense: { w: 220, h: 72 },
+      attention: { w: 220, h: 72 },
+      moe: { w: 220, h: 72 },
+      norm: { w: 220, h: 48 },
+      operator: { w: 44, h: 44 },
+      caption: { w: 360, h: 44 },
+      agent: { w: 210, h: 96 },
+      'timeline-step': { w: 240, h: 88 },
+      'data-table': { w: 300, h: 190 },
+      toggle: { w: 210, h: 84 },
+      artifact: { w: 230, h: 100 },
+      'approval-gate': { w: 180, h: 118 },
+    };
+    const makeNode = (label: string, nodeType: NodeType, description: string, containerId?: string, sectionId?: string, color?: NodeColor) => {
       const node = graphs.current.createNode({
         Label: { text: label },
         NodeType: nodeType,
+        Color: color,
         Description: description,
-        Size: nodeType === 'text' ? { w: 190, h: 108 } : { w: 118, h: 118 },
+        Size: NODE_SIZES[nodeType] ?? { w: 118, h: 118 },
       });
       if (containerId) emit('container.add-child', { containerId, childRef: { kind: 'node', id: node.id } as ItemRef, sectionId });
       emit('graph.node.created', { graphId: graphs.current.id, id: node.id });
@@ -182,14 +263,19 @@ export function registerDemo(system: Registry) {
 
     on('demo.run-c4', () => {
       clearGraph();
-      const context = makeContainer('C4 · System context', { x: 0, y: 0 }, ['People', 'System', 'External'], 'columns');
-      const shop = makeContainer('C4 · Web shop containers', { x: 0, y: 0 }, ['Experience', 'Application', 'Data'], 'columns');
-      if (context && shop) emit('container.add-child', { containerId: context, childRef: { kind: 'container', id: shop }, sectionId: 's2' });
-      const customer = makeNode('Customer', 'circle', 'A person browsing products and placing an order.', context, 's1');
-      const payment = makeNode('Payment provider', 'square', 'External card authorization and settlement.', context, 's3');
-      const web = makeNode('Web application', 'text', 'Browser UI: catalog, basket, checkout.', shop, 's1');
-      const api = makeNode('Commerce API', 'square', 'Owns pricing, orders, and checkout orchestration.', shop, 's2');
-      const database = makeNode('Orders database', 'circle', 'Stores customers, baskets, and order state.', shop, 's3');
+      emit('preset.set', { preset: 'c4' });
+      const landscape = makeContainer('System landscape', { x: 0, y: 0 }, []);
+      const shop = makeContainer('Online shop', { x: 0, y: 0 }, [], 'rows', 'c4-system', 'blue');
+      const webApp = makeContainer('Web application', { x: -230, y: 0 }, [], 'rows', 'c4-container', 'purple');
+      const apiApp = makeContainer('API application', { x: 230, y: 0 }, [], 'rows', 'c4-container', 'purple');
+      if (landscape && shop) emit('container.add-child', { containerId: landscape, childRef: { kind: 'container', id: shop } });
+      if (shop && webApp) emit('container.add-child', { containerId: shop, childRef: { kind: 'container', id: webApp } });
+      if (shop && apiApp) emit('container.add-child', { containerId: shop, childRef: { kind: 'container', id: apiApp } });
+      const customer = makeNode('Customer', 'rounded', 'A person browsing products and placing an order.', landscape, undefined, 'gray');
+      const payment = makeNode('Payment provider', 'square', 'External card authorization and settlement.', landscape, undefined, 'gray');
+      const web = makeNode('Storefront UI', 'square', 'Catalog, basket, and checkout experience.', webApp, undefined, 'green');
+      const api = makeNode('Commerce API', 'square', 'Pricing, orders, and checkout orchestration.', apiApp, undefined, 'green');
+      const database = makeNode('Orders datastore', 'pill', 'Customers, baskets, and order state.', apiApp, undefined, 'blue');
       [
         [customer, web, 'uses'],
         [web, api, 'HTTPS / JSON'],
@@ -197,18 +283,21 @@ export function registerDemo(system: Registry) {
         [api, payment, 'authorizes'],
       ].forEach(([From, To, label]) => emit('graph.edge.create', { From, To, Label: { text: label } }));
       finishDemo(null, 'c4', () => {
-        frame(context, { x: 0, y: 0 }, { w: 1760, h: 660 });
-        frame(shop, { x: 20, y: 0 }, { w: 1080, h: 460 });
-        place(customer, { x: -700, y: -60 });
-        place(payment, { x: 700, y: 60 });
-        place(web, { x: -320, y: -90 });
-        place(api, { x: 20, y: 0 });
-        place(database, { x: 360, y: 90 });
+        frame(landscape, { x: 0, y: 0 }, { w: 1900, h: 920 });
+        frame(shop, { x: 0, y: 0 }, { w: 1220, h: 700 });
+        frame(webApp, { x: -280, y: 0 }, { w: 420, h: 430 });
+        frame(apiApp, { x: 280, y: 0 }, { w: 500, h: 430 });
+        place(customer, { x: -790, y: -70 });
+        place(payment, { x: 790, y: 80 });
+        place(web, { x: -280, y: 20 });
+        place(api, { x: 280, y: -70 });
+        place(database, { x: 280, y: 100 });
       });
     });
 
     on('demo.run-math', () => {
       clearGraph();
+      emit('preset.set', { preset: 'basic' });
       const expectation = makeNode('Expected value', 'circle', 'The probability-weighted center of a random variable.');
       const variable = makeNode('Random variable X', 'square', 'A rule that assigns a number to each possible outcome.');
       const outcomes = makeNode('Outcomes xᵢ', 'text', 'The values X can take: x₁, x₂, …');
@@ -229,27 +318,78 @@ export function registerDemo(system: Registry) {
 
     on('demo.run-workflow', () => {
       clearGraph();
-      const board = makeContainer('Delivery workflow', { x: 0, y: 0 }, ['Frame', 'Build', 'Check', 'Release'], 'columns');
-      const request = makeNode('Frame the change', 'text', 'State the user outcome and the smallest acceptance check.', board, 's1');
-      const implement = makeNode('Implement', 'square', 'Change one coherent slice and keep it reviewable.', board, 's2');
-      const tests = makeNode('Automated checks', 'circle', 'Types, focused regression, then the full release gate.', board, 's3');
-      const review = makeNode('Review', 'square', 'Inspect behavior, architecture boundaries, and failure paths.', board, 's3');
-      const release = makeNode('Release', 'text', 'Publish the verified artifact and its concise change note.', board, 's4');
+      emit('preset.set', { preset: 'jira' });
+      const board = makeContainer('Jira · Issue lifecycle', { x: 0, y: 0 }, ['Backlog', 'Active', 'Done'], 'columns');
+      const open = makeNode('Open', 'square', 'Triaged and ready for someone to start.', board, 's1', 'gray');
+      const progress = makeNode('In progress', 'square', 'Work is actively underway.', board, 's2', 'yellow');
+      const resolved = makeNode('Resolved', 'square', 'A fix is available and awaiting verification.', board, 's3', 'green');
+      const closed = makeNode('Closed', 'square', 'Verification passed; no further work remains.', board, 's3', 'green');
+      const reopened = makeNode('Reopened', 'square', 'Verification found the issue still reproducible.', board, 's1', 'gray');
+      [open, progress, resolved, closed, reopened].forEach(id =>
+        emit('item.update', { ref: { kind: 'node', id }, patch: { Fill: 'solid' } }));
       [
-        [request, implement, 'ready'],
-        [implement, tests, 'verify'],
-        [tests, review, 'green'],
-        [review, release, 'approved'],
-        [review, implement, 'changes requested'],
+        [open, progress, 'start progress'],
+        [progress, resolved, 'resolve'],
+        [resolved, closed, 'verify'],
+        [resolved, reopened, 'reopen'],
+        [reopened, progress, 'resume'],
       ].forEach(([From, To, label]) => emit('graph.edge.create', { From, To, Label: { text: label } }));
       finishDemo(null, 'workflow', () => {
-        frame(board, { x: 0, y: 0 }, { w: 1560, h: 440 });
-        place(request, { x: -560, y: 0 });
-        place(implement, { x: -190, y: 0 });
-        place(tests, { x: 180, y: -90 });
-        place(review, { x: 180, y: 90 });
-        place(release, { x: 560, y: 0 });
+        frame(board, { x: 0, y: 0 }, { w: 1500, h: 560 });
+        place(open, { x: -540, y: -100 });
+        place(reopened, { x: -540, y: 130 });
+        place(progress, { x: -80, y: 0 });
+        place(resolved, { x: 390, y: -100 });
+        place(closed, { x: 390, y: 130 });
       });
+    });
+
+    on('demo.run-flowchart', () => {
+      clearGraph();
+      emit('preset.set', { preset: 'flowchart' });
+      const start = makeNode('Order received', 'pill', 'A customer submits an order.', undefined, undefined, 'green');
+      const capture = makeNode('Capture order', 'parallelogram', 'Read customer, basket, and payment input.', undefined, undefined, 'purple');
+      const valid = makeNode('Payment valid?', 'diamond', 'Authorize the selected payment method.', undefined, undefined, 'yellow');
+      const fulfill = makeNode('Fulfill order', 'square', 'Reserve stock and send the warehouse request.', undefined, undefined, 'blue');
+      const retry = makeNode('Request another method', 'rounded', 'Explain the decline and preserve the basket.', undefined, undefined, 'green');
+      const done = makeNode('Confirmation sent', 'pill', 'Tell the customer the order is accepted.', undefined, undefined, 'green');
+      [
+        [start, capture, ''], [capture, valid, ''], [valid, fulfill, 'Yes'],
+        [valid, retry, 'No'], [retry, capture, 'retry'], [fulfill, done, ''],
+      ].forEach(([From, To, label]) => emit('graph.edge.create', {
+        From, To, ...(label ? { Label: { text: label } } : {}), EdgeKind: 'plain',
+      }));
+      finishDemo(null, 'flowchart', () => {
+        place(start, { x: 0, y: -420 });
+        place(capture, { x: 0, y: -260 });
+        place(valid, { x: 0, y: -70 });
+        place(fulfill, { x: 300, y: 150 });
+        place(retry, { x: -300, y: 150 });
+        place(done, { x: 300, y: 340 });
+      });
+    });
+
+    on('demo.run-mindmap', () => {
+      clearGraph();
+      emit('preset.set', { preset: 'mindmap' });
+      const launch = makeNode('Product launch', 'rounded', 'One shared launch plan.', undefined, undefined, 'gray');
+      const market = makeNode('Market', 'pill', 'Who needs this and why now?', undefined, undefined, 'blue');
+      const product = makeNode('Product', 'pill', 'What must be ready?', undefined, undefined, 'green');
+      const story = makeNode('Story', 'pill', 'How will people understand it?', undefined, undefined, 'orange');
+      const rollout = makeNode('Rollout', 'pill', 'How do we release safely?', undefined, undefined, 'purple');
+      const leaves: Array<[Id, Id]> = [
+        [market, makeNode('Ideal customer', 'text', 'Primary segment and job.')],
+        [market, makeNode('Alternatives', 'text', 'What they use today.')],
+        [product, makeNode('Quality bar', 'text', 'Acceptance checks and polish.')],
+        [product, makeNode('Support', 'text', 'Docs, onboarding, ownership.')],
+        [story, makeNode('Positioning', 'text', 'One memorable promise.')],
+        [story, makeNode('Proof', 'text', 'Demo, evidence, customer voice.')],
+        [rollout, makeNode('Pilot', 'text', 'Small cohort and feedback loop.')],
+        [rollout, makeNode('Metrics', 'text', 'Activation, reliability, retention.')],
+      ];
+      [market, product, story, rollout].forEach(branch => emit('graph.edge.create', { From: launch, To: branch }));
+      leaves.forEach(([From, To]) => emit('graph.edge.create', { From, To }));
+      finishDemo('layout.apply.radial', 'mindmap');
     });
     on('demo.run-game', () => {
       clearGraph();
@@ -297,12 +437,194 @@ export function registerDemo(system: Registry) {
       });
       finishDemo('layout.apply.vertical', 'game');
     });
+
+    // Preset demos activate their preset first: the preset owns the shell
+    // style, the layout mode, and the default type for anything the user adds
+    // afterwards. Explicit per-node types below are never patched by it.
+    on('demo.run-uml', () => {
+      clearGraph();
+      emit('preset.set', { preset: 'uml' });
+      const user = makeNode('User', 'uml-class', '- id: UUID\n- email: string\n- name: string\n\n+ authenticate(): boolean');
+      const order = makeNode('Order', 'uml-class', '- id: UUID\n- items: LineItem[]\n- status: OrderStatus\n\n+ total(): Money');
+      const payment = makeNode('PaymentService', 'uml-class', '+ charge(order, card): Receipt\n+ refund(receipt): void');
+      const repository = makeNode('OrderRepository', 'uml-class', '+ save(order): void\n+ find(id): Order');
+      [
+        [user, order, 'places'],
+        [order, payment, 'charged by'],
+        [order, repository, 'persisted by'],
+      ].forEach(([From, To, label]) => emit('graph.edge.create', { From, To, Label: { text: label } }));
+      finishDemo('layout.apply.tree', 'uml');
+    });
+
+    on('demo.run-outline', () => {
+      clearGraph();
+      emit('preset.set', { preset: 'outline' });
+      const header = makeNode('Launch plan', 'section-header', 'Everything that has to be true before launch day.');
+      const positioning = makeNode('Positioning', 'list-item', 'One sentence a tired user would repeat.');
+      const research = makeContainer('Research', { x: 0, y: 0 }, []);
+      const interviews = makeNode('User interviews', 'list-item', '12 sessions, tagged by job-to-be-done.', research);
+      const scan = makeNode('Competitor scan', 'list-item', 'Top 5 alternatives, pricing, gaps.', research);
+      const pricing = makeContainer('Pricing', { x: 0, y: 0 }, []);
+      if (research && pricing) emit('container.add-child', { containerId: research, childRef: { kind: 'container', id: pricing } });
+      const wtp = makeNode('Willingness-to-pay calls', 'list-item', 'Van Westendorp on the shortlisted tiers.', pricing);
+      const tiers = makeNode('Tier draft', 'list-item', 'Free / Pro / Team with usage caps.', pricing);
+      const week = makeContainer('Launch week', { x: 0, y: 0 }, []);
+      const announce = makeNode('Announcement', 'list-item', 'Blog post, changelog, social kit.', week);
+      const docs = makeNode('Docs refresh', 'list-item', 'Quickstart plus migration guide.', week);
+      // Children open to the right: one horizontal row per container, explicit
+      // placement (a vertical layout pass would stack them). Containers
+      // auto-fit their bounds around wherever the children land.
+      finishDemo(null, 'outline', () => {
+        place(header, { x: 0, y: -300 });
+        place(positioning, { x: 0, y: -190 });
+        place(interviews, { x: -330, y: -40 });
+        place(scan, { x: -54, y: -40 });
+        place(wtp, { x: 222, y: -40 });
+        place(tiers, { x: 498, y: -40 });
+        place(announce, { x: -138, y: 170 });
+        place(docs, { x: 138, y: 170 });
+      });
+    });
+
+    // Model architecture examples: ML block node types + per-node colors.
+    on('demo.run-transformer', () => {
+      clearGraph();
+      graphs.current.rename('Transformer');
+      emit('graph.renamed', { id: graphs.current.id, name: graphs.current.name });
+
+      const srcTokens = makeNode('Source tokens', 'input', 'Token ids from the source sentence.', undefined, undefined, 'gray');
+      const tgtTokens = makeNode('Target tokens (shifted right)', 'input', 'Decoder input during training.', undefined, undefined, 'gray');
+      const srcEmbed = makeNode('Input embedding + positions', 'embedding', 'Vocab projection scaled by √d, plus positional signal.', undefined, undefined, 'purple');
+      const tgtEmbed = makeNode('Output embedding + positions', 'embedding', 'Shares weights with the input embedding and the final linear layer.', undefined, undefined, 'purple');
+      const selfAttn = makeNode('Encoder self-attention ×N', 'attention', 'Multi-head attention over the full source sequence.', undefined, undefined, 'red');
+      const crossAttn = makeNode('Decoder cross-attention ×N', 'attention', 'Queries from the decoder attend to encoder outputs.', undefined, undefined, 'orange');
+      const maskedAttn = makeNode('Masked self-attention ×N', 'attention', 'Causal mask keeps each position from seeing the future.', undefined, undefined, 'red');
+      const encNorm = makeNode('Add & norm', 'norm', 'Residual connection plus layer normalization.', undefined, undefined, 'green');
+      const ffn = makeNode('Feed-forward ×N', 'dense', 'Two linear layers with a ReLU (or GELU) between: d → 4d → d.', undefined, undefined, 'blue');
+      const head = makeNode('Linear + softmax', 'output', 'Projects decoder state to vocab logits and samples the next token.', undefined, undefined, 'yellow');
+      [
+        [srcTokens, srcEmbed, 'ids'],
+        [tgtTokens, tgtEmbed, 'ids'],
+        [srcEmbed, selfAttn, 'Q K V'],
+        [selfAttn, encNorm, 'residual'],
+        [encNorm, ffn, 'encode'],
+        [tgtEmbed, maskedAttn, 'Q K V'],
+        [maskedAttn, crossAttn, 'decode'],
+        [encNorm, crossAttn, 'memory K V'],
+        [ffn, head, 'final state'],
+        [crossAttn, head, 'final state'],
+      ].forEach(([From, To, label]) => emit('graph.edge.create', { From, To, Label: { text: label } }));
+      finishDemo('layout.apply.vertical', 'transformer');
+    });
+
+    // Kimi K2: a canonical architecture reading order rather than a dense
+    // inventory. One vertical backbone, one repeated boundary, one expert fork.
+    on('demo.run-kimi-k2', () => {
+      clearGraph();
+      graphs.current.rename('Kimi K2 · canonical architecture');
+      emit('graph.renamed', { id: graphs.current.id, name: graphs.current.name });
+      emit('preset.set', { preset: 'architecture' });
+
+      const tokens = makeNode('Tokens · 128K context', 'input', 'Input token sequence.', undefined, undefined, 'gray');
+      const embed = makeNode('Token embedding', 'embedding', 'Maps token ids into the model width.', undefined, undefined, 'purple');
+      const denseFirst = makeNode('Dense transformer layer', 'dense', 'Layer 1 uses a dense feed-forward network.', undefined, undefined, 'blue');
+      const repeated = makeContainer('Repeated transformer block · layers 2–61', { x: 0, y: 80 }, []);
+      const mla = makeNode('Multi-head Latent Attention', 'attention', 'Compressed latent keys and values reduce KV-cache cost.', repeated, undefined, 'red');
+      const router = makeNode('Sparse expert router', 'norm', 'Scores experts and selects the top eight per token.', repeated, undefined, 'green');
+      const shared = makeNode('Shared expert · always active', 'dense', 'Handles common knowledge for every token.', repeated, undefined, 'blue');
+      const routed = makeNode('384 routed experts · top 8', 'moe', 'Sparse specialists; only eight activate for each token.', repeated, undefined, 'orange');
+      const sum = makeNode('⊕', 'operator', 'Merge shared and routed expert outputs.', repeated);
+      const norm = makeNode('Residual + RMSNorm', 'norm', 'Merge the skip path and normalize.', repeated, undefined, 'green');
+      const head = makeNode('Language-model head', 'output', 'Projects hidden state to next-token logits.', undefined, undefined, 'yellow');
+      const caption = makeNode('Kimi K2 · 1.04T total parameters · 32B active per token', 'caption', 'Simplified architectural view.');
+      if (repeated) {
+        emit('item.update', {
+          ref: { kind: 'container', id: repeated },
+          patch: {
+            Legend: [
+              { color: 'blue', label: 'Shared expert' },
+              { color: 'orange', label: 'Routed experts' },
+            ],
+            Multiplier: '60×',
+          },
+        });
+      }
+      ([
+        [tokens, embed, 'ids', 'plain'],
+        [embed, denseFirst, 'hidden', 'plain'],
+        [denseFirst, mla, 'hidden', 'plain'],
+        [mla, router, 'hidden', 'plain'],
+        [router, shared, 'always', 'plain'],
+        [router, routed, 'top-8', 'dashed'],
+        [shared, sum, '', 'plain'],
+        [routed, sum, '', 'plain'],
+        [sum, norm, 'sum', 'plain'],
+        [mla, norm, 'residual', 'residual'],
+        [norm, head, 'final hidden', 'plain'],
+      ] as [Id, Id, string, EdgeKind][]).forEach(([From, To, label, kind]) =>
+        emit('graph.edge.create', { From, To, ...(label ? { Label: { text: label } } : {}), EdgeKind: kind }));
+      finishDemo(null, 'kimi-k2', () => {
+        frame(repeated, { x: 0, y: 80 }, { w: 760, h: 690 });
+        place(tokens, { x: 0, y: -500 });
+        place(embed, { x: 0, y: -390 });
+        place(denseFirst, { x: 0, y: -275 });
+        place(mla, { x: 0, y: -145 });
+        place(router, { x: 0, y: -20 });
+        place(shared, { x: -210, y: 115 });
+        place(routed, { x: 210, y: 115 });
+        place(sum, { x: 0, y: 235 });
+        place(norm, { x: 0, y: 340 });
+        place(head, { x: 0, y: 480 });
+        place(caption, { x: 0, y: 570 });
+      });
+    });
+
+    on('demo.run-agent-observability', () => {
+      clearGraph();
+      graphs.current.rename('Multi-agent run · observability report');
+      emit('graph.renamed', { id: graphs.current.id, name: graphs.current.name });
+      emit('preset.set', { preset: 'autonomous' });
+
+      const investigator = makeNode('Investigator', 'agent', 'Architecture audit · done · 2.4k tokens', undefined, undefined, 'blue');
+      const builder = makeNode('Builder', 'agent', 'Visualization prototype · retry 1/3', undefined, undefined, 'purple');
+      const reviewer = makeNode('Reviewer', 'agent', 'Keyboard, layout, evidence · running', undefined, undefined, 'green');
+      const audit = makeNode('Trace boundaries · 02:18', 'timeline-step', '18 modules · 3 leaks · critical path', undefined, undefined, 'gray');
+      const prototype = makeNode('Draft v2 · 01:44', 'timeline-step', 'Loop cause and artifact lineage added.', undefined, undefined, 'purple');
+      const verify = makeNode('Verify demo · 00:51', 'timeline-step', '320px reflow · selection · filters', undefined, undefined, 'green');
+      const report = makeNode('architecture-review.md', 'artifact', 'Producer: Investigator\nConsumer: Orchestrator\nState: accepted', undefined, undefined, 'orange');
+      const demo = makeNode('agent-run-observer.html', 'artifact', 'Producer: Builder\nVersion: v2\nState: verified', undefined, undefined, 'orange');
+      const metrics = makeNode('Run metrics', 'data-table', 'Agent | Time | Tokens\nInvestigator | 3:12 | 2.4k\nBuilder | 3:18 | 2.9k\nReviewer | 1:39 | 1.1k', undefined, undefined, 'purple');
+      const rawReasoning = makeNode('Show raw reasoning', 'toggle', 'Off · expose decisions and evidence instead.', undefined, undefined, 'green');
+      const approval = makeNode('Implementation approval', 'approval-gate', 'Visual proposal complete. Product changes wait here.', undefined, undefined, 'yellow');
+
+      ([
+        [investigator, audit, 'owns', 'plain'], [audit, report, 'produces', 'plain'], [report, metrics, 'feeds', 'plain'],
+        [builder, prototype, 'owns', 'plain'], [prototype, demo, 'produces v2', 'plain'], [demo, rawReasoning, 'policy', 'plain'],
+        [reviewer, verify, 'owns', 'plain'], [verify, approval, 'evidence', 'plain'], [approval, prototype, 'retry if rejected', 'dashed'],
+      ] as [Id, Id, string, EdgeKind][]).forEach(([From, To, label, EdgeKind]) =>
+        emit('graph.edge.create', { From, To, Label: { text: label }, EdgeKind }));
+
+      finishDemo(null, 'agent-observability', () => {
+        place(investigator, { x: -560, y: -250 }); place(builder, { x: -560, y: 0 }); place(reviewer, { x: -560, y: 250 });
+        place(audit, { x: -260, y: -250 }); place(prototype, { x: -260, y: 0 }); place(verify, { x: -260, y: 250 });
+        place(report, { x: 30, y: -250 }); place(demo, { x: 30, y: 0 }); place(approval, { x: 30, y: 250 });
+        place(metrics, { x: 380, y: -180 }); place(rawReasoning, { x: 380, y: 80 });
+      });
+    });
+
     on('app.start', () => {
       const id = new URLSearchParams(location.search).get('demo');
       const event = id === 'c4' ? 'demo.run-c4'
         : id === 'math' ? 'demo.run-math'
         : id === 'workflow' ? 'demo.run-workflow'
+        : id === 'flowchart' ? 'demo.run-flowchart'
+        : id === 'mindmap' ? 'demo.run-mindmap'
         : id === 'game' ? 'demo.run-game'
+        : id === 'uml' ? 'demo.run-uml'
+        : id === 'outline' ? 'demo.run-outline'
+        : id === 'transformer' ? 'demo.run-transformer'
+        : id === 'kimi-k2' ? 'demo.run-kimi-k2'
+        : id === 'agent-observability' ? 'demo.run-agent-observability'
         : null;
       if (event) queueMicrotask(() => emit(event));
     });

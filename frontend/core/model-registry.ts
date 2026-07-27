@@ -3,6 +3,7 @@ import type {
   EntityDef,
   Id,
   ModelDef,
+  NodeTypeDef,
   ResolvedCollectionDef,
 } from '../types';
 import { singular } from './collection-commands';
@@ -13,6 +14,7 @@ export type ModelRegistry = ReturnType<typeof createModelRegistry>;
 export const createModelRegistry = <Ctx,>(model: ModelDef<Ctx>, flags?: FlagsApi) => {
   const entities = new Map<string, EntityDef<unknown, unknown>>();
   const collections = new Map<string, ResolvedCollectionDef<unknown, unknown>>();
+  const nodeTypes = new Map<string, NodeTypeDef>();
   const defaultItemId = <T,>(item: T): Id => {
     const id = (item as { id?: unknown }).id;
     return typeof id === 'string' ? id : '';
@@ -49,10 +51,17 @@ export const createModelRegistry = <Ctx,>(model: ModelDef<Ctx>, flags?: FlagsApi
     collections.set(resolved.id, resolved as unknown as ResolvedCollectionDef<unknown, unknown>);
     return () => { if (collections.get(resolved.id) === resolved as unknown) collections.delete(resolved.id); };
   };
+  const registerNodeType = (def: NodeTypeDef) => {
+    const current = nodeTypes.get(def.id);
+    if (current && current !== def) throw new Error(`Node type "${def.id}" already registered`);
+    nodeTypes.set(def.id, def);
+    return () => { if (nodeTypes.get(def.id) === def) nodeTypes.delete(def.id); };
+  };
   // Seed from the initial ModelDef. After boot, systems can keep adding via
   // registerEntity / registerCollection — container, group, region, layer, …
   model.entities.forEach(entityDef => registerEntity(entityDef));
   model.collections.forEach(collectionDef => registerCollection(collectionDef));
+  model.nodeTypes?.forEach(registerNodeType);
   // Disabled abilities disappear from the live model — render, palette, and DX all stop seeing them.
   const filterAbilities = <T,>(entityDef: EntityDef<T>): EntityDef<T> => {
     if (!flags) return entityDef;
@@ -69,11 +78,15 @@ export const createModelRegistry = <Ctx,>(model: ModelDef<Ctx>, flags?: FlagsApi
     /** Live entities, ordered by `EntityDef.order` (lower first = paints behind). */
     entities: () => ordered().map(e => filterAbilities(e)),
     collections: () => [...collections.values()],
+    nodeType: (id: string) => nodeTypes.get(id),
+    nodeTypes: () => [...nodeTypes.values()],
     /** Raw, unfiltered, ordered — DX validator uses this to compare declared vs live. */
     rawEntities: () => ordered(),
     /** Add an entity at runtime. Returns a teardown that removes it. */
     registerEntity,
     /** Add a collection at runtime. Returns a teardown that removes it. */
     registerCollection,
+    /** Add a reusable node vocabulary entry at runtime. */
+    registerNodeType,
   };
 };

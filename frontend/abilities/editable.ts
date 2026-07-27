@@ -41,7 +41,8 @@ export function registerEditable(system: Registry) {
      *  marks its title with [data-editable-title]. */
     const titleEl = (ref: ItemRef): HTMLElement | null => {
       const stage = contexts.places.el(Places.Stage);
-      const item = stage?.querySelector(`[data-item-kind="${ref.kind}"][data-item-id="${ref.id}"]`);
+      const item = [...(stage?.querySelectorAll(`[data-item-kind="${ref.kind}"][data-item-id="${ref.id}"]`) ?? [])]
+        .find(candidate => !candidate.closest('.tool-panel, .item-toolbar'));
       const el = item?.querySelector('[data-editable-title]') ?? null;
       return el instanceof HTMLElement ? el : null;
     };
@@ -97,8 +98,13 @@ export function registerEditable(system: Registry) {
         shortcut: 'Enter',
         // Plain Enter while an item is selected. The selector-based commit
         // commands below take precedence inside an active editing element so
-        // Enter-to-commit still works.
-        input: { on: 'keydown', key: 'Enter', prevent: true },
+        // Enter-to-commit still works. Inside a modal, Enter stays the
+        // browser's button activation (the prevented binding would otherwise
+        // swallow it before the focused button can click).
+        input: {
+          on: 'keydown', key: 'Enter', prevent: true,
+          when: event => !(event.target as Element).closest('.modal-layer'),
+        },
         available: source => !!refFromSource(source ?? {}),
         payload: source => {
           const ref = refFromSource(source);

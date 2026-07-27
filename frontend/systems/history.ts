@@ -103,8 +103,8 @@ export function registerHistory(system: Registry) {
         shortcut: 'Cmd+Shift+Z', input: { on: 'keydown', key: 'Z', meta: true, shift: true, prevent: true },
       },
     ]);
-    contribute({ surface: 'top', command: 'history.undo', kind: 'button', text: 'Undo', label: 'Undo', order: 26, group: 'history' });
-    contribute({ surface: 'top', command: 'history.redo', kind: 'button', text: 'Redo', label: 'Redo', order: 27, group: 'history' });
+    contribute({ surface: 'top', command: 'history.undo', kind: 'button', icon: 'undo', label: 'Undo', order: 26, group: 'history' });
+    contribute({ surface: 'top', command: 'history.redo', kind: 'button', icon: 'redo', label: 'Redo', order: 27, group: 'history' });
 
     on('history.undo', () => restore(-1));
     on('history.redo', () => restore(1));
@@ -118,10 +118,12 @@ export function registerHistory(system: Registry) {
     on('app.start', () => { ensure(); announce(); });
     on('graph.switched', ({ id }) => { clearTimeout(pending); pending = undefined; ensure(id); announce(); });
     on('graph.deleted', ({ id }) => { timelines.delete(id); });
-    const offAny = bus.onAny(({ name }) => {
+    const offAny = bus.onAny(({ name, data }) => {
       const graphFact = name.startsWith('graph.') && /\.(created|updated|deleted|renamed|imported)$/.test(name);
       const containerFact = name.startsWith('container.') && /\.(created|updated|deleted|changed)$/.test(name);
-      if (graphFact || containerFact) scheduleCapture();
+      const inkFact = name === 'ink.stroke.completed' || name === 'ink.stroke.deleted'
+        || (name === 'ink.stroke.updated' && !(data as { gesture?: boolean } | undefined)?.gesture);
+      if (graphFact || containerFact || inkFact) scheduleCapture();
     });
 
     return () => {

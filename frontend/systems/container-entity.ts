@@ -1,10 +1,16 @@
 import { collapsible, configurable, draggable, editable, nudgeable, resizeable, selectable } from '../abilities';
 import { refKey } from '../core';
+import { isNodeColor, type NodeColor } from '../model';
 import { Slots } from '../types';
 import type { EntityDef, EntityRenderer, Id, ItemRef, Position, PropertyDef, Rect, Size } from '../types';
 
 export type SectionAxis = 'rows' | 'columns';
+export type ContainerType = 'group' | 'c4-system' | 'c4-container';
 export type ContainerSection = { id: Id; title: string; weight: number };
+/** One legend row rendered inside the container: a color swatch + its meaning
+ *  ("blue → Shared Expert"). Colors are NodeColor palette keys, same as node
+ *  tints, so a legend always matches the nodes it explains. */
+export type LegendEntry = { color: NodeColor; label: string };
 export type Container = {
   id: Id;
   kind: 'container';
@@ -12,14 +18,22 @@ export type Container = {
   Position: Position;
   Size: Size;
   AutoFit?: boolean;
+  ContainerType?: ContainerType;
+  Color?: NodeColor;
   Sections?: ContainerSection[];
   SectionAxis?: SectionAxis;
   ChildSections?: Record<string, Id>;
   Children: ItemRef[];
+  Legend?: LegendEntry[];
+  /** Repeat badge in the container corner ("3×"). Free text, empty = none. */
+  Multiplier?: string;
 };
-export type ContainerPatch = Partial<Pick<Container, 'Label' | 'Position' | 'Size' | 'AutoFit' | 'Sections' | 'SectionAxis' | 'ChildSections'>>;
+export type ContainerPatch = Partial<Pick<Container, 'Label' | 'Position' | 'Size' | 'AutoFit' | 'ContainerType' | 'Color' | 'Sections' | 'SectionAxis' | 'ChildSections' | 'Legend' | 'Multiplier'>>;
 
 export const DEFAULT_CONTAINER_SIZE: Size = { w: 320, h: 200 };
+export const containerDefaultSize = (type?: ContainerType): Size => type === 'c4-system'
+  ? { w: 560, h: 360 }
+  : type === 'c4-container' ? { w: 400, h: 240 } : { ...DEFAULT_CONTAINER_SIZE };
 export const firstSectionId = (container: Container) => container.Sections?.[0]?.id;
 export const sanitizeContainerSections = (container: Container) => {
   container.Sections = container.Sections?.map((section, index) => ({
@@ -47,6 +61,22 @@ export const sanitizeContainerSections = (container: Container) => {
 const parseSections = (value: unknown, existing: ContainerSection[] = []): ContainerSection[] =>
   String(value).split(/\r?\n/).map(title => title.trim()).filter(Boolean)
     .map((title, index) => ({ id: existing[index]?.id ?? `s${index + 1}`, title, weight: existing[index]?.weight ?? 1 }));
+
+/** One entry per line, `<color> <label>` ("blue Shared Expert"). Lines whose
+ *  first token is not a palette color are dropped — bad snapshots or typos
+ *  can't break render. */
+export const parseLegend = (value: unknown): LegendEntry[] =>
+  String(value).split(/\r?\n/).map(line => line.trim()).filter(Boolean)
+    .flatMap(line => {
+      const [color, ...rest] = line.split(/\s+/);
+      const label = rest.join(' ').trim();
+      return isNodeColor(color) && label ? [{ color, label }] : [];
+    });
+export const sanitizeLegend = (entries: unknown): LegendEntry[] =>
+  Array.isArray(entries)
+    ? entries.filter((entry): entry is LegendEntry =>
+      !!entry && isNodeColor((entry as LegendEntry).color) && typeof (entry as LegendEntry).label === 'string' && !!(entry as LegendEntry).label)
+    : [];
 const validAxis = (value: unknown): value is SectionAxis => value === 'rows' || value === 'columns';
 
 export const createContainerEntity = (
@@ -63,6 +93,8 @@ export const createContainerEntity = (
       if (folded(container)) element.classList.add('collapsed');
       if (container.AutoFit === false) element.classList.add('manual');
       element.dataset.sectionAxis = container.SectionAxis ?? 'rows';
+      element.dataset.containerType = container.ContainerType ?? 'group';
+      if (container.Color) element.dataset.containerColor = container.Color;
       element.style.left = `${rect.x + rect.w / 2}px`;
       element.style.top = `${rect.y + rect.h / 2}px`;
       element.style.width = `${rect.w}px`;
@@ -101,6 +133,28 @@ export const createContainerEntity = (
         });
         element.append(sections);
       }
+      if (!folded(container) && container.Legend?.length) {
+        const legend = document.createElement('div');
+        legend.className = 'container-legend';
+        container.Legend.forEach(entry => {
+          const row = document.createElement('div');
+          row.className = 'container-legend-entry';
+          const swatch = document.createElement('span');
+          swatch.className = 'container-legend-swatch';
+          swatch.dataset.legendColor = entry.color;
+          const text = document.createElement('span');
+          text.textContent = entry.label;
+          row.append(swatch, text);
+          legend.append(row);
+        });
+        element.append(legend);
+      }
+      if (container.Multiplier?.trim()) {
+        const badge = document.createElement('div');
+        badge.className = 'container-multiplier';
+        badge.textContent = container.Multiplier.trim();
+        element.append(badge);
+      }
       const label = document.createElement('div');
       label.className = 'container-label';
       label.dataset.editableTitle = '';
@@ -121,12 +175,21 @@ export const createContainerEntity = (
       patch: (c, value) => Number.isFinite(Number(value)) ? { Size: { ...c.Size, w: Math.max(120, Number(value)) } } : undefined },
     { id: 'height', label: 'Height', input: 'number', min: 80, step: 8, value: c => c.Size.h,
       patch: (c, value) => Number.isFinite(Number(value)) ? { Size: { ...c.Size, h: Math.max(80, Number(value)) } } : undefined },
+    { id: 'containerType', label: 'Container type', input: 'select', value: c => c.ContainerType ?? 'group',
+      options: [{ value: 'group', label: 'Group' }, { value: 'c4-system', label: 'C4 system' }, { value: 'c4-container', label: 'C4 container' }],
+      patch: (_c, value) => value === 'group' || value === 'c4-system' || value === 'c4-container' ? { ContainerType: value } : undefined },
     { id: 'sectionAxis', label: 'Section axis', input: 'select', group: 'Structure',
       options: [{ value: 'rows', label: 'Rows' }, { value: 'columns', label: 'Columns' }],
       value: c => c.SectionAxis ?? 'rows', patch: (_c, value) => validAxis(value) ? { SectionAxis: value } : undefined },
     { id: 'sections', label: 'Sections', input: 'textarea', rows: 4, group: 'Structure',
       value: c => c.Sections?.map(section => section.title).join('\n') ?? '',
       patch: (c, value) => ({ Sections: parseSections(value, c.Sections) }) },
+    { id: 'legend', label: 'Legend (color label, one per line)', input: 'textarea', rows: 3, group: 'Structure',
+      value: c => c.Legend?.map(entry => `${entry.color} ${entry.label}`).join('\n') ?? '',
+      patch: (_c, value) => ({ Legend: parseLegend(value) }) },
+    { id: 'multiplier', label: 'Repeat badge (e.g. 3×)', input: 'text', group: 'Structure',
+      value: c => c.Multiplier ?? '',
+      patch: (_c, value) => ({ Multiplier: String(value).trim() || undefined }) },
   ];
 
   return {

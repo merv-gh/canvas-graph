@@ -89,7 +89,12 @@ export function registerPresent(system: Registry) {
 
     // --- Render context reusing the real entity renderers over a positioned set ---
     const buildCtx = (items: Map<string, GraphNode>, kind: ItemRef['kind']): EntityRenderCtx => ({
-      graph: { getItem: ref => items.get((ref as ItemRef).id), itemsOfKind: () => [] },
+      graph: {
+        getItem: ref => items.get((ref as ItemRef).id),
+        refById: id => items.has(id) ? { kind: 'node', id } : undefined,
+        itemsOfKind: () => [],
+      },
+      nodeType: id => model.nodeType(id),
       refOf: id => ({ kind, id }),
       tagItem,
       applyItemModes: () => {},

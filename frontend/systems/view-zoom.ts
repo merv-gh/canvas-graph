@@ -36,7 +36,7 @@ export function registerViewZoom(system: Registry) {
     declarePanel({ id: 'zoom', anchor: 'bottom-right', movable: false, layout: 'toolbar', order: 20 });
     // Zoom is gesture/key driven. One recovery control earns persistent canvas
     // chrome: Fit. +/-/100% remain commands and palette entries, not buttons.
-    contribute({ panel: 'zoom', surface: 'top', command: 'view.fit.all', kind: 'button', text: 'Fit', label: 'Fit canvas to content', slot: Slots.End, order: 5 });
+    contribute({ panel: 'zoom', surface: 'top', command: 'view.fit.all', kind: 'button', icon: 'fit', label: 'Fit canvas to content', slot: Slots.End, order: 5 });
     const stageSelector = `[data-place="${Places.Stage}"]`;
     const commit = () => emit('view.changed', contexts.view.get());
     const centerZoom = (factor: number) => {
@@ -77,7 +77,12 @@ export function registerViewZoom(system: Registry) {
         group: 'view',
         hidden: true,
         // Pinch only (ctrl+wheel). Plain two-finger scroll is pan (view.wheel.pan).
-        input: { on: 'wheel', selector: stageSelector, when: event => (event as WheelEvent).ctrlKey, prevent: true },
+        input: {
+          on: 'wheel', selector: stageSelector,
+          when: event => (event as WheelEvent).ctrlKey
+            && !(event.target instanceof Element && event.target.closest('[data-native-scroll]')),
+          prevent: true,
+        },
         payload: ({ event }) => {
           const wheel = event as WheelEvent;
           // ctrlKey wheel = trackpad pinch (diverging/converging fingers) — the
@@ -127,6 +132,18 @@ export function registerViewZoom(system: Registry) {
       return isFinite(minX) ? { minX, minY, maxX, maxY } : null;
     };
     type NodeObstacle = { rect: Rect };
+    type EndpointGeometry = { ref: ItemRef; Position: Position; Size: { w: number; h: number }; rect: Rect };
+    const endpointGeometry = (id: Id): EndpointGeometry | null => {
+      const ref = graphs.current.refById(id);
+      const item = ref ? graphs.current.getItem(ref) : undefined;
+      const rect = ref && item ? model.entity(ref.kind)?.render?.bounds?.(item as never) : null;
+      if (!ref || !rect) return null;
+      return {
+        ref, rect,
+        Position: { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 },
+        Size: { w: rect.w, h: rect.h },
+      };
+    };
     const nodeObstacleIndex = () => createRectIndex<NodeObstacle>(graphs.current.nodes().flatMap(node => {
       if (!node.Position) return [];
       return [{ rect: {
@@ -138,8 +155,8 @@ export function registerViewZoom(system: Registry) {
     }));
     const edgeLabelRect = (
       edge: GraphEdge,
-      from: GraphNode,
-      to: GraphNode,
+      from: EndpointGeometry,
+      to: EndpointGeometry,
       obstacleIndex?: RectIndex<NodeObstacle>,
     ) => {
       const label = edge.Label?.text?.trim();
@@ -290,11 +307,10 @@ export function registerViewZoom(system: Registry) {
       if (rect) return rectToBounds(rect);
       if (ref.kind === 'edge') {
         const edge = graphs.current.getEdge(ref.id) as GraphEdge | undefined;
-        const from = edge && graphs.current.getNode(edge.From);
-        const to = edge && graphs.current.getNode(edge.To);
+        const from = edge && endpointGeometry(edge.From);
+        const to = edge && endpointGeometry(edge.To);
         if (from && to) {
-          const nodes = [from, to].filter(n => n.Position) as GraphNode[];
-          const bounds = nodes.length ? nodesBounds(nodes) : null;
+          const bounds = unionBounds(rectToBounds(from.rect), rectToBounds(to.rect));
           const labelRect = edgeLabelRect(edge, from, to);
           if (bounds && labelRect) {
             return {
@@ -370,10 +386,10 @@ export function registerViewZoom(system: Registry) {
       const obstacleIndex = nodeObstacleIndex();
       graphs.current.edges().forEach(edge => {
         const label = edge.Label?.text?.trim();
-        const from = graphs.current.getNode(edge.From), to = graphs.current.getNode(edge.To);
+        const from = endpointGeometry(edge.From), to = endpointGeometry(edge.To);
         if (!label || !from?.Position || !to?.Position) return;
-        if (foldHidden({ kind: 'node', id: from.id }, contexts.hierarchy.parentChain, contexts.fold, graphs.current.id)) return;
-        if (foldHidden({ kind: 'node', id: to.id }, contexts.hierarchy.parentChain, contexts.fold, graphs.current.id)) return;
+        if (foldHidden(from.ref, contexts.hierarchy.parentChain, contexts.fold, graphs.current.id)) return;
+        if (foldHidden(to.ref, contexts.hierarchy.parentChain, contexts.fold, graphs.current.id)) return;
         const rect = edgeLabelRect(edge, from, to, obstacleIndex);
         if (!rect) return;
         const bb = { minX: rect.x, minY: rect.y, maxX: rect.x + rect.w, maxY: rect.y + rect.h };
@@ -417,14 +433,7 @@ export function registerViewZoom(system: Registry) {
       if (typeof ResizeObserver === 'function') {
         resizeObserver = new ResizeObserver(fitAfterResize);
         const stage = contexts.places.el(Places.Stage);
-        const panel = contexts.places.el(Places.Left);
         if (stage) resizeObserver.observe(stage);
-        if (panel) resizeObserver.observe(panel);
-      }
-    });
-    on('fold.changed', ({ id }) => {
-      if (id === 'outline.panel' && graphs.current.nodes().length) {
-        frameLoop.schedule('view.navigator.fit', () => emit('view.fit.all'), 30);
       }
     });
     return () => {
@@ -432,7 +441,6 @@ export function registerViewZoom(system: Registry) {
       resizeObserver?.disconnect();
       globalThis.removeEventListener?.('resize', fitAfterResize);
       frameLoop.cancel('view.resize.fit');
-      frameLoop.cancel('view.navigator.fit');
     };
   }, { requires: ['render'] });
 }

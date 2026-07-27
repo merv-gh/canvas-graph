@@ -10,7 +10,7 @@ Both halves live together so toggling `ability.<id>` removes UI + behavior atomi
 - `resizeable.ts` — pointer resize handle → Size patches.
 - `editable.ts` — Enter / dblclick inline title edit on `[data-editable-title]` → Label patch.
 - `collapsible.ts` — `c` collapse toggle (writes the fold store, not item data).
-- `configurable.ts` — properties modal from `entity.properties` schema → typed patches.
+- `configurable.ts` — selection-driven right properties inspector from `entity.properties` schema → typed patches.
 - `shared.ts` / `shapes.ts` — `ability()`/`action()` builders; structural item types (Identified, Labeled…).
 
 Mutations always go `emit('item.update', { ref, patch })` — never touch a store directly.

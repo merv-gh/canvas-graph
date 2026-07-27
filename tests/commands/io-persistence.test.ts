@@ -62,6 +62,26 @@ describe('graph persistence (io system)', () => {
     expect(container.ChildSections['node:e1']).toBe('s1');
   }, 15000);
 
+  it('restores edges whose endpoint is a container', async () => {
+    const io = memoryIo();
+    const flags = { dx: false, demo: false, debug: false, autoLayout: false };
+    const first = bootApp(flags, io);
+    await settle();
+    first.bus.emit('graph.node.create', { Label: { text: 'API' } });
+    first.bus.emit('editing.container.create', { Label: { text: 'Boundary' }, at: { x: 300, y: 200 } });
+    await settle();
+    first.bus.emit('graph.edge.create', { From: 'e1', To: 'c1', Label: { text: 'enters' } });
+    await settle();
+    expect(first.graphs.current.edges()).toHaveLength(1);
+    flushPersist();
+
+    const second = bootApp(flags, io);
+    await settle();
+    expect(second.graphs.current.edges()).toHaveLength(1);
+    expect(second.graphs.current.edges()[0]).toMatchObject({ From: 'e1', To: 'c1', Label: { text: 'enters' } });
+    expect(second.graphs.current.refById('c1')?.kind).toBe('container');
+  }, 15000);
+
   it('restores multiple graphs and the active graph id', async () => {
     const io = memoryIo();
     const first = bootApp({ dx: false, demo: false, debug: false, autoLayout: false }, io);

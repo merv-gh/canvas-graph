@@ -1,4 +1,6 @@
 import { nodeRef, type Registry } from '../core';
+import type { NodeColor } from '../model';
+import type { ContainerType } from './container-entity';
 import type { ItemRef, Position } from '../types';
 
 /** choose — strategies for *building the chosen set*, and bulk actions over it.
@@ -22,6 +24,7 @@ declare module '../types' {
     'choose.search': { q: string };
     /** Bulk action: fold the chosen nodes/containers into a new container. */
     'selection.group': void;
+    'selection.group.as': { label?: string; containerType?: ContainerType; color?: NodeColor };
   }
 }
 
@@ -61,10 +64,9 @@ export function registerChoose(system: Registry) {
         available: () => allRefs().length > 0,
       },
       {
-        id: 'selection.group', label: 'Group into container', group: 'choose', shortcut: 'Ctrl+G',
+        id: 'selection.group', label: 'Create container or group selection', group: 'choose', shortcut: 'Ctrl+G',
         input: { on: 'keydown', key: 'g', ctrl: true, prevent: true },
-        available: () => flags.isOn('containers')
-          && selection.selectedAll().filter(ref => ref.kind === 'node' || ref.kind === 'container').length >= 2,
+        available: () => flags.isOn('containers'),
       },
     ]);
 
@@ -107,16 +109,33 @@ export function registerChoose(system: Registry) {
     // Group: create a container, then move every chosen node/container into it.
     // The container.created emit is synchronous, so the one-shot fires before
     // the create handler's own select — children land, container ends selected.
-    on('selection.group', () => {
+    const group = (style: { label?: string; containerType?: ContainerType; color?: NodeColor } = {}) => {
       const members = selection.selectedAll().filter(ref => ref.kind === 'node' || ref.kind === 'container');
-      if (members.length < 2) return;
+      if (!members.length) {
+        emit('editing.container.create', {
+          ...(style.label ? { Label: { text: style.label } } : {}),
+          ContainerType: style.containerType,
+          Color: style.color,
+        });
+        return;
+      }
       const off = on('container.created', ({ id }) => {
         off();
         members.forEach(childRef => emit('container.add-child', { containerId: id, childRef }));
+        // Select the group itself: the next action after grouping is almost
+        // always styling/configuring it, and this is the keyboard route to a
+        // container (Tab only cycles nodes).
+        emit('selection.item.select', { kind: 'container', id });
       });
-      emit('editing.container.create', {});
-    });
+      emit('editing.container.create', {
+        ...(style.label ? { Label: { text: style.label } } : {}),
+        ContainerType: style.containerType,
+        Color: style.color,
+      });
+    };
+    on('selection.group', () => group());
+    on('selection.group.as', style => group(style));
 
-    contribute({ surface: 'top', command: 'selection.group', kind: 'button', text: 'Group', order: 41, group: 'edit' });
+    contribute({ surface: 'top', command: 'selection.group', kind: 'button', icon: 'group', label: 'Create container or group selection', order: 17, group: 'edit' });
   }, { requires: ['ability.selectable', 'graph'] });
 }

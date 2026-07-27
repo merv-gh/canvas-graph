@@ -10,6 +10,11 @@ const boot = async (page) => {
   await page.goto('/');
   await page.waitForFunction(() => !!window.app);
 };
+const clickMore = async (page, name) => {
+  const details = page.locator('.toolbar-overflow');
+  if (!(await details.evaluate(element => element.open))) await page.getByLabel('More actions').click();
+  await page.getByRole('button', { name, exact: true }).click();
+};
 
 test('model exposes an edge collection for navigation surfaces', async ({ page }) => {
   await boot(page);
@@ -108,7 +113,7 @@ test('Escape collapses the open navigator and redundant per-node/status panels s
 test('guide shortcut lanes do not overlap on desktop or phone', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await boot(page);
-  await page.getByRole('button', { name: 'Open getting-started guide' }).click();
+  await clickMore(page, 'Open getting-started guide');
   const overlapCount = () => page.locator('.onboarding-keys li').evaluateAll(rows => rows.filter(row => {
     const key = row.querySelector('kbd').getBoundingClientRect();
     const label = row.querySelector('span').getBoundingClientRect();
@@ -125,8 +130,8 @@ test('guide shortcut lanes do not overlap on desktop or phone', async ({ page })
 
 test('dark Preview import button keeps high-contrast primary styling', async ({ page }) => {
   await boot(page);
-  await page.getByRole('button', { name: 'Toggle theme' }).click();
-  await page.getByRole('button', { name: 'Open getting-started guide' }).click();
+  await clickMore(page, 'Toggle theme');
+  await clickMore(page, 'Open getting-started guide');
   const preview = page.getByRole('button', { name: 'Preview import' });
   await expect(preview).toHaveCSS('background-color', 'rgb(215, 215, 215)');
   await expect(preview).toHaveCSS('color', 'rgb(22, 22, 22)');
@@ -134,8 +139,8 @@ test('dark Preview import button keeps high-contrast primary styling', async ({ 
 
 test('workflow edge-label rectangles clear nodes, each other, and their own arrow axes', async ({ page }) => {
   await boot(page);
-  await page.getByRole('button', { name: 'Open getting-started guide' }).click();
-  await page.getByRole('button', { name: /Delivery workflow/ }).click();
+  await clickMore(page, 'Open getting-started guide');
+  await page.getByRole('button', { name: /Jira · Issue lifecycle/ }).click();
   const collisions = await page.locator('g.edge').evaluateAll(groups => {
     const intersects = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
     const segmentHitsRect = (x1, y1, x2, y2, rect) => {

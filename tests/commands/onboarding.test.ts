@@ -15,7 +15,7 @@ describe('first-visit guide', () => {
     await settle();
 
     expect(document.querySelector('.onboarding')).not.toBeNull();
-    expect(document.querySelectorAll('.onboarding-example')).toHaveLength(4);
+    expect(document.querySelectorAll('.onboarding-example')).toHaveLength(9);
     expect(document.cookie).toContain('showDemo=false');
 
     runCommand(ctx, 'modal.close');

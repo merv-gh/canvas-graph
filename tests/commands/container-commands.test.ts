@@ -68,6 +68,30 @@ describe('frontend containers', () => {
     expect(after.y - before.y).toBe(30);
   });
 
+  it('drags containers through the generic ability and drops nodes into them', async () => {
+    const ctx = bootApp({ autoLayout: false });
+    await settle();
+    ctx.bus.emit('editing.container.create', { Label: { text: 'Drop zone' }, at: { x: 0, y: 0 } });
+    await settle();
+    const container = containers(ctx)[0];
+
+    ctx.bus.emit('drag.item.start', { ref: { kind: 'container', id: container.id }, x: 0, y: 0 });
+    ctx.bus.emit('drag.item.move', { x: 40, y: 30 });
+    ctx.bus.emit('drag.item.end');
+    await settle();
+    expect(container.Position).toEqual({ x: 40, y: 30 });
+
+    const node = ctx.graphs.current.createNode({ Label: { text: 'Drop me' }, Position: { x: 500, y: 30 } });
+    ctx.bus.emit('drag.item.start', { ref: { kind: 'node', id: node.id }, x: 500, y: 30 });
+    ctx.bus.emit('drag.item.move', { x: 40, y: 30 });
+    expect(document.querySelector(`.container[data-item-id="${container.id}"]`)?.classList.contains('drop-target')).toBe(true);
+    ctx.bus.emit('drag.item.end');
+    await settle();
+
+    expect(container.Children).toContainEqual({ kind: 'node', id: node.id });
+    expect(document.querySelector('.container.drop-target')).toBeNull();
+  });
+
   it('resizes from the bottom-right while keeping top-left fixed', async () => {
     const ctx = bootApp();
     await settle();
@@ -127,6 +151,20 @@ describe('frontend containers', () => {
     ctx.bus.emit('container.remove-child', { childRef: { kind: 'node', id: child.id } });
     await settle();
     expect(containers(ctx)[0].Children).toHaveLength(0);
+  });
+
+  it('does not offer or run Ungroup for an empty container', async () => {
+    const ctx = bootApp();
+    await settle();
+    runCommand(ctx, 'editing.container.create');
+    await settle();
+    const container = containers(ctx)[0];
+    ctx.selection.select({ kind: 'container', id: container.id });
+    await settle();
+
+    expect(runCommand(ctx, 'container.ungroup')).toBe(false);
+    expect(document.querySelector('[data-command="container.ungroup"]')).toBeNull();
+    expect(containers(ctx)).toHaveLength(1);
   });
 
   it('deleting a container deletes its child nodes and emits container.deleted', async () => {

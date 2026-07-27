@@ -4,6 +4,10 @@ import { Places, Slots } from '../types';
 import type { ActionDef, AffordanceDef, EntityDef, EntityRenderCtx, ItemRef } from '../types';
 import { uiValue } from '../core';
 
+declare module '../types' {
+  interface CustomEvents { 'canvas.empty.create': void }
+}
+
 /** render.stage owns the stage paint: nodes, edges, overlays, empty state.
  *  Listens for `render.stage.draw` from the render scheduler — never schedules
  *  by itself — and pushes results back through `render.view.set`. This split
@@ -12,6 +16,12 @@ import { uiValue } from '../core';
 export function registerRenderStage(system: Registry) {
   system('render.stage', ctx => {
     const { on, emit, graphs, contexts, model } = ctx;
+
+    contexts.commands.register([{ id: 'canvas.empty.create', label: 'Create first node', group: 'editing', hidden: true }]);
+    on('canvas.empty.create', () => {
+      emit('canvas.select');
+      contexts.commands.run('editing.node.create', { origin: 'pointer' });
+    });
 
     const applyAffordance = <T>(el: HTMLElement, item: T, ui: AffordanceDef<T>) => {
       if (ui.className) el.classList.add(...ui.className.split(/\s+/).filter(Boolean));
@@ -60,6 +70,7 @@ export function registerRenderStage(system: Registry) {
     };
     const renderCtxFor = <T>(entityDef: EntityDef<T>, item: T): EntityRenderCtx => ({
       graph: graphs.current,
+      nodeType: id => model.nodeType(id),
       refOf: (id) => {
         const base = { kind: entityDef.kind as ItemRef['kind'], id };
         const parent = contexts.hierarchy.parentIds(base);
@@ -289,7 +300,7 @@ export function registerRenderStage(system: Registry) {
       refs.forEach(r0 => {
         const ref = norm(r0);
         todo.set(keyOf(ref), ref);
-        if (ref.kind === 'node') graphs.current.edgesOf(ref.id).forEach(e => {
+        if (ref.kind === 'node' || ref.kind === 'container') graphs.current.edgesOf(ref.id).forEach(e => {
           const er = norm(edgeRef(e.id)); todo.set(keyOf(er), er);
         });
       });
@@ -364,7 +375,7 @@ export function registerRenderStage(system: Registry) {
           hint.append(purpose);
           if (globalThis.innerWidth <= 680) hint.append('Tap to add a node');
           else if (shortcut) hint.append(kbdHint('Press ', shortcut, ' to add a node'));
-          return emptyState(contexts.templates, 'No nodes in this graph yet', hint, 'editing.node.create') ?? document.createDocumentFragment();
+          return emptyState(contexts.templates, 'No nodes in this graph yet', hint, 'canvas.empty.create') ?? document.createDocumentFragment();
         },
       });
     };

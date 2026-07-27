@@ -20,10 +20,13 @@ EntityDef → CollectionDef/ModelDef.
 | Cross-system flow (A's fact → B's request) | `features.ts` only — never inside a system |
 | Node/edge data, CRUD | `model/graph.ts` (store) + `systems/graph.ts` (events/commands) |
 | Node/edge appearance | `model/entities.ts` (renderers) + `styles.css` |
+| New reusable node type | `model/node-types.ts` (one catalog row); add CSS only for a genuinely new `NodeVisual` |
+| Graph presets (UML/outline) | `systems/presets.ts` + `styles.css` `[data-preset]` blocks |
 | Stage paint / culling / overlays | `systems/render-stage.ts` |
 | Redraw scheduling / slots / shell | `systems/render.ts` (don't touch for paint changes) |
 | Left panel tree | `systems/outline.ts` + `core/hierarchy.ts` |
-| Palette / Help / shortcut editing | `systems/command-modal.ts` |
+| Persistent node collection / saved types | `systems/palette.ts` + `systems/presets.ts` |
+| Command search / shortcut editing | `systems/command-modal.ts` |
 | Letter-pick flows | `systems/command-picker.ts` (multi-step) or `systems/jump.ts` (nav) |
 | Pan/zoom/fit | `systems/view-zoom.ts`, `systems/view-pan.ts`, `core/view.ts` |
 | Fold/collapse/zen anything | `core/fold.ts` (store) + `systems/foldable.ts` (click/event) + owner |

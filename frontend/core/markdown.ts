@@ -183,3 +183,98 @@ export function renderMarkdown(markdown: string): DocumentFragment {
   });
   return fragment;
 }
+
+// ---------------------------------------------------------------------------
+// Outline parsing (markdown import). Independent of parseMarkdown so the
+// text-layout measurement path is untouched.
+// ---------------------------------------------------------------------------
+export type OutlineItem = { text: string; description?: string; children: OutlineItem[] };
+export type OutlineEntry =
+  | { kind: 'heading'; level: number; text: string; description?: string; items: OutlineItem[] }
+  | { kind: 'items'; items: OutlineItem[] };
+
+// Indent-capturing list regexes — the shared unorderedOf/orderedOf above strip
+// indentation, which the nesting stack needs, so the outline keeps its own.
+const unorderedItemOf = (line: string) => /^(\s*)[-+*]\s+(.+)$/.exec(line);
+const orderedItemOf = (line: string) => /^(\s*)\d+[.)]\s+(.+)$/.exec(line);
+
+/** Parse headings + nested lists into an outline. Headings become entries in
+ *  document order; list runs after a heading attach to it, lists before any
+ *  heading become a leading `{kind:'items'}` entry.
+ *
+ *  Nesting uses an indentation stack: indent greater than the stack top nests
+ *  under the previous item, equal is a sibling, smaller pops. A tab expands to
+ *  two spaces before measuring, so one tab = one 2-space level. Indent jumps
+ *  deeper than one level clamp to stack depth + 1 (the stack can only grow by
+ *  one entry per line, so no level is ever skipped).
+ *
+ *  The first paragraph line run directly after a heading or item (any line
+ *  that is not a list/heading/fence/quote/rule) becomes that entry's
+ *  `description`; later paragraphs are ignored. Code fences, quotes, and
+ *  rules are skipped entirely. */
+export function parseMarkdownOutline(markdown: string): OutlineEntry[] {
+  const lines = markdown.replace(/\r\n?/g, '\n').split('\n');
+  const entries: OutlineEntry[] = [];
+  /** Entry that currently receives list runs (last heading, or the leading
+   *  items entry created on demand). */
+  let current: OutlineEntry | null = null;
+  /** Heading/item still eligible for a description paragraph. */
+  let target: { description?: string } | null = null;
+  let stack: { indent: number; item: OutlineItem }[] = [];
+  let paragraph: string[] = [];
+  let index = 0;
+
+  const flushParagraph = () => {
+    if (paragraph.length && target && target.description === undefined) {
+      target.description = paragraph.join(' ');
+    }
+    paragraph = [];
+  };
+  const addItem = (indent: number, text: string) => {
+    if (!current) {
+      current = { kind: 'items', items: [] };
+      entries.push(current);
+    }
+    while (stack.length && stack[stack.length - 1].indent >= indent) stack.pop();
+    const item: OutlineItem = { text, children: [] };
+    if (stack.length) stack[stack.length - 1].item.children.push(item);
+    else current.items.push(item);
+    stack.push({ indent, item });
+    target = item;
+  };
+
+  while (index < lines.length) {
+    const line = lines[index];
+    if (fenceOf(line)) {
+      flushParagraph();
+      index += 1;
+      while (index < lines.length && !fenceOf(lines[index])) index += 1;
+      if (index < lines.length) index += 1;
+      continue;
+    }
+    if (!line.trim()) { flushParagraph(); index += 1; continue; }
+    const heading = headingOf(line);
+    if (heading) {
+      flushParagraph();
+      const entry: OutlineEntry = { kind: 'heading', level: heading[1].length, text: heading[2], items: [] };
+      entries.push(entry);
+      current = entry;
+      stack = [];
+      target = entry;
+      index += 1;
+      continue;
+    }
+    if (isRule(line) || quoteOf(line)) { flushParagraph(); index += 1; continue; }
+    const listed = unorderedItemOf(line) ?? orderedItemOf(line);
+    if (listed) {
+      flushParagraph();
+      addItem(listed[1].replace(/\t/g, '  ').length, listed[2].trim());
+      index += 1;
+      continue;
+    }
+    paragraph.push(line.trim());
+    index += 1;
+  }
+  flushParagraph();
+  return entries;
+}

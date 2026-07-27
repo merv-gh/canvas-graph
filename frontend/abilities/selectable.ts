@@ -61,10 +61,9 @@ export function registerSelectable(system: Registry) {
         input: {
           on: 'pointerdown',
           selector: '[data-item-kind][data-item-id]',
-          // `.modal-layer`, inputs, and labels are excluded so a click on a
-          // property field (the `.properties` form carries data-item-kind/id)
-          // focuses the input instead of being eaten by select's preventDefault.
-          when: event => !(event.target as Element).closest('[data-command], [data-drag-handle], [data-resize-handle], [data-container-section-title], [data-container-section-resize], .modal-layer, input, textarea, select, label'),
+          // Inspector/tool chrome can carry data-item-kind/id for command payloads,
+          // but only canvas entities participate in pointer selection.
+          when: event => !(event.target as Element).closest('.stage.ink-erasing, .tool-panel, .item-toolbar, [data-command], [data-drag-handle], [data-resize-handle], [data-container-section-title], [data-container-section-resize], .modal-layer, input, textarea, select, label'),
           prevent: true,
           stop: true,
         },
@@ -82,10 +81,9 @@ export function registerSelectable(system: Registry) {
           on: 'pointerdown',
           selector: '[data-item-kind][data-item-id]',
           shift: true,
-          // `.modal-layer`, inputs, and labels are excluded so a click on a
-          // property field (the `.properties` form carries data-item-kind/id)
-          // focuses the input instead of being eaten by select's preventDefault.
-          when: event => !(event.target as Element).closest('[data-command], [data-drag-handle], [data-resize-handle], [data-container-section-title], [data-container-section-resize], .modal-layer, input, textarea, select, label'),
+          // Inspector/tool chrome can carry data-item-kind/id for command payloads,
+          // but only canvas entities participate in pointer selection.
+          when: event => !(event.target as Element).closest('.stage.ink-erasing, .tool-panel, .item-toolbar, [data-command], [data-drag-handle], [data-resize-handle], [data-container-section-title], [data-container-section-resize], .modal-layer, input, textarea, select, label'),
           prevent: true,
           stop: true,
         },
@@ -106,7 +104,9 @@ export function registerSelectable(system: Registry) {
         shortcut: 'Tab',
         input: {
           on: 'keydown', key: 'Tab', prevent: true,
-          when: event => !(event.target as Element).closest('input, textarea, select, [contenteditable="true"], [contenteditable="plaintext-only"]'),
+          // Inside a modal, Tab must stay the browser's focus walk (otherwise
+          // the prevented binding traps focus on whatever the modal focused).
+          when: event => !(event.target as Element).closest('input, textarea, select, [contenteditable="true"], [contenteditable="plaintext-only"], .modal-layer'),
         },
         available: () => graphs.current.nodes().length > 0,
         payload: () => ({ id: nextNodeId() }),

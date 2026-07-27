@@ -1,4 +1,4 @@
-import { clamp, clientPoint, isStageSurface, type Registry } from '../core';
+import { clamp, clientPoint, isStageSurface, pointerGesture, type Registry } from '../core';
 import { Places } from '../types';
 import type { Position, ViewState } from '../types';
 
@@ -16,8 +16,6 @@ declare module '../types' {
  *  the same pointerdown cleanly: pan owns two-finger / middle / space / alt,
  *  marquee owns a bare single primary pointer. Tracked here (pan is the
  *  render-adjacent camera owner) and read by `marquee.ts`. */
-const gesture = { pointers: new Set<number>(), points: new Map<number, Position>(), space: false };
-
 /** Pure two-touch transform: keep graph point beneath starting centroid under
  * current centroid while distance ratio controls scale. This makes pinch and
  * two-finger translation one stable gesture instead of competing handlers. */
@@ -46,8 +44,7 @@ export const touchGestureView = (
  *  CURRENT pointer before this runs, so `size` already counts this finger — a
  *  lone finger is `size === 1` (select); the second makes it `>= 2` (pan). */
 export const isMoveIntent = (event: PointerEvent) =>
-  event.button === 1 || event.altKey || gesture.space ||
-  (event.pointerType === 'touch' && gesture.pointers.size >= 2);
+  pointerGesture.isMoveIntent(event);
 
 export function registerViewPan(system: Registry) {
   system('view.pan', ({ on, emit, contexts, frameLoop }) => {
@@ -60,17 +57,15 @@ export function registerViewPan(system: Registry) {
 
     // --- Pointer/space bookkeeping (feeds isMoveIntent) ---
     const onDown = (e: PointerEvent) => {
-      gesture.pointers.add(e.pointerId);
-      if (e.pointerType === 'touch') gesture.points.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      pointerGesture.down(e);
     };
     const onMove = (e: PointerEvent) => {
-      if (gesture.points.has(e.pointerId)) gesture.points.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      pointerGesture.move(e);
     };
     const onUp = (e: PointerEvent) => {
-      gesture.pointers.delete(e.pointerId);
-      gesture.points.delete(e.pointerId);
+      pointerGesture.up(e);
     };
-    const onKey = (e: KeyboardEvent) => { if (e.code === 'Space') gesture.space = e.type === 'keydown'; };
+    const onKey = (e: KeyboardEvent) => pointerGesture.key(e);
     window.addEventListener('pointerdown', onDown, true);
     window.addEventListener('pointermove', onMove, true);
     window.addEventListener('pointerup', onUp, true);
@@ -86,7 +81,7 @@ export function registerViewPan(system: Registry) {
       });
     };
     const beginTouch = () => {
-      const entries = [...gesture.points.entries()].slice(0, 2);
+      const entries = [...pointerGesture.state.points.entries()].slice(0, 2);
       if (entries.length < 2) return null;
       const [[aId, a], [bId, b]] = entries;
       const center = contexts.view.clientToScreen(Places.Stage, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
@@ -99,8 +94,8 @@ export function registerViewPan(system: Registry) {
     };
     const applyTouch = () => {
       if (!touch) return false;
-      const a = gesture.points.get(touch.ids[0]);
-      const b = gesture.points.get(touch.ids[1]);
+      const a = pointerGesture.state.points.get(touch.ids[0]);
+      const b = pointerGesture.state.points.get(touch.ids[1]);
       if (!a || !b) return false;
       const center = contexts.view.clientToScreen(Places.Stage, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
       contexts.view.set(touchGestureView(
@@ -148,7 +143,12 @@ export function registerViewPan(system: Registry) {
         // makes "two fingers = move" work on a trackpad, where the gesture arrives
         // as wheel deltas, not pointer events.
         id: 'view.wheel.pan', label: 'Wheel pan', event: 'view.wheel.pan', group: 'view', hidden: true,
-        input: { on: 'wheel', selector: stageSelector, when: event => !(event as WheelEvent).ctrlKey, prevent: true },
+        input: {
+          on: 'wheel', selector: stageSelector,
+          when: event => !(event as WheelEvent).ctrlKey
+            && !(event.target instanceof Element && event.target.closest('[data-native-scroll]')),
+          prevent: true,
+        },
         payload: ({ event }) => ({ dx: (event as WheelEvent).deltaX, dy: (event as WheelEvent).deltaY }),
       },
     ]);
@@ -170,7 +170,7 @@ export function registerViewPan(system: Registry) {
       emit('select.box.cancel');
       pan = { pointer: { x, y }, view: contexts.view.get() };
       panPointerId = pointerId;
-      touch = gesture.points.size >= 2 ? beginTouch() : null;
+      touch = pointerGesture.state.points.size >= 2 ? beginTouch() : null;
       contexts.places.el(Places.Stage)?.classList.add('panning');
     });
     on('view.pan.move', p => {
@@ -204,8 +204,7 @@ export function registerViewPan(system: Registry) {
       window.removeEventListener('pointercancel', onUp, true);
       window.removeEventListener('keydown', onKey, true);
       window.removeEventListener('keyup', onKey, true);
-      gesture.pointers.clear();
-      gesture.points.clear();
+      pointerGesture.clear();
     };
   }, { requires: ['render'] });
 }

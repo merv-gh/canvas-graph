@@ -1,7 +1,6 @@
-import { clientPoint, isStageSurface, nodeRect, nodeRef, rectsIntersect, type Registry } from '../core';
+import { clientPoint, isStageSurface, nodeRect, nodeRef, pointerGesture, rectsIntersect, type Registry } from '../core';
 import { Places } from '../types';
 import type { ItemRef, Position } from '../types';
-import { isMoveIntent } from './view-pan';
 
 declare module '../types' {
   interface CustomEvents {
@@ -58,10 +57,12 @@ export function registerMarquee(system: Registry) {
         hidden: true,
         input: {
           on: 'pointerdown', selector: stageSelector,
-          // Bare primary pointer on empty stage — everything move-intent is pan's.
+          // Bare primary pointer on empty stage — everything move-intent is
+          // pan's, and ink owns the pointer entirely while draw mode is on.
           when: (event, stage) => {
             const e = event as PointerEvent;
-            return isStageSurface(event, stage) && e.isPrimary && e.button === 0 && !isMoveIntent(e);
+            return !contexts.cancellation.blocksPointer()
+              && isStageSurface(event, stage) && e.isPrimary && e.button === 0 && !pointerGesture.isMoveIntent(e);
           },
           prevent: true, stop: true,
         },

@@ -1,6 +1,7 @@
 import type { ModelDef } from '../types';
 import { appCollections, type AppModelCtx } from './collections';
 import { builtinEntities } from './entities';
+import { BUILTIN_NODE_TYPES } from './node-types';
 
 /** The built-in domain. Entities (graph / node / edge) are declared in
  *  `entities.ts`, collections in `collections.ts`. Behavior lives in systems.
@@ -10,6 +11,7 @@ import { builtinEntities } from './entities';
 export const appModel: ModelDef<AppModelCtx> = {
   entities: builtinEntities,
   collections: appCollections,
+  nodeTypes: BUILTIN_NODE_TYPES,
 };
 
 export type AppModel = typeof appModel;

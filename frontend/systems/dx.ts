@@ -45,6 +45,23 @@ export function runDx(ctx: AppCtx): DxIssue[] {
   const visibleCommandIds = new Set(commands.filter(c => !c.hidden).map(c => c.id));
   const knownSlots = EntitySlots;
 
+  ctx.model.nodeTypes().forEach(def => {
+    if (!def.id.trim()) error('node-type.id-empty', 'node type has an empty id');
+    if (!def.label.trim()) error('node-type.label-empty', `node type "${def.id}" has no label`);
+    if (!def.category.trim()) error('node-type.category-empty', `node type "${def.id}" has no category`);
+    if (!def.visual) error('node-type.visual-missing', `node type "${def.id}" has no visual primitive`);
+    if (def.defaultSize && (!(def.defaultSize.w > 0) || !(def.defaultSize.h > 0))) {
+      error('node-type.size-invalid', `node type "${def.id}" has invalid default size`);
+    }
+  });
+  ctx.graphs.current.nodes().forEach(node => {
+    if (!ctx.model.nodeType(node.NodeType)) warn('node-type.unknown', `node "${node.id}" uses unknown type "${node.NodeType}"`);
+  });
+
+  ctx.contexts.storage.defaultOwners().forEach(({ kind, origin }) => {
+    if (!ctx.flags.isOn(origin)) error('defaults.owner-disabled', `"${kind}" defaults owned by disabled "${origin}"`);
+  });
+
   ctx.model.entities().forEach(entityDef => entityDef.abilities.forEach(abilityDef => {
     if (!abilityDef.actions.length) error('ability.no-actions', `${entityDef.kind}.${abilityDef.id} has no actions`);
     if (abilityDef.id === 'configurable' && !entityDef.properties?.length) {

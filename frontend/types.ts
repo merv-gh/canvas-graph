@@ -230,7 +230,7 @@ export type CommandFormOption = { value: string; label: string };
 export type CommandFormField = {
   id: string;
   label: string;
-  input?: 'text';
+  input?: 'text' | 'select' | 'hidden';
   placeholder?: string;
   required?: boolean;
   autofocus?: boolean;
@@ -331,7 +331,7 @@ export type PropertyDef<T = unknown, Patch = unknown> = {
   min?: number;
   step?: number;
   rows?: number;
-  options?: { value: string; label: string }[];
+  options?: { value: string; label: string; icon?: string }[];
   /** Section the property is rendered under in the modal. Default 'default'. */
   group?: string;
 };
@@ -349,6 +349,12 @@ export type AffordanceSurface = 'palette' | 'list' | 'entity' | 'top';
  *  Keyboard shortcuts are NOT affordances here — they live on CommandSpec.input.
  *  DX treats an input-bound command as the keyboard affordance for its action. */
 export type AffordanceKind = 'button' | 'handler';
+export type IconName = 'menu' | 'fit' | 'more' | 'commands' | 'select' | 'draw' | 'erase'
+  | 'node' | 'connect' | 'container' | 'group' | 'undo' | 'redo' | 'export' | 'import'
+  | 'share' | 'help' | 'theme' | 'star' | 'star-filled' | 'close' | 'trash'
+  | 'text' | 'circle' | 'toggle' | 'reverse' | 'collapse' | 'ungroup' | 'move-out' | 'check'
+  | 'placement-inside' | 'placement-below' | 'placement-right' | 'placement-hidden'
+  | 'layout-columns' | 'layout-rows';
 
 export type AffordanceDef<T = unknown> = {
   surface: AffordanceSurface;
@@ -359,6 +365,7 @@ export type AffordanceDef<T = unknown> = {
   when?: (item: T) => boolean;
   slot?: SlotName;
   text?: UiValue<T>;
+  icon?: IconName;
   label?: UiValue<T>;
   className?: string;
   attrs?: Record<string, UiValue<T>>;
@@ -394,12 +401,16 @@ export type PanelAnchor = 'top-left' | 'top-center' | 'top-right' | 'middle-righ
 export type PanelDef = {
   id: string;
   anchor: PanelAnchor;
+  /** Render into a shell place instead of the floating stage layer. */
+  place?: Place;
   /** Bind a collapse chevron to this fold id (and hide the body while folded). */
   foldId?: string;
   /** Render a drag handle so the user can reposition the panel. */
   movable?: boolean;
-  /** Buttons in a row (`toolbar`) or a column (`stack`). Default `stack`. */
-  layout?: 'toolbar' | 'stack';
+  /** Buttons in a row (`toolbar`), column (`stack`), or owner-rendered body. */
+  layout?: 'toolbar' | 'stack' | 'custom';
+  /** Body factory for `custom` panels. DOM stays owned by the declaring system. */
+  render?: () => HTMLElement;
   /** Re-evaluated on each redraw; when it returns false the panel is unmounted. */
   mountWhen?: () => boolean;
   /** Lower renders/iterates earlier. */
@@ -429,7 +440,27 @@ export type AbilityDef<T = unknown> = { id: string; actions: NonEmptyArray<Actio
  *  An edge renderer that needs its endpoints calls `getItem({kind:'node', id})`. */
 export type EntityRenderGraph = {
   getItem(ref: ItemRef): unknown | undefined;
+  refById(id: Id): ItemRef | undefined;
   itemsOfKind<T = unknown>(kind: string): T[];
+};
+
+/** Reusable visual primitive. Node types choose one; adding a domain-specific
+ * type normally adds catalog data, not renderer code. Add a primitive only when
+ * the DOM treatment itself is genuinely new. */
+export type NodeVisual = 'card' | 'circle' | 'rounded' | 'pill' | 'diamond' | 'parallelogram'
+  | 'operator' | 'caption' | 'list' | 'section' | 'table' | 'switch' | 'timeline'
+  | 'artifact' | 'agent' | 'approval';
+
+export type NodeTypeDef = {
+  id: string;
+  label: string;
+  category: string;
+  keywords?: string[];
+  visual: NodeVisual;
+  defaultSize?: Size;
+  /** False when the visual owns its geometry (tables, controls, run-report
+   * primitives). Text edits then preserve the catalog-declared dimensions. */
+  autoSize?: boolean;
 };
 
 /** Per-item render scope. The render system constructs this once per item and
@@ -437,6 +468,9 @@ export type EntityRenderGraph = {
  *  reach for the DOM, item-modes, or affordances directly. */
 export type EntityRenderCtx = {
   graph: EntityRenderGraph;
+  /** Resolve node vocabulary through the model boundary. Renderers never import
+   * palette/preset systems to understand a type. */
+  nodeType(id: string): NodeTypeDef | undefined;
   /** Build a full ItemRef for *this entity's kind* with the parent chain
    *  populated from the hierarchy context. Use this instead of constructing
    *  ItemRef literals — containers/groups attach parent automatically, so
@@ -521,6 +555,7 @@ export type EntityDef<T, Patch = unknown> = {
 export type CollectionToolbar = {
   /** Override the button text. Default: `+ ${entity.label ?? collection.label-singular}`. */
   text?: string;
+  icon?: IconName;
   surface?: AffordanceSurface;
   order?: number;
 };
@@ -556,4 +591,5 @@ export type ResolvedCollectionDef<T, Ctx = unknown> = Omit<CollectionDef<T, Ctx>
 export type ModelDef<Ctx = unknown> = {
   entities: EntityDef<unknown, unknown>[];
   collections: CollectionDef<unknown, Ctx>[];
+  nodeTypes?: NodeTypeDef[];
 };

@@ -1,5 +1,8 @@
-import type { Registry } from '../core';
+import { rectCenter, type Registry } from '../core';
+import { parseMarkdownOutline, type OutlineItem } from '../core/markdown';
 import type { GraphSnapshot } from '../model';
+import type { ItemRef, Rect, Size } from '../types';
+import type { Container } from './container-entity';
 
 declare module '../types' {
   interface CustomEvents {
@@ -10,12 +13,16 @@ declare module '../types' {
     /** Import a mermaid flowchart from a string (raw source, a mermaid.live
      *  link, or an http(s) URL) — the paste/`?in=` entry point. */
     'graph.import.mermaid': { source: string };
+    /** Import a Markdown outline (headings + nested lists) from raw text. */
+    'graph.import.markdown': { source: string };
     'graph.import.confirm': void;
     'graph.import.cancel': void;
     /** Read the clipboard and import it as mermaid (palette action). */
     'graph.import.paste': void;
     /** Preview Mermaid entered in the import dialog. */
     'graph.import.submit': { source: string };
+    'graph.import.file.choose': { input?: HTMLInputElement };
+    'graph.import.file.read': { file?: File; textarea?: HTMLTextAreaElement };
   }
 }
 
@@ -308,12 +315,155 @@ const looksLikeMermaid = (text: string) =>
   !!mermaidLivePayload(text) ||
   (/-->|---|-\.->|==>/.test(text) && /[A-Za-z0-9_]/.test(text));
 
+// ---------------------------------------------------------------------------
+// Markdown outline -> GraphSnapshot. Headings become section-header nodes and
+// leaf list items become list-item nodes, flowing top-to-bottom at x=0; items
+// with children become AutoFit containers whose children open to the right in
+// a single row (nested containers recurse with the same rule). Consecutive
+// top-level rows are chained with unlabeled sync edges so the import reads as
+// a sequence and tidy/vertical layouts keep working. Positions are centers —
+// the convention nodeBoundsOf and the mermaid builder above already use.
+// ---------------------------------------------------------------------------
+type ContainerSnapshot = Omit<Container, 'kind'>;
+type ImportFormat = 'JSON' | 'Mermaid' | 'Markdown outline';
+
+const OUTLINE_HEADER_SIZE: Size = { w: 260, h: 56 };
+const OUTLINE_H1_SIZE: Size = { w: 280, h: 64 };   // level-1 headings read slightly larger
+const OUTLINE_ITEM_SIZE: Size = { w: 240, h: 48 };
+const OUTLINE_ROW_GAP = 24;
+const OUTLINE_CHILD_GAP = 36;
+// Mirror the containers.ts AutoFit chrome (PADDING/LABEL_BAND) so stored
+// container sizes match what expandedRect derives from the laid-out children.
+const OUTLINE_CONTAINER_PAD = 24;
+const OUTLINE_CONTAINER_LABEL = 18;
+
+const markdownOutlineToSnapshot = (source: string): { snapshot: GraphSnapshot; counts: { nodes: number; containers: number } } => {
+  const nodes: GraphSnapshot['nodes'] = [];
+  const edges: GraphSnapshot['edges'] = [];
+  const containers: ContainerSnapshot[] = [];
+  let nodeSeq = 0;
+  let containerSeq = 0;
+
+  // Containers have no Description field, so an item-with-children carries
+  // its description as a first child list-item node instead.
+  const childItems = (item: OutlineItem): OutlineItem[] =>
+    item.children.length && item.description
+      ? [{ text: item.description, children: [] }, ...item.children]
+      : item.children;
+
+  const measureItem = (item: OutlineItem): Size => {
+    const kids = childItems(item);
+    if (!kids.length) return OUTLINE_ITEM_SIZE;
+    const sizes = kids.map(measureItem);
+    return {
+      w: sizes.reduce((sum, size) => sum + size.w, 0) + OUTLINE_CHILD_GAP * (sizes.length - 1) + OUTLINE_CONTAINER_PAD * 2,
+      h: Math.max(...sizes.map(size => size.h)) + OUTLINE_CONTAINER_PAD * 2 + OUTLINE_CONTAINER_LABEL,
+    };
+  };
+
+  /** Emit a leaf node or container subtree with its outer rect anchored at
+   *  (left, top); returns the ref and the outer rect actually occupied. */
+  const placeItem = (item: OutlineItem, left: number, top: number): { ref: ItemRef; rect: Rect } => {
+    const kids = childItems(item);
+    if (!kids.length) {
+      const id = `e${++nodeSeq}`;
+      const rect: Rect = { x: left, y: top, w: OUTLINE_ITEM_SIZE.w, h: OUTLINE_ITEM_SIZE.h };
+      nodes.push({
+        id,
+        Label: { text: item.text },
+        NodeType: 'list-item',
+        Position: rectCenter(rect),
+        Size: { ...OUTLINE_ITEM_SIZE },
+        ...(item.description ? { Description: item.description } : {}),
+      });
+      return { ref: { kind: 'node', id }, rect };
+    }
+    const sizes = kids.map(measureItem);
+    const maxHeight = Math.max(...sizes.map(size => size.h));
+    const contentWidth = sizes.reduce((sum, size) => sum + size.w, 0) + OUTLINE_CHILD_GAP * (sizes.length - 1);
+    const rect: Rect = {
+      x: left,
+      y: top,
+      w: contentWidth + OUTLINE_CONTAINER_PAD * 2,
+      h: maxHeight + OUTLINE_CONTAINER_PAD * 2 + OUTLINE_CONTAINER_LABEL,
+    };
+    const id = `c${++containerSeq}`;
+    const children: ItemRef[] = [];
+    let childLeft = left + OUTLINE_CONTAINER_PAD;
+    const contentTop = top + OUTLINE_CONTAINER_LABEL + OUTLINE_CONTAINER_PAD;
+    kids.forEach((kid, kidIndex) => {
+      children.push(placeItem(kid, childLeft, contentTop + (maxHeight - sizes[kidIndex].h) / 2).ref);
+      childLeft += sizes[kidIndex].w + OUTLINE_CHILD_GAP;
+    });
+    containers.push({
+      id,
+      Label: { text: item.text },
+      Position: rectCenter(rect),
+      Size: { w: rect.w, h: rect.h },
+      AutoFit: true,
+      SectionAxis: 'columns',
+      Children: children,
+    });
+    return { ref: { kind: 'container', id }, rect };
+  };
+
+  /** Edges only address nodes, so a container row chains through its first
+   *  descendant leaf. */
+  const firstLeaf = (ref: ItemRef): string => {
+    if (ref.kind === 'node') return ref.id;
+    const first = containers.find(container => container.id === ref.id)?.Children[0];
+    return first ? firstLeaf(first) : ref.id;
+  };
+
+  let rowTop = 0;
+  const rowAnchors: string[] = [];
+  parseMarkdownOutline(source).forEach(entry => {
+    if (entry.kind === 'heading') {
+      const size = entry.level === 1 ? OUTLINE_H1_SIZE : OUTLINE_HEADER_SIZE;
+      const id = `e${++nodeSeq}`;
+      const rect: Rect = { x: 0, y: rowTop, w: size.w, h: size.h };
+      nodes.push({
+        id,
+        Label: { text: entry.text },
+        NodeType: 'section-header',
+        Position: rectCenter(rect),
+        Size: { ...size },
+        ...(entry.description ? { Description: entry.description } : {}),
+      });
+      rowAnchors.push(id);
+      rowTop = rect.y + rect.h + OUTLINE_ROW_GAP;
+    }
+    entry.items.forEach(item => {
+      const placed = placeItem(item, 0, rowTop);
+      rowAnchors.push(firstLeaf(placed.ref));
+      rowTop = placed.rect.y + placed.rect.h + OUTLINE_ROW_GAP;
+    });
+  });
+  rowAnchors.forEach((anchor, index) => {
+    if (!index) return;
+    edges.push({ id: `m-e-${edges.length}`, From: rowAnchors[index - 1], To: anchor, EdgeKind: 'sync' });
+  });
+  return {
+    snapshot: { schemaVersion: 1, nodes, edges, ...(containers.length ? { extensions: { containers } } : {}) },
+    counts: { nodes: nodes.length, containers: containers.length },
+  };
+};
+
+/** Markdown outline = first content line is a heading or a list marker, and
+ *  the source is neither JSON nor mermaid. */
+const looksLikeMarkdownOutline = (source: string) => {
+  if (source.trimStart().startsWith('{')) return false;
+  if (looksLikeMermaid(source)) return false;
+  const first = source.split('\n').find(line => line.trim());
+  return !!first && (/^#{1,6}\s/.test(first.trim()) || /^\s*(?:[-+*]|\d+[.)])\s+/.test(first));
+};
+
 export const SHARE_URL_LIMIT = 7500;
 export const shareUrlTooLarge = (url: string) => url.length > SHARE_URL_LIMIT;
 
 export function registerShare(system: Registry) {
   system('share', ({ on, emit, contexts, graphs, contribute }) => {
-    let pendingImport: { snapshot: GraphSnapshot; format: 'JSON' | 'Mermaid'; tidy: boolean } | null = null;
+    let pendingImport: { snapshot: GraphSnapshot; format: ImportFormat; tidy: boolean } | null = null;
     contexts.commands.register([
       { id: 'graph.share.copy', label: 'Share current graph', group: 'graph' },
       {
@@ -338,6 +488,24 @@ export function registerShare(system: Registry) {
       {
         id: 'graph.import.cancel', label: 'Cancel graph import', group: 'graph', hidden: true,
         input: { on: 'click', selector: '[data-import-cancel]' },
+      },
+      {
+        id: 'graph.import.file.choose', label: 'Choose Markdown file', group: 'graph', hidden: true,
+        input: { on: 'click', selector: '[data-import-file-choose]' },
+        payload: ({ target }) => ({
+          input: target?.closest('.import-source')?.querySelector<HTMLInputElement>('[data-import-file]') ?? undefined,
+        }),
+      },
+      {
+        id: 'graph.import.file.read', label: 'Read Markdown file', group: 'graph', hidden: true,
+        input: { on: 'change', selector: '[data-import-file]' },
+        payload: ({ target }) => {
+          const input = target as HTMLInputElement | null;
+          return {
+            file: input?.files?.[0],
+            textarea: input?.closest('.import-source')?.querySelector<HTMLTextAreaElement>('[data-import-source]') ?? undefined,
+          };
+        },
       },
       {
         id: 'graph.import.mermaid.paste-event',
@@ -410,7 +578,7 @@ export function registerShare(system: Registry) {
       return panel;
     };
 
-    const importPreviewBody = (snapshot: GraphSnapshot, format: 'JSON' | 'Mermaid') => () => {
+    const importPreviewBody = (snapshot: GraphSnapshot, format: ImportFormat) => () => {
       const panel = document.createElement('section');
       panel.className = 'import-preview';
       const summary = document.createElement('p');
@@ -442,7 +610,7 @@ export function registerShare(system: Registry) {
       const panel = document.createElement('section');
       panel.className = 'import-source';
       const intro = document.createElement('p');
-      intro.textContent = 'Paste Canvas Graph JSON, Mermaid flowchart source, or a mermaid.live link. You will review changes before replacement.';
+      intro.textContent = 'Paste Canvas Graph JSON, Mermaid flowchart source, a mermaid.live link, or a Markdown outline (headings + nested lists). You will review changes before replacement.';
       const textarea = document.createElement('textarea');
       textarea.dataset.importSource = '';
       textarea.setAttribute('aria-label', 'Graph JSON or Mermaid source');
@@ -457,7 +625,17 @@ export function registerShare(system: Registry) {
       preview.dataset.command = 'graph.import.submit';
       preview.dataset.importSubmit = '';
       preview.textContent = 'Preview import';
-      actions.append(preview);
+      const file = document.createElement('input');
+      file.type = 'file';
+      file.accept = '.md,.markdown,.txt';
+      file.hidden = true;
+      file.dataset.importFile = '';
+      const choose = document.createElement('button');
+      choose.type = 'button';
+      choose.textContent = 'Choose .md file';
+      choose.dataset.command = 'graph.import.file.choose';
+      choose.dataset.importFileChoose = '';
+      actions.append(preview, choose, file);
       panel.append(intro, textarea, actions);
       return panel;
     };
@@ -472,6 +650,13 @@ export function registerShare(system: Registry) {
         emit('graph.shared', { url: url.toString() });
         emit('modal.open', { title: 'Share graph', visual: 'properties', body: shareBody(url.toString()) });
       })();
+    });
+    on('graph.import.file.choose', ({ input }) => input?.click());
+    on('graph.import.file.read', ({ file, textarea }) => {
+      if (!file || !textarea) return;
+      const reader = new FileReader();
+      reader.onload = () => { textarea.value = String(reader.result ?? ''); };
+      reader.readAsText(file);
     });
     on('graph.share.clipboard', ({ url }) => {
       if (!url) return;
@@ -492,6 +677,15 @@ export function registerShare(system: Registry) {
         emit('modal.open', { title: 'Review Mermaid import', visual: 'properties', body: importPreviewBody(snapshot, 'Mermaid') });
       })();
     });
+    on('graph.import.markdown', ({ source }) => {
+      const { snapshot, counts } = markdownOutlineToSnapshot(source);
+      if (!counts.nodes) {
+        emit('app.notice', { message: 'No headings or list items found in the Markdown outline. Nothing was changed.', level: 'warn' });
+        return;
+      }
+      pendingImport = { snapshot, format: 'Markdown outline', tidy: false };
+      emit('modal.open', { title: 'Review Markdown outline import', visual: 'properties', body: importPreviewBody(snapshot, 'Markdown outline') });
+    });
     on('graph.import.submit', ({ source }) => {
       if (!source.trim()) {
         emit('app.notice', { message: 'Paste graph JSON or Mermaid before previewing.', level: 'warn' });
@@ -505,6 +699,14 @@ export function registerShare(system: Registry) {
         }
         pendingImport = { snapshot, format: 'JSON', tidy: false };
         emit('modal.open', { title: 'Review JSON import', visual: 'properties', body: importPreviewBody(snapshot, 'JSON') });
+        return;
+      }
+      if (looksLikeMermaid(source)) {
+        emit('graph.import.mermaid', { source });
+        return;
+      }
+      if (looksLikeMarkdownOutline(source)) {
+        emit('graph.import.markdown', { source });
         return;
       }
       emit('graph.import.mermaid', { source });
@@ -547,7 +749,7 @@ export function registerShare(system: Registry) {
     };
 
     on('app.start', bootFromUrl);
-    contribute({ surface: 'top', command: 'graph.import.paste', kind: 'button', text: 'Import', order: 23, group: 'file' });
-    contribute({ surface: 'top', command: 'graph.share.copy', kind: 'button', text: 'Share', order: 24, group: 'file' });
+    contribute({ surface: 'top', command: 'graph.import.paste', kind: 'button', icon: 'import', text: 'Import', order: 23, group: 'overflow' });
+    contribute({ surface: 'top', command: 'graph.share.copy', kind: 'button', icon: 'share', text: 'Share', order: 24, group: 'overflow' });
   }, { requires: ['graph', 'modal'] });
 }

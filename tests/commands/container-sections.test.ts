@@ -116,4 +116,44 @@ describe('container sections', () => {
     expect(ctx.textLayout?.estimate({ title: 'A long Java Memory Model node' }).w).toBeGreaterThan(112);
     expect(ctx.textLayout?.fit('volatile write publishes visibility', { w: 120, h: 60 }).fontSize).toBeGreaterThan(0);
   });
+
+  it('renders a legend and repeat badge, drops invalid colors, and round-trips both', async () => {
+    const ctx = bootApp();
+    runCommand(ctx, 'editing.container.create');
+    await settle();
+    const container = containers(ctx)[0] as SectionedContainer & { Legend?: { color: string; label: string }[]; Multiplier?: string };
+    ctx.bus.emit('item.update', {
+      ref: { kind: 'container', id: container.id },
+      patch: {
+        Legend: [
+          { color: 'green', label: 'Shared Expert' },
+          { color: 'purple', label: 'Routed Expert' },
+          { color: 'plaid', label: 'Invalid color is dropped' },
+        ],
+        Multiplier: '3×',
+      },
+    });
+    await settle();
+
+    expect(container.Legend).toEqual([
+      { color: 'green', label: 'Shared Expert' },
+      { color: 'purple', label: 'Routed Expert' },
+    ]);
+    const legendEl = document.querySelector('.container-legend')!;
+    expect(legendEl.textContent).toContain('Shared Expert');
+    expect(legendEl.querySelectorAll('.container-legend-swatch')).toHaveLength(2);
+    expect(legendEl.querySelector('[data-legend-color="green"]')).not.toBeNull();
+    expect(document.querySelector('.container-multiplier')?.textContent).toBe('3×');
+
+    // Snapshot round-trip through the containers extension.
+    const snapshot = ctx.graphs.current.snapshot();
+    ctx.graphs.current.replace(snapshot);
+    await settle();
+    const restored = containers(ctx)[0] as typeof container;
+    expect(restored.Legend).toEqual([
+      { color: 'green', label: 'Shared Expert' },
+      { color: 'purple', label: 'Routed Expert' },
+    ]);
+    expect(restored.Multiplier).toBe('3×');
+  });
 });

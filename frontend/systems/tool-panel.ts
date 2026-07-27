@@ -1,4 +1,4 @@
-import { commandShortcut, type Registry } from '../core';
+import { commandShortcut, setIcon, type Registry } from '../core';
 import { Places, Slots } from '../types';
 import type { PanelDef, Place, Position } from '../types';
 
@@ -8,7 +8,9 @@ declare module '../types' {
     'tool.panel.drag.move': { x: number; y: number };
     'tool.panel.drag.end': void;
     'tool.panel.moved': { id: string; position: Position };
+    'tool.panel.redraw': { id: string };
     'tool.panel.mobile.toggle': void;
+    'tool.panel.dismiss.menus': void;
   }
 }
 
@@ -53,7 +55,7 @@ export function registerToolPanel(system: Registry) {
     };
     const panelPosition = (panel: PanelDef) => positions.get(panel.id) ?? anchorPosition(panel);
     const isCollapsed = (panel: PanelDef) => panel.foldId ? contexts.fold.folded(panel.foldId) : false;
-    const placeFor = (panel: PanelDef) => panel.id === TOP_PANEL_ID ? Places.Top : Places.Stage;
+    const placeFor = (panel: PanelDef) => panel.place ?? (panel.id === TOP_PANEL_ID ? Places.Top : Places.Stage);
     const buttonsFor = (panelId: string) =>
       contexts.affordances.system('top').filter(aff => (aff.panel ?? TOP_PANEL_ID) === panelId);
 
@@ -91,6 +93,18 @@ export function registerToolPanel(system: Registry) {
         input: { on: 'pointerup', when: () => !!drag, stop: true },
       },
       { id: 'tool.panel.mobile.toggle', label: 'Toggle mobile actions', group: 'tool-panel', hidden: true },
+      {
+        id: 'tool.panel.dismiss.menus', label: 'Dismiss open menus', group: 'tool-panel', hidden: true,
+        input: {
+          on: 'pointerdown', selector: `[data-place="${Places.Stage}"]`,
+          when: (event) => {
+            const actual = event.target;
+            const stage = contexts.places.el(Places.Stage);
+            return actual instanceof Element && !!stage && stage.contains(actual)
+              && !actual.closest('.tool-panel, .item-toolbar, .picker-prompt, [data-ghost-node]');
+          },
+        },
+      },
     ]);
 
     const buttonFor = (commandId: string, text: string, label?: string) => {
@@ -123,17 +137,32 @@ export function registerToolPanel(system: Registry) {
       return btn;
     };
 
-    const addButton = (parent: HTMLElement, aff: { command: string; text?: string; label?: string; className?: string; active?: () => boolean }) => {
+    const addButton = (parent: HTMLElement, aff: { command: string; text?: string; icon?: import('../types').IconName; label?: string; className?: string; active?: () => boolean }) => {
       const cmd = contexts.commands.get(aff.command);
       if (cmd?.available && !cmd.available()) return;
       const text = aff.text ?? aff.command;
       const button = buttonFor(aff.command, text, aff.label);
+      if (aff.icon) {
+        setIcon(button, aff.icon);
+        if (parent.classList.contains('toolbar-overflow-menu') && aff.text) {
+          const copy = document.createElement('span');
+          copy.textContent = aff.text;
+          button.append(copy);
+        }
+      }
       const shortcut = commandShortcut(contexts.commands, aff.command);
       const description = !aff.label && cmd?.label !== text ? cmd?.label : undefined;
       if (description) button.setAttribute('aria-description', description);
-      button.title = [description, shortcut].filter(Boolean).join(' · ');
-      if (aff.active) button.setAttribute('aria-pressed', aff.active() ? 'true' : 'false');
-      if (aff.className) button.classList.add(...aff.className.split(/\s+/).filter(Boolean));
+      button.title = [aff.label ?? description ?? cmd?.label, shortcut].filter(Boolean).join(' · ');
+      const classes = aff.className?.split(/\s+/).filter(Boolean) ?? [];
+      if (aff.active) {
+        const active = aff.active();
+        if (classes.includes('tool-switch')) {
+          button.setAttribute('role', 'switch');
+          button.setAttribute('aria-checked', active ? 'true' : 'false');
+        } else button.setAttribute('aria-pressed', active ? 'true' : 'false');
+      }
+      if (classes.length) button.classList.add(...classes);
       parent.append(button);
     };
 
@@ -177,10 +206,26 @@ export function registerToolPanel(system: Registry) {
         end.prepend(actions);
       }
       const groups = new Map<string, HTMLElement>();
-      buttonsFor(panel.id).forEach(aff => {
+      const affordances = buttonsFor(panel.id);
+      affordances.filter(aff => aff.group !== 'overflow').forEach(aff => {
         if (aff.slot === Slots.End) addButton(end, aff);
         else addButton(groupTarget(start, groups, aff.group), aff);
       });
+      const overflow = affordances.filter(aff => aff.group === 'overflow');
+      if (overflow.length) {
+        const details = document.createElement('details');
+        details.className = 'toolbar-overflow';
+        const summary = document.createElement('summary');
+        summary.setAttribute('aria-label', 'More actions');
+        summary.title = 'More actions';
+        setIcon(summary, 'more');
+        const menu = document.createElement('div');
+        menu.className = 'toolbar-overflow-menu';
+        menu.setAttribute('role', 'menu');
+        overflow.forEach(aff => addButton(menu, aff));
+        details.append(summary, menu);
+        end.prepend(details);
+      }
       section.append(toolbar);
     };
 
@@ -225,6 +270,7 @@ export function registerToolPanel(system: Registry) {
           if (collapsed) return section;
 
           if (panel.layout === 'toolbar') fillToolbar(panel, section);
+          else if (panel.layout === 'custom' && panel.render) section.append(panel.render());
           else fillStack(panel, section);
           return section;
         },
@@ -267,7 +313,16 @@ export function registerToolPanel(system: Registry) {
       drawPanels();
     });
     on('tool.panel.drag.end', () => { drag = null; });
+    on('tool.panel.redraw', ({ id }) => {
+      const panel = panelById(id);
+      if (panel) drawPanel(panel);
+    });
     on('tool.panel.mobile.toggle', () => { mobileOpen = !mobileOpen; drawPanels(); });
+    on('tool.panel.dismiss.menus', () => {
+      mobileOpen = false;
+      const top = panelById(TOP_PANEL_ID);
+      if (top) drawPanel(top);
+    });
 
     const closeMobileActions = () => {
       if (!mobileOpen) return;
@@ -275,13 +330,23 @@ export function registerToolPanel(system: Registry) {
       drawPanels();
     };
     const offAny = bus.onAny(({ name }) => {
+      const topAffordances = buttonsFor(TOP_PANEL_ID);
+      const eventOf = (affordance: (typeof topAffordances)[number]) => {
+        const command = contexts.commands.get(affordance.command);
+        return command?.event ?? command?.id;
+      };
+      const overflowEvents = new Set(topAffordances
+        .filter(affordance => affordance.group === 'overflow')
+        .map(eventOf)
+        .filter((event): event is string => !!event));
+      if (overflowEvents.has(name)) queueMicrotask(() => {
+        const top = panelById(TOP_PANEL_ID);
+        if (top) drawPanel(top);
+      });
       if (!mobileOpen) return;
-      const mobileActionEvents = new Set(buttonsFor(TOP_PANEL_ID)
+      const mobileActionEvents = new Set(topAffordances
         .filter(affordance => affordance.slot !== Slots.End)
-        .map(affordance => {
-          const command = contexts.commands.get(affordance.command);
-          return command?.event ?? command?.id;
-        })
+        .map(eventOf)
         .filter((event): event is string => !!event));
       if (mobileActionEvents.has(name)) queueMicrotask(closeMobileActions);
     });
@@ -297,9 +362,17 @@ export function registerToolPanel(system: Registry) {
     on('debug.enabled.changed', drawPanels);
     on('debug.recording.changed', drawPanels);
     on('history.changed', drawPanels);
-    // Only panels with a `mountWhen` predicate care about selection changes;
-    // skip the redraw entirely when none do (keeps the top panel untouched).
-    on('selection.changed', () => { if (panels().some(p => p.mountWhen)) drawPanels(); });
+    // Only panels with a `mountWhen` predicate care about selection changes.
+    // Redraw only when a gated panel's mount state actually flips — panel
+    // contents are static between mounts, and 100 rapid creates must not
+    // repaint the chrome 100 times (redraw-convention budget).
+    on('selection.changed', () => {
+      const gated = panels().filter(panel => panel.mountWhen);
+      if (!gated.length) return;
+      gated.forEach(panel => {
+        if (!!panel.mountWhen!() !== mounted.has(keyOf(panel.id))) drawPanel(panel);
+      });
+    });
     return () => offAny();
   }, { requires: ['render.stage'] });
 }

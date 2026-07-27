@@ -73,4 +73,19 @@ describe('tool panel registry', () => {
     expect(panel('probe')).toBeNull();
     expect(ctx.contexts.affordances.panels().some(p => p.id === 'probe')).toBe(false);
   });
+
+  it('renders an owner-provided custom body', async () => {
+    const ctx = bootApp();
+    await settle();
+    ctx.contexts.affordances.declarePanel({
+      id: 'custom-probe', anchor: 'bottom-left', layout: 'custom', origin: 'probe',
+      render: () => {
+        const body = document.createElement('div');
+        body.dataset.customProbe = 'ready';
+        return body;
+      },
+    });
+    await settle();
+    expect(panel('custom-probe')?.querySelector('[data-custom-probe="ready"]')).not.toBeNull();
+  });
 });

@@ -14,7 +14,7 @@ const createNodes = async (page, labels) => page.evaluate((labels) => {
 test('frontend boots current TypeScript entrypoint with edge creation UI enabled', async ({ page }) => {
   await boot(page);
 
-  await expect(page.locator('.toolbar [data-command="editing.edge.create"]')).toHaveText('Connect');
+  await expect(page.locator('.toolbar [data-command="editing.edge.create"] .ui-icon')).toBeVisible();
   const state = await page.evaluate(() => ({
     commandFormOn: window.app.flags.isOn('commandForm'),
     commandFormRegistered: !!window.app.contexts.commands.get('commandForm.submit'),
