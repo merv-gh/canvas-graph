@@ -11,7 +11,10 @@ test('release chrome stays borderless and the empty action does not move on hove
   const css = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'styles.css'), 'utf8');
   // Node *content* tints (ML block types + the `data-node-color` palette) are
   // user data, not chrome — the monochrome rule covers the product surface.
-  const contentTints = new Set(['7c3aed', '2563eb', 'dc2626', 'd97706', '059669', 'ea580c', 'ca8a04', '16a34a', 'db2777']);
+  const contentTints = new Set([
+    '7c3aed', '2563eb', 'dc2626', 'd97706', '059669', 'ea580c', 'ca8a04', '16a34a', 'db2777',
+    '5a9f35', '336791', 'd82c20', // guide-preview technology logos
+  ]);
   for (const [, raw] of css.matchAll(/#([0-9a-f]{3,8})\b/gi)) {
     if (contentTints.has(raw.toLowerCase())) continue;
     const hex = raw.length === 3 || raw.length === 4
@@ -96,11 +99,12 @@ test('first node starts at centre and later pointer creation keeps the camera st
   })).toEqual(await stageCentre());
 
   const camera = await page.evaluate(() => window.app.contexts.view.get());
-  await page.getByRole('button', { name: 'Add node', exact: true }).click();
+  await page.locator('.stage').click({ position: { x: 120, y: 120 } });
   await expect(page.locator('.node')).toHaveCount(2);
   await expect.poll(() => page.evaluate(() => window.app.contexts.view.get())).toEqual(camera);
   await expect(page.locator('.node').nth(1)).toBeVisible();
 
+  await page.locator('.node').nth(1).click();
   const toolbar = await page.locator('.node-toolbar').boundingBox();
   expect(toolbar.height).toBeLessThanOrEqual(32);
   await clickMore(page, 'Export');
@@ -139,7 +143,7 @@ test('period opens one compact actions and properties inspector', async ({ page 
   await expect(page.locator('.properties [data-field="title"]')).toHaveCount(0);
 
   const title = page.getByLabel('Item title');
-  await expect(title).toHaveValue('Node 1');
+  await expect(title).toHaveValue('Text');
   await title.fill('Compact title');
   await expect(page.locator('.node-title')).toHaveText('Compact title');
 });

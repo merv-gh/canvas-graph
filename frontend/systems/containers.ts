@@ -46,6 +46,7 @@ declare module '../types' {
     'graph.container.delete': { id: Id };
     'container.deleted': { id: Id };
     'container.add-child': { containerId: Id; childRef: ItemRef; sectionId?: Id };
+    'container.move-child': { destination: ItemRef; childRef: ItemRef };
     'container.remove-child': { childRef: ItemRef };
     'container.child.section.set': { containerId?: Id; childRef?: ItemRef; sectionId?: Id };
     'container.section.title.edit': { containerId: Id; sectionId: Id };
@@ -366,12 +367,13 @@ export function registerContainers(system: Registry) {
       },
       {
         id: 'container.add-child',
-        label: 'Move into container',
+        label: 'Move item',
+        event: 'container.move-child',
         group: 'container',
         shortcut: 'M',
         input: { on: 'keydown', key: 'm', prevent: true },
         picker: {
-          title: 'Move into container',
+          title: 'Move item',
           steps: [
             { id: 'child', prompt: 'Pick a node or container to move',
               filter: () => ref => ref.kind === 'node' || ref.kind === 'container',
@@ -379,12 +381,12 @@ export function registerContainers(system: Registry) {
                 const r = selection.selected();
                 return r && (r.kind === 'node' || r.kind === 'container') ? r : null;
               } },
-            { id: 'container', prompt: 'Pick a container',
+            { id: 'container', prompt: 'Pick a destination', canvasLabel: 'Canvas',
+              canvas: vs => !!vs.child && !!nestHere().parentRefOf(vs.child),
               filter: vs => ref => ref.kind === 'container' && !!vs.child && !nestHere().isAncestorOrSelf(vs.child, ref) },
           ],
-          validate: vs => !containersHere().size ? 'Create a container first (Y).'
-            : (!vs.child || !vs.container) ? 'Pick an item and a container.' : undefined,
-          payload: vs => ({ containerId: vs.container.id, childRef: vs.child }),
+          validate: vs => (!vs.child || !vs.container) ? 'Pick an item and a destination.' : undefined,
+          payload: vs => ({ destination: vs.container, childRef: vs.child }),
         },
       },
       {
@@ -667,6 +669,17 @@ export function registerContainers(system: Registry) {
         emit('container.children.changed', { id: containerId });
         emit('container.updated', { id: containerId });
       }
+    });
+    on('container.move-child', ({ destination, childRef }) => {
+      if (destination.kind === 'graph') {
+        emit('container.remove-child', { childRef });
+        emit('app.notice', { message: 'Moved to Canvas.' });
+        return;
+      }
+      if (destination.kind !== 'container') return;
+      emit('container.add-child', { containerId: destination.id, childRef });
+      const target = containersHere().get(destination.id);
+      if (target) emit('app.notice', { message: `Moved into “${target.Label.text}”.` });
     });
     on('container.remove-child', ({ childRef }) => {
       const parentId = nestHere().remove(childRef);

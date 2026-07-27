@@ -1,4 +1,4 @@
-import { clientPoint, edgeRef, nodeRef, setIcon, type Registry } from '../core';
+import { clientPoint, edgeRef, itemRefFrom, nodeRef, setIcon, type Registry } from '../core';
 import {
   EDGE_KINDS,
   isEdgeKind,
@@ -18,7 +18,7 @@ import {
   type NodePatch,
   type NodeType,
 } from '../model';
-import { Places } from '../types';
+import { Places, type ItemRef } from '../types';
 import type { ContainerType } from './container-entity';
 import {
   activePresetId,
@@ -41,7 +41,8 @@ declare module '../types' {
     'palette.arm.changed': { type: NodeType; color?: NodeColor; fill?: NodeFill; border?: NodeBorder; entity?: 'node' | 'container'; containerType?: ContainerType; label?: string; entryIndex?: number; entryId?: string };
     'palette.custom-type.delete.request': { preset: PresetId; entryId: string };
     'palette.custom-type.delete.confirm': void;
-    'palette.node.place': { point: { x: number; y: number } };
+    'palette.node.place': { point: { x: number; y: number }; containerId?: string };
+    'palette.place.item': { ref: ItemRef; point: { x: number; y: number }; client: { x: number; y: number } };
     'palette.place.activate': void;
     'palette.place.cancel': void;
     'palette.mobile.toggle': void;
@@ -210,6 +211,60 @@ export function registerPalette(system: Registry) {
       setPlacement(true);
       changed();
     };
+    const deepestContainerAt = ({ x, y }: { x: number; y: number }) => {
+      const stage = stageEl();
+      if (!stage) return undefined;
+      return [...stage.querySelectorAll<HTMLElement>('.container[data-item-id]')]
+        .filter(element => {
+          const rect = element.getBoundingClientRect();
+          return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+        })
+        .map(element => {
+          const ref = itemRefFrom(element);
+          const rect = element.getBoundingClientRect();
+          return ref?.kind === 'container'
+            ? { id: ref.id, depth: contexts.hierarchy.parentChain(ref).length, area: rect.width * rect.height }
+            : null;
+        })
+        .filter((candidate): candidate is { id: string; depth: number; area: number } => !!candidate)
+        .sort((a, b) => b.depth - a.depth || a.area - b.area)[0]?.id;
+    };
+    const placeArmed = (point: { x: number; y: number }, containerId?: string) => {
+      if (arm.entity === 'container') {
+        const sameType = graphs.current.itemsOfKind<{ ContainerType?: ContainerType }>('container')
+          .filter(container => container.ContainerType === arm.containerType).length;
+        if (containerId) {
+          const off = on('container.created', ({ id }) => {
+            off();
+            emit('container.add-child', { containerId, childRef: { kind: 'container', id } });
+          });
+        }
+        emit('editing.container.create', {
+          Label: { text: `${arm.label ?? 'Container'} ${sameType + 1}` },
+          at: point,
+          ContainerType: arm.containerType,
+          Color: arm.color,
+        });
+        return;
+      }
+      const size = nodeTypeDefinition(arm.type)?.defaultSize;
+      if (containerId) {
+        const off = on('graph.node.created', ({ id }) => {
+          off();
+          emit('container.add-child', { containerId, childRef: nodeRef(id) });
+        });
+      }
+      emit('graph.node.create', {
+        Label: { text: arm.label ?? `Node ${graphs.current.nodes().length + 1}` },
+        Position: point,
+        NodeType: arm.type,
+        Color: arm.color,
+        Fill: arm.fill,
+        BorderColor: arm.border,
+        ...(size ? { Size: size } : {}),
+        keepView: true,
+      });
+    };
     const applyEntry = (entry: PresetTypeEntry, entryIndex: number, entryPreset = presetId()) => {
       const entries = typeEntriesFor(io, entryPreset);
       const needsLabelIdentity = entryPreset === 'jira'
@@ -375,6 +430,20 @@ export function registerPalette(system: Registry) {
           },
         },
         payload: ({ event }) => ({ point: contexts.view.clientToSpace(Places.Stage, clientPoint(event!)) }),
+      },
+      {
+        id: 'palette.place.item', label: 'Resolve an item click while adding', group: 'palette', hidden: true,
+        input: {
+          on: 'pointerdown', selector: '[data-item-kind][data-item-id]', prevent: true, stop: true,
+          when: event => placing && !drawing && !erasing
+            && (event as PointerEvent).button === 0
+            && !(event.target as Element).closest('.tool-panel, .item-toolbar, .modal-layer, [data-command], input, textarea, select'),
+        },
+        payload: ({ event, target }) => {
+          const ref = itemRefFrom(target);
+          const client = clientPoint(event!);
+          return ref ? { ref, client, point: contexts.view.clientToSpace(Places.Stage, client) } : undefined;
+        },
       },
       { id: 'palette.place.cancel', label: 'Stop placing nodes', group: 'palette', hidden: true },
       ...typeCommands.map(type => ({
@@ -796,11 +865,9 @@ export function registerPalette(system: Registry) {
             catalog.append(catalogBlock());
           }
           catalogSection.append(catalog);
-          if (category !== 'Favorites') {
-            const saved = savedTypesBlock();
-            saved.classList.add('palette-saved-pinned');
-            catalogSection.append(saved);
-          }
+          const saved = savedTypesBlock();
+          saved.classList.add('palette-saved-pinned');
+          catalogSection.append(saved);
         }
         const styles = document.createElement('div');
         styles.className = 'palette-style-controls';
@@ -908,32 +975,24 @@ export function registerPalette(system: Registry) {
       updateSelectedEdges({ EdgeKind: kind });
       redraw();
     });
-    on('palette.node.place', ({ point }) => {
+    on('palette.node.place', ({ point, containerId }) => {
       if (!placing || drawing || erasing) return;
-      if (arm.entity === 'container') {
-        const sameType = graphs.current.itemsOfKind<{ ContainerType?: ContainerType }>('container')
-          .filter(container => container.ContainerType === arm.containerType).length;
-        emit('editing.container.create', {
-          Label: { text: `${arm.label ?? 'Container'} ${sameType + 1}` },
-          at: point,
-          ContainerType: arm.containerType,
-          Color: arm.color,
-        });
+      placeArmed(point, containerId);
+    });
+    on('palette.place.item', ({ ref, point, client }) => {
+      if (!placing || drawing || erasing) return;
+      if (ref.kind === 'container') {
+        placeArmed(point, deepestContainerAt(client) ?? ref.id);
         return;
       }
-      const size = nodeTypeDefinition(arm.type)?.defaultSize;
-      emit('graph.node.create', {
-        Label: { text: arm.label ?? `Node ${graphs.current.nodes().length + 1}` },
-        Position: point,
-        NodeType: arm.type,
-        Color: arm.color,
-        Fill: arm.fill,
-        BorderColor: arm.border,
-        ...(size ? { Size: size } : {}),
-        keepView: true,
-      });
+      setPlacement(false);
+      emit('selection.item.select', ref);
     });
-    on('palette.place.activate', activateArm);
+    on('palette.place.activate', () => {
+      if (placing) return;
+      activateArm();
+      placeArmed(contexts.view.spaceCenter(Places.Stage));
+    });
     on('palette.place.cancel', () => setPlacement(false));
     on('palette.mobile.toggle', () => setMobileOpen(!mobileOpen));
     on('palette.mobile.close', () => setMobileOpen(false));

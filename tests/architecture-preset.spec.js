@@ -45,7 +45,6 @@ test('mouse flow: preset, typed colored blocks, plain edge, dashed kind, ink ann
   const placementStage = page.locator('[data-place="stage"]');
   const stageBox = await placementStage.boundingBox();
   await placementStage.click({ position: { x: stageBox.width - 160, y: stageBox.height - 180 } });
-  await placementStage.click({ position: { x: stageBox.width - 360, y: stageBox.height - 180 } });
   await expect(page.locator('.node')).toHaveCount(2);
   const ids = await page.evaluate(() => window.app.graphs.current.nodes().map(node => node.id));
 
@@ -201,20 +200,9 @@ test('keyboard-only flow: preset, blocks, chain, edge kinds, grouping, legend, m
   await expect.poll(() => page.evaluate(() => window.app.selection.selected()?.kind)).toBe('container');
   await paletteRun(page, 'Open item inspector');
   await expect(page.locator('.properties')).toHaveCount(1);
-  for (let i = 0; i < 25; i += 1) {
-    const focused = await page.evaluate(() => document.activeElement?.getAttribute('data-field'));
-    if (focused === 'legend') break;
-    await page.keyboard.press('Tab');
-  }
-  await page.keyboard.type('blue Shared expert');
-  await page.keyboard.press('Enter');
-  await page.keyboard.type('orange Routed experts');
-  for (let i = 0; i < 10; i += 1) {
-    const focused = await page.evaluate(() => document.activeElement?.getAttribute('data-field'));
-    if (focused === 'multiplier') break;
-    await page.keyboard.press('Tab');
-  }
-  await page.keyboard.type('60×');
+  await page.getByRole('button', { name: 'Toggle Structure properties' }).press('Enter');
+  await page.locator('[data-field="legend"]').fill('blue Shared expert\norange Routed experts');
+  await page.locator('[data-field="multiplier"]').fill('60×');
   await page.keyboard.press('Escape');
 
   const state = await model(page);

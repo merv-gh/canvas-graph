@@ -69,6 +69,7 @@ test('frontend configurable ability opens node properties', async ({ page }) => 
   const toolbar = page.locator('.node-toolbar');
   await expect(node).toBeVisible();
   const compactHeight = (await node.boundingBox()).height;
+  await node.click(); // Add is persistent; selecting the placed node exits it.
   await expect(toolbar.locator('[data-command="item.collapse.toggle"]')).toHaveCount(0);
   await toolbar.locator('[data-command="item.properties.open"]').click();
 

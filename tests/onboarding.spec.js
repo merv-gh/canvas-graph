@@ -12,11 +12,26 @@ test('guide opens from the toolbar and exposes all canonical starters', async ({
   const commands = await page.locator('.onboarding-example').evaluateAll(buttons =>
     buttons.map(button => button.getAttribute('data-command')));
   expect(commands).toEqual([
-    'demo.render-math', 'demo.render-kimi-k2', 'demo.render-workflow', 'demo.render-flowchart',
-    'demo.render-mindmap', 'demo.render-c4', 'demo.render-uml', 'demo.render-outline',
-    'demo.render-agent-observability',
+    'demo.render-c4', 'demo.render-flowchart', 'demo.render-uml', 'demo.render-kimi-k2',
+    'demo.render-agent-observability', 'demo.render-workflow', 'demo.render-mindmap',
+    'demo.render-outline', 'demo.render-math',
   ]);
   await expect(page.getByLabel('Mermaid flowchart source')).toHaveValue(/flowchart LR/);
+});
+
+test('first-run guide and every architecture starter fit a laptop viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto('/');
+  await clickGuide(page);
+  const modal = await page.locator('.modal-layer[data-visual="onboarding"] .modal').boundingBox();
+  const lastExample = await page.locator('.onboarding-example').last().boundingBox();
+  expect(modal.y).toBeGreaterThanOrEqual(0);
+  expect(modal.y + modal.height).toBeLessThanOrEqual(720);
+  expect(lastExample.y + lastExample.height).toBeLessThanOrEqual(modal.y + modal.height);
+  await expect(page.locator('.onboarding-architecture [data-brand="spring"]')).toHaveCount(5);
+  await expect(page.locator('.onboarding-architecture [data-brand="kafka"]')).toHaveCount(1);
+  await expect(page.locator('.onboarding-architecture [data-brand="postgres"]')).toHaveCount(4);
+  await expect(page.locator('.onboarding-architecture [data-brand="redis"]')).toHaveCount(2);
 });
 
 test('hosted demo route opens the radial math map without onboarding', async ({ page }) => {
@@ -30,7 +45,7 @@ test('hosted demo route opens the radial math map without onboarding', async ({ 
 test('a chosen demo keeps its readable fitted camera after refresh', async ({ page }) => {
   await page.goto('/');
   await clickGuide(page);
-  await page.getByRole('button', { name: /Expected value/ }).click();
+  await page.getByRole('button', { name: /Expected-value model/ }).click();
   await expect.poll(() => page.evaluate(() => window.app.graphs.current.nodes().length)).toBe(7);
   await expect.poll(() => page.evaluate(() => window.app.contexts.view.get().scale)).toBeGreaterThanOrEqual(0.8);
   const fitted = await page.evaluate(() => window.app.contexts.view.get());

@@ -30,7 +30,7 @@ describe('first-visit guide', () => {
     expect(runCommand(ctx, 'onboarding.open')).toBe(true);
     expect(runCommand(ctx, 'demo.render-c4')).toBe(true);
     await settle();
-    expect(ctx.graphs.current.nodes().some(node => node.Label.text === 'Commerce API')).toBe(true);
+    expect(ctx.graphs.current.nodes().some(node => node.Label.text === 'Spring · Order Service')).toBe(true);
     expect(document.querySelector('.onboarding')).toBeNull();
 
     expect(runCommand(ctx, 'onboarding.open')).toBe(true);

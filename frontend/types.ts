@@ -255,6 +255,11 @@ export type PickerStep = {
   prompt?: string;
   filter?: (values: Record<string, ItemRef>, source: CommandSource) => (ref: ItemRef) => boolean;
   seed?: (values: Record<string, ItemRef>, source: CommandSource) => ItemRef | null | undefined;
+  /** Offer the graph surface as a first-class destination beside item refs.
+   *  Used by structural commands such as “Move into” so moving back to the
+   *  canvas is the inverse of nesting, not a separate command to discover. */
+  canvas?: (values: Record<string, ItemRef>, source: CommandSource) => boolean;
+  canvasLabel?: string;
 };
 
 /** A keyboard-driven multi-step picker — same shape as CommandFormSpec but for

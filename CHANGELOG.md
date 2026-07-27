@@ -5,6 +5,41 @@ All notable changes to this project will be documented here. The format follows
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-27
+
+### Added
+
+- Added an extensible node-type registry, searchable categorized catalog,
+  favorites, recent types, and reusable saved types.
+- Added C4, architecture, flowchart, UML, planning, data, ML, and autonomous
+  system primitives with inline SVG controls and editable visual properties.
+- Added nested containers, free-form ink, canvas and item context menus,
+  switch nodes, conversion between nodes and containers, and viewport-aware
+  sharing.
+- Added deterministic visual journeys, architecture projections, performance
+  probes, and regression gates for interaction and layout behavior.
+- Added compact production-shaped guide examples, including a Spring, Kafka,
+  PostgreSQL, and Redis checkout architecture.
+
+### Changed
+
+- Rebuilt the desktop interface around a stable icon command bar, collapsible
+  workspace drawer, compact left-rail inspector, and nearby item actions.
+- Made Add place the first node immediately, continue as a placement mode, and
+  place into the deepest container under the pointer.
+- Reworked Move item into a visual destination picker that supports nested
+  containers and moving nested items back to Canvas.
+- Reworked selection, drawing, erase, responsive navigation, onboarding, and
+  properties editing for clearer state and smaller interaction cost.
+
+### Fixed
+
+- Preserved connections when converting between nodes and containers.
+- Prevented canvas gestures and pinned drawer sections from intercepting catalog
+  scrolling or catalog-item activation.
+- Kept the command bar, hamburger, Fit control, graph viewport, and canvas
+  camera stable while side panels open and close.
+
 ## [0.2.0] - 2026-07-16
 
 ### Added
@@ -54,7 +89,8 @@ All notable changes to this project will be documented here. The format follows
 - Scoped 0.1 to the static application; the experimental library remains post-0.1 work.
 - Removed the unused system-design subsystem and split container/debug rendering policy from behavior.
 
-[Unreleased]: https://github.com/merv-gh/canvas-graph/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/merv-gh/canvas-graph/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/merv-gh/canvas-graph/releases/tag/v1.0.0
 [0.2.0]: https://github.com/merv-gh/canvas-graph/releases/tag/v0.2.0
 [0.1.1]: https://github.com/merv-gh/canvas-graph/releases/tag/v0.1.1
 [0.1.0]: https://github.com/merv-gh/canvas-graph/releases/tag/v0.1.0

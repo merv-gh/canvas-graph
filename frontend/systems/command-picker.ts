@@ -27,7 +27,7 @@ const compactViewport = () => globalThis.innerWidth <= 680
  *  next to commandForm so any single-file system can opt into either UI by
  *  declaring `form` or `picker` on its CommandSpec — no system-level glue. */
 export function registerCommandPicker(system: Registry) {
-  system('commandPicker', ({ on, emit, forward, contexts, origin, frameLoop }) => {
+  system('commandPicker', ({ on, emit, forward, contexts, graphs, origin, frameLoop }) => {
     type Active = {
       commandId: string;
       command: CommandSpec;
@@ -38,6 +38,8 @@ export function registerCommandPicker(system: Registry) {
       candidates: Set<string>;
       restoreFocus: HTMLElement | null;
       restoreCommand: string;
+      canvasRef: ItemRef | null;
+      canvasLetter: string;
     };
     let active: Active | null = null;
 
@@ -45,6 +47,7 @@ export function registerCommandPicker(system: Registry) {
       contexts.decorations.unregisterOrigin('commandPicker');
       contexts.keyboard.unregisterOrigin('commandPicker');
       emit('render.view.clear', { place: Places.Stage, key: 'picker-prompt' });
+      contexts.places.el(Places.Stage)?.classList.remove('picker-canvas-target');
       frameLoop.schedule('commandPicker.restoreFocus.prepare', () => {
         // Render flushes may enqueue follow-up patches. Restore in the next
         // frame so focus lands on the final live command button, never a node
@@ -99,6 +102,16 @@ export function registerCommandPicker(system: Registry) {
         ? ' · Tap a highlighted item'
         : ' · Click a highlighted item or press its letter · Esc to cancel';
       el.append(title, meta, hint);
+      if (active?.canvasRef) {
+        const canvas = document.createElement('button');
+        canvas.type = 'button';
+        canvas.className = 'picker-canvas-option';
+        canvas.dataset.command = 'commandPicker.pick.canvas';
+        canvas.dataset.pickerCanvas = '';
+        canvas.textContent = `${active.canvasLetter.toUpperCase()} · ${step.canvasLabel ?? 'Canvas'}`;
+        canvas.setAttribute('aria-label', `Move to ${step.canvasLabel ?? 'Canvas'}`);
+        el.append(canvas);
+      }
       return el;
     };
 
@@ -114,7 +127,14 @@ export function registerCommandPicker(system: Registry) {
         return;
       }
       const filterFn = step.filter?.(active.values, active.source) ?? (() => true);
-      const targets = contexts.hierarchy.items().filter(target => filterFn(target.ref)).slice(0, LETTERS.length);
+      const canvasRef: ItemRef | null = step.canvas?.(active.values, active.source)
+        ? { kind: 'graph', id: graphs.current.id }
+        : null;
+      const itemLimit = LETTERS.length - (canvasRef ? 1 : 0);
+      const itemTargets = contexts.hierarchy.items().filter(target => filterFn(target.ref)).slice(0, itemLimit);
+      const targets = canvasRef
+        ? [{ ref: canvasRef, label: step.canvasLabel ?? 'Canvas' }, ...itemTargets]
+        : itemTargets;
       if (!targets.length) {
         emit('app.notice', { message: `Nothing to pick for ${step.prompt ?? step.id}`, level: 'warn' });
         cancel();
@@ -124,15 +144,21 @@ export function registerCommandPicker(system: Registry) {
       const overlays = targets.map((target, i) => {
         const letter = LETTERS[i];
         letterMap.set(letter, target.ref);
+        if (target.ref.kind === 'graph') return null;
         return {
           ref: target.ref,
           text: letter.toUpperCase(),
           className: 'picker-letter',
           id: `picker-${letter}`,
         };
-      });
+      }).filter((overlay): overlay is NonNullable<typeof overlay> => !!overlay);
       contexts.decorations.overlays.set('commandPicker', overlays);
+      contexts.decorations.modes.set('commandPicker', 'candidate', itemTargets.map(target => target.ref), 'picker-candidate');
       active.candidates = new Set(targets.map(target => refKey(target.ref)));
+      active.canvasRef = canvasRef;
+      active.canvasLetter = canvasRef ? LETTERS[0] : '';
+      const stage = contexts.places.el(Places.Stage);
+      stage?.classList.toggle('picker-canvas-target', !!canvasRef);
       emit('render.view.set', {
         place: Places.Stage,
         key: 'picker-prompt',
@@ -185,6 +211,25 @@ export function registerCommandPicker(system: Registry) {
         const ref = itemRefFrom(target);
         return ref ? { ref } : undefined;
       },
+    }, {
+      id: 'commandPicker.pick.canvas',
+      label: 'Pick canvas destination',
+      event: 'commandPicker.pick',
+      group: 'modal',
+      hidden: true,
+      payload: () => active?.canvasRef ? { ref: active.canvasRef } : undefined,
+    }, {
+      id: 'commandPicker.pick.canvas.pointer',
+      label: 'Pick canvas destination with pointer',
+      event: 'commandPicker.pick',
+      group: 'modal',
+      hidden: true,
+      input: {
+        on: 'pointerdown', selector: '[data-place="stage"]', prevent: true, stop: true,
+        when: event => !!active?.canvasRef
+          && !(event.target as Element | null)?.closest('[data-item-kind][data-item-id], .tool-panel, .item-toolbar, .picker-prompt, .modal-layer'),
+      },
+      payload: () => active?.canvasRef ? { ref: active.canvasRef } : undefined,
     }]);
 
     on('commandPicker.open', ({ commandId, source }) => {
@@ -211,10 +256,12 @@ export function registerCommandPicker(system: Registry) {
         candidates: new Set(),
         restoreFocus,
         restoreCommand: restoreFocus?.closest<HTMLElement>('[data-command]')?.dataset.command ?? '',
+        canvasRef: null,
+        canvasLetter: '',
       };
       runStep();
     });
-    on('commandPicker.pick', ({ ref }) => pick(ref));
+    on('commandPicker.pick', payload => { if (payload?.ref) pick(payload.ref); });
     on('commandPicker.cancel', cancel);
     // A picker is scoped to the graph and canvas context where it started.
     // Switching documents or opening an unrelated modal must never leave a

@@ -113,7 +113,9 @@ describe('frontend node commands', () => {
       bubbles: true, cancelable: true, clientX: 500, clientY: 350,
     }));
     await settle();
-    expect(ctx.graphs.current.nodes()).toHaveLength(2);
+    // Entering Add places one immediately; the following canvas click places
+    // another while the mode remains armed.
+    expect(ctx.graphs.current.nodes()).toHaveLength(3);
     expect(ctx.graphs.current.edges()).toHaveLength(0);
   });
 

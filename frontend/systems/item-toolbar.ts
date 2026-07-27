@@ -147,8 +147,10 @@ export function registerItemToolbar(system: Registry) {
     };
 
     const wheelActions = (ref: ItemRef, root: HTMLElement): WheelAction[] => {
-      const canMoveInto = ref.kind !== 'edge'
-        && graphs.current.itemsOfKind('container').some(container => (container as { id: string }).id !== ref.id);
+      const canMoveInto = ref.kind !== 'edge' && (
+        !!contexts.hierarchy.parentRefOf(ref)
+        || graphs.current.itemsOfKind('container').some(container => (container as { id: string }).id !== ref.id)
+      );
       const common: WheelAction[] = [
         { command: 'item.title.edit', glyph: 'Aa', icon: 'text', label: 'Rename', section: 'Edit' },
         { command: 'item.description.edit', glyph: '¶', icon: 'text', label: 'Edit description', section: 'Edit' },

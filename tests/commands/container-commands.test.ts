@@ -153,6 +153,54 @@ describe('frontend containers', () => {
     expect(containers(ctx)[0].Children).toHaveLength(0);
   });
 
+  it('offers Canvas as the inverse destination for a nested item', async () => {
+    const ctx = bootApp({ autoLayout: false });
+    await settle();
+    runCommand(ctx, 'editing.container.create');
+    await settle();
+    const container = containers(ctx)[0];
+    const child = ctx.graphs.current.createNode({ Label: { text: 'child' }, Position: { x: 0, y: 0 } });
+    ctx.bus.emit('container.add-child', { containerId: container.id, childRef: { kind: 'node', id: child.id } });
+    ctx.bus.emit('selection.item.select', { kind: 'node', id: child.id });
+    await settle();
+
+    expect(runCommand(ctx, 'container.add-child', { origin: 'pointer' })).toBe(true);
+    await settle();
+    const canvas = document.querySelector<HTMLElement>('.picker-canvas-option')!;
+    expect(canvas.textContent).toContain('Canvas');
+    expect(document.querySelector('.stage')?.classList.contains('picker-canvas-target')).toBe(true);
+    canvas.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await settle();
+
+    expect(container.Children).toHaveLength(0);
+    expect(ctx.contexts.hierarchy.parentRefOf({ kind: 'node', id: child.id })).toBeUndefined();
+    expect(document.querySelector('.stage')?.classList.contains('picker-canvas-target')).toBe(false);
+  });
+
+  it('highlights every valid nested container and accepts its direct overlay', async () => {
+    const ctx = bootApp({ autoLayout: false });
+    await settle();
+    runCommand(ctx, 'editing.container.create');
+    runCommand(ctx, 'editing.container.create');
+    await settle();
+    const [outer, inner] = containers(ctx);
+    ctx.bus.emit('container.add-child', { containerId: outer.id, childRef: { kind: 'container', id: inner.id } });
+    const child = ctx.graphs.current.createNode({ Label: { text: 'root child' }, Position: { x: 0, y: 0 } });
+    ctx.bus.emit('selection.item.select', { kind: 'node', id: child.id });
+    await settle();
+
+    expect(runCommand(ctx, 'container.add-child', { origin: 'pointer' })).toBe(true);
+    await settle();
+    expect(document.querySelectorAll('.container.picker-candidate')).toHaveLength(2);
+    const target = document.querySelector<HTMLElement>(`.item-overlay[data-item-kind="container"][data-item-id="${inner.id}"]`)!;
+    expect(target).not.toBeNull();
+    target.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true }));
+    await settle();
+
+    expect(inner.Children).toContainEqual({ kind: 'node', id: child.id });
+    expect(document.querySelectorAll('.picker-candidate')).toHaveLength(0);
+  });
+
   it('does not offer or run Ungroup for an empty container', async () => {
     const ctx = bootApp();
     await settle();

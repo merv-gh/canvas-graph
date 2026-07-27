@@ -38,7 +38,7 @@ export function registerDemo(system: Registry) {
       },
       {
         id: 'demo.render-c4',
-        label: 'Open C4 software architecture example',
+        label: 'Open checkout microservices architecture',
         event: 'demo.run-c4',
         group: 'demo',
       },
@@ -264,34 +264,49 @@ export function registerDemo(system: Registry) {
     on('demo.run-c4', () => {
       clearGraph();
       emit('preset.set', { preset: 'c4' });
-      const landscape = makeContainer('System landscape', { x: 0, y: 0 }, []);
-      const shop = makeContainer('Online shop', { x: 0, y: 0 }, [], 'rows', 'c4-system', 'blue');
-      const webApp = makeContainer('Web application', { x: -230, y: 0 }, [], 'rows', 'c4-container', 'purple');
-      const apiApp = makeContainer('API application', { x: 230, y: 0 }, [], 'rows', 'c4-container', 'purple');
-      if (landscape && shop) emit('container.add-child', { containerId: landscape, childRef: { kind: 'container', id: shop } });
-      if (shop && webApp) emit('container.add-child', { containerId: shop, childRef: { kind: 'container', id: webApp } });
-      if (shop && apiApp) emit('container.add-child', { containerId: shop, childRef: { kind: 'container', id: apiApp } });
-      const customer = makeNode('Customer', 'rounded', 'A person browsing products and placing an order.', landscape, undefined, 'gray');
-      const payment = makeNode('Payment provider', 'square', 'External card authorization and settlement.', landscape, undefined, 'gray');
-      const web = makeNode('Storefront UI', 'square', 'Catalog, basket, and checkout experience.', webApp, undefined, 'green');
-      const api = makeNode('Commerce API', 'square', 'Pricing, orders, and checkout orchestration.', apiApp, undefined, 'green');
-      const database = makeNode('Orders datastore', 'pill', 'Customers, baskets, and order state.', apiApp, undefined, 'blue');
+      const landscape = makeContainer('Commerce landscape', { x: 0, y: 0 }, []);
+      const platform = makeContainer('Checkout platform', { x: 0, y: 0 }, [], 'rows', 'c4-system', 'blue');
+      const edge = makeContainer('Edge', { x: -515, y: 0 }, [], 'rows', 'c4-container', 'gray');
+      const services = makeContainer('Spring services', { x: -100, y: 0 }, [], 'rows', 'c4-container', 'green');
+      const data = makeContainer('Data & events', { x: 440, y: 0 }, [], 'rows', 'c4-container', 'purple');
+      if (landscape && platform) emit('container.add-child', { containerId: landscape, childRef: { kind: 'container', id: platform } });
+      [edge, services, data].forEach(id => {
+        if (platform && id) emit('container.add-child', { containerId: platform, childRef: { kind: 'container', id } });
+      });
+      const customer = makeNode('Web / mobile client', 'user-input', 'Customers browse, build a cart, and submit checkout.', landscape, undefined, 'gray');
+      const stripe = makeNode('Stripe', 'rounded', 'External payment authorization and settlement.', landscape, undefined, 'gray');
+      const gateway = makeNode('API Gateway', 'gateway', 'Routes authenticated requests.', edge, undefined, 'gray');
+      const orders = makeNode('Spring · Order Service', 'service', 'Owns checkout orchestration and the order aggregate.', services, undefined, 'green');
+      const inventory = makeNode('Spring · Inventory Service', 'service', 'Consumes order events and reserves available stock.', services, undefined, 'green');
+      const payments = makeNode('Spring · Payment Service', 'service', 'Isolates the payment provider and idempotency policy.', services, undefined, 'green');
+      const kafka = makeNode('Kafka · order-events', 'kafka', 'Durable order.created and inventory.reserved streams.', data, undefined, 'gray');
+      const postgres = makeNode('Postgres · orders', 'database', 'Transactional order state and the outbox table.', data, undefined, 'blue');
+      const redis = makeNode('Redis · carts', 'cache', 'Short-lived carts and checkout idempotency keys.', data, undefined, 'red');
       [
-        [customer, web, 'uses'],
-        [web, api, 'HTTPS / JSON'],
-        [api, database, 'reads + writes'],
-        [api, payment, 'authorizes'],
+        [customer, gateway, 'HTTPS / JSON'],
+        [gateway, orders, 'REST'],
+        [orders, redis, 'read + write'],
+        [orders, postgres, 'transaction + outbox'],
+        [orders, kafka, 'publish order.created'],
+        [kafka, inventory, 'consume'],
+        [orders, payments, 'gRPC'],
+        [payments, stripe, 'HTTPS'],
       ].forEach(([From, To, label]) => emit('graph.edge.create', { From, To, Label: { text: label } }));
       finishDemo(null, 'c4', () => {
-        frame(landscape, { x: 0, y: 0 }, { w: 1900, h: 920 });
-        frame(shop, { x: 0, y: 0 }, { w: 1220, h: 700 });
-        frame(webApp, { x: -280, y: 0 }, { w: 420, h: 430 });
-        frame(apiApp, { x: 280, y: 0 }, { w: 500, h: 430 });
-        place(customer, { x: -790, y: -70 });
-        place(payment, { x: 790, y: 80 });
-        place(web, { x: -280, y: 20 });
-        place(api, { x: 280, y: -70 });
-        place(database, { x: 280, y: 100 });
+        frame(landscape, { x: 0, y: 0 }, { w: 1650, h: 900 });
+        frame(platform, { x: 0, y: 0 }, { w: 1300, h: 700 });
+        frame(edge, { x: -515, y: 0 }, { w: 280, h: 540 });
+        frame(services, { x: -100, y: 0 }, { w: 540, h: 540 });
+        frame(data, { x: 440, y: 0 }, { w: 380, h: 540 });
+        place(customer, { x: -730, y: -55 }, { w: 190, h: 82 });
+        place(stripe, { x: 730, y: 145 }, { w: 180, h: 78 });
+        place(gateway, { x: -515, y: 0 }, { w: 176, h: 176 });
+        place(orders, { x: -100, y: -165 }, { w: 230, h: 86 });
+        place(inventory, { x: -100, y: 0 }, { w: 230, h: 86 });
+        place(payments, { x: -100, y: 165 }, { w: 230, h: 86 });
+        place(kafka, { x: 440, y: -165 }, { w: 220, h: 86 });
+        place(redis, { x: 440, y: 0 }, { w: 220, h: 86 });
+        place(postgres, { x: 440, y: 165 }, { w: 220, h: 86 });
       });
     });
 

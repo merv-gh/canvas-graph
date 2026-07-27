@@ -13,29 +13,30 @@ const placeNode = async page => {
   const before = await page.locator('.node').count();
   if (!/node-placing/.test(await stage.getAttribute('class') ?? '')) {
     await page.getByRole('button', { name: 'Add node', exact: true }).click();
+  } else {
+    await stage.click({ position: { x: 620 + (before % 2) * 70, y: 420 + (before % 3) * 45 } });
   }
-  await stage.click({ position: { x: 620 + (before % 2) * 70, y: 420 + (before % 3) * 45 } });
   await expect(page.locator('.node')).toHaveCount(before + 1);
 };
 
 test('nested C4 document survives reload and share', async ({ page, context }) => {
   await page.goto('/');
   await clickMore(page, 'Open getting-started guide');
-  await page.getByRole('button', { name: /C4 · Online shop/ }).click();
-  await expect(page.locator('.container')).toHaveCount(4);
-  await expectModelNodeCount(page, 5);
+  await page.getByRole('button', { name: /Checkout microservices/ }).click();
+  await expect(page.locator('.container')).toHaveCount(5);
+  await expectModelNodeCount(page, 9);
   await expect(page.locator('.save-state')).toHaveCount(0);
 
   await page.reload();
-  await expect(page.locator('.container')).toHaveCount(4);
-  await expectModelNodeCount(page, 5);
+  await expect(page.locator('.container')).toHaveCount(5);
+  await expectModelNodeCount(page, 9);
 
   await clickMore(page, 'Share');
   const url = await page.getByRole('textbox', { name: 'Share link', exact: true }).inputValue();
   const copy = await context.newPage();
   await copy.goto(url);
-  await expect(copy.locator('.container')).toHaveCount(4);
-  await expectModelNodeCount(copy, 5);
+  await expect(copy.locator('.container')).toHaveCount(5);
+  await expectModelNodeCount(copy, 9);
 });
 
 test('share can restore the intended viewport, zoom, and selection', async ({ page, context }) => {
@@ -67,6 +68,7 @@ test('Mermaid import validates, previews, and remains undoable', async ({ page }
   await expect(page.locator('.node')).toHaveCount(1);
 
   await clickMore(page, 'Open getting-started guide');
+  await page.getByText('Import an existing Mermaid architecture', { exact: true }).click();
   await page.getByLabel('Mermaid flowchart source').fill('flowchart LR\nA -->');
   await page.getByRole('button', { name: 'Preview import' }).click();
   await expect(page.locator('.import-preview')).toHaveCount(0);
@@ -137,7 +139,7 @@ test('edge picker never leaks into a new graph', async ({ page }) => {
 test('fit is the only persistent zoom control', async ({ page }) => {
   await page.goto('/');
   await clickMore(page, 'Open getting-started guide');
-  await page.getByRole('button', { name: /C4 · Online shop/ }).click();
+  await page.getByRole('button', { name: /Checkout microservices/ }).click();
   await expect(page.getByRole('button', { name: 'Fit canvas to content' })).toBeVisible();
   await expect(page.locator('[data-command="view.zoom.in"], [data-command="view.zoom.out"], [data-command="view.zoom.reset"]')).toHaveCount(0);
 });
@@ -146,7 +148,7 @@ test('phone fit ignores overlay navigator width', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await page.evaluate(() => window.app.contexts.commands.run('onboarding.open'));
-  await page.getByRole('button', { name: /C4 · Online shop/ }).click();
+  await page.getByRole('button', { name: /Checkout microservices/ }).click();
   await page.getByRole('button', { name: 'Fit canvas to content' }).click();
   const scale = await page.evaluate(() => window.app.contexts.view.get().scale);
   expect(scale).toBeGreaterThanOrEqual(0.8);
@@ -210,7 +212,7 @@ test('deleting a graph requires explicit confirmation', async ({ page }) => {
 test('deleting a populated container warns and offers ungroup', async ({ page }) => {
   await page.goto('/');
   await clickMore(page, 'Open getting-started guide');
-  await page.getByRole('button', { name: /C4 · Online shop/ }).click();
+  await page.getByRole('button', { name: /Checkout microservices/ }).click();
   // Oversized Fit deliberately leaves lower content off-screen at 80%.
   // Address the container through the navigator, which also frames it before
   // exposing contextual deletion.
@@ -222,14 +224,14 @@ test('deleting a populated container warns and offers ungroup', async ({ page })
   await expect(page.locator('.container-delete-preview')).toContainText('cannot be undone');
   await expect(page.locator('.container-delete-preview')).toContainText('Ungroup and keep contents');
   await page.getByRole('button', { name: 'Keep container' }).click();
-  await expect(page.locator('.container')).toHaveCount(4);
-  await expectModelNodeCount(page, 5);
+  await expect(page.locator('.container')).toHaveCount(5);
+  await expectModelNodeCount(page, 9);
 });
 
 test('selected edges expose a nearby editor with connection actions', async ({ page }) => {
   await page.goto('/');
   await clickMore(page, 'Open getting-started guide');
-  await page.getByRole('button', { name: /C4 · Online shop/ }).click();
+  await page.getByRole('button', { name: /Checkout microservices/ }).click();
   // At fit-to-document zoom, the navigator is the reliable, intended route
   // for selecting a fine connection without pixel-level hit testing.
   await page.getByRole('button', { name: 'Expand graph navigator' }).click();
@@ -245,15 +247,15 @@ test('mobile selected-item wheel stays fully reachable', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await page.evaluate(() => window.app.contexts.commands.run('onboarding.open'));
-  await page.getByRole('button', { name: /C4 · Online shop/ }).click();
+  await page.getByRole('button', { name: /Checkout microservices/ }).click();
   // The reading-scale floor intentionally leaves the far end off-screen.
   // Select it through the addressable navigator, which frames it first.
   await page.getByRole('button', { name: 'Expand graph navigator' }).click();
   await page.locator('.graph-nav-item[data-item-kind="node"]')
-    .filter({ hasText: 'Payment provider' }).click();
+    .filter({ hasText: 'Payment Service' }).click();
 
   await expect(page.locator('.item-toolbar')).toBeHidden();
-  const node = page.locator('.node').filter({ hasText: 'Payment provider' });
+  const node = page.locator('.node').filter({ hasText: 'Payment Service' });
   await expect(node).toBeVisible();
   await node.evaluate(element => {
     const rect = element.getBoundingClientRect();

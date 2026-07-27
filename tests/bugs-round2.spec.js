@@ -132,6 +132,7 @@ test('dark Preview import button keeps high-contrast primary styling', async ({ 
   await boot(page);
   await clickMore(page, 'Toggle theme');
   await clickMore(page, 'Open getting-started guide');
+  await page.getByText('Import an existing Mermaid architecture', { exact: true }).click();
   const preview = page.getByRole('button', { name: 'Preview import' });
   await expect(preview).toHaveCSS('background-color', 'rgb(215, 215, 215)');
   await expect(preview).toHaveCSS('color', 'rgb(22, 22, 22)');
@@ -140,7 +141,7 @@ test('dark Preview import button keeps high-contrast primary styling', async ({ 
 test('workflow edge-label rectangles clear nodes, each other, and their own arrow axes', async ({ page }) => {
   await boot(page);
   await clickMore(page, 'Open getting-started guide');
-  await page.getByRole('button', { name: /Jira · Issue lifecycle/ }).click();
+  await page.getByRole('button', { name: /Delivery workflow/ }).click();
   const collisions = await page.locator('g.edge').evaluateAll(groups => {
     const intersects = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
     const segmentHitsRect = (x1, y1, x2, y2, rect) => {

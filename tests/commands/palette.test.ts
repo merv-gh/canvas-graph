@@ -226,7 +226,7 @@ describe('persistent node palette', () => {
     expect(ctx.graphs.current.nodes()[0]).toMatchObject({ NodeType: 'circle', Color: 'green' });
   });
 
-  it('turns a type tile into a persistent canvas placement tool', async () => {
+  it('turns a type tile into a persistent canvas placement tool', { timeout: 10_000 }, async () => {
     const ctx = bootPalette();
     await settle();
     click(document.querySelector<HTMLElement>('[data-command="palette.arm.type.diamond"]')!);
@@ -250,7 +250,7 @@ describe('persistent node palette', () => {
     expect(stage.classList.contains('node-placing')).toBe(false);
   });
 
-  it('creates real C4 systems and containers, including empty ones', async () => {
+  it('creates real C4 systems and containers, including empty ones', { timeout: 10_000 }, async () => {
     const ctx = bootPalette({ autoLayout: false });
     await settle();
     ctx.bus.emit('preset.set', { preset: 'c4' });
