@@ -230,6 +230,7 @@ test('desktop item context owns keyboard focus and activates the focused action'
 
 test('collapsed navigator and fit controls use the same measured shell', async ({ page }) => {
   await page.goto('/?demo=agent-observability');
+  await expect(page.locator('.graph-navigator')).toBeVisible();
   const collapse = page.getByRole('button', { name: 'Collapse graph navigator', exact: true });
   if (await collapse.isVisible()) await collapse.click();
   const hamburger = await page.locator('.graph-navigator[data-outline-folded="true"]').boundingBox();
