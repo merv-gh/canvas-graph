@@ -2,7 +2,7 @@ import { itemRefFrom, type Registry } from '../core';
 import { Places, Slots } from '../types';
 import type { CommandSource, ItemRef } from '../types';
 import { ability, action } from './shared';
-import type { Labeled } from './shapes';
+import type { MaybeLabeled } from './shapes';
 
 declare module '../types' {
   interface CustomEvents {
@@ -10,16 +10,18 @@ declare module '../types' {
     'item.title.commit': { ref: ItemRef; text: string; finish?: boolean };
     'item.description.edit': { ref: ItemRef };
     'item.description.commit': { ref: ItemRef; text: string; finish?: boolean };
+    /** Escape: put the pre-edit text back and leave the model alone. */
+    'item.edit.cancel': { ref: ItemRef; field: 'title' | 'description' };
   }
 }
 
-type Described = Labeled & { Description?: string };
+type Described = MaybeLabeled & { Description?: string };
 
 /** Editable title — any item with a `Label.text` can use this.
  *  Convention: the entity's renderer must surface its title in an element
  *  carrying `[data-editable-title]`. Single click is selection; double-click
  *  (or Enter while selected) enters edit mode. */
-export const editable = <T extends Labeled>() => ability<T>('editable', [action<T>({
+export const editable = <T extends MaybeLabeled>() => ability<T>('editable', [action<T>({
   id: 'item.title.edit',
   label: 'Rename item',
   paletteCommand: 'item.title.edit',
@@ -43,14 +45,21 @@ export function registerEditable(system: Registry) {
     /** Find the title element belonging to a given ref. Generic over kind via the
      *  data-item-* tagging — works for node, container, or any future kind that
      *  marks its title with [data-editable-title]. */
-    const itemEl = (ref: ItemRef): Element | undefined => {
+    const itemEls = (ref: ItemRef): Element[] => {
       const stage = contexts.places.el(Places.Stage);
       return [...(stage?.querySelectorAll(`[data-item-kind="${ref.kind}"][data-item-id="${ref.id}"]`) ?? [])]
-        .find(candidate => !candidate.closest('.tool-panel, .item-toolbar'));
+        .filter(candidate => !candidate.closest('.tool-panel, .item-toolbar'));
     };
+    const itemEl = (ref: ItemRef): Element | undefined => itemEls(ref)[0];
+    /** An item may be tagged on several elements (an edge tags its hit line, its
+     *  drawn line, and its label host). Walk them until one actually owns the
+     *  editable element instead of assuming the first hit does. */
     const editableEl = (ref: ItemRef, selector: string): HTMLElement | null => {
-      const el = itemEl(ref)?.querySelector(selector) ?? null;
-      return el instanceof HTMLElement ? el : null;
+      for (const candidate of itemEls(ref)) {
+        const el = candidate.querySelector(selector);
+        if (el instanceof HTMLElement) return el;
+      }
+      return null;
     };
     const titleEl = (ref: ItemRef) => editableEl(ref, '[data-editable-title]');
     const descriptionEl = (ref: ItemRef) => editableEl(ref, '[data-editable-description]');
@@ -68,6 +77,8 @@ export function registerEditable(system: Registry) {
      *  the Cancellable + the focusout/Enter commit guard. */
     let editingRef: ItemRef | null = null;
     let editingDescriptionRef: ItemRef | null = null;
+    /** Text as it was when the edit started, so Escape can put it back. */
+    let editingOriginal = '';
     const renderedDescriptions = new WeakMap<HTMLElement, Node[]>();
 
     const enterEditMode = (el: HTMLElement) => {
@@ -237,16 +248,18 @@ export function registerEditable(system: Registry) {
         const el = titleEl(ref);
         if (!el) return;
         editingRef = ref;
+        editingOriginal = (graphs.current.getItem(ref) as MaybeLabeled | undefined)?.Label?.text ?? '';
         enterEditMode(el);
       });
     });
     on('item.title.commit', ({ ref, text, finish }) => {
-      const item = graphs.current.getItem(ref) as Labeled | undefined;
+      const item = graphs.current.getItem(ref) as MaybeLabeled | undefined;
       if (!item) return;
-      if (text && text !== item.Label.text) emit('item.update', { ref, patch: { Label: { text } } });
+      const current = item.Label?.text ?? '';
+      if (text && text !== current) emit('item.update', { ref, patch: { Label: { text } } });
       if (!text) {
         const el = titleEl(ref);
-        if (el) el.textContent = item.Label.text;
+        if (el) el.textContent = current;
       }
       const el = titleEl(ref);
       if (el) exitEditMode(el);
@@ -288,19 +301,52 @@ export function registerEditable(system: Registry) {
       if (editingDescriptionRef && editingDescriptionRef.kind === ref.kind && editingDescriptionRef.id === ref.id) editingDescriptionRef = null;
     });
 
-    contexts.cancellation.register({
+    /** The element the caret is in right now, or null. Liveness-checked on
+     *  purpose: if a redraw ever does destroy the editor, everything that reads
+     *  this claim switches off instead of locking every shortcut out. */
+    const editingEl = (): HTMLElement | null => {
+      const ref = editingDescriptionRef ?? editingRef;
+      if (!ref) return null;
+      const el = editingDescriptionRef ? descriptionEl(ref) : titleEl(ref);
+      return el?.isConnected && el.classList.contains('editing') ? el : null;
+    };
+    // One claim, three readers: the input router (which skips non-global
+    // shortcuts), the guard below, and anything else that needs to know the
+    // keyboard is spoken for. Edit-session state rather than one event's
+    // target, so a keydown a redraw retargeted at <body> can no longer fire
+    // `a`/`x`/`z` mid-rename.
+    contexts.interaction.editing.claim(origin, () => !!editingEl());
+    // `global` bindings (Escape) and selector-scoped ones (the commit commands)
+    // still pass: those *are* the edit session's own keys.
+    contexts.commands.registerGuard(origin, (command, source) => {
+      if (source.origin !== 'keyboard' || !editingEl()) return true;
+      return command.input?.global || command.input?.selector ? true : '';
+    });
+
+    // Escape is the universal "undo this edit before it happens". Enter and
+    // focusout commit; Escape puts the text back and never touches the model.
+    on('item.edit.cancel', ({ ref, field }) => {
+      const description = field === 'description';
+      const el = description ? descriptionEl(ref) : titleEl(ref);
+      if (el) {
+        if (description) restoreDescription(el);
+        else el.textContent = editingOriginal;
+        exitEditMode(el);
+      }
+      if (description) editingDescriptionRef = null; else editingRef = null;
+      frameLoop.schedule(finishFocusTask, () => queueMicrotask(() => {
+        const item = itemEl(ref) as HTMLElement | undefined;
+        item?.focus({ preventScroll: true });
+      }), 30);
+    });
+
+    contexts.interaction.cancel.register({
       origin,
       active: () => !!editingRef || !!editingDescriptionRef,
-      // Cancel = synthesise a commit with finish:true so the same code path
-      // runs as Enter. No revert-to-original in v1.
       cancel: () => {
-        const ref = editingDescriptionRef ?? editingRef;
-        if (!ref) return;
         const description = !!editingDescriptionRef;
-        const el = description ? descriptionEl(ref) : titleEl(ref);
-        if (!el) return;
-        if (description) emit('item.description.commit', { ref, text: el.textContent ?? '', finish: true });
-        else emit('item.title.commit', { ref, text: el.textContent?.trim() ?? '', finish: true });
+        const ref = editingDescriptionRef ?? editingRef;
+        if (ref) emit('item.edit.cancel', { ref, field: description ? 'description' : 'title' });
       },
     });
   }, { requires: ['ability.selectable'] });

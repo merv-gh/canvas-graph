@@ -17,7 +17,7 @@ export type KeyboardCapture = {
   stop(): void;
 };
 
-export function keyboardCaptureContext() {
+export function keyboardCaptureFacet() {
   let active: KeyboardCapture | null = null;
   const teardowns = new WeakMap<KeyboardCapture, () => void>();
   const remove = (capture: KeyboardCapture | null) => {

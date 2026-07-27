@@ -366,7 +366,13 @@ export function registerToolPanel(system: Registry) {
     });
     on('debug.enabled.changed', drawPanels);
     on('debug.recording.changed', drawPanels);
-    on('history.changed', drawPanels);
+    // Undo/redo availability only changes buttons on the top toolbar. Rebuilding
+    // every panel for it churned the inspector under the user's cursor — a
+    // repaint that has nothing to say should not cost a caret.
+    on('history.changed', () => {
+      const top = panelById(TOP_PANEL_ID);
+      if (top) drawPanel(top);
+    });
     // Only panels with a `mountWhen` predicate care about selection changes.
     // Redraw only when a gated panel's mount state actually flips — panel
     // contents are static between mounts, and 100 rapid creates must not

@@ -96,6 +96,8 @@ export function registerPresent(system: Registry) {
       },
       nodeType: id => model.nodeType(id),
       refOf: id => ({ kind, id }),
+      // Presentation renders nodes only; there are no wires to route around.
+      linesOfKind: () => [],
       tagItem,
       applyItemModes: () => {},
       wireAffordances: () => {},

@@ -273,7 +273,9 @@ export function registerInk(system: Registry) {
         group: 'edit',
         hidden: true,
         input: {
-          on: 'pointerdown', selector: '[data-item-kind][data-item-id]', prevent: true, stop: true,
+          // Erase mode owns the press outright — priority, not import order,
+          // is what puts it ahead of selection and drag.
+          on: 'pointerdown', selector: '[data-item-kind][data-item-id]', prevent: true, stop: true, priority: -30,
           when: event => erasing && (event as PointerEvent).isPrimary && (event as PointerEvent).button === 0
             && !(event.target as Element).closest('.tool-panel, .item-toolbar, .modal-layer'),
         },
@@ -321,6 +323,7 @@ export function registerInk(system: Registry) {
             && !(event.target as Element).closest('[data-item-id], .tool-panel, .item-toolbar, .modal-layer, .empty-action'),
           prevent: true,
           stop: true,
+          priority: -30,
         },
         payload: ({ event }) => ({ point: contexts.view.clientToSpace(Places.Stage, clientPoint(event!)) }),
       },
@@ -420,7 +423,7 @@ export function registerInk(system: Registry) {
     on('graph.switched', () => { activeId = null; ensureState(graphs.current.id); });
     on('app.start', () => { ensureState(graphs.current.id); });
 
-    contexts.cancellation.register({
+    contexts.interaction.cancel.register({
       origin,
       priority: 30,
       background: false,

@@ -15,7 +15,7 @@ export function registerMain(system: Registry) {
     // Escape exits zen mode through the shared cancellation stack. `background:
     // false` keeps zen active on canvas clicks — it persists until an explicit
     // exit (`\` or Escape), so the faded panels don't pop back on a stray click.
-    contexts.cancellation.register({
+    contexts.interaction.cancel.register({
       origin,
       background: false,
       active: () => contexts.fold.folded(ZEN_FOLD_ID),
@@ -46,10 +46,10 @@ export function registerMain(system: Registry) {
         payload: () => ({ id: ZEN_FOLD_ID }),
       },
     ]);
-    on('canvas.select', () => contexts.cancellation.cancelPointerModes());
+    on('canvas.select', () => contexts.interaction.cancel.cancelPointerModes());
     contribute({
       surface: 'top', command: 'canvas.select', kind: 'button', icon: 'select', label: 'Select mode',
-      className: 'canvas-mode-tool canvas-select-tool', active: () => !contexts.cancellation.blocksPointer(),
+      className: 'canvas-mode-tool canvas-select-tool', active: () => !contexts.interaction.cancel.blocksPointer(),
       order: 5, group: 'mode',
     });
     on('app.start', () => { emit('render.shell'); syncShellFold(); });

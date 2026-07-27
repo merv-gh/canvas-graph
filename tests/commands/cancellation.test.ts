@@ -65,11 +65,11 @@ describe('first-class cancellation', () => {
     ctx.graphs.current.createNode({ Label: { text: 'A' } });
     ctx.bus.emit('selection.node.select', { id: 'e1' });
     await settle();
-    expect(ctx.contexts.cancellation.active()).toContain('ability.selectable');
+    expect(ctx.contexts.interaction.cancel.active()).toContain('ability.selectable');
 
     runCommand(ctx, 'jump.start');
     await settle();
-    const active = ctx.contexts.cancellation.active();
+    const active = ctx.contexts.interaction.cancel.active();
     expect(active).toContain('jump');
     expect(active).toContain('ability.selectable');
   });
@@ -80,11 +80,11 @@ describe('first-class cancellation', () => {
     ctx.bus.emit('selection.node.select', { id: 'e1' });
     runCommand(ctx, 'ink.toggle');
     await settle();
-    expect(ctx.contexts.cancellation.blocksPointer()).toBe(true);
+    expect(ctx.contexts.interaction.cancel.blocksPointer()).toBe(true);
 
     runCommand(ctx, 'canvas.select');
     await settle();
-    expect(ctx.contexts.cancellation.blocksPointer()).toBe(false);
+    expect(ctx.contexts.interaction.cancel.blocksPointer()).toBe(false);
     expect(ctx.selection.selected()).toEqual({ kind: 'node', id: 'e1' });
   });
 
@@ -127,7 +127,7 @@ describe('first-class cancellation', () => {
     outsideButton.remove();
   });
 
-  it('Escape commits an in-progress title edit', async () => {
+  it('Escape abandons an in-progress title edit', async () => {
     const ctx = bootApp();
     const node = ctx.graphs.current.createNode({ Label: { text: 'old' } });
     ctx.bus.emit('selection.node.select', { id: node.id });
@@ -142,6 +142,9 @@ describe('first-class cancellation', () => {
     pressEscape();
     await settle();
     expect(title.classList.contains('editing')).toBe(false);
-    expect(ctx.graphs.current.getNode(node.id)?.Label.text).toBe('new');
+    // Escape is "never mind", not "save": the model keeps the old text and the
+    // field shows it again.
+    expect(ctx.graphs.current.getNode(node.id)?.Label.text).toBe('old');
+    expect(title.textContent).toBe('old');
   });
 });

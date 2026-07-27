@@ -495,14 +495,14 @@ export function registerOutline(system: Registry) {
     };
 
     const draw = () => emit('render.view.set', { place: Places.Left, key: 'outline', view: renderOutline });
-    const offCancellation = contexts.cancellation.register({
+    const offCancellation = contexts.interaction.cancel.register({
       origin,
       priority: -5,
       background: false,
       active: () => contexts.fold.isOpen(PANEL_FOLD_ID),
       cancel: () => contexts.fold.set(PANEL_FOLD_ID, false),
     });
-    const offMobileCancellation = contexts.cancellation.register({
+    const offMobileCancellation = contexts.interaction.cancel.register({
       origin: `${origin}.mobile`,
       priority: 50,
       background: false,

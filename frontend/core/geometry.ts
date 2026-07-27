@@ -1,4 +1,4 @@
-import type { Position, Rect, Size } from '../types';
+import type { Position, Rect, Segment, Size } from '../types';
 
 /** Centered bounding rect of a positioned, sized item. Returns null when the
  *  item has no Position to anchor at. */
@@ -83,4 +83,23 @@ export const intersectRectBoundary = (
   const ty = dy === 0 ? Infinity : Math.abs(half.h / dy);
   const t = Math.min(tx, ty);
   return { x: cx + dx * t, y: cy + dy * t };
+};
+
+/** Does a segment touch an axis-aligned rectangle? Used to keep edge labels off
+ *  other people's wires: the label layout walks its box along the edge normal
+ *  until this returns false for every nearby line. */
+export const segmentIntersectsRect = (s: Segment, r: Rect): boolean => {
+  const inside = (x: number, y: number) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+  if (inside(s.ax, s.ay) || inside(s.bx, s.by)) return true;
+  const crosses = (x3: number, y3: number, x4: number, y4: number) => {
+    const d = (s.bx - s.ax) * (y4 - y3) - (s.by - s.ay) * (x4 - x3);
+    if (!d) return false;
+    const u = ((x3 - s.ax) * (y4 - y3) - (y3 - s.ay) * (x4 - x3)) / d;
+    const v = ((x3 - s.ax) * (s.by - s.ay) - (y3 - s.ay) * (s.bx - s.ax)) / d;
+    return u >= 0 && u <= 1 && v >= 0 && v <= 1;
+  };
+  return crosses(r.x, r.y, r.x + r.w, r.y)
+    || crosses(r.x, r.y + r.h, r.x + r.w, r.y + r.h)
+    || crosses(r.x, r.y, r.x, r.y + r.h)
+    || crosses(r.x + r.w, r.y, r.x + r.w, r.y + r.h);
 };

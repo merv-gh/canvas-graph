@@ -38,6 +38,7 @@ const paths: Record<IconName, string[]> = {
   'placement-hidden': ['M4 4h16v16H4z', 'M3 21 21 3'],
   'layout-columns': ['M4 5h7v14H4z', 'M13 5h7v14h-7z'],
   'layout-rows': ['M4 5h16v6H4z', 'M4 13h16v6H4z'],
+  pulse: ['M3 12h4l3-7 4 14 3-7h4'],
 };
 
 export const iconNode = (name: IconName, className = 'ui-icon') => {

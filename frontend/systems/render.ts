@@ -1,4 +1,4 @@
-import { itemParentAttr, type Registry } from '../core';
+import { isTextEntry, itemParentAttr, type Registry } from '../core';
 import { scopeForEvent } from '../core/redraw';
 import { mountRoot } from '../core/mount';
 import { Places } from '../types';
@@ -24,6 +24,11 @@ export function registerRender(system: Registry) {
     const modalOpen = () => !!contexts.places.el(Places.Modal)?.querySelector('.modal-layer');
     const blurActiveItem = () => {
       const active = activeElement();
+      // Clearing focus means "no item is focused", not "abandon what the user
+      // is typing". Inspector fields and inline editors live inside
+      // item-tagged chrome, so without this guard a deselect lands as a lost
+      // keystroke — the same class of bug as a redraw eating the caret.
+      if (isTextEntry(active)) return;
       if (active?.closest('[data-item-kind][data-item-id]') && typeof active.blur === 'function') active.blur();
     };
     const nodeOf = (view: Renderable) => typeof view === 'function' ? view() : view;
@@ -37,11 +42,49 @@ export function registerRender(system: Registry) {
         if (child !== keep && child instanceof HTMLElement && child.dataset.renderKey === key) child.remove();
       });
     };
+    /** The render layer's one hard rule: a repaint never takes the keyboard.
+     *  Panels legitimately rebuild while a field inside them has focus (a
+     *  search box filtering its own list), so the answer is to carry the caret
+     *  across the swap rather than to block it. Identity first (a field's own
+     *  `data-*`/name/class), child path as the fallback. */
+    type CaretMemo = { selector: string | null; path: number[]; start: number | null; end: number | null };
+    const caretMemo = (previous?: Node | null): CaretMemo | null => {
+      const active = activeElement();
+      if (!isTextEntry(active) || !(previous instanceof Element) || !previous.contains(active!)) return null;
+      const field = active as HTMLElement & { selectionStart?: number | null; selectionEnd?: number | null };
+      const path: number[] = [];
+      for (let node: Element | null = field; node && node !== previous; node = node.parentElement)
+        path.unshift([...(node.parentElement?.children ?? [])].indexOf(node));
+      const stable = field.dataset?.field ? `[data-field="${field.dataset.field}"]`
+        : field.getAttribute('name') ? `[name="${field.getAttribute('name')}"]`
+        : field.dataset?.command ? `[data-command="${field.dataset.command}"]`
+        : field.classList[0] ? `.${field.classList[0]}` : null;
+      let start: number | null = null, end: number | null = null;
+      try { start = field.selectionStart ?? null; end = field.selectionEnd ?? null; } catch { /* not a text input */ }
+      return { selector: stable, path, start, end };
+    };
+    const restoreCaret = (next: Node, memo: CaretMemo | null) => {
+      if (!memo || !(next instanceof Element)) return;
+      let target: Element | null = memo.selector
+        ? (next.matches(memo.selector) ? next : next.querySelector(memo.selector))
+        : null;
+      if (!target) {
+        let node: Element | null = next;
+        for (const index of memo.path) { node = node?.children[index] ?? null; if (!node) break; }
+        target = node;
+      }
+      if (!(target instanceof HTMLElement) || !isTextEntry(target)) return;
+      target.focus({ preventScroll: true });
+      if (memo.start == null) return;
+      try { (target as HTMLInputElement).setSelectionRange?.(memo.start, memo.end ?? memo.start); }
+      catch { /* selection not supported on this input type */ }
+    };
     const mountView = (place: Place, key: string, view: Renderable) => {
       const slot = contexts.places.el(place);
       if (!slot) return;
       const live = mountedFor(place);
       const previous = live.get(key);
+      const memo = caretMemo(previous);
       const next = tagRenderKey(nodeOf(view), key);
       // A hot redraw or shell remount may race a previous view replacement.
       // Render keys are singular: reconcile stale siblings before mounting so
@@ -54,6 +97,7 @@ export function registerRender(system: Registry) {
       if (previous?.parentNode) previous.parentNode.replaceChild(next, previous);
       else slot.append(next);
       live.set(key, next);
+      restoreCaret(next, memo);
     };
     const remount = (place: Place) => {
       const slot = contexts.places.el(place), parts = views.get(place);

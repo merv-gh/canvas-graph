@@ -15,14 +15,15 @@ concept needs more text to explain than to implement, it belongs in a system, no
 the core.
 
 > **Test:** `core.ts` size ≤ 400 lines. New core APIs require deleting at least
-> as many lines elsewhere. **And** `ctx.contexts` ≤ 14 entries — the shared
+> as many lines elsewhere. **And** `ctx.contexts` ≤ 13 entries — the shared
 > mental-model surface ratchets: adding a context means merging two first
 > (`contexts.budget` DX rule + `principles.test.ts`).
 
 Current status: `core.ts` is below this target after extracting IO, flags, DX,
 selection, and other small adapters. The context surface shrank by merging
-itemModes + itemOverlays → `decorations` and hierarchy + itemTargets + nesting →
-`hierarchy`. New foundation work keeps paying its way with equal or greater
+itemModes + itemOverlays → `decorations`, hierarchy + itemTargets + nesting →
+`hierarchy`, and keyboard-capture + cancellation + the inline-edit claim →
+`interaction`. New foundation work keeps paying its way with equal or greater
 deletions / merges.
 
 ## 2. Systems are self-sufficient and independent
@@ -40,7 +41,7 @@ its teardown. Disabling a system must not break others.
 
 > **Test:** Disable any non-core system; the rest still boots without errors.
 
-## 3. Everything has both a command and a UI affordance
+## 3. Everything has both a command and a UI affordance — and the renderer keeps it
 
 If a user can do X, they can do X from:
 - the keyboard (a shortcut bound to a command), AND
@@ -49,8 +50,16 @@ If a user can do X, they can do X from:
 This is non-negotiable for discoverability and accessibility. The DX validator
 enforces it per ability action.
 
+An ability is also a promise about the DOM. `editable` needs a
+`[data-editable-title]`, `draggable` a `[data-drag-surface]`, `resizeable` a
+resize slot. Declaring the ability without rendering its convention ships a
+command that does nothing — which is exactly how node cards spent months
+advertising a drag they didn't offer.
+
 > **Test:** Every `actionDef.ui` is non-empty AND at least one affordance has a
-> `kind: 'button'` or `kind: 'handler'`.
+> `kind: 'button'` or `kind: 'handler'`. Plus the `ability.unrendered` DX rule:
+> for every kind currently on the stage, each declared ability's DOM convention
+> must actually be present.
 
 ## 4. Data shapes the UI
 
@@ -265,6 +274,13 @@ Three rules guarantee the budget holds:
 > When you add a new entity ability, add the corresponding journey row before
 > shipping.
 
+**Known trade-off:** `Tab` is spent on cycling canvas items, so stage items sit
+at `tabindex="-1"` and are not in the browser's normal tab order. That buys the
+keyboard budget above and costs assistive-tech users the traversal they expect.
+Every item stays reachable (Tab cycle, `G`+letter jump, palette search) and
+carries a role + label, but this is a deliberate debt, not an oversight — if it
+is ever repaid, it is repaid by moving the cycle to another key.
+
 ## 18. Hierarchy is visible in navigation, not just storage
 
 Containment is a *navigation* truth, not only a data field. The left pane (and,
@@ -302,7 +318,7 @@ Origin-scoped teardown is uniform, so a regroup never changes runtime behavior.
 The pressure to merge is the contexts budget (Principle 1); the freedom to split
 is that facets are independently typed.
 
-> **Test:** `ctx.contexts` ≤ 14 (`contexts.budget`). Disabling any system tears
+> **Test:** `ctx.contexts` ≤ 13 (`contexts.budget`). Disabling any system tears
 > down cleanly regardless of how its contexts are grouped (Principle 2 tests).
 
 ## 20. Types read high → low

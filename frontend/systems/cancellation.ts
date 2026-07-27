@@ -4,7 +4,7 @@ import { Places } from '../types';
 /** Owns the two app-wide cancellation triggers. Both fire `app.cancel`, which
  *  the cancellation context routes to the topmost active Cancellable. Systems
  *  that want to opt into Esc / background-click cancellation only have to
- *  register a Cancellable via `contexts.cancellation.register(...)` — they
+ *  register a Cancellable via `contexts.interaction.cancel.register(...)` — they
  *  never wire their own Escape binding. */
 export function registerCancellation(system: Registry) {
   system('cancellation', ({ contexts }) => {
@@ -29,7 +29,7 @@ export function registerCancellation(system: Registry) {
         hidden: true,
         // While ink draw mode is on, a stage pointerdown is the start of a
         // stroke, not a cancel gesture (Escape still exits the mode).
-        input: { on: 'pointerdown', selector: `[data-place="${Places.Stage}"]`, when: (event, stage) => isStageSurface(event, stage) && !contexts.cancellation.blocksBackground() },
+        input: { on: 'pointerdown', selector: `[data-place="${Places.Stage}"]`, when: (event, stage) => isStageSurface(event, stage) && !contexts.interaction.cancel.blocksBackground() },
         payload: () => ({ source: 'background' }),
       },
     ]);

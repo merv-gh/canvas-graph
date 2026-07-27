@@ -54,7 +54,7 @@ export function eventBus(perf?: PerfApi): InstrumentedBus {
       throw new Error(`[bus] emit depth exceeded ${MAX_EMIT_DEPTH} at "${String(name)}" — event cycle (a handler re-emitting what triggered it?)`);
     }
     try {
-      const event = { name, data, at: performance.now() } as AnyEvent;
+      const event = { name, data, at: performance.now(), depth } as AnyEvent;
       const anySnapshot = any;
       const namedSnapshot = listeners.get(name);
       const fireAny = () => { for (const fn of anySnapshot) fn(event); };

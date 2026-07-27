@@ -160,8 +160,9 @@ describe('view fit', () => {
     } as DOMRect);
     document.querySelector<HTMLElement>('[data-fold-id="outline.panel"]')!.click();
     await settle();
-    const navigator = left.querySelector<HTMLElement>('.graph-navigator')!;
-    navigator.getBoundingClientRect = () => ({
+    // Fit measures the left *place* — whatever panel is mounted there occludes
+    // the canvas, so the place is the honest thing to stub.
+    left.getBoundingClientRect = () => ({
       x: 12, y: 12, left: 12, top: 12, right: 292, bottom: 588, width: 280, height: 576,
       toJSON: () => ({}),
     } as DOMRect);

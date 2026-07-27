@@ -339,7 +339,7 @@ export function registerItemToolbar(system: Registry) {
       const actions: WheelAction[] = [
         { command: 'palette.place.activate', glyph: '+', icon: 'node', label: 'Add node', section: 'Mode', active: !!stage?.classList.contains('node-placing') },
         { command: 'ink.toggle', glyph: '✎', icon: 'draw', label: 'Draw mode', section: 'Mode', active: !!stage?.classList.contains('ink-drawing') },
-        { command: 'canvas.select', glyph: '↖', icon: 'select', label: 'Select mode', section: 'Mode', active: !contexts.cancellation.blocksPointer() },
+        { command: 'canvas.select', glyph: '↖', icon: 'select', label: 'Select mode', section: 'Mode', active: !contexts.interaction.cancel.blocksPointer() },
         { command: 'ink.erase.toggle', glyph: '⌫', icon: 'erase', label: 'Erase canvas items', section: 'Mode', active: !!stage?.classList.contains('ink-erasing') },
         { command: 'editing.edge.create', glyph: '↗', icon: 'connect', label: 'Connect nodes', section: 'Structure' },
         { command: 'selection.group', glyph: '▣', icon: 'group', label: selection.selectedAll().length ? 'Group selected' : 'Create container', section: 'Structure' },
@@ -566,7 +566,7 @@ export function registerItemToolbar(system: Registry) {
 
     on('render.stage.draw', draw);
     on('render.stage.camera', draw);
-    const offCancel = contexts.cancellation.register({
+    const offCancel = contexts.interaction.cancel.register({
       origin,
       priority: 20,
       active: () => !!openMenu || !!hold,

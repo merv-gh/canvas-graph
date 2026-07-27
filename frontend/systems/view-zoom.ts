@@ -184,11 +184,12 @@ export function registerViewZoom(system: Registry) {
       const top = pixelPadding;
       let right = rect.width - pixelPadding;
       const bottom = rect.height - pixelPadding;
+      // Whatever is mounted in the left place — navigator, palette, inspector —
+      // floats over the canvas. Fit measures the *place*, not one known child,
+      // so content can never land underneath a panel just because a different
+      // system happens to own it today.
       const panel = contexts.places.el(Places.Left);
-      const navigator = panel?.querySelector<HTMLElement>('.graph-navigator');
-      const panelRect = navigator?.dataset.outlineFolded === 'false'
-        ? navigator.getBoundingClientRect()
-        : undefined;
+      const panelRect = panel && panel.childElementCount > 0 ? panel.getBoundingClientRect() : undefined;
       const overlapsStage = !!panelRect && panelRect.width > 0 && panelRect.height > 0
         && panelRect.right > rect.left && panelRect.left < rect.right
         && panelRect.bottom > rect.top && panelRect.top < rect.bottom;

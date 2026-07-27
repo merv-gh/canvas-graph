@@ -194,7 +194,10 @@ interface BuiltinEvents {
 
 export type AppEvents = BuiltinEvents & CustomEvents;
 export type EventName = keyof AppEvents;
-export type EventOf<K extends EventName = EventName> = { name: K; data: AppEvents[K]; at: number };
+/** `depth` is the bus's nested-dispatch level (1 = a root emit, 2 = something a
+ *  root handler emitted, …). It's what lets telemetry reconstruct causality —
+ *  request → fact → feature → … — without every emitter passing a trace id. */
+export type EventOf<K extends EventName = EventName> = { name: K; data: AppEvents[K]; at: number; depth?: number };
 export type AnyEvent = { [K in EventName]: EventOf<K> }[EventName];
 
 export type Bus = {
@@ -284,6 +287,12 @@ export type CommandInput = {
   global?: boolean;
   prevent?: boolean;
   stop?: boolean;
+  /** Match order for one raw input type: **lower runs first**, default 0.
+   *  Combined with `stop`, this is the whole conflict-resolution model — a
+   *  gesture that must win (a resize grip, a drag arming before selection)
+   *  says so in data instead of relying on which file was imported first.
+   *  Ties keep registration order, so existing bindings are unaffected. */
+  priority?: number;
   when?: (event: Event, target: Element) => boolean;
 };
 
@@ -359,7 +368,7 @@ export type IconName = 'menu' | 'fit' | 'more' | 'commands' | 'select' | 'draw' 
   | 'share' | 'help' | 'theme' | 'star' | 'star-filled' | 'close' | 'trash'
   | 'text' | 'circle' | 'toggle' | 'reverse' | 'collapse' | 'ungroup' | 'move-out' | 'check'
   | 'placement-inside' | 'placement-below' | 'placement-right' | 'placement-hidden'
-  | 'layout-columns' | 'layout-rows';
+  | 'layout-columns' | 'layout-rows' | 'pulse';
 
 export type AffordanceDef<T = unknown> = {
   surface: AffordanceSurface;
@@ -443,6 +452,9 @@ export type AbilityDef<T = unknown> = { id: string; actions: NonEmptyArray<Actio
 /** Structural slice of the live graph that an entity renderer needs.
  *  Kind-agnostic: callers go through `getItem(ref)` / `itemsOfKind(kind)`.
  *  An edge renderer that needs its endpoints calls `getItem({kind:'node', id})`. */
+/** A straight run between two points — an edge's centre-to-centre line. */
+export type Segment = { ax: number; ay: number; bx: number; by: number };
+
 export type EntityRenderGraph = {
   getItem(ref: ItemRef): unknown | undefined;
   refById(id: Id): ItemRef | undefined;
@@ -500,6 +512,10 @@ export type EntityRenderCtx = {
    *  visible endpoint. Returns null when the ref has no entity, no item, or
    *  the entity renderer doesn't declare bounds. */
   boundsOf(ref: ItemRef): Rect | null;
+  /** Centre-to-centre lines of every item of `kind` except `exceptId`. The
+   *  companion to `boundsInRect` for renderers that must avoid other people's
+   *  connections, not just their cards. Cached per draw pass by the stage. */
+  linesOfKind(kind: string, exceptId?: Id): Segment[];
   /** Resolve only the rendered bounds intersecting a graph-space area. This is
    * the spatial-query seam for renderers whose geometry must avoid nearby
    * entities without scanning the entire document for every painted item. */

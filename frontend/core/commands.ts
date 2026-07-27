@@ -7,6 +7,24 @@ import { bindingParsed, keyMatchesEvent, parseShortcut, shortcutOf } from './sho
 import type { FrameLoop } from './frame-loop';
 
 const POINTER_TYPES = new Set(['click', 'contextmenu', 'pointerdown', 'pointermove', 'pointerup', 'wheel']);
+
+/** An element that owns the keystrokes: a form control or an inline editor. */
+export const isTextEntry = (el: Element | null | undefined): boolean => {
+  if (!el) return false;
+  if (/^(input|textarea|select)$/i.test(el.tagName)) return true;
+  if (!(el instanceof HTMLElement)) return false;
+  // `isContentEditable` is the browser answer (it accounts for inheritance);
+  // the property read covers jsdom, which doesn't implement the former.
+  return el.isContentEditable || el.contentEditable === 'true' || el.contentEditable === 'plaintext-only';
+};
+
+/** True while the user is typing. Three answers to one question, because each
+ *  alone has a hole: the event target (normal case), the focused element (a
+ *  redraw can retarget a keydown at `document.body` while the caret is still in
+ *  an editor), and the interaction context's editing claim (an editor that owns
+ *  the session even if focus is momentarily elsewhere). */
+export const typingInto = (target: Element | null, claimed = false): boolean =>
+  claimed || isTextEntry(target) || isTextEntry(typeof document === 'undefined' ? null : document.activeElement);
 const originFromEvent = (event?: Event): CommandOrigin => {
   if (!event) return 'programmatic';
   if (event instanceof KeyboardEvent) return 'keyboard';
@@ -84,12 +102,26 @@ export function commandsContext(bus: Bus, isFlagOn: (origin?: string) => boolean
     },
     get: (id: string) => commandMap.get(id),
     all: () => [...commandMap.values()],
+    /** Two populations share one registry, and conflating them is why the
+     *  palette, DX and every consumer re-derived the same `!hidden` filter:
+     *   - **capabilities** — things a user can ask for, listed in the palette;
+     *   - **bindings** — gesture plumbing (`drag.item.move`, `jump.cancel`)
+     *     that exists only to give a raw input somewhere to go.
+     *  Ask for the one you mean. */
+    userVisible: () => [...commandMap.values()].filter(command => !command.hidden),
+    bindings: () => [...commandMap.values()].filter(command => command.hidden && !!command.input),
     enabled: () => enabledCache ??= [...commandMap.values()].filter(isEnabled),
     enabledForInput(type: RawInput) {
       let cached = inputCache.get(type);
       if (!cached) {
+        // Explicit priority, registration order as the tiebreak. Before this,
+        // "which gesture wins this pointerdown" was decided by import order in
+        // an index file — invisible at the call site and easy to break.
         cached = (enabledCache ??= [...commandMap.values()].filter(isEnabled))
-          .filter(command => command.input?.on === type);
+          .filter(command => command.input?.on === type)
+          .map((command, index) => ({ command, index }))
+          .sort((a, b) => (a.command.input!.priority ?? 0) - (b.command.input!.priority ?? 0) || a.index - b.index)
+          .map(entry => entry.command);
         inputCache.set(type, cached);
       }
       return cached;
@@ -157,7 +189,14 @@ export function commandsContext(bus: Bus, isFlagOn: (origin?: string) => boolean
  *  eliminating wasted command matching on events whose intermediate results
  *  would be overwritten before the next paint.  `[data-command]` button clicks
  *  are excluded — toolbar buttons dispatch synchronously for instant feedback. */
-export function inputRouter(commands: ReturnType<typeof commandsContext>, perf?: PerfApi, frameLoop?: FrameLoop, counters?: { events: number; commands: number }) {
+export function inputRouter(
+  commands: ReturnType<typeof commandsContext>,
+  perf?: PerfApi,
+  frameLoop?: FrameLoop,
+  counters?: { events: number; commands: number },
+  /** `contexts.interaction.editing.active` — an inline editor's own claim. */
+  isEditing: () => boolean = () => false,
+) {
   // Events safe to coalesce: only the latest per type matters.  pointerdown /
   // pointerup must stay synchronous so drag/marquee start/end pair correctly.
   // dblclick enters inline editors and must keep its live DOM target. Deferring
@@ -183,8 +222,7 @@ export function inputRouter(commands: ReturnType<typeof commandsContext>, perf?:
           return perf?.enabled() ? perf.measure(`Command.run.${id}`, run) : run();
         };
         try {
-          const typing = event instanceof KeyboardEvent
-            && (/input|textarea|select/i.test(rawTarget?.tagName ?? '') || (rawTarget instanceof HTMLElement && rawTarget.isContentEditable));
+          const typing = event instanceof KeyboardEvent && typingInto(rawTarget, isEditing());
           const modal = modalScopeEl();
           const inModal = targetInModal(rawTarget, modal);
 

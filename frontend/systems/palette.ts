@@ -1066,7 +1066,7 @@ export function registerPalette(system: Registry) {
       if (mobileOpen) setMobileOpen(false);
     });
 
-    contexts.cancellation.register({
+    contexts.interaction.cancel.register({
       origin,
       priority: 20,
       background: false,
@@ -1074,7 +1074,7 @@ export function registerPalette(system: Registry) {
       active: () => placing,
       cancel: () => emit('palette.place.cancel'),
     });
-    contexts.cancellation.register({
+    contexts.interaction.cancel.register({
       origin: `${origin}.mobile`,
       priority: 40,
       background: false,

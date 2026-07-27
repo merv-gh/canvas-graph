@@ -10,7 +10,7 @@ import type { ItemRef } from '../types';
  *
  *    - `contexts.hierarchy.targets()`       → the canonical "what can I jump to" list
  *    - `contexts.decorations.overlays.set()` → renders the letter chips in screen-space
- *    - `contexts.keyboard.capture(id, {onKey})` → consumes keys without
+ *    - `contexts.interaction.keys.capture(id, {onKey})` → consumes keys without
  *      synthesising a DOM listener outside the input router
  *    - `view.fit.item: ItemRef`       → gently reveals the chosen item (any kind)
  *    - `focus.item.focus`             → standard focus event
@@ -34,7 +34,7 @@ export function registerJump(system: Registry) {
       if (!letterToRef) return;
       letterToRef = null;
       contexts.decorations.unregisterOrigin('jump');
-      contexts.keyboard.unregisterOrigin('jump');
+      contexts.interaction.keys.unregisterOrigin('jump');
     };
 
     const start = () => {
@@ -61,7 +61,7 @@ export function registerJump(system: Registry) {
       // registered below fires jump.cancel for us. Enter still cancels here
       // because we treat it as "I'm done, don't pick" — it's a positive intent
       // distinct from the global cancel signal.
-      contexts.keyboard.capture('jump', {
+      contexts.interaction.keys.capture('jump', {
         onKey(event) {
           if (event.key === 'Escape') return;  // global Esc handles it
           if (event.key === 'Enter') {
@@ -88,9 +88,10 @@ export function registerJump(system: Registry) {
         group: 'jump',
         shortcut: 'g',
         // `stop: true` so the same `g` keystroke doesn't also fall through to
-        // `graph.switch.next`. DX will still emit `binding.duplicate` so the
-        // conflict is visible — rebind either side from Help to silence it.
-        input: { on: 'keydown', key: 'g', prevent: true, stop: true },
+        // `graph.switch.next`, and `priority` so winning doesn't depend on
+        // `registerJump` being called before `registerCollections`. DX still
+        // emits `binding.duplicate` so the conflict stays visible.
+        input: { on: 'keydown', key: 'g', prevent: true, stop: true, priority: -10 },
         available: () => contexts.hierarchy.targets().length > 0,
       },
       {
@@ -103,7 +104,7 @@ export function registerJump(system: Registry) {
 
     on('jump.start', start);
     on('jump.cancel', cancel);
-    contexts.cancellation.register({
+    contexts.interaction.cancel.register({
       origin,
       active: () => !!letterToRef,
       cancel: () => emit('jump.cancel'),

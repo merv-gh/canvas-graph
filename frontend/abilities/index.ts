@@ -17,6 +17,9 @@ export { selectable } from './selectable';
 export type { Identified, Labeled, Positioned, Sized } from './shapes';
 
 export function registerAbilitySystems(system: Registry) {
+  // Order here is presentation only. Gesture precedence lives on each binding's
+  // `input.priority` (see draggable's body-drag, which must arm before
+  // selectable's `stop`), never on which line comes first.
   registerSelectable(system);
   registerDraggable(system);
   registerNudgeable(system);

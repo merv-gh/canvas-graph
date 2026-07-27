@@ -41,8 +41,10 @@ commits once on pointer-up. rAF-free — it's cheap.
 **Observable:** `ui.select.marquee` (bool, band visible), `selection.count`
 after commit. New events `select.box.start/move/end`.
 
-**Edge cases:** a pointer that started on a node → item drag (unchanged, it has
-`stop:true` and fires first). Two-finger during a marquee → cancel marquee,
+**Edge cases:** a pointer that started on a node → item drag. The node card is a
+`[data-drag-surface]` and `drag.item.surface.start` carries `input.priority: -10`,
+so it arms before selection on the same press (it deliberately does *not* `stop` —
+the press must both pick the item and start the drag). Two-finger during a marquee → cancel marquee,
 begin pan (move-intent wins). Escape cancels an in-progress band.
 
 ---

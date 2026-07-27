@@ -34,6 +34,7 @@ EntityDef → CollectionDef/ModelDef.
 | Boot / flags / plugin lifecycle | `core.ts` (registry) + `runtime.ts` + `app.ts` |
 | DX rules | `systems/dx.ts` |
 | Record/replay/snapshot/test-gen | `core/sim.ts`, `core/snapshot.ts`, `core/test-gen.ts`, `systems/debug.ts` |
+| Tracing / OTLP export / live event map | `systems/telemetry.ts` (spans + export) + `systems/telemetry-portal.ts` (panel) |
 
 Each of `core/`, `systems/`, `abilities/` has a `CLAUDE.md` index — one line per file.
 
@@ -49,7 +50,7 @@ Each of `core/`, `systems/`, `abilities/` has a `CLAUDE.md` index — one line p
 - Commands are data (`contexts.commands.register([...])`) — the registry auto-tags your
   `origin` for flag teardown. Every user action needs a command AND a UI affordance.
 - No `document.querySelector` outside render-adjacent files — use `contexts.places.el(place)`.
-- Don't add a 15th `ctx.contexts` entry or grow `core.ts` past 400 lines (ratchet: merge first).
+- Don't add a 14th `ctx.contexts` entry or grow `core.ts` past 400 lines (ratchet: merge first).
 - Selection/fold/camera are presentation stores, never fields on graph data.
 
 ## Verify loop (fast)

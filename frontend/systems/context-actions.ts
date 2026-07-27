@@ -91,7 +91,7 @@ export function registerContextActions(system: Registry) {
       eraseMode.setAttribute('aria-label', 'Erase canvas items');
       const stage = contexts.places.el('stage');
       drawMode.setAttribute('aria-pressed', stage?.classList.contains('ink-drawing') ? 'true' : 'false');
-      selectMode.setAttribute('aria-pressed', contexts.cancellation.blocksPointer() ? 'false' : 'true');
+      selectMode.setAttribute('aria-pressed', contexts.interaction.cancel.blocksPointer() ? 'false' : 'true');
       eraseMode.setAttribute('aria-pressed', stage?.classList.contains('ink-erasing') ? 'true' : 'false');
       modeGroup.append(drawMode, selectMode, eraseMode);
       header.prepend(modeGroup);

@@ -28,7 +28,7 @@ export function registerModal(system: Registry) {
     contexts.commands.register([
       { id: 'modal.close', label: 'Close modal', group: 'modal' },
     ]);
-    contexts.cancellation.register({
+    contexts.interaction.cancel.register({
       origin,
       active: () => open,
       cancel: () => emit('modal.close'),

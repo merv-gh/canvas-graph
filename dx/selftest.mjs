@@ -790,7 +790,7 @@ ok('add_fold_cancellable: registers Escape-to-exit + adds missing origin/context
   const src = readFileSync(file, 'utf8');
   assert(/added Escape-to-exit cancellable/.test(out), out);
   assert(src.includes('({ on, contexts, origin }) =>'), src);                     // origin widened in
-  assert(src.includes('contexts.cancellation.register({'), src);
+  assert(src.includes('contexts.interaction.cancel.register({'), src);
   assert(src.includes("active: () => contexts.fold.folded('shell.zen')"), src);
   assert(src.includes("cancel: () => contexts.fold.set('shell.zen', true)"), src);
   rmSync(dir, { recursive: true, force: true });

@@ -197,6 +197,27 @@ every feature pays a small observability tax as it lands. The contract:
 4. **Localization is free from the plugin boundary.** Systems toggle off
    independently (Principle 2), so a flag-bisect narrows a fault to a few files
    without the model reasoning about it.
+5. **Every dispatch is a span, and observing costs nothing.**
+   `systems/telemetry.ts` turns each bus event into an OpenTelemetry span, with
+   parent/child taken from the bus's nested-dispatch depth — so a trace shows the
+   real request → fact → feature chain, not a flat log. Capture on the
+   interaction path is a Map lookup plus seven typed-array stores: no allocation,
+   no string formatting. Batches leave on a microtask *after* the dispatch chain
+   unwinds and land in a **worker**, where grouping, causality, OTLP
+   serialisation, the persistence JSON and the HTTP POST all happen off-thread.
+   `await app.telemetry.otlp()` returns OTLP/JSON (`resourceSpans`) that any
+   collector accepts; `telemetry.copy` puts it on the clipboard.
+
+### Telemetry & the event-flow portal
+
+| | |
+|---|---|
+| See it | `Ctrl+Shift+E`, or **⋯ → Event flow**. Movable, resizable, collapsible. |
+| Read it | Columns are bus dispatch depth (roots left), links are parent→child pairs the bus actually produced, a node lights when its event fires and fades over ~1.4s. Chips filter by channel. |
+| Local sink (on) | Newest 100 spans live in `IoApi` and survive a reload. This is the sink that works on GitHub Pages, where there is no backend. |
+| Backend sink (off) | `telemetry.export.toggle` POSTs batches to `http://localhost:4318/v1/traces` (`app.telemetry.setConfig({ endpoint })` to change it). Off by default and per-browser — nothing leaves the page until someone asks. A dead collector is swallowed, never surfaced as an editor error. |
+| No SDK | The OTLP wire format is the contract; a ~200KB browser SDK to serialise 100 spans would cost every visitor more than it buys. Swapping the real SDK in later only replaces the aggregator. |
+| Cost | `tests/commands/probes/telemetry-overhead.test.ts` holds the line: 20k emits with recording on stay inside noise of recording off, and a 10k-node pan/drag session keeps its render budget with the panel open. The panel's footer says `worker` or `inline` so you can see which side of the batch boundary you are on. |
 
 ### Roadmap (closes the remaining blind spots)
 

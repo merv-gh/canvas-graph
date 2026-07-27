@@ -503,6 +503,105 @@ button.icon:hover { color: var(--ink); }
 .tool-panel-body { display: flex; gap: 4px; }
 .tool-panel-stack .tool-panel-body { flex-direction: column; }
 
+/* --- Event-flow portal (systems/telemetry-portal.ts) ---------------------- */
+.tool-panel[data-panel-id="telemetry"] { align-items: stretch; max-width: none; padding: 0; }
+.tool-panel[data-panel-id="telemetry"] .tool-panel-head {
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  z-index: 1;
+  border: 0;
+  padding: 0;
+}
+.telemetry-portal {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.telemetry-portal-head { display: flex; align-items: baseline; gap: 8px; padding-right: 52px; }
+.telemetry-portal-title { flex: 1 1 auto; color: var(--ink); font-weight: 600; letter-spacing: .02em; }
+.telemetry-portal-export {
+  padding: 1px 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 10px;
+  cursor: pointer;
+}
+.telemetry-portal-export.is-on { border-color: var(--accent); color: var(--ink); background: var(--accent-soft); }
+/* One scrollable line: channel chips must never steal height from the map. */
+.telemetry-portal-filter {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 3px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.telemetry-portal-filter::-webkit-scrollbar { display: none; }
+.telemetry-portal-filter button { flex: 0 0 auto; }
+.telemetry-portal-filter button {
+  padding: 0 5px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: var(--panel-2);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-family: ui-monospace, monospace;
+  cursor: pointer;
+}
+.telemetry-portal-filter button.is-active { border-color: var(--accent); color: var(--ink); }
+.telemetry-portal-map {
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+.telemetry-map { display: block; }
+.telemetry-link { fill: none; stroke: var(--line-strong); opacity: .5; }
+.telemetry-node-bg { fill: var(--panel-2); stroke: var(--line-strong); stroke-width: .5px; }
+.telemetry-node-label {
+  fill: var(--text-muted);
+  font-family: ui-monospace, monospace;
+  font-size: 8.5px;
+}
+/* A span just landed on this event: the node lights, then fades back over
+   HOT_MS. The fade is redrawn, not animated, so it can't drift from the data. */
+.telemetry-node[data-hot] .telemetry-node-bg { fill: var(--accent-soft); stroke: var(--accent); }
+.telemetry-node[data-hot] .telemetry-node-label { fill: var(--ink); }
+.telemetry-node[data-channel="render"] .telemetry-node-label { opacity: .6; }
+.telemetry-empty { fill: var(--text-muted); font-size: 11px; }
+.telemetry-portal-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.telemetry-portal-last { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; }
+.telemetry-portal-where {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  opacity: .8;
+}
+.telemetry-portal-resize {
+  margin-left: auto;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
 /* Persistent pre-create palette. Tints are node content, never app chrome. */
 .tool-panel[data-panel-id="palette"] {
   position: relative;
@@ -836,10 +935,50 @@ button.icon:hover { color: var(--ink); }
 /* Opaque backdrop behind each edge label so text stays clear where it crosses a
  * line; the text is appended after it, so it always paints on top of its edge. */
 .edges .edge-label-bg { fill: var(--bg); opacity: 0.92; }
-.edges .edge-label { fill: var(--text-muted); font-family: ui-monospace, monospace; }
-.edges .edge-label.edge-kind-read { fill: var(--text-muted); }
-.edges .edge-label.edge-kind-write { fill: var(--ink); }
-.edges .edge-label.edge-kind-async { fill: var(--accent-2); }
+/* The label is HTML in a <foreignObject> so it can hold a caret (SVG <text>
+   cannot be contenteditable). It keeps the same box the layout engine reserves. */
+.edges .edge-label-host { overflow: visible; pointer-events: none; }
+.edges .edge-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--text-muted);
+  font-family: ui-monospace, monospace;
+  text-align: center;
+  white-space: pre-wrap;
+  pointer-events: auto;
+  cursor: text;
+}
+.edges .edge-label.edge-kind-read { color: var(--text-muted); }
+.edges .edge-label.edge-kind-write { color: var(--ink); }
+.edges .edge-label.edge-kind-async { color: var(--accent-2); }
+/* Unlabelled relationship: an invisible, inert box until you hover or select
+   the edge — then it offers itself as the "name this" target. */
+.edge-label-wrap.is-empty .edge-label { opacity: 0; pointer-events: none; }
+.edge:hover .edge-label-wrap.is-empty .edge-label,
+.edge:focus-within .edge-label-wrap.is-empty .edge-label,
+.edge:has(.selected) .edge-label-wrap.is-empty .edge-label {
+  opacity: 1;
+  pointer-events: auto;
+  color: var(--text-muted);
+  border: 1px dashed var(--line-strong);
+  border-radius: 3px;
+  background: var(--bg);
+}
+.edge-label-wrap.is-empty .edge-label::after { content: '+ label'; }
+.edge-label-wrap.is-empty .edge-label.editing::after { content: none; }
+.edges .edge-label.editing {
+  opacity: 1;
+  pointer-events: auto;
+  color: var(--ink);
+  background: var(--panel);
+  outline: 2px solid var(--accent);
+  border-radius: 3px;
+  cursor: text;
+  white-space: pre;
+}
 .item-overlays { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
 .item-overlay {
   position: absolute;
@@ -911,6 +1050,11 @@ button.icon:hover { color: var(--ink); }
 .node:hover {
   border-color: var(--accent);
 }
+/* The card body is a drag surface (abilities/draggable.ts) — say so on hover. */
+.node[data-drag-surface]:hover { cursor: grab; }
+.container-label[data-drag-surface] { cursor: grab; }
+.node[data-drag-surface] .editing,
+.container-label[data-drag-surface].editing { cursor: text; }
 /* Keyboard nudge eases via the left/top transition above. A pointer-drag must
    track the cursor 1:1, so the stage drops the easing while dragging. */
 .stage.dragging .node { cursor: grabbing; transition: border-color var(--duration-normal) var(--ease-default); }

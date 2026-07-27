@@ -5,7 +5,7 @@ affordances an entity opts into) AND `register<Id>(system)` (commands + event ha
 Both halves live together so toggling `ability.<id>` removes UI + behavior atomically.
 
 - `selectable.ts` — pointer select, Shift+toggle, Tab/Shift+Tab cycle, `x` delete fan-out, `selection.choose` seam.
-- `draggable.ts` — pointer drag → `item.update` Position patches.
+- `draggable.ts` — pointer drag → `item.update` Position patches. Two entry points: the toolbar `⋮⋮` grip (`[data-drag-handle]`) and the item's own body wherever its renderer marks `[data-drag-surface]` (whole card for a node, title bar for a container).
 - `nudgeable.ts` — arrow-key moves (separate modality from drag, toggle independently).
 - `resizeable.ts` — pointer resize handle → Size patches.
 - `editable.ts` — Enter / dblclick inline title edit on `[data-editable-title]` → Label patch; Shift+Enter / description dblclick edits raw Markdown on `[data-editable-description]` → Description patch (Ctrl/Cmd+Enter commits).

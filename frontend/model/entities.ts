@@ -1,9 +1,9 @@
 import { clamp, semanticTitle } from '../core';
-import { expandRect, intersectRectBoundary } from '../core/geometry';
+import { expandRect, intersectRectBoundary, segmentIntersectsRect } from '../core/geometry';
 import { renderMarkdown } from '../core/markdown';
 import { collapsible, configurable, draggable, editable, nudgeable, selectable } from '../abilities';
 import type { DataScale, DescriptionPlacement, EdgeKind, Graph, GraphEdge, GraphNode, NodeEntity, EdgePatch, NodeColor, NodeFill, NodePatch, NodeType } from './graph';
-import type { EntityDef, EntityRenderCtx, EntityRenderer, ItemRef, Position, PropertyDef, Rect, Size } from '../types';
+import type { EntityDef, EntityRenderCtx, EntityRenderer, ItemRef, Position, PropertyDef, Rect, Segment, Size } from '../types';
 import { isNodeType, NODE_TYPES, nodeTypeLabel } from './node-types';
 
 /** Built-in entity declarations — what a graph / node / edge *is*: its label,
@@ -120,6 +120,9 @@ const EDGE_LABEL_PAD_Y = 2;
 const EDGE_LABEL_LINE_GAP = 10;
 const EDGE_LABEL_AVOID_STEP = 12;
 export const EDGE_LABEL_AVOID_REACH = 480;
+/** Sizes the invisible label box an unlabelled edge still renders, so the
+ *  double-click target sits where the real label will appear. */
+const EDGE_LABEL_PLACEHOLDER = 'label';
 
 export const measureEdgeLabel = (label: string): Size => {
   const lines = label.split(/\r?\n/);
@@ -140,6 +143,7 @@ export const edgeLabelGeometry = (
   to: Position,
   edgeId = '',
   avoid: Rect[] = [],
+  avoidLines: Segment[] = [],
 ) => {
   const lines = label.split(/\r?\n/);
   const size = measureEdgeLabel(label);
@@ -167,7 +171,11 @@ export const edgeLabelGeometry = (
   // Short relationships may not have enough along-edge room for a long label.
   // Walk the rectangle farther along the same normal until it clears both cards;
   // it stays attached to the edge but never hides an endpoint.
-  for (let pass = 0; pass < EDGE_LABEL_AVOID_REACH / EDGE_LABEL_AVOID_STEP && avoid.some(obstacle => overlaps(rect, obstacle)); pass++) {
+  // Cards AND other people's wires: a label sitting on an unrelated line reads
+  // as belonging to it, which is worse than a label sitting slightly far out.
+  const blocked = () => avoid.some(obstacle => overlaps(rect, obstacle))
+    || avoidLines.some(line => segmentIntersectsRect(line, rect));
+  for (let pass = 0; pass < EDGE_LABEL_AVOID_REACH / EDGE_LABEL_AVOID_STEP && blocked(); pass++) {
     clearance += EDGE_LABEL_AVOID_STEP;
     anchor = {
       x: from.x + dx * t + nx * clearance,
@@ -185,6 +193,57 @@ export const edgeLabelGeometry = (
   };
 };
 
+/** Centre-to-centre lines of every edge *except* one, as a lookup. Built once
+ *  per pass so label placement is O(edges) rather than O(edges²) of lookups. */
+const otherEdgeLines = (
+  edges: { id: string; From: string; To: string }[],
+  positionOf: (id: string) => Position | null,
+) => {
+  if (edges.length > LABEL_AVOID_EDGE_LIMIT) return () => [] as Segment[];
+  const all: (Segment & { id: string })[] = [];
+  edges.forEach(edge => {
+    const from = positionOf(edge.From), to = positionOf(edge.To);
+    if (from && to) all.push({ id: edge.id, ax: from.x, ay: from.y, bx: to.x, by: to.y });
+  });
+  return (exceptId: string) => all.filter(line => line.id !== exceptId);
+};
+
+/** Final label rectangles for every labelled edge, produced by the same
+ *  placement the renderer uses (stagger, node avoidance, border clipping).
+ *
+ *  Exported because the DX layout rule used to re-derive a simplified version
+ *  of this — a midpoint plus a fixed offset — and warned about overlaps at
+ *  positions no label had occupied since the avoidance pass landed. Duplicated
+ *  layout math rots; one function cannot. */
+/** Beyond this an all-pairs label/line check stops being worth its frame. */
+const LABEL_AVOID_EDGE_LIMIT = 400;
+
+export const edgeLabelRects = (graph: Graph): Map<string, Rect> => {
+  const rects = new Map<string, Rect>();
+  const nodeRects = graph.nodes().map(nodeBoundsOf);
+  const anchorOf = (id: string) => {
+    const node = graph.node(id);
+    if (!node?.Position) return null;
+    const rect = nodeBoundsOf(node);
+    return { center: { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 }, half: { w: rect.w / 2, h: rect.h / 2 } };
+  };
+  const lines = otherEdgeLines(graph.edges(), id => graph.node(id)?.Position ?? null);
+  graph.edges().forEach(edge => {
+    const label = edge.Label?.text;
+    if (!label) return;
+    const from = anchorOf(edge.From), to = anchorOf(edge.To);
+    if (!from || !to) return;
+    const tipAtTarget = intersectRectBoundary(from.center, to.center, to.half);
+    const tipAtSource = intersectRectBoundary(to.center, from.center, from.half);
+    const initial = edgeLabelGeometry(label, tipAtSource, tipAtTarget, edge.id);
+    const area = expandRect(initial.rect, EDGE_LABEL_AVOID_REACH);
+    const obstacles = nodeRects.filter(rect =>
+      rect.x < area.x + area.w && rect.x + rect.w > area.x && rect.y < area.y + area.h && rect.y + rect.h > area.y);
+    rects.set(edge.id, edgeLabelGeometry(label, tipAtSource, tipAtTarget, edge.id, obstacles, lines(edge.id)).rect);
+  });
+  return rects;
+};
+
 const renderedEdgeLabelGeometry = (
   label: string,
   from: Position,
@@ -194,7 +253,10 @@ const renderedEdgeLabelGeometry = (
 ) => {
   const initial = edgeLabelGeometry(label, from, to, edgeId);
   const obstacles = ctx.boundsInRect('node', expandRect(initial.rect, EDGE_LABEL_AVOID_REACH));
-  return edgeLabelGeometry(label, from, to, edgeId, obstacles);
+  // Same placement the DX layout rule checks (`edgeLabelRects`): cards first,
+  // then everyone else's wires, so a label never reads as belonging to a line
+  // it merely crosses.
+  return edgeLabelGeometry(label, from, to, edgeId, obstacles, ctx.linesOfKind('edge', edgeId));
 };
 
 const edgeRenderer: EntityRenderer<GraphEdge> = {
@@ -255,17 +317,22 @@ const edgeRenderer: EntityRenderer<GraphEdge> = {
     g.append(line('edge-hit', from.center.x, from.center.y, to.center.x, to.center.y, { tabindex: -1 }));
     g.append(line('edge-line', tipAtSource.x, tipAtSource.y, tipAtTarget.x, tipAtTarget.y,
       ARROWLESS_KINDS.includes(edgeKind) ? {} : { 'marker-end': 'url(#edge-arrow)' }));
-    const label = edge.Label?.text;
+    const label = edge.Label?.text ?? '';
+    // An unlabelled relationship still gets a label box — invisible until the
+    // edge is hovered or selected. It is the double-click target that turns
+    // "this arrow means something" into words (Principle 12: empty states).
+    const geometry = label
+      ? renderedEdgeLabelGeometry(label, tipAtSource, tipAtTarget, edge.id, ctx)
+      : edgeLabelGeometry(EDGE_LABEL_PLACEHOLDER, tipAtSource, tipAtTarget, edge.id);
+    // Label content is built in LOCAL coords around (0,0) inside a translated
+    // wrapper group — reposition then only rewrites the wrapper's transform.
+    const wrap = svg('g', {
+      class: `edge-label-wrap${label ? '' : ' is-empty'}`,
+      transform: geometry.transform,
+      'data-label-width': geometry.size.w,
+      'data-label-height': geometry.size.h,
+    });
     if (label) {
-      const geometry = renderedEdgeLabelGeometry(label, tipAtSource, tipAtTarget, edge.id, ctx);
-      // Label content is built in LOCAL coords around (0,0) inside a translated
-      // wrapper group — reposition then only rewrites the wrapper's transform.
-      const wrap = svg('g', {
-        class: 'edge-label-wrap',
-        transform: geometry.transform,
-        'data-label-width': geometry.size.w,
-        'data-label-height': geometry.size.h,
-      });
       // Opaque backdrop uses the same rectangle the layout engine reserves.
       wrap.append(svg('rect', {
         class: 'edge-label-bg',
@@ -275,20 +342,28 @@ const edgeRenderer: EntityRenderer<GraphEdge> = {
         height: geometry.size.h,
         rx: 3,
       }));
-      const text = svg('text', {
-        class: `edge-label edge-kind-${edgeKind}`,
-        'text-anchor': 'middle',
-        'font-size': EDGE_LABEL_FONT_SIZE,
-      });
-      geometry.lines.forEach((line, i) => {
-        const tspan = svg('tspan', { x: 0, y: geometry.textStartY + i * EDGE_LABEL_LINE_HEIGHT });
-        tspan.textContent = line;
-        text.append(tspan);
-      });
-      // Backdrop then text → text always paints on top of its own edge line.
-      wrap.append(text);
-      g.append(wrap);
     }
+    // The label is HTML inside a foreignObject rather than SVG <text> so the
+    // generic `editable` ability can put a caret in it (contenteditable does
+    // not work on SVG text). Geometry, wrapping, and backdrop are unchanged.
+    const host = svg('foreignObject', {
+      x: -geometry.size.w / 2,
+      y: -geometry.size.h / 2,
+      width: geometry.size.w,
+      height: geometry.size.h,
+      class: 'edge-label-host',
+    });
+    ctx.tagItem(host as unknown as HTMLElement, ref);
+    const text = document.createElement('div');
+    text.className = `edge-label edge-kind-${edgeKind}`;
+    text.dataset.editableTitle = '';
+    text.setAttribute('aria-label', label ? 'Edge label. Double-click to edit.' : 'Unlabelled edge. Double-click to add a label.');
+    text.style.fontSize = `${EDGE_LABEL_FONT_SIZE}px`;
+    text.style.lineHeight = `${EDGE_LABEL_LINE_HEIGHT}px`;
+    text.textContent = label;
+    host.append(text);
+    wrap.append(host);
+    g.append(wrap);
     return g;
   },
   /** Endpoint move (drag / nudge / cascade) — rewrite line coordinates and the
@@ -314,10 +389,12 @@ const edgeRenderer: EntityRenderer<GraphEdge> = {
     setLine('.edge-hit', from.center.x, from.center.y, to.center.x, to.center.y);
     setLine('.edge-line', tipAtSource.x, tipAtSource.y, tipAtTarget.x, tipAtTarget.y);
     const wrap = el.querySelector('.edge-label-wrap');
-    const label = edge.Label?.text;
-    if (wrap && label) wrap.setAttribute(
+    const label = edge.Label?.text ?? '';
+    if (wrap) wrap.setAttribute(
       'transform',
-      renderedEdgeLabelGeometry(label, tipAtSource, tipAtTarget, edge.id, ctx).transform,
+      label
+        ? renderedEdgeLabelGeometry(label, tipAtSource, tipAtTarget, edge.id, ctx).transform
+        : edgeLabelGeometry(EDGE_LABEL_PLACEHOLDER, tipAtSource, tipAtTarget, edge.id).transform,
     );
   },
   signature(edge) {
@@ -328,7 +405,9 @@ const edgeRenderer: EntityRenderer<GraphEdge> = {
 export const edgeEntity: EntityDef<GraphEdge, EdgePatch> = entityDef<GraphEdge, EdgePatch>('edge', {
   label: 'Edge',
   labelOf: edge => edge.Label?.text?.trim() || 'Connection',
-  abilities: [selectable<GraphEdge>(), configurable<GraphEdge>()],
+  // editable: the label is the edge's meaning. Double-click it (or press Enter
+  // with the edge selected) to name the relationship without a modal.
+  abilities: [selectable<GraphEdge>(), editable<GraphEdge>(), configurable<GraphEdge>()],
   render: edgeRenderer,
   properties: [
     property<GraphEdge, EdgePatch>({
@@ -397,6 +476,9 @@ const nodeRenderer: EntityRenderer<GraphNode> = {
     ].filter(Boolean).join(' · ');
     ctx.tagItem(el, ref);
     el.tabIndex = -1;
+    // The whole card is the drag surface (see abilities/draggable.ts). Text
+    // selection, buttons, and the inline editors opt out via DRAG_BLOCKERS.
+    el.setAttribute('data-drag-surface', '');
     el.setAttribute('role', nodeVisual === 'switch' ? 'group' : 'button');
     const editHint = globalThis.innerWidth <= 680 ? 'Hold for actions.' : 'Press Enter to edit.';
     el.setAttribute('aria-label', `${node.Label.text || 'Untitled'}; ${typeLabel(nodeType)} node. ${editHint}`);

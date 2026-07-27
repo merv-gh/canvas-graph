@@ -114,15 +114,15 @@ describe('frontend selection polymorphism', () => {
     expect(overlay.dataset.itemKind).toBe('edge');
     expect(overlay.dataset.itemId).toBe(edge.id);
 
-    const capture = ctx.contexts.keyboard.capture('jump');
-    expect(ctx.contexts.keyboard.active()).toBe('jump');
+    const capture = ctx.contexts.interaction.keys.capture('jump');
+    expect(ctx.contexts.interaction.keys.active()).toBe('jump');
     expect(document.activeElement).toBe(capture.input);
     capture.input.value = 'e';
     expect(capture.value()).toBe('e');
     capture.clear();
     expect(capture.value()).toBe('');
     capture.stop();
-    expect(ctx.contexts.keyboard.active()).toBeNull();
+    expect(ctx.contexts.interaction.keys.active()).toBeNull();
     expect(document.querySelector('[data-keyboard-mode="jump"]')).toBeNull();
   });
 });

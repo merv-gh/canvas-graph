@@ -2,13 +2,12 @@ import type { GraphStore } from './model';
 import { affordancesContext } from './core/affordances';
 import { eventBus, type BusOriginIndex } from './core/bus';
 export type { BusOriginIndex, InstrumentedBus } from './core/bus';
-import { cancellationContext } from './core/cancellation';
 import { commandsContext, inputRouter } from './core/commands';
 import { decorationsContext } from './core/decorations';
 import { createFlags, type FlagKind, type FlagsApi } from './core/flags';
 import { hierarchyContext } from './core/hierarchy';
 import { localStorageIo, type IoApi } from './core/io';
-import { keyboardCaptureContext } from './core/keyboard';
+import { interactionContext } from './core/interaction';
 import { createModelRegistry } from './core/model-registry';
 import { createAppPerf, installGraphPerf, type PerfApi } from './core/perf';
 import { propertiesContext } from './core/properties';
@@ -40,11 +39,12 @@ export { createFlags, type FlagKind, type FlagsApi } from './core/flags';
 export { createSelectionStore, type SelectionStore } from './core/selection';
 export { createSim, type SimApi, type Trace, type TraceEvent } from './core/sim';
 export { parseShortcut, shortcutOf, commandShortcut } from './core/shortcuts';
+export { isTextEntry, typingInto } from './core/commands';
 export { itemIdFrom, itemRefFrom, appendRenderable, itemParentAttr, itemParentFromAttr, tagItem } from './core/dom';
 export { edgeRef, itemKey, refKey, nodeRef, sameItemRef } from './core/item-ref';
 export { decorationsContext, type DecorationsApi, type ItemMode, type Overlay } from './core/decorations';
 export { hierarchyContext, createNesting, type HierarchyApi, type HierarchyItem, type HierarchySource, type HierarchyParent, type HierarchyNode, type NestApi } from './core/hierarchy';
-export { keyboardCaptureContext, type KeyboardCapture } from './core/keyboard';
+export { interactionContext, type InteractionApi, type Cancellable, type KeyboardCapture } from './core/interaction';
 export { clamp, nodeRect, rectsIntersect, clientPoint, isStageSurface } from './core/view';
 export { pointerGesture } from './core/pointer-gesture';
 export { emptyState, kbdHint } from './core/templates';
@@ -126,12 +126,11 @@ function createContexts(bus: Bus, flags: FlagsApi, io: IoApi, perf: PerfApi, fra
   const view = viewContext(places);
   const properties = propertiesContext();
   const affordances = affordancesContext(bus);
-  const cancellation = cancellationContext(bus);
   const decorations = decorationsContext(bus);
   const hierarchy = hierarchyContext();
-  const keyboard = keyboardCaptureContext();
+  const interaction = interactionContext(bus);
   const commands = commandsContext(bus, origin => !origin || flags.isOn(origin), io);
-  const input = inputRouter(commands, perf, frameLoop);
+  const input = inputRouter(commands, perf, frameLoop, undefined, interaction.editing.active);
   const storage = storageContext(bus);
   const fold = foldContext(bus, io);
   const placeContext = {
@@ -146,7 +145,7 @@ function createContexts(bus: Bus, flags: FlagsApi, io: IoApi, perf: PerfApi, fra
     setIssues(issues: DxIssue[]) { lastDxIssues = issues; },
     setRunner(fn: () => DxIssue[]) { runner = fn; },
   };
-  const teardown: OriginScoped[] = [commands, affordances, cancellation, decorations, hierarchy, keyboard, storage];
+  const teardown: OriginScoped[] = [commands, affordances, decorations, hierarchy, interaction, storage];
   return {
     commands,
     input,
@@ -156,10 +155,9 @@ function createContexts(bus: Bus, flags: FlagsApi, io: IoApi, perf: PerfApi, fra
     properties,
     dx,
     affordances,
-    cancellation,
     decorations,
     hierarchy,
-    keyboard,
+    interaction,
     storage,
     fold,
     teardown,

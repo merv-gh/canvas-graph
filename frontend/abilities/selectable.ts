@@ -175,7 +175,7 @@ export function registerSelectable(system: Registry) {
         if (ref.kind === 'edge') emit('graph.edge.delete', { id: ref.id });
       });
     });
-    contexts.cancellation.register({
+    contexts.interaction.cancel.register({
       origin,
       priority: -10,
       active: () => selection.selectedAll().length > 0,

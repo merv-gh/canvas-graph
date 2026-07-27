@@ -22,3 +22,6 @@ export type Identified = { id: Id; kind: string };
 export type Positioned = Identified & { Position?: Position };
 export type Sized = Identified & { Size: Size };
 export type Labeled = Identified & { Label: { text: string } };
+/** Entities whose label is optional (an edge starts unlabelled). `editable`
+ *  accepts these too — the empty label is the thing you double-click to fill. */
+export type MaybeLabeled = Identified & { Label?: { text: string } };

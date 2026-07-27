@@ -61,7 +61,7 @@ export function registerMarquee(system: Registry) {
           // pan's, and ink owns the pointer entirely while draw mode is on.
           when: (event, stage) => {
             const e = event as PointerEvent;
-            return !contexts.cancellation.blocksPointer()
+            return !contexts.interaction.cancel.blocksPointer()
               && isStageSurface(event, stage) && e.isPrimary && e.button === 0 && !pointerGesture.isMoveIntent(e);
           },
           prevent: true, stop: true,

@@ -461,7 +461,7 @@ export class Tools {
     const sysLine = lines[sysIdx];
     const m = sysLine.match(/\(\s*\{([^}]*)\}\s*\)\s*=>/);
     if (!m) {
-      return `add_fold_cancellable: the system in ${rel} doesn't use a single-line ({ … }) => ctx destructure, so I can't safely add origin/contexts. Add it by hand (see jump.ts): contexts.cancellation.register({ origin, active: () => contexts.fold.folded('${foldId}'), cancel: () => contexts.fold.set('${foldId}', true) });`;
+      return `add_fold_cancellable: the system in ${rel} doesn't use a single-line ({ … }) => ctx destructure, so I can't safely add origin/contexts. Add it by hand (see jump.ts): contexts.interaction.cancel.register({ origin, active: () => contexts.fold.folded('${foldId}'), cancel: () => contexts.fold.set('${foldId}', true) });`;
     }
     const current = m[1].split(',').map(s => s.trim()).filter(Boolean);
     const missing = ['contexts', 'origin'].filter(n => !current.includes(n));
@@ -471,7 +471,7 @@ export class Tools {
     const indent = (sysLine.match(/^\s*/) ?? [''])[0] + '  ';
     lines.splice(sysIdx + 1, 0,
       `${indent}// Escape exits this folded region — cancellation peels the topmost active layer.`,
-      `${indent}contexts.cancellation.register({`,
+      `${indent}contexts.interaction.cancel.register({`,
       `${indent}  origin,`,
       `${indent}  active: () => contexts.fold.folded('${foldId}'),`,
       `${indent}  cancel: () => contexts.fold.set('${foldId}', true),`,

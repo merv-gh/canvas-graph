@@ -316,7 +316,8 @@ describe('frontend node commands', () => {
     expect(ctx.contexts.view.get()).toEqual(cameraBeforeDelete);
   });
 
-  it('drags only from the explicit drag handle (now in ephemeral node-toolbar)', async () => {
+  // The card body is the other drag entry point — see direct-manipulation.test.ts.
+  it('drags from the explicit drag handle in the ephemeral node-toolbar', async () => {
     const ctx = bootApp();
     runCommand(ctx, 'editing.node.create');
     await settle();

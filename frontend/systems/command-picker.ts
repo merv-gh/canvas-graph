@@ -45,7 +45,7 @@ export function registerCommandPicker(system: Registry) {
 
     const clearStageOverlay = (restoreFocus: HTMLElement | null = null, restoreCommand = '') => {
       contexts.decorations.unregisterOrigin('commandPicker');
-      contexts.keyboard.unregisterOrigin('commandPicker');
+      contexts.interaction.keys.unregisterOrigin('commandPicker');
       emit('render.view.clear', { place: Places.Stage, key: 'picker-prompt' });
       contexts.places.el(Places.Stage)?.classList.remove('picker-canvas-target');
       frameLoop.schedule('commandPicker.restoreFocus.prepare', () => {
@@ -166,7 +166,7 @@ export function registerCommandPicker(system: Registry) {
       });
       // No Escape handling here — the global cancellation system fires
       // app.cancel → cancellationContext routes to our Cancellable below.
-      contexts.keyboard.capture('commandPicker', {
+      contexts.interaction.keys.capture('commandPicker', {
         onKey(event) {
           if (event.key === 'Escape') return;  // let the global Esc binding fire
           const letter = event.key.toLowerCase();
@@ -186,7 +186,7 @@ export function registerCommandPicker(system: Registry) {
       active.values[step.id] = ref;
       active.stepIndex++;
       emit('commandPicker.step', { commandId: active.commandId, step: step.id, ref });
-      contexts.keyboard.unregisterOrigin('commandPicker');
+      contexts.interaction.keys.unregisterOrigin('commandPicker');
       contexts.decorations.unregisterOrigin('commandPicker');
       runStep();
     };
@@ -240,7 +240,7 @@ export function registerCommandPicker(system: Registry) {
       // A picker is itself a pointer interaction. Entering it must replace
       // placement/draw/erase instead of leaving an older mode to intercept the
       // target click underneath the picker overlays.
-      contexts.cancellation.cancelPointerModes();
+      contexts.interaction.cancel.cancelPointerModes();
       frameLoop.cancel('commandPicker.restoreFocus.prepare');
       frameLoop.cancel('commandPicker.restoreFocus.commit');
       const sourceTarget = pickerSource.target instanceof HTMLElement ? pickerSource.target : null;
@@ -268,7 +268,7 @@ export function registerCommandPicker(system: Registry) {
     // stale step/candidate set waiting behind the new surface.
     on('graph.switched', cancel);
     on('modal.open', cancel);
-    contexts.cancellation.register({
+    contexts.interaction.cancel.register({
       origin,
       active: () => !!active,
       cancel: () => emit('commandPicker.cancel'),

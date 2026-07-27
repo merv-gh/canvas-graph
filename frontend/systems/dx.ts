@@ -1,5 +1,6 @@
 import { collectionCreateCommand, collectionDeleteCommand, collectionKind, type AppCtx, type Models, type Registry } from '../core';
-import { EntitySlots } from '../types';
+import { edgeLabelRects } from '../model/entities';
+import { EntitySlots, Places } from '../types';
 import type { CommandSpec, DxIssue } from '../types';
 
 type TemplateDebug = { _cloned?: Set<string> };
@@ -42,7 +43,7 @@ export function runDx(ctx: AppCtx): DxIssue[] {
 
   const commands = ctx.contexts.commands.all();
   const commandIds = new Set(commands.map(c => c.id));
-  const visibleCommandIds = new Set(commands.filter(c => !c.hidden).map(c => c.id));
+  const visibleCommandIds = new Set(ctx.contexts.commands.userVisible().map(c => c.id));
   const knownSlots = EntitySlots;
 
   ctx.model.nodeTypes().forEach(def => {
@@ -103,6 +104,36 @@ export function runDx(ctx: AppCtx): DxIssue[] {
     }
   });
 
+  // An ability is a promise the renderer has to keep. `draggable` without a
+  // drag surface, `editable` without a title element, `resizeable` without a
+  // handle: the command exists, the palette lists it, and nothing happens when
+  // the user tries. Node cards shipped exactly that way — declared draggable,
+  // draggable only from a toolbar grip — until somebody reported it.
+  //
+  // Checked against what is actually on the stage, so it can only speak about
+  // kinds that have something drawn. That makes it progressive (PRINCIPLES 6):
+  // silent on an empty canvas, loud the moment the shape is wrong.
+  const RENDERED_ABILITY_CONVENTIONS: Record<string, { selector: string; hint: string }> = {
+    editable: { selector: '[data-editable-title]', hint: 'the renderer must mark its title element' },
+    draggable: { selector: '[data-drag-surface]', hint: 'the renderer must mark the area that drags the item' },
+    resizeable: { selector: '[data-slot="resize"]', hint: 'the renderer must place a resize handle slot' },
+  };
+  const stageEl = ctx.contexts.places.el(Places.Stage);
+  if (stageEl) ctx.model.entities().forEach(entityDef => {
+    if (!entityDef.render) return;
+    const drawn = [...stageEl.querySelectorAll(`[data-item-kind="${entityDef.kind}"]`)]
+      .filter(el => !el.closest('.tool-panel, .item-toolbar'));
+    if (!drawn.length) return;
+    entityDef.abilities.forEach(abilityDef => {
+      const convention = RENDERED_ABILITY_CONVENTIONS[abilityDef.id];
+      if (!convention) return;
+      const satisfied = drawn.some(el => el.matches(convention.selector) || el.querySelector(convention.selector));
+      if (!satisfied) {
+        warn('ability.unrendered', `entity "${entityDef.kind}" declares ${abilityDef.id} but nothing it renders matches ${convention.selector} — ${convention.hint}`);
+      }
+    });
+  });
+
   ctx.model.collections().forEach(collectionDef => {
     const create = collectionCreateCommand(collectionDef);
     const del = collectionDeleteCommand(collectionDef);
@@ -161,7 +192,9 @@ export function runDx(ctx: AppCtx): DxIssue[] {
   // Contexts budget — ctx.contexts is the shared mental-model surface, so it
   // RATCHETS: adding a context means merging two others first (Principle:
   // concepts merge and split safely). 'teardown' is bookkeeping, not a concept.
-  const CONTEXT_BUDGET = 14;
+  // Ratchets down, never up: keyboard + cancellation merged into `interaction`,
+  // so 13 is the new ceiling.
+  const CONTEXT_BUDGET = 13;
   const contextNames = Object.keys(ctx.contexts).filter(name => name !== 'teardown');
   if (contextNames.length > CONTEXT_BUDGET) {
     error('contexts.budget', `ctx.contexts has ${contextNames.length} contexts (budget ${CONTEXT_BUDGET}); merge two before adding one — ${contextNames.join(', ')}`);
@@ -192,24 +225,24 @@ export function runDx(ctx: AppCtx): DxIssue[] {
 }
 
 /** Warn when an edge's label rect crosses a *different* edge's line — the layout
- *  smell that a multi-line label got buried under other wiring. Mirrors the
- *  renderer's right-of-direction offset (model/entities.ts) so the geometry it
- *  checks is the geometry the user sees. Capped by edge count so the validator
- *  stays sub-frame on large graphs. */
+ *  smell that a label got buried under other wiring. The rectangles come from
+ *  `edgeLabelRects`, the renderer's own placement, so this rule can only ever
+ *  report what the user actually sees. (It used to re-derive a simplified
+ *  midpoint offset and warn about positions no label had occupied for months.)
+ *  Capped by edge count so the validator stays sub-frame on large graphs. */
 function checkLabelOverlaps(ctx: AppCtx, warn: (rule: string, message: string) => void) {
   const graph = ctx.graphs.current;
   const edges = graph.edges();
   if (!edges.length || edges.length > 400) return; // perf guard for huge graphs
-  const LINE_H = 16, CHAR_W = 9;
   const center = (id: string) => {
-    const n = graph.getNode(id) as { Position?: { x: number; y: number }; Size?: { w: number; h: number } } | undefined;
-    return n?.Position ? { pos: n.Position, size: n.Size ?? { w: 160, h: 72 } } : null;
+    const n = graph.getNode(id) as { Position?: { x: number; y: number } } | undefined;
+    return n?.Position ?? null;
   };
   type Seg = { id: string; ax: number; ay: number; bx: number; by: number };
   const segs: Seg[] = [];
   for (const e of edges) {
     const f = center(e.From), t = center(e.To);
-    if (f && t) segs.push({ id: e.id, ax: f.pos.x, ay: f.pos.y, bx: t.pos.x, by: t.pos.y });
+    if (f && t) segs.push({ id: e.id, ax: f.x, ay: f.y, bx: t.x, by: t.y });
   }
   const segRect = (s: Seg, r: { x: number; y: number; w: number; h: number }) => {
     // Segment vs axis-aligned rect: endpoint inside, or segment crosses a side.
@@ -230,25 +263,11 @@ function checkLabelOverlaps(ctx: AppCtx, warn: (rule: string, message: string) =
     );
   };
   let hits = 0;
-  for (const e of edges) {
-    const text = e.Label?.text;
-    if (!text) continue;
-    const f = center(e.From), t = center(e.To);
-    if (!f || !t) continue;
-    const lines = text.split(/\r?\n/);
-    const dx = t.pos.x - f.pos.x, dy = t.pos.y - f.pos.y;
-    const len = Math.hypot(dx, dy) || 1;
-    const blockH = lines.length * LINE_H;
-    const off = blockH / 2 + 8;
-    const cx = (f.pos.x + t.pos.x) / 2 + (-dy / len) * off;
-    const cy = (f.pos.y + t.pos.y) / 2 + (dx / len) * off;
-    const w = Math.max(...lines.map(l => l.length)) * CHAR_W;
-    const rect = { x: cx - w / 2, y: cy - blockH / 2, w, h: blockH };
-    const clash = segs.find(s => s.id !== e.id && segRect(s, rect));
-    if (clash) {
-      hits++;
-      if (hits <= 8) warn('layout.label-overlap', `edge "${e.id}" label overlaps edge "${clash.id}" — run a layout or move the label`);
-    }
-  }
+  edgeLabelRects(graph).forEach((rect, id) => {
+    const clash = segs.find(s => s.id !== id && segRect(s, rect));
+    if (!clash) return;
+    hits++;
+    if (hits <= 8) warn('layout.label-overlap', `edge "${id}" label overlaps edge "${clash.id}" — run a layout or move the label`);
+  });
   if (hits > 8) warn('layout.label-overlap', `…and ${hits - 8} more label/edge overlaps`);
 }

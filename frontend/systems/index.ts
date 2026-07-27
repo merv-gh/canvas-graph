@@ -39,6 +39,8 @@ import { registerRenderStageGpu } from './render-stage-gpu';
 import { registerRequirementsView } from './requirements-view';
 import { registerScenario } from './scenario';
 import { registerShare } from './share';
+import { registerTelemetry } from './telemetry';
+import { registerTelemetryPortal } from './telemetry-portal';
 import { registerTextLayout } from './text-layout';
 import { registerToolPanel } from './tool-panel';
 import { registerViewPan } from './view-pan';
@@ -56,6 +58,10 @@ export function registerSystems(system: Registry) {
   registerCancellation(system);
   registerMain(system);
   registerToolPanel(system);
+  // Telemetry starts early so it records the rest of boot; the portal that
+  // draws it is a separate system you can toggle off without losing the data.
+  registerTelemetry(system);
+  registerTelemetryPortal(system);
   // The event log remains developer-only. The release navigator is the
   // polished document tree in outline.ts.
   registerOutline(system);
@@ -64,16 +70,15 @@ export function registerSystems(system: Registry) {
   registerCommandPicker(system);
   registerCommandModal(system);
   registerPerfPanel(system);
-  // Jump must register before `collections` so its `g` binding sits earlier in
-  // the input router's enabled() iteration — combined with `stop: true` it then
-  // shadows `graph.switch.next` instead of doubling up.
+  // Gesture precedence is data now: `jump`'s `g` shadows `graph.switch.next`
+  // through `input.priority`, not through this line's position.
   registerJump(system);
   registerCollections(system);
   registerGraph(system);
   registerViewZoom(system);
   registerViewPan(system);
-  // Ink registers before marquee so its draw-mode pointerdown wins the input
-  // router; marquee also yields through the generic pointer-mode claim.
+  // Ink's draw/erase pointerdown outranks marquee and selection by priority;
+  // marquee also yields through the generic pointer-mode claim.
   registerInk(system);
   registerMarquee(system);
   registerFocus(system);

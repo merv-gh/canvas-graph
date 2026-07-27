@@ -19,7 +19,8 @@ export type Cancellable = {
   blocksPointer?: boolean;
 };
 
-/** First-class cancellation. Any system that has an "active mode" (modal open,
+/** First-class cancellation — the `cancel` facet of `contexts.interaction`.
+ *  Any system that has an "active mode" (modal open,
  *  picker running, edit-in-place, selection set, jump letters showing) registers
  *  a Cancellable. The cancellation system fires `app.cancel` on Escape or stage
  *  background click; this context picks the highest-priority active handler
@@ -27,7 +28,7 @@ export type Cancellable = {
  *
  *  One handler per Escape: peel one layer at a time. Press Escape again to peel
  *  the next. Predictable and easy to test. */
-export function cancellationContext(bus: Bus) {
+export function cancellationFacet(bus: Bus) {
   const handlers: Cancellable[] = [];
   const orderedActive = () => handlers
     .map((handler, index) => ({ handler, index }))

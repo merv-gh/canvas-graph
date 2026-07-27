@@ -1,7 +1,7 @@
-import { commandShortcut, edgeRef, emptyState, foldHidden, itemFoldId, kbdHint, tagItem, type Registry } from '../core';
+import { commandShortcut, edgeRef, emptyState, foldHidden, isTextEntry, itemFoldId, kbdHint, tagItem, type Registry } from '../core';
 import { expandRect, rectsOverlap } from '../core/geometry';
 import { Places, Slots } from '../types';
-import type { ActionDef, AffordanceDef, EntityDef, EntityRenderCtx, ItemRef } from '../types';
+import type { ActionDef, AffordanceDef, EntityDef, EntityRenderCtx, ItemRef, Segment } from '../types';
 import { uiValue } from '../core';
 
 declare module '../types' {
@@ -68,6 +68,29 @@ export function registerRenderStage(system: Registry) {
       if (!entityDef || !item) return null;
       return entityDef.render?.bounds?.(item) ?? null;
     };
+    // Centre-to-centre lines per kind, rebuilt once per draw pass. Renderers
+    // that avoid other items' connections (edge labels) would otherwise pay
+    // O(items) per item.
+    let linePass = 0;
+    const lineCache = new Map<string, { pass: number; lines: (Segment & { id: string })[] }>();
+    const linesOfKind = (kind: string, exceptId?: string): Segment[] => {
+      let entry = lineCache.get(kind);
+      if (!entry || entry.pass !== linePass) {
+        const items = graphs.current.itemsOfKind<{ id: string; From?: string; To?: string }>(kind);
+        // All-pairs avoidance stops being worth a frame past this; big graphs
+        // get plain placement rather than a stall.
+        const lines: (Segment & { id: string })[] = [];
+        if (items.length <= LINE_AVOID_LIMIT) items.forEach(item => {
+          const from = item.From ? graphs.current.getNode(item.From)?.Position : undefined;
+          const to = item.To ? graphs.current.getNode(item.To)?.Position : undefined;
+          if (from && to) lines.push({ id: item.id, ax: from.x, ay: from.y, bx: to.x, by: to.y });
+        });
+        entry = { pass: linePass, lines };
+        lineCache.set(kind, entry);
+      }
+      return exceptId ? entry.lines.filter(line => line.id !== exceptId) : entry.lines;
+    };
+
     const renderCtxFor = <T>(entityDef: EntityDef<T>, item: T): EntityRenderCtx => ({
       graph: graphs.current,
       nodeType: id => model.nodeType(id),
@@ -85,6 +108,7 @@ export function registerRenderStage(system: Registry) {
       parentChain: ref => contexts.hierarchy.parentChain(ref),
       isFolded: ref => contexts.fold.folded(itemFoldId(ref, graphs.current.id)),
       boundsOf: boundsOfRef,
+      linesOfKind,
       boundsInRect: (kind, area) => {
         const entityDef = model.entity(kind) as EntityDef<unknown> | undefined;
         const bounds = entityDef?.render?.bounds;
@@ -135,10 +159,15 @@ export function registerRenderStage(system: Registry) {
     const sigCache = new Map<string, string>();
     const modeKey = (ref: ItemRef) =>
       contexts.decorations.modes.for(ref).map(m => m.mode).sort().join(',');
+    /** Everything outside the item's own data that its renderer reads: which
+     *  decoration modes it carries, and whether it is folded. A signature that
+     *  ignored these was harmless while a full draw rebuilt the world; now that
+     *  full draws are keyed, it would leave a collapsed node drawn expanded. */
+    const stateKey = (ref: ItemRef) =>
+      `|modes:${modeKey(ref)}|fold:${contexts.fold.folded(itemFoldId(ref, graphs.current.id)) ? 1 : 0}`;
     const cacheSig = (k: string, def: EntityDef<unknown>, item: unknown, ref?: ItemRef) => {
       const sig = def.render?.signature?.(item);
-      const modes = ref ? `|modes:${modeKey(ref)}` : '';
-      if (sig !== undefined) sigCache.set(k, sig + modes);
+      if (sig !== undefined) sigCache.set(k, sig + (ref ? stateKey(ref) : ''));
       else sigCache.delete(k);
     };
     const keyOf = (ref: ItemRef) => `${ref.kind}:${ref.id}:${(ref.parent ?? []).join('/')}`;
@@ -171,6 +200,8 @@ export function registerRenderStage(system: Registry) {
     // gridded yet, so they render unconditionally. `null` = no viewport
     // (headless/tests with no stage rect) → render everything.
     const CULL_MARGIN = 200;
+    /** Above this, edge-label line avoidance is skipped (see `linesOfKind`). */
+    const LINE_AVOID_LIMIT = 400;
     const visibleNodeIds = (): Set<string> | null => {
       const rect = contexts.view.visibleRect(Places.Stage, CULL_MARGIN);
       if (!rect) return null;
@@ -202,21 +233,26 @@ export function registerRenderStage(system: Registry) {
       return desired;
     };
 
-    /** Reconcile the DOM to the desired set. `rebuild` makes a fresh layer (first
-     *  paint / graph switch); otherwise it diffs against the live layer — pan/zoom
-     *  only insert nodes entering the viewport and remove those leaving, never
-     *  touching the elements that stay (so camera moves are O(delta)). */
-    const reconcile = (rebuild: boolean) => {
+    /** Reconcile the DOM to the desired set — always keyed, never wholesale.
+     *
+     *  `revisit` is what separates the two callers: a camera move only wants
+     *  entering/leaving items (O(delta), existing elements untouched), while a
+     *  full draw also re-checks every element's signature. Neither throws the
+     *  layer away, so a full draw is no longer an identity bomb: an unchanged
+     *  node keeps its DOM node, its focus, and any caret inside it. */
+    const reconcile = (revisit: boolean) => {
       syncStageView();
-      const fresh = rebuild || !layer;
-      if (fresh) {
+      linePass++;
+      if (!layer) {
         layer = contexts.templates.clone('nodes') as HTMLElement;
         svgLayer = contexts.templates.slot(layer, 'edges') as HTMLElement;
         els.clear();
         sigCache.clear();
+        emit('render.view.set', { place: Places.Stage, key: 'nodes', view: layer });
       }
-      layer!.style.transform = layerTransform(contexts.view.get());
-      const desired = collectDesired(visibleNodeIds());
+      layer.style.transform = layerTransform(contexts.view.get());
+      const visible = visibleNodeIds();
+      const desired = collectDesired(visible);
       let removed = 0;
       let inserted = 0;
       [...els.keys()].forEach(k => {
@@ -228,7 +264,12 @@ export function registerRenderStage(system: Registry) {
         }
       });
       desired.forEach(({ ref, def, item }, k) => {
-        if (els.has(k)) return; // already on stage — leave it (cheap camera moves)
+        if (els.has(k)) {
+          // Signature-aware: unchanged items cost nothing, changed ones are
+          // redrawn in place by the same path a targeted patch takes.
+          if (revisit) patchOne(ref, visible);
+          return;
+        }
         const el = ctx.perf.measure(`Render.entity.${def.kind}.draw`, () =>
           def.render!.draw(item, renderCtxFor(def, item)) as HTMLElement | null,
         );
@@ -243,7 +284,6 @@ export function registerRenderStage(system: Registry) {
       ctx.perf.count('Render.stage.itemsInserted', inserted);
       ctx.perf.count('Render.stage.itemsRemoved', removed);
       ctx.perf.sample('Render.stage.liveItems', els.size);
-      if (fresh) emit('render.view.set', { place: Places.Stage, key: 'nodes', view: layer! });
     };
     const drawAll = () => reconcile(true);
 
@@ -261,11 +301,13 @@ export function registerRenderStage(system: Registry) {
         && !visible.has((item as { To?: string }).To ?? '');
       const hidden = (ref.kind !== 'edge' && hiddenByCollapsedAncestor(ref)) || culled || edgeCulled;
       if (!renderer || !item || hidden) { existing?.remove(); els.delete(k); sigCache.delete(k); return; }
+      // Never replace the element the caret lives in. sigCache is left stale on
+      // purpose, so the patch that follows the commit redraws it for real.
+      if (existing && editingHost() === existing) return;
       // Fast path: the element exists and nothing but its position changed →
       // move it in place (no rebuild, keeps identity so CSS can ease the move).
       if (existing && renderer.reposition && renderer.signature) {
-        const dataSig = renderer.signature(item);
-        const fullSig = dataSig + `|modes:${modeKey(ref)}`;
+        const fullSig = renderer.signature(item) + stateKey(ref);
         if (fullSig === sigCache.get(k)) {
           ctx.perf.count('Render.stage.reposition');
           renderer.reposition(existing, item, renderCtxFor(entityDef!, item));
@@ -289,6 +331,7 @@ export function registerRenderStage(system: Registry) {
     const patchItems = (refs: ItemRef[]) => {
       if (!layer) { drawAll(); return; }
       syncStageView();
+      linePass++;
       layer.style.transform = layerTransform(contexts.view.get());
       // Normalize parents so keys match what drawAll stored (container children
       // carry a parent chain; the scheduler's bare {kind,id} does not).
@@ -309,6 +352,18 @@ export function registerRenderStage(system: Registry) {
       ctx.perf.sample('Render.stage.patchItems', todo.size);
       todo.forEach(ref => patchOne(ref, visible));
       ctx.perf.sample('Render.stage.liveItems', els.size);
+    };
+
+    /** The stage item that currently hosts a focused inline editor (title /
+     *  description contenteditable, or a form control an entity rendered).
+     *  Rebuilding it mid-keystroke drops the caret and hands the rest of the
+     *  word back to the global shortcut router — that's the broken-rename bug. */
+    const editingHost = (): HTMLElement | null => {
+      const active = typeof document === 'undefined' ? null : document.activeElement;
+      if (!isTextEntry(active)) return null;
+      const stage = contexts.places.el(Places.Stage);
+      if (!stage?.contains(active!)) return null;
+      return (active as Element).closest<HTMLElement>('[data-item-kind][data-item-id]');
     };
 
     let overlaysMounted = false;

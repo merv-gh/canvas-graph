@@ -4,6 +4,8 @@ export const STORAGE_KEYS = {
   disabledCommands: 'frontend.commands.disabled',
   graphs: 'frontend.graphs',
   graphsBackup: 'frontend.graphs.backup',
+  telemetry: 'frontend.telemetry.spans',
+  telemetryConfig: 'frontend.telemetry.config',
 } as const;
 
 /** Swap point between localStorage, memory, IndexedDB, HTTP, etc. */
