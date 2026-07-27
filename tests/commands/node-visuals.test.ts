@@ -110,13 +110,13 @@ describe('node type and color', () => {
     expect(cleared?.dataset.nodeColor).toBeUndefined();
   });
 
-  it('does not mount the removed right-side Type and Color toolbar', async () => {
+  it('keeps the removed style toolbar absent and exposes type in selection properties', async () => {
     const ctx = bootApp();
     await settle();
     expect(document.querySelector('.tool-panel[data-panel-id="node-style"]')).toBeNull();
     await createNode(ctx);
     expect(document.querySelector('.tool-panel[data-panel-id="node-style"]')).toBeNull();
-    expect(document.querySelector('[data-command="node.type.open"]')).toBeNull();
+    expect(document.querySelector('.tool-panel[data-panel-id="properties"] [data-command="node.type.open"]')).not.toBeNull();
     expect(document.querySelector('[data-command="node.color.open"]')).toBeNull();
   });
 

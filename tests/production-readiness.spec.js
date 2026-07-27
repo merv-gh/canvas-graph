@@ -8,6 +8,15 @@ const openMore = async page => {
   if (!(await details.evaluate(element => element.open))) await page.getByLabel('More actions').click();
 };
 const clickMore = async (page, name) => { await openMore(page); await page.getByRole('button', { name, exact: true }).click(); };
+const placeNode = async page => {
+  const stage = page.locator('[data-place="stage"]');
+  const before = await page.locator('.node').count();
+  if (!/node-placing/.test(await stage.getAttribute('class') ?? '')) {
+    await page.getByRole('button', { name: 'Add node', exact: true }).click();
+  }
+  await stage.click({ position: { x: 620 + (before % 2) * 70, y: 420 + (before % 3) * 45 } });
+  await expect(page.locator('.node')).toHaveCount(before + 1);
+};
 
 test('nested C4 document survives reload and share', async ({ page, context }) => {
   await page.goto('/');
@@ -29,9 +38,32 @@ test('nested C4 document survives reload and share', async ({ page, context }) =
   await expectModelNodeCount(copy, 5);
 });
 
+test('share can restore the intended viewport, zoom, and selection', async ({ page, context }) => {
+  await page.goto('/?demo=agent-observability');
+  await page.waitForFunction(() => window.app.graphs.current.nodes().length >= 9);
+  const target = page.getByRole('button', { name: /Trace boundaries .*Timeline step node/ });
+  await target.click();
+  const selectedId = await page.evaluate(() => window.app.selection.selected().id);
+  await page.evaluate(() => {
+    window.app.contexts.view.set({ x: 321.25, y: -84.5, scale: 1.375 });
+    window.app.bus.emit('view.changed', window.app.contexts.view.get());
+  });
+
+  await clickMore(page, 'Share');
+  await page.getByRole('switch', { name: 'Include viewport, zoom, and selection' }).check();
+  const url = await page.getByRole('textbox', { name: 'Share link', exact: true }).inputValue();
+  expect(new URL(url).searchParams.has('view')).toBe(true);
+
+  const copy = await context.newPage();
+  await copy.goto(url);
+  await copy.waitForFunction(() => window.app.graphs.current.nodes().length >= 9);
+  await expect.poll(() => copy.evaluate(() => window.app.contexts.view.get())).toEqual({ x: 321.25, y: -84.5, scale: 1.375 });
+  await expect.poll(() => copy.evaluate(() => window.app.selection.selected()?.id)).toBe(selectedId);
+});
+
 test('Mermaid import validates, previews, and remains undoable', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Add node', exact: true }).click();
+  await placeNode(page);
   await expect(page.locator('.node')).toHaveCount(1);
 
   await clickMore(page, 'Open getting-started guide');
@@ -79,8 +111,8 @@ test('phone starts canvas-first with usable primary commands', async ({ page }) 
 
 test('edge picker accepts a target click and explains the active mode', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Add node', exact: true }).click();
-  await page.getByRole('button', { name: 'Add node', exact: true }).click();
+  await placeNode(page);
+  await placeNode(page);
   const nodes = page.locator('.node');
   await expect(nodes).toHaveCount(2);
   await nodes.nth(0).click();
@@ -93,8 +125,8 @@ test('edge picker accepts a target click and explains the active mode', async ({
 
 test('edge picker never leaks into a new graph', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Add node', exact: true }).click();
-  await page.getByRole('button', { name: 'Add node', exact: true }).click();
+  await placeNode(page);
+  await placeNode(page);
   await page.getByRole('button', { name: 'Connect', exact: true }).click();
   await expect(page.locator('.picker-prompt')).toBeVisible();
   await page.locator('.top-tool-panel [data-command="graph.create"]').click();
@@ -149,7 +181,7 @@ test('export dialog exposes backup and image formats', async ({ page }) => {
 
 test('SVG and PNG exports produce downloadable files', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Add node', exact: true }).click();
+  await placeNode(page);
   await clickMore(page, 'Export');
   const svgDownload = page.waitForEvent('download');
   await page.getByRole('button', { name: 'SVG' }).click();
@@ -244,9 +276,9 @@ test('mobile selected-item wheel stays fully reachable', async ({ page }) => {
 
 test('previous-save recovery stays in command search, not export', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Add node', exact: true }).click();
+  await placeNode(page);
   await page.waitForTimeout(400);
-  await page.getByRole('button', { name: 'Add node', exact: true }).click();
+  await placeNode(page);
   await page.waitForTimeout(400);
   await expect(page.locator('.save-state')).toHaveCount(0);
   await clickMore(page, 'Export');

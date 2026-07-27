@@ -192,6 +192,10 @@ export function registerCommandPicker(system: Registry) {
       if (!command?.picker) return;
       const pickerSource: CommandSource = source ?? { origin: 'keyboard' };
       cancel();
+      // A picker is itself a pointer interaction. Entering it must replace
+      // placement/draw/erase instead of leaving an older mode to intercept the
+      // target click underneath the picker overlays.
+      contexts.cancellation.cancelPointerModes();
       frameLoop.cancel('commandPicker.restoreFocus.prepare');
       frameLoop.cancel('commandPicker.restoreFocus.commit');
       const sourceTarget = pickerSource.target instanceof HTMLElement ? pickerSource.target : null;

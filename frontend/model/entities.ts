@@ -212,10 +212,10 @@ const edgeRenderer: EntityRenderer<GraphEdge> = {
     }
     // Non-node endpoints are extension-owned and not part of the node spatial
     // index. Include their relations; draw() still rejects missing endpoints.
-    g.edges().forEach(e => {
+    g.edgesOutsideNodes().forEach(e => {
       if (seen.has(e.id)) return;
-      const from = g.refById(e.From), to = g.refById(e.To);
-      if (from?.kind !== 'node' || to?.kind !== 'node') { seen.add(e.id); edges.push(e); }
+      seen.add(e.id);
+      edges.push(e);
     });
     // Edge hidden-by-fold: an edge is visible when at least one endpoint is.
     // Individual endpoint collapse is handled by resolveEndpoint in draw().
@@ -441,7 +441,10 @@ const nodeRenderer: EntityRenderer<GraphNode> = {
     ctx.templateText(el, 'type', nodeTypeDef?.label ?? typeLabel(nodeType));
     ctx.templateText(el, 'metrics', meta);
     ctx.templateText(el, 'title', node.Label.text);
-    ctx.templateSlot(el, 'description').replaceChildren(renderMarkdown(description));
+    const descriptionEl = ctx.templateSlot(el, 'description');
+    descriptionEl.setAttribute('data-editable-description', '');
+    descriptionEl.setAttribute('aria-label', description ? 'Description. Double-click to edit.' : 'Empty description. Press Shift+Enter to edit.');
+    descriptionEl.replaceChildren(renderMarkdown(description));
     ctx.wireAffordances(el);
     return el;
   },

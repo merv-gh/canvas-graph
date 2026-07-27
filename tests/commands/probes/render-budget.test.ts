@@ -1,8 +1,10 @@
 import { readFileSync } from 'node:fs';
+import { Session } from 'node:inspector';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { bootApp, perfTrace, runCommand, settle } from '../testkit';
 import type { GraphSnapshot } from '../../../frontend/model';
+import { heapUsedBytes } from '../../../frontend/core/perf';
 
 /** Render-budget + heap probes on top of the perfTrace harness. Ceilings are
  *  jsdom/CI-tolerant (like performance.test.ts) — the point is a *trend* trap:
@@ -13,6 +15,16 @@ import type { GraphSnapshot } from '../../../frontend/model';
 const csMap = JSON.parse(
   readFileSync(resolve(process.cwd(), 'frontend/public/graphs/cs-map.json'), 'utf8'),
 ) as GraphSnapshot & { meta: unknown };
+
+const collectHeap = async () => {
+  const session = new Session();
+  session.connect();
+  await new Promise<void>((resolvePromise, reject) => {
+    session.post('HeapProfiler.collectGarbage', error => error ? reject(error) : resolvePromise());
+  });
+  session.disconnect();
+  return heapUsedBytes();
+};
 
 describe('render budget probes (perfTrace)', () => {
   it('traces flush cost, idle gaps, and over-budget count on node churn', async () => {
@@ -36,7 +48,7 @@ describe('render budget probes (perfTrace)', () => {
     expect(report.flush.avgMs).toBeLessThan(50);
   }, 20000);
 
-  it('create/delete cycles do not accrue heap (loose ceiling, no forced GC)', async () => {
+  it('create/delete cycles do not retain heap after collection', async () => {
     const ctx = bootApp({ dx: false, demo: false, debug: false, autoLayout: false });
     await settle();
 
@@ -46,6 +58,7 @@ describe('render budget probes (perfTrace)', () => {
     for (const node of [...ctx.graphs.current.nodes()]) ctx.bus.forward('graph.node.delete', { id: node.id });
     await settle();
 
+    const heapStart = await collectHeap();
     const trace = perfTrace(ctx);
     for (let cycle = 0; cycle < 10; cycle++) {
       for (let i = 0; i < 20; i++) runCommand(ctx, 'editing.node.create');
@@ -54,13 +67,15 @@ describe('render budget probes (perfTrace)', () => {
       await settle();
     }
     const report = trace.stop();
+    const heapEnd = await collectHeap();
+    const retainedHeap = heapStart != null && heapEnd != null ? heapEnd - heapStart : null;
 
     expect(ctx.graphs.current.nodes()).toHaveLength(0);
-    expect(report.heapDeltaBytes).not.toBeNull();
-    console.log(`  heapDelta=${((report.heapDeltaBytes ?? 0) / 1024 / 1024).toFixed(1)}MB over 10 cycles of 20 nodes`);
-    // 200 create+delete round trips; without a leak the un-GC'd residue stays
-    // far below this. A per-node retention of even ~250KB would trip it.
-    expect(report.heapDeltaBytes!).toBeLessThan(50 * 1024 * 1024);
+    expect(retainedHeap).not.toBeNull();
+    console.log(`  retainedHeap=${((retainedHeap ?? 0) / 1024 / 1024).toFixed(1)}MB rawAllocations=${((report.heapDeltaBytes ?? 0) / 1024 / 1024).toFixed(1)}MB over 10 cycles of 20 nodes`);
+    // Forced collection separates retained objects from normal allocation
+    // churn. A per-node retention of even ~25KB still trips this 5MB ceiling.
+    expect(retainedHeap!).toBeLessThan(5 * 1024 * 1024);
   }, 30000);
 
   it('cs-map.json imports whole and full-redraws within budget', async () => {

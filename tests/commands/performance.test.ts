@@ -37,11 +37,10 @@ describe('performance metrics', () => {
     const bootMs = performance.now() - t0;
 
     console.log(`  Boot: ${bootMs.toFixed(0)}ms`);
-    // V8 coverage instruments every loaded module and is not a product-speed
-    // measurement. release:check runs this file once without instrumentation
-    // at the real 500ms budget, then again amid the parallel coverage suite as
-    // a coarse regression check. The strict result is the isolated phase.
-    expect(bootMs).toBeLessThan(process.env.COVERAGE ? 2000 : 500);
+    // Parallel workers and V8 coverage are not product-speed measurements.
+    // release:check explicitly sets PERF_ENFORCE for the isolated strict lane;
+    // the general suite remains a coarse order-of-magnitude regression guard.
+    expect(bootMs).toBeLessThan(process.env.PERF_ENFORCE ? 500 : 2000);
     expect(ctx.contexts.commands.all().length).toBeGreaterThan(0);
   }, 5000);
 

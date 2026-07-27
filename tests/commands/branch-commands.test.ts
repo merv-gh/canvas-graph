@@ -98,7 +98,7 @@ describe('frontend defensive command branches', () => {
     ctx.bus.emit('node.title.commit', { id: 'missing', text: '', finish: true });
     await settle();
 
-    expect(commandButton('editing.node.create')).not.toBeNull();
+    expect(commandButton('palette.place.activate')).not.toBeNull();
   });
 
   it('derives collection toolbar defaults and honors toolbar opt-out', () => {

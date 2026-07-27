@@ -166,6 +166,24 @@ describe('frontend model and core helpers', () => {
     expect(graph.itemsOfKind('container')).toEqual([]);
   });
 
+  it('caches non-node endpoint edges and invalidates on structural changes', () => {
+    const graph = Graph.new('g-edge-index');
+    const a = graph.createNode({ Label: { text: 'A' } });
+    const b = graph.createNode({ Label: { text: 'B' } });
+    const nodeEdge = graph.createEdge({ From: a.id, To: b.id });
+    const containerEdge = graph.createEdge({ From: a.id, To: 'c1' });
+
+    expect(graph.edgesOutsideNodes()).toEqual([containerEdge]);
+    expect(graph.edgesOutsideNodes()).toBe(graph.edgesOutsideNodes());
+
+    graph.updateEdge(containerEdge.id, { To: b.id });
+    expect(graph.edgesOutsideNodes()).toEqual([]);
+    graph.updateEdge(nodeEdge.id, { From: 'c1' });
+    expect(graph.edgesOutsideNodes()).toEqual([nodeEdge]);
+    graph.deleteEdge(nodeEdge.id);
+    expect(graph.edgesOutsideNodes()).toEqual([]);
+  });
+
   it('derives collection defaults and commands from collection kind', () => {
     const ctx = bootApp();
     const graphs = ctx.model.collection<Graph>('graphs')!;

@@ -185,7 +185,7 @@ export function registerToolPanel(system: Registry) {
     // The top panel keeps the toolbar template (start/end slots); start-slot
     // buttons are clustered into `.tool-group`s, end-slot buttons (search) stay
     // pinned right.
-    const fillToolbar = (panel: PanelDef, section: HTMLElement) => {
+    const fillToolbar = (panel: PanelDef, section: HTMLElement, overflowOpen = false) => {
       const toolbar = contexts.templates.clone('toolbar');
       const start = contexts.templates.slot(toolbar, 'start');
       const end = contexts.templates.slot(toolbar, 'end');
@@ -215,6 +215,7 @@ export function registerToolPanel(system: Registry) {
       if (overflow.length) {
         const details = document.createElement('details');
         details.className = 'toolbar-overflow';
+        details.open = overflowOpen;
         const summary = document.createElement('summary');
         summary.setAttribute('aria-label', 'More actions');
         summary.title = 'More actions';
@@ -239,6 +240,8 @@ export function registerToolPanel(system: Registry) {
     const drawPanel = (panel: PanelDef) => {
       const key = keyOf(panel.id);
       const place = placeFor(panel);
+      const overflowOpen = panel.id === TOP_PANEL_ID
+        && !!contexts.places.el(Places.Top)?.querySelector<HTMLDetailsElement>('.toolbar-overflow')?.open;
       if (panel.mountWhen && !panel.mountWhen()) {
         if (mounted.delete(key)) emit('render.view.clear', { place, key });
         return;
@@ -269,7 +272,7 @@ export function registerToolPanel(system: Registry) {
           if (head.childElementCount) section.append(head);
           if (collapsed) return section;
 
-          if (panel.layout === 'toolbar') fillToolbar(panel, section);
+          if (panel.layout === 'toolbar') fillToolbar(panel, section, overflowOpen);
           else if (panel.layout === 'custom' && panel.render) section.append(panel.render());
           else fillStack(panel, section);
           return section;
@@ -320,6 +323,7 @@ export function registerToolPanel(system: Registry) {
     on('tool.panel.mobile.toggle', () => { mobileOpen = !mobileOpen; drawPanels(); });
     on('tool.panel.dismiss.menus', () => {
       mobileOpen = false;
+      contexts.places.el(Places.Top)?.querySelector<HTMLDetailsElement>('.toolbar-overflow')?.removeAttribute('open');
       const top = panelById(TOP_PANEL_ID);
       if (top) drawPanel(top);
     });
@@ -340,6 +344,7 @@ export function registerToolPanel(system: Registry) {
         .map(eventOf)
         .filter((event): event is string => !!event));
       if (overflowEvents.has(name)) queueMicrotask(() => {
+        contexts.places.el(Places.Top)?.querySelector<HTMLDetailsElement>('.toolbar-overflow')?.removeAttribute('open');
         const top = panelById(TOP_PANEL_ID);
         if (top) drawPanel(top);
       });

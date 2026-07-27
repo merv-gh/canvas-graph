@@ -220,6 +220,11 @@ export class Graph {
   // objects, so the cached array stays valid.
   private nodeArr: GraphNode[] | null = null;
   private edgeArr: GraphEdge[] | null = null;
+  // Edges with at least one endpoint outside the node store (containers and
+  // future connectable entities). Camera culling needs these in addition to
+  // visible-node adjacency, but their membership changes only structurally —
+  // never rescan the whole edge set on every pan frame.
+  private nonNodeEdgeArr: GraphEdge[] | null = null;
   // Adjacency index nodeId → incident edge ids. Turns edgesOf / delete-cascade
   // from O(E) scans into O(degree).
   private adjacency = new Map<Id, Set<Id>>();
@@ -363,10 +368,15 @@ export class Graph {
     this.edgeMap.set(id, edge);
     this.addAdj(edge);
     this.edgeArr = null;
+    this.nonNodeEdgeArr = null;
     return edge;
   }
   getEdge(id: Id) { return this.edgeMap.get(id); }
   edges() { return this.edgeArr ??= [...this.edgeMap.values()]; }
+  edgesOutsideNodes() {
+    return this.nonNodeEdgeArr ??= this.edges().filter(edge =>
+      !this.items.has(edge.From) || !this.items.has(edge.To));
+  }
   edgesOf(nodeId: Id) {
     const ids = this.adjacency.get(nodeId);
     if (!ids) return [];
@@ -381,7 +391,7 @@ export class Graph {
     if (reindex) this.removeAdj(edge);
     Object.assign(edge, patch);
     edge.visualVersion++;
-    if (reindex) this.addAdj(edge);
+    if (reindex) { this.addAdj(edge); this.nonNodeEdgeArr = null; }
     return true;
   }
   deleteEdge(id: Id) {
@@ -390,6 +400,7 @@ export class Graph {
     this.removeAdj(edge);
     this.edgeMap.delete(id);
     this.edgeArr = null;
+    this.nonNodeEdgeArr = null;
     return true;
   }
 
@@ -401,6 +412,7 @@ export class Graph {
     this.items.set(id, node);
     this.indexNode(node);
     this.nodeArr = null;
+    this.nonNodeEdgeArr = null;
     return node;
   }
   /** Backwards-compatible overload: `node(id)` reads, `node(draft, opts)` creates.
@@ -436,9 +448,10 @@ export class Graph {
       });
       this.adjacency.delete(id);
       this.edgeArr = null;
+      this.nonNodeEdgeArr = null;
     }
     const removed = this.items.delete(id);
-    if (removed) { this.unindexNode(id); this.nodeArr = null; }
+    if (removed) { this.unindexNode(id); this.nodeArr = null; this.nonNodeEdgeArr = null; }
     return removed;
   }
 
@@ -518,6 +531,7 @@ export class Graph {
     this.nextEdge = maxEdge + 1;
     this.nodeArr = null;
     this.edgeArr = null;
+    this.nonNodeEdgeArr = null;
     this.snapshotExtensions.forEach((extension, key) => extension.restore?.(this.storedExtensions[key]));
   }
 }

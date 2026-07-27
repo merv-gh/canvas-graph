@@ -422,6 +422,10 @@ export function registerViewZoom(system: Registry) {
     });
     let resizeObserver: ResizeObserver | undefined;
     const fitAfterResize = () => {
+      const params = new URLSearchParams(location.search);
+      // A contextual share explicitly owns its camera. Resizing UI chrome or
+      // the browser must not silently replace the sender's intended view.
+      if (params.has('g') && params.has('view')) return;
       frameLoop.schedule('view.resize.fit', () => {
         const rect = contexts.places.el(Places.Stage)?.getBoundingClientRect();
         if (!rect) return;

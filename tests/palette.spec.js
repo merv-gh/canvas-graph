@@ -138,6 +138,88 @@ test('node converts to container from properties and radial menu', async ({ page
   }, edgeId)).toEqual({ id: edgeId, endpointKinds: ['node', 'node'] });
 });
 
+test('desktop item context switches between radial and list menus in place', async ({ page }) => {
+  await page.goto('/?demo=agent-observability');
+  await page.waitForFunction(() => window.app.graphs.current.nodes().length >= 9);
+  const node = page.locator('.node').first();
+  await node.click({ button: 'right' });
+  await expect(page.locator('.item-action-wheel')).toBeVisible();
+  await page.getByRole('button', { name: 'Use list context menu', exact: true }).click();
+  const list = page.locator('.item-action-menu');
+  await expect(list).toBeVisible();
+  await expect(list.getByRole('menuitem', { name: 'Details', exact: true })).toBeVisible();
+  await expect(page.locator('.item-toolbar')).toBeHidden();
+  await page.getByRole('button', { name: 'Use radial context menu', exact: true }).click();
+  await expect(page.locator('.item-action-wheel')).toBeVisible();
+  await page.mouse.click(1100, 650);
+  await expect(page.locator('.item-action-wheel')).toHaveCount(0);
+});
+
+test('desktop item context owns keyboard focus and activates the focused action', async ({ page }) => {
+  await page.goto('/?demo=agent-observability');
+  await page.waitForFunction(() => window.app.graphs.current.nodes().length >= 9);
+  await page.locator('.node').first().click({ button: 'right' });
+  const rename = page.getByRole('menuitem', { name: 'Rename', exact: true });
+  const description = page.getByRole('menuitem', { name: 'Edit description', exact: true });
+  await expect(rename).toBeFocused();
+  await rename.press('ArrowRight');
+  await expect(description).toBeFocused();
+  await description.press('Enter');
+  await expect(page.locator('.item-action-wheel')).toHaveCount(0);
+  await expect(page.locator('[data-editable-description].editing')).toHaveCount(1);
+});
+
+test('collapsed navigator and fit controls use the same measured shell', async ({ page }) => {
+  await page.goto('/?demo=agent-observability');
+  const collapse = page.getByRole('button', { name: 'Collapse graph navigator', exact: true });
+  if (await collapse.isVisible()) await collapse.click();
+  const hamburger = await page.locator('.graph-navigator[data-outline-folded="true"]').boundingBox();
+  const fit = await page.locator('.tool-panel[data-panel-id="zoom"]').boundingBox();
+  expect({ width: hamburger?.width, height: hamburger?.height }).toEqual({ width: 42, height: 42 });
+  expect({ width: fit?.width, height: fit?.height }).toEqual({ width: 42, height: 42 });
+});
+
+test('empty canvas context mirrors primary toolbar commands near the pointer', async ({ page }) => {
+  await page.goto('/?demo=agent-observability');
+  await page.waitForFunction(() => window.app.graphs.current.nodes().length >= 9);
+  const stage = page.locator('[data-place="stage"]');
+  await stage.dispatchEvent('contextmenu', { button: 2, clientX: 900, clientY: 700 });
+  const menu = page.locator('.canvas-action-menu');
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Add node', exact: true })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Draw mode', exact: true })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Select mode', exact: true })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Erase canvas items', exact: true })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Fit canvas', exact: true })).toBeVisible();
+  await menu.getByRole('menuitem', { name: 'Draw mode', exact: true }).click();
+  await expect(stage).toHaveClass(/ink-drawing/);
+  await expect(menu).toHaveCount(0);
+
+  await stage.dispatchEvent('contextmenu', { button: 2, clientX: 900, clientY: 700 });
+  await page.locator('.canvas-action-menu').getByRole('menuitem', { name: 'Select mode', exact: true }).click();
+  await expect(stage).not.toHaveClass(/ink-drawing/);
+
+  await stage.dispatchEvent('contextmenu', { button: 2, clientX: 900, clientY: 700 });
+  await expect(page.locator('.canvas-action-menu')).toBeVisible();
+  await page.mouse.click(80, 680);
+  await expect(page.locator('.canvas-action-menu')).toHaveCount(0);
+});
+
+test('node description supports inline Markdown editing', async ({ page }) => {
+  await page.goto('/?demo=agent-observability');
+  const node = page.getByRole('button', { name: /Trace boundaries .*Timeline step node/ });
+  const description = node.locator('[data-editable-description]');
+  await node.click();
+  await description.dblclick();
+  await expect(description).toHaveClass(/editing/);
+  expect(await description.evaluate(element => element.isContentEditable)).toBe(true);
+  await expect(description).toHaveAttribute('aria-label', 'Markdown description');
+  await description.fill('**Reviewed** · direct edit');
+  await description.press(process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter');
+  await expect(description.locator('strong')).toHaveText('Reviewed');
+  await expect(description).not.toHaveClass(/editing/);
+});
+
 test('Edit reveals the collapsed inspector and focuses its title', async ({ page }) => {
   await page.goto('/?demo=agent-observability');
   await page.waitForFunction(() => window.app.graphs.current.nodes().length >= 9);
@@ -166,8 +248,12 @@ test('selection opens compact left properties without leaking canvas context act
   expect(panelBox.x).toBeGreaterThanOrEqual(drawerBox.x);
   expect(panelBox.x + panelBox.width).toBeLessThanOrEqual(drawerBox.x + drawerBox.width + 1);
   expect(panelBox.width).toBeLessThanOrEqual(305);
+  expect(await properties.locator('.properties-inspector-scroll').evaluate(element => element.clientHeight)).toBeGreaterThanOrEqual(180);
   await expect(page.locator('.palette-style-controls')).toHaveCount(0);
   await expect(properties.locator('.context-action-icon .ui-icon').first()).toBeVisible();
+  await expect(properties.getByRole('button', { name: /^Change type · / })).toBeVisible();
+  await expect(properties.locator('.context-action-group.danger [data-command="selection.item.delete"]')).toBeVisible();
+  await expect(properties.locator('.properties-autosave-note')).toBeVisible();
 
   await properties.locator('[data-item-modal-title]').click({ button: 'right' });
   await expect(page.locator('.item-action-wheel')).toHaveCount(0);
@@ -178,17 +264,24 @@ test('selection opens compact left properties without leaking canvas context act
   await expect(page.locator('.item-toolbar [data-command="graph.container.delete"] .ui-icon')).toBeVisible();
 });
 
-test('draw mode preserves catalog and node context actions', async ({ page }) => {
+test('draw mode preserves catalog but suspends select-mode affordances', async ({ page }) => {
   await page.goto('/?demo=agent-observability');
   await page.waitForFunction(() => window.app.graphs.current.nodes().length >= 9);
   await openPaletteDrawer(page);
+  const node = page.locator('.node').first();
+  await node.click();
+  await expect(page.locator('.properties-inspector')).toBeVisible();
+  await expect(page.locator('.item-toolbar')).toBeVisible();
   await page.locator('[data-command="ink.toggle"]').first().click();
   await expect(page.locator('.palette-catalog-region')).toBeVisible();
   await expect(page.locator('.palette-draw')).toBeVisible();
+  await expect(page.locator('.properties-inspector')).toBeHidden();
+  await expect(page.locator('.item-toolbar')).toBeHidden();
+  await expect(page.locator('.ghost-node')).toBeHidden();
 
-  const node = page.locator('.node').first();
   await node.click({ button: 'right' });
   await expect(page.locator('.item-action-wheel')).toBeVisible();
+  await expect(page.locator('.item-toolbar')).toBeHidden();
 });
 
 test('toggle node switch keeps persisted state without toggling the whole card', async ({ page }) => {
@@ -246,6 +339,28 @@ test('mobile palette stays collapsed until requested and closes on outside tap',
   await page.mouse.click(200, 150);
   await expect(palette).toHaveAttribute('data-mobile-open', 'false');
   await expect(sheet).toBeHidden();
+});
+
+test('mobile graph navigator is a focus-contained modal sheet', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  const open = page.getByRole('button', { name: 'Expand graph navigator', exact: true });
+  await open.click();
+  const navigator = page.getByRole('dialog', { name: 'Graph navigator', exact: true });
+  await expect(navigator).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Close graph navigator', exact: true })).toBeVisible();
+  const toggle = page.getByRole('button', { name: 'Collapse graph navigator', exact: true });
+  await expect(toggle).toBeFocused();
+  await toggle.press('Tab');
+  await expect(page.getByRole('textbox', { name: 'Current graph name', exact: true })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.graph-navigator')).toHaveAttribute('data-outline-folded', 'true');
+  await expect(page.getByRole('button', { name: 'Expand graph navigator', exact: true })).toBeFocused();
+
+  const hamburger = await page.locator('.graph-navigator[data-outline-folded="true"]').boundingBox();
+  const fit = await page.locator('.tool-panel[data-panel-id="zoom"]').boundingBox();
+  expect({ width: hamburger?.width, height: hamburger?.height }).toEqual({ width: 48, height: 48 });
+  expect({ width: fit?.width, height: fit?.height }).toEqual({ width: 48, height: 48 });
 });
 
 test('draw mode swaps node styling for stroke controls', async ({ page }) => {

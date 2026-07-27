@@ -32,6 +32,7 @@ declare module '../types' {
     'outline.section.open': { graphId: Id; containerId: Id; sectionId: Id };
     'outline.requirements.filter.changed': { key: RequirementsFilterKey; value: string };
     'outline.requirements.filter.clear': void;
+    'outline.mobile.tab': { shift: boolean };
     'requirements.review.changed': { filters: RequirementsReviewFilters; query: string };
   }
 }
@@ -48,6 +49,9 @@ export function registerOutline(system: Registry) {
   system('outline', ({ on, emit, contexts, graphs, frameLoop, origin }) => {
     let query = '';
     let requirementsFilters = emptyRequirementsFilters();
+    let mobileRestoreFocus: HTMLElement | null = null;
+    let restoreMobileOnClose = true;
+    const mobileSheet = () => globalThis.innerWidth <= 680;
     const el = <K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string) => {
       const node = document.createElement(tag);
       if (className) node.className = className;
@@ -399,6 +403,17 @@ export function registerOutline(system: Registry) {
       const collapsed = contexts.fold.folded(PANEL_FOLD_ID);
       const wrapper = el('aside', 'outline-panel graph-navigator');
       wrapper.dataset.outlineFolded = collapsed ? 'true' : 'false';
+      if (!collapsed && mobileSheet()) {
+        wrapper.setAttribute('role', 'dialog');
+        wrapper.setAttribute('aria-modal', 'true');
+        wrapper.setAttribute('aria-label', 'Graph navigator');
+        const scrim = el('button', 'graph-navigator-scrim');
+        scrim.type = 'button';
+        scrim.dataset.command = 'fold.toggle';
+        scrim.dataset.foldId = PANEL_FOLD_ID;
+        scrim.setAttribute('aria-label', 'Close graph navigator');
+        wrapper.append(scrim);
+      }
       const head = el('div', 'outline-panel-head');
       const fold = el('button', 'graph-navigator-toggle');
       fold.append(iconNode('menu'));
@@ -487,6 +502,13 @@ export function registerOutline(system: Registry) {
       active: () => contexts.fold.isOpen(PANEL_FOLD_ID),
       cancel: () => contexts.fold.set(PANEL_FOLD_ID, false),
     });
+    const offMobileCancellation = contexts.cancellation.register({
+      origin: `${origin}.mobile`,
+      priority: 50,
+      background: false,
+      active: () => mobileSheet() && contexts.fold.isOpen(PANEL_FOLD_ID),
+      cancel: () => contexts.fold.set(PANEL_FOLD_ID, false),
+    });
     const publishRequirementsReview = () => emit('requirements.review.changed', {
       filters: { ...requirementsFilters },
       query,
@@ -497,6 +519,15 @@ export function registerOutline(system: Registry) {
         event: 'outline.search.changed',
         input: { on: 'input', selector: '[data-graph-nav-search]' },
         payload: ({ target }) => ({ query: (target as HTMLInputElement).value }),
+      },
+      {
+        id: 'outline.mobile.tab', label: 'Keep focus in the mobile graph navigator', group: 'outline', hidden: true,
+        input: {
+          on: 'keydown', key: 'Tab', global: true, prevent: true, stop: true,
+          when: event => mobileSheet() && contexts.fold.isOpen(PANEL_FOLD_ID)
+            && !!(event.target as Element | null)?.closest('.graph-navigator'),
+        },
+        payload: ({ event }) => ({ shift: (event as KeyboardEvent).shiftKey }),
       },
       { id: 'outline.search.clear', label: 'Clear graph filter', group: 'outline', hidden: true },
       {
@@ -545,6 +576,17 @@ export function registerOutline(system: Registry) {
       });
     });
     on('outline.search.clear', () => { query = ''; draw(); publishRequirementsReview(); });
+    on('outline.mobile.tab', ({ shift }) => {
+      const panel = contexts.places.el(Places.Left)?.querySelector<HTMLElement>('.graph-navigator');
+      const focusable = Array.from(panel?.querySelectorAll<HTMLElement>(
+        '.graph-navigator-toggle, .graph-navigator-title, .outline-panel-body button:not([disabled]), .outline-panel-body input:not([disabled]), .outline-panel-body select:not([disabled]), .outline-panel-body textarea:not([disabled]), .outline-panel-body [href], .outline-panel-body [tabindex]:not([tabindex="-1"])',
+      ) ?? []);
+      if (!focusable.length) return;
+      const current = focusable.indexOf(document.activeElement as HTMLElement);
+      const next = current < 0 ? (shift ? focusable.length - 1 : 0)
+        : (current + (shift ? -1 : 1) + focusable.length) % focusable.length;
+      focusable[next]?.focus({ preventScroll: true });
+    });
     on('outline.requirements.filter.changed', ({ key, value }) => {
       if (!(['scope', 'readiness', 'attribute', 'component'] as string[]).includes(key)) return;
       requirementsFilters = { ...requirementsFilters, [key]: value };
@@ -600,6 +642,10 @@ export function registerOutline(system: Registry) {
       // one-Attribute-at-a-time reading policy through fold.changed.
       revealRef(ref);
       emit('selection.item.select', ref);
+      if (mobileSheet()) {
+        restoreMobileOnClose = false;
+        contexts.fold.set(PANEL_FOLD_ID, false);
+      }
       frameLoop.schedule('outline.open.item', () => emit('view.fit.item', ref), 45);
     });
     on('outline.section.open', ({ graphId, containerId, sectionId }) => {
@@ -608,6 +654,10 @@ export function registerOutline(system: Registry) {
       const ref = { kind: 'container', id: containerId } as ItemRef;
       revealRef(ref);
       emit('selection.item.select', ref);
+      if (mobileSheet()) {
+        restoreMobileOnClose = false;
+        contexts.fold.set(PANEL_FOLD_ID, false);
+      }
       // Section fitting intentionally runs after the container's unfold/layout
       // camera task and aligns the requested band to the top reading edge.
       frameLoop.schedule('outline.open.section', () => emit('view.fit.section', { containerId, sectionId }), 50);
@@ -631,12 +681,39 @@ export function registerOutline(system: Registry) {
     on('outline.draw', draw);
     on('graph.switched', () => {
       requirementsFilters = emptyRequirementsFilters();
+      if (mobileSheet() && contexts.fold.isOpen(PANEL_FOLD_ID)) {
+        restoreMobileOnClose = false;
+        contexts.fold.set(PANEL_FOLD_ID, false);
+      }
       draw();
       publishRequirementsReview();
     });
     on('fold.changed', ({ id }) => {
+      const mobilePanelChange = id === PANEL_FOLD_ID && mobileSheet();
+      const open = mobilePanelChange && contexts.fold.isOpen(PANEL_FOLD_ID);
+      if (open) {
+        mobileRestoreFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        restoreMobileOnClose = true;
+      }
       if (id.startsWith('outline.') || (requirementsMapOf(graphs.current) && id.startsWith(`fold:${graphs.current.id}:`))) draw();
+      if (!mobilePanelChange) return;
+      frameLoop.schedule('outline.mobile.focus.prepare', () => {
+        frameLoop.schedule('outline.mobile.focus.commit', () => {
+          if (contexts.fold.isOpen(PANEL_FOLD_ID)) {
+            contexts.places.el(Places.Left)?.querySelector<HTMLElement>('.graph-navigator-toggle')?.focus({ preventScroll: true });
+            return;
+          }
+          const target = restoreMobileOnClose ? mobileRestoreFocus : null;
+          mobileRestoreFocus = null;
+          restoreMobileOnClose = true;
+          if (target?.isConnected) target.focus({ preventScroll: true });
+          else if (target) contexts.places.el(Places.Left)?.querySelector<HTMLElement>('.graph-navigator-toggle')?.focus({ preventScroll: true });
+        }, 45);
+      }, 45);
     });
-    return offCancellation;
+    return () => {
+      offMobileCancellation();
+      offCancellation();
+    };
   }, { requires: ['render', 'graph'] });
 }

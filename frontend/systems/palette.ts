@@ -46,6 +46,7 @@ declare module '../types' {
     'palette.place.cancel': void;
     'palette.mobile.toggle': void;
     'palette.mobile.close': void;
+    'palette.mobile.tab': { shift: boolean };
     'palette.category.set': { category: string };
     'palette.favorite.toggle': { key: string };
   }
@@ -108,9 +109,10 @@ const sameVisualEntry = (a: PresetTypeEntry, b: PresetTypeEntry) =>
   && a.entity === b.entity && a.containerType === b.containerType;
 
 export function registerPalette(system: Registry) {
-  system('palette', ({ on, emit, contexts, graphs, io, selection, declarePanel, contribute, origin }) => {
+  system('palette', ({ on, emit, contexts, graphs, io, selection, declarePanel, contribute, origin, frameLoop }) => {
     let placing = false;
     let mobileOpen = false;
+    let mobileRestoreFocus: HTMLElement | null = null;
     let redrawPending = false;
     let disposed = false;
     let pendingDelete: { preset: PresetId; entryId: string } | null = null;
@@ -155,6 +157,24 @@ export function registerPalette(system: Registry) {
         redrawPending = false;
         if (!disposed) emit('tool.panel.redraw', { id: 'palette' });
       });
+    };
+    const setMobileOpen = (next: boolean) => {
+      if (mobileOpen === next) return;
+      if (next) mobileRestoreFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      mobileOpen = next;
+      redraw();
+      frameLoop.schedule('palette.mobile.focus.prepare', () => {
+        frameLoop.schedule('palette.mobile.focus.commit', () => {
+          if (mobileOpen) {
+            contexts.places.el(Places.Left)?.querySelector<HTMLElement>('.palette-mobile-close')?.focus({ preventScroll: true });
+            return;
+          }
+          const target = mobileRestoreFocus;
+          mobileRestoreFocus = null;
+          if (target?.isConnected) target.focus({ preventScroll: true });
+          else contexts.places.el(Places.Left)?.querySelector<HTMLElement>('.palette-mobile-toggle')?.focus({ preventScroll: true });
+        }, 45);
+      }, 45);
     };
     const stageEl = () => contexts.places.el(Places.Stage);
     const setPlacement = (active: boolean) => {
@@ -745,6 +765,11 @@ export function registerPalette(system: Registry) {
       scrim.className = 'palette-scrim';
       const sheet = document.createElement('div');
       sheet.className = 'palette-sheet';
+      if (globalThis.innerWidth <= 700) {
+        sheet.setAttribute('role', 'dialog');
+        sheet.setAttribute('aria-modal', 'true');
+        sheet.setAttribute('aria-label', 'Node catalog and drawing styles');
+      }
       const close = button('palette.mobile.close', 'Close node palette', '×');
       close.className = 'palette-mobile-close';
       sheet.append(close);
@@ -765,8 +790,8 @@ export function registerPalette(system: Registry) {
           if (category === 'Favorites') {
             catalog.append(reuseBlock('Favorites', favorites, 'palette-favorites-block', 'Star a type to keep it here.'));
           } else {
-            if (!search && category === 'All') catalog.append(
-              reuseBlock('Recent', recent, 'palette-recent-block', 'Used types appear here.'),
+            if (!search && category === 'All' && recent.length) catalog.append(
+              reuseBlock('Recent', recent, 'palette-recent-block', ''),
             );
             catalog.append(catalogBlock());
           }
@@ -910,8 +935,19 @@ export function registerPalette(system: Registry) {
     });
     on('palette.place.activate', activateArm);
     on('palette.place.cancel', () => setPlacement(false));
-    on('palette.mobile.toggle', () => { mobileOpen = !mobileOpen; redraw(); });
-    on('palette.mobile.close', () => { if (mobileOpen) { mobileOpen = false; redraw(); } });
+    on('palette.mobile.toggle', () => setMobileOpen(!mobileOpen));
+    on('palette.mobile.close', () => setMobileOpen(false));
+    on('palette.mobile.tab', ({ shift }) => {
+      const sheet = contexts.places.el(Places.Left)?.querySelector<HTMLElement>('.palette-sheet');
+      const focusable = Array.from(sheet?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+      ) ?? []);
+      if (!focusable.length) return;
+      const current = focusable.indexOf(document.activeElement as HTMLElement);
+      const next = current < 0 ? (shift ? focusable.length - 1 : 0)
+        : (current + (shift ? -1 : 1) + focusable.length) % focusable.length;
+      focusable[next]?.focus({ preventScroll: true });
+    });
     on('outline.search.changed', ({ query }) => {
       search = query.trimStart();
       if (search) category = 'All';
@@ -919,14 +955,14 @@ export function registerPalette(system: Registry) {
     });
     on('outline.search.clear', () => { search = ''; redraw(); });
     on('palette.category.set', ({ category: next }) => { category = next; redraw(); });
-    on('selection.changed', () => { if (mobileOpen) mobileOpen = false; redraw(); });
+    on('selection.changed', () => { if (mobileOpen) setMobileOpen(false); redraw(); });
     on('preset.changed', () => { setPlacement(false); reset(); });
     on('graph.switched', () => { setPlacement(false); reset(); });
     on('ink.mode.changed', (state) => {
       drawing = state.drawing;
       if (drawing) {
         setPlacement(false);
-        if (globalThis.innerWidth <= 700) mobileOpen = true;
+        if (globalThis.innerWidth <= 700) setMobileOpen(true);
         else contexts.fold.set('outline.panel', true);
       }
       redraw();
@@ -968,7 +1004,7 @@ export function registerPalette(system: Registry) {
       const size = nodeTypeDefinition(arm.type)?.defaultSize;
       if (size && (arm.type === 'operator' || arm.type === 'diamond' || isDefaultNodeSize(node.Size))) patch.Size = size;
       emit('item.update', { ref: nodeRef(id), patch });
-      if (mobileOpen) { mobileOpen = false; redraw(); }
+      if (mobileOpen) setMobileOpen(false);
     });
 
     contexts.cancellation.register({
@@ -979,6 +1015,22 @@ export function registerPalette(system: Registry) {
       active: () => placing,
       cancel: () => emit('palette.place.cancel'),
     });
+    contexts.cancellation.register({
+      origin: `${origin}.mobile`,
+      priority: 40,
+      background: false,
+      active: () => mobileOpen,
+      cancel: () => setMobileOpen(false),
+    });
+    contexts.commands.register([{
+      id: 'palette.mobile.tab', label: 'Keep focus in the mobile palette', group: 'palette', hidden: true,
+      input: {
+        on: 'keydown', key: 'Tab', global: true, prevent: true, stop: true,
+        when: event => mobileOpen && globalThis.innerWidth <= 700
+          && !!(event.target as Element | null)?.closest('.palette-sheet'),
+      },
+      payload: ({ event }) => ({ shift: (event as KeyboardEvent).shiftKey }),
+    }]);
     contexts.storage.claimDefaults('node', origin);
 
     contribute({

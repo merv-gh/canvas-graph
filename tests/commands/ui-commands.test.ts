@@ -12,8 +12,8 @@ describe('frontend UI command surfaces', () => {
     const ctx = bootApp();
     await createNodes(ctx, 2);
 
-    // Graph-editing actions cluster in the top bar's `edit` group.
-    expect(document.querySelector('.tool-panel[data-panel-id="top"] .tool-group[data-group="edit"] [data-command="editing.node.create"] .ui-icon')).not.toBeNull();
+    // Placement is a mode beside Draw/Select/Erase; connection stays editing.
+    expect(document.querySelector('.tool-panel[data-panel-id="top"] .tool-group[data-group="mode"] [data-command="palette.place.activate"] .ui-icon')).not.toBeNull();
     expect(document.querySelectorAll('.tool-panel[data-panel-id="top"]')).toHaveLength(1);
     expect(document.querySelector('.top > .tool-panel[data-panel-id="top"]')).not.toBeNull();
     expect(document.querySelector('.tool-panel[data-panel-id="top"] .tool-group[data-group="edit"] [data-command="editing.edge.create"] .ui-icon')).not.toBeNull();

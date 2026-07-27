@@ -137,6 +137,85 @@ describe('mobile journey interaction budgets', () => {
     expect(document.querySelector('[data-editable-title].editing')).not.toBeNull();
   });
 
+  it('puts context-menu focus on its first action and supports roving arrows', async () => {
+    const ctx = bootApp({ autoLayout: false });
+    ctx.bus.emit('graph.node.create', { Label: { text: 'Focusable' }, Description: 'Editable' });
+    await settle();
+    const node = ctx.graphs.current.nodes()[0];
+    document.querySelector<HTMLElement>(`.node[data-item-id="${node.id}"]`)!.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true, cancelable: true, clientX: 240, clientY: 220,
+    }));
+    await settle();
+    await settle();
+
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Rename');
+    document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'ArrowRight', bubbles: true, cancelable: true,
+    }));
+    await settle();
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Edit description');
+    document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter', bubbles: true, cancelable: true,
+    }));
+    await settle();
+    expect(document.querySelector('.item-action-wheel')).toBeNull();
+    expect(document.querySelector('[data-editable-description].editing')).not.toBeNull();
+  });
+
+  it('traps focus in the mobile palette and restores it after Escape', async () => {
+    bootApp({ autoLayout: false });
+    await settle();
+    const toggle = document.querySelector<HTMLElement>('[data-command="palette.mobile.toggle"]')!;
+    toggle.focus();
+    click(toggle);
+    await settle();
+    await settle();
+
+    const sheet = document.querySelector<HTMLElement>('.palette-sheet')!;
+    expect(sheet.getAttribute('role')).toBe('dialog');
+    expect(sheet.getAttribute('aria-modal')).toBe('true');
+    expect(document.activeElement).toBe(sheet.querySelector('.palette-mobile-close'));
+
+    document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Escape', bubbles: true, cancelable: true,
+    }));
+    await settle();
+    await settle();
+    expect(document.querySelector<HTMLElement>('.palette-panel')!.dataset.mobileOpen).toBe('false');
+    expect(document.activeElement).toBe(document.querySelector('[data-command="palette.mobile.toggle"]'));
+  });
+
+  it('treats the compact graph navigator as a modal sheet', async () => {
+    bootApp({ autoLayout: false });
+    await settle();
+    const toggle = document.querySelector<HTMLElement>('.graph-navigator-toggle')!;
+    toggle.focus();
+    click(toggle);
+    await settle();
+    await settle();
+
+    const navigator = document.querySelector<HTMLElement>('.graph-navigator')!;
+    expect(navigator.dataset.outlineFolded).toBe('false');
+    expect(navigator.getAttribute('role')).toBe('dialog');
+    expect(navigator.getAttribute('aria-modal')).toBe('true');
+    expect(navigator.querySelector('.graph-navigator-scrim')).not.toBeNull();
+    expect(document.activeElement).toBe(navigator.querySelector('.graph-navigator-toggle'));
+
+    document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Tab', bubbles: true, cancelable: true,
+    }));
+    await settle();
+    expect(document.activeElement).toBe(navigator.querySelector('.graph-navigator-title'));
+
+    document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Escape', bubbles: true, cancelable: true,
+    }));
+    await settle();
+    await settle();
+    expect(document.querySelector<HTMLElement>('.graph-navigator')!.dataset.outlineFolded).toBe('true');
+    expect(document.activeElement).toBe(document.querySelector('.graph-navigator-toggle'));
+  });
+
   it('folds a persisted desktop-open navigator on compact boot', async () => {
     const io = memoryIo();
     io.set('frontend.fold', { 'outline.panel': true });

@@ -147,6 +147,9 @@ export function registerIo(system: Registry) {
       if (!restoring && (graphFact || containerFact)) scheduleSave();
     });
     on('app.start', () => {
+      // A portable graph URL is an explicit document source. Do not hydrate a
+      // local document first or schedule its fit after share restores camera.
+      if (new URLSearchParams(location.search).has('g')) return;
       const primary = io.get<unknown>(STORAGE_KEYS.graphs, null);
       const backup = io.get<unknown>(STORAGE_KEYS.graphsBackup, null);
       const saved = validPersisted(primary) ? primary : validPersisted(backup) ? backup : null;

@@ -230,6 +230,26 @@ describe('frontend node commands', () => {
     expect(ctx.graphs.current.nodes()).toHaveLength(2);
   });
 
+  it('edits raw Markdown descriptions inline and renders the committed result', async () => {
+    const ctx = bootApp();
+    ctx.bus.emit('graph.node.create', { Label: { text: 'Documented' }, Description: '**Old**\nline' });
+    await settle();
+
+    expect(runCommand(ctx, 'item.description.edit')).toBe(true);
+    await settle();
+    const editor = document.querySelector<HTMLElement>('[data-editable-description].editing')!;
+    expect(editor.getAttribute('role')).toBe('textbox');
+    expect(editor.getAttribute('aria-label')).toBe('Markdown description');
+    expect(editor.textContent).toBe('**Old**\nline');
+
+    editor.textContent = '**New**\nnext';
+    expect(runCommand(ctx, 'item.description.commit.ctrl-enter', { target: editor })).toBe(true);
+    await settle();
+    expect(ctx.graphs.current.nodes()[0].Description).toBe('**New**\nnext');
+    expect(document.querySelector('.node-description strong')?.textContent).toBe('New');
+    expect(document.querySelector('[data-editable-description].editing')).toBeNull();
+  });
+
   it('blurs the inspector title input when Enter finishes editing', async () => {
     const ctx = bootApp();
     runCommand(ctx, 'editing.node.create');

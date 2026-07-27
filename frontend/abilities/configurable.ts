@@ -67,6 +67,7 @@ export function registerConfigurable(system: Registry) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = `context-action context-action-card${active ? ' active' : ''}`;
+      if (command.includes('delete')) button.classList.add('danger');
       button.dataset.command = command;
       button.setAttribute('aria-label', label);
       if (active !== undefined) button.setAttribute('aria-pressed', active ? 'true' : 'false');
@@ -87,6 +88,7 @@ export function registerConfigurable(system: Registry) {
       const body = document.createElement('div');
       body.className = 'context-action-grid';
       body.append(...children);
+      if (children.some(child => child.classList.contains('danger'))) group.classList.add('danger');
       group.append(heading, body);
       return group;
     };
@@ -95,42 +97,38 @@ export function registerConfigurable(system: Registry) {
       actions.className = 'context-actions context-actions-combined';
       if (ref.kind === 'node') {
         const type = (current as { NodeType?: string }).NodeType ?? 'text';
-        actions.append(actionGroup('Shape', [
-          actionButton('Text', 'node.type.text', 'text', {}, type === 'text'),
-          actionButton('Box', 'node.type.square', 'node', {}, type === 'square'),
-          actionButton('Circle', 'node.type.circle', 'circle', {}, type === 'circle'),
+        if (contexts.commands.get('node.type.open')) actions.append(actionGroup('Type', [
+          actionButton(`Change type · ${model.nodeType(type)?.label ?? type}`, 'node.type.open', 'node'),
         ]));
         const itemActions = [
           actionButton('Convert to container', 'node.convert.container', 'container'),
           actionButton('Group', 'selection.group', 'group'),
-          actionButton('Delete', 'selection.item.delete', 'trash'),
         ];
         if (graphs.current.itemsOfKind('ink').length) itemActions.unshift(actionButton('Select drawings', 'ink.select.all', 'draw'));
         if (type === 'toggle') itemActions.unshift(actionButton(
           (current as { ToggleState?: boolean }).ToggleState ? 'Turn off' : 'Turn on',
           'node.toggle.state', 'toggle',
         ));
-        if (contexts.commands.get('palette.custom-type.create')) itemActions.splice(itemActions.length - 1, 0,
+        if (contexts.commands.get('palette.custom-type.create')) itemActions.push(
           actionButton('Save as type', 'palette.custom-type.create', 'star'));
         actions.append(actionGroup('Actions', itemActions));
+        actions.append(actionGroup('Danger', [actionButton('Delete', 'selection.item.delete', 'trash')]));
       }
       if (ref.kind === 'edge') {
-        actions.append(actionGroup('Connection', [
-          actionButton('Reverse direction', 'graph.edge.reverse', 'reverse'),
-          actionButton('Delete connection', 'graph.edge.delete', 'trash'),
-        ]));
+        actions.append(actionGroup('Connection', [actionButton('Reverse direction', 'graph.edge.reverse', 'reverse')]));
+        actions.append(actionGroup('Danger', [actionButton('Delete connection', 'graph.edge.delete', 'trash')]));
       }
       if (ref.kind === 'container') {
         const boundaryActions = [
           actionButton('Convert to node', 'container.convert.node', 'node'),
           actionButton('Fold / unfold', 'item.collapse.toggle', 'collapse'),
-          actionButton('Delete…', 'container.delete.request', 'trash'),
         ];
         const currentContainer = graphs.current.getItem<{ Children?: ItemRef[] }>(ref);
         if (currentContainer?.Children?.length) {
           boundaryActions.unshift(actionButton('Ungroup, keep contents', 'container.ungroup', 'ungroup'));
         }
         actions.append(actionGroup('Boundary', boundaryActions));
+        actions.append(actionGroup('Danger', [actionButton('Delete…', 'container.delete.request', 'trash')]));
       }
       const parent = contexts.hierarchy.parentRefOf(ref);
       const container = parent?.kind === 'container' ? graphs.current.getItem<ContainerLike>(parent) : null;
@@ -272,10 +270,6 @@ export function registerConfigurable(system: Registry) {
         }
         props.forEach(prop => fields.append(contexts.properties.render(prop, current)));
       });
-      const note = document.createElement('p');
-      note.className = 'properties-autosave-note';
-      note.textContent = 'Changes save automatically in this browser.';
-      fields.append(note);
       return form;
     };
     const applyProperty = (ref: ItemRef, field: string, value: PropertyValue) => {
@@ -314,13 +308,19 @@ export function registerConfigurable(system: Registry) {
       root.setAttribute('aria-label', `${target.entity.label} properties`);
       const header = document.createElement('header');
       const kind = document.createElement('span');
-      kind.textContent = target.entity.label;
+      const nodeType = target.ref.kind === 'node'
+        ? model.nodeType((target.current as { NodeType?: string }).NodeType ?? 'text')?.label
+        : undefined;
+      kind.textContent = `Properties · ${nodeType ?? target.entity.label}`;
       header.append(kind, titleView(target.ref, target.current));
       const scroll = document.createElement('div');
       scroll.className = 'properties-inspector-scroll';
       scroll.dataset.nativeScroll = '';
       scroll.append(renderProperties(target.ref, target.current, target.properties));
-      root.append(header, scroll);
+      const note = document.createElement('p');
+      note.className = 'properties-autosave-note';
+      note.textContent = 'Changes save automatically';
+      root.append(header, scroll, note);
       return root;
     };
 

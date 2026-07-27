@@ -92,6 +92,17 @@ describe('release UX', () => {
     expect(document.querySelector('[data-share-copy]')).not.toBeNull();
     expect(document.querySelector('.share-link-panel')?.textContent).toContain('Portable snapshot link');
     expect(document.querySelector('.share-size')?.textContent).toContain('embedded in the URL');
+    const context = document.querySelector<HTMLInputElement>('[data-share-context]')!;
+    expect(context.checked).toBe(false);
+    expect(new URL(input!.value).searchParams.has('view')).toBe(false);
+    context.checked = true;
+    context.dispatchEvent(new Event('change', { bubbles: true }));
+    await settle();
+    expect(new URL(input!.value).searchParams.has('view')).toBe(true);
+    context.checked = false;
+    context.dispatchEvent(new Event('change', { bubbles: true }));
+    await settle();
+    expect(new URL(input!.value).searchParams.has('view')).toBe(false);
   });
 
   it('offers editable, vector, and bitmap export formats', async () => {

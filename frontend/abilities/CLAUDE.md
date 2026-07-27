@@ -8,7 +8,7 @@ Both halves live together so toggling `ability.<id>` removes UI + behavior atomi
 - `draggable.ts` — pointer drag → `item.update` Position patches.
 - `nudgeable.ts` — arrow-key moves (separate modality from drag, toggle independently).
 - `resizeable.ts` — pointer resize handle → Size patches.
-- `editable.ts` — Enter / dblclick inline title edit on `[data-editable-title]` → Label patch.
+- `editable.ts` — Enter / dblclick inline title edit on `[data-editable-title]` → Label patch; Shift+Enter / description dblclick edits raw Markdown on `[data-editable-description]` → Description patch (Ctrl/Cmd+Enter commits).
 - `collapsible.ts` — `c` collapse toggle (writes the fold store, not item data).
 - `configurable.ts` — selection-driven right properties inspector from `entity.properties` schema → typed patches.
 - `shared.ts` / `shapes.ts` — `ability()`/`action()` builders; structural item types (Identified, Labeled…).

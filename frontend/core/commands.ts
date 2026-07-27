@@ -152,7 +152,7 @@ export function commandsContext(bus: Bus, isFlagOn: (origin?: string) => boolean
  *    2. Modal — when a modal is mounted, non-global commands whose event
  *       target is outside the modal are skipped.
  *
- *  Coalescable events (wheel, pointermove, click, dblclick) are batched on the
+ *  Coalescable events (wheel, pointermove, click) are batched on the
  *  shared frame loop: only the latest event of each type dispatches per frame,
  *  eliminating wasted command matching on events whose intermediate results
  *  would be overwritten before the next paint.  `[data-command]` button clicks
@@ -160,7 +160,9 @@ export function commandsContext(bus: Bus, isFlagOn: (origin?: string) => boolean
 export function inputRouter(commands: ReturnType<typeof commandsContext>, perf?: PerfApi, frameLoop?: FrameLoop, counters?: { events: number; commands: number }) {
   // Events safe to coalesce: only the latest per type matters.  pointerdown /
   // pointerup must stay synchronous so drag/marquee start/end pair correctly.
-  const COALESCE = new Set(['wheel', 'pointermove', 'click', 'dblclick']);
+  // dblclick enters inline editors and must keep its live DOM target. Deferring
+  // it lets the preceding selection paint replace that target first.
+  const COALESCE = new Set(['wheel', 'pointermove', 'click']);
   return {
     start(root: Document | HTMLElement = document) {
       const modalScopeEl = (): Element | null => {

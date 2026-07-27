@@ -28,11 +28,20 @@ export function renderConcept(query) {
   const words = conceptWords(query);
   if (!words.length) return 'concept: provide a phrase to search\n';
   const score = (text) => { const t = String(text || '').toLowerCase(); return words.reduce((n, w) => n + (t.includes(w) ? 1 : 0), 0); };
+  // Command source slices contain surrounding comments and nearby declarations.
+  // An exact id segment is stronger evidence than an incidental word in that
+  // slice; weight it so focused concepts cannot be displaced by file noise.
+  const commandScore = (command) => {
+    const idWords = String(command.id || '').toLowerCase().split(/[^a-z0-9]+/);
+    return words.reduce((n, word) => n
+      + (idWords.includes(word) ? 4 : 0)
+      + (String(command.text || '').toLowerCase().includes(word) ? 1 : 0), 0);
+  };
   const data = eventFlowData();
   const lines = [`concept "${words.join(' ')}" — auto-gathered from the views:`, ''];
 
   const commands = collectCommands()
-    .map(command => ({ command, s: score(`${command.id} ${command.text}`) }))
+    .map(command => ({ command, s: commandScore(command) }))
     .filter(entry => entry.s > 0)
     .sort((a, b) => b.s - a.s)
     .slice(0, 6);

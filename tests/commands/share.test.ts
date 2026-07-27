@@ -1,7 +1,7 @@
 import { deflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { bootApp, settle } from './testkit';
-import { decodeGraph, encodeGraph, mermaidToSnapshot, SHARE_URL_LIMIT, shareUrlTooLarge } from '../../frontend/systems/share';
+import { decodeGraph, decodeShareView, encodeGraph, encodeShareView, mermaidToSnapshot, SHARE_URL_LIMIT, shareUrlTooLarge } from '../../frontend/systems/share';
 import type { GraphSnapshot } from '../../frontend/model';
 
 const sample: GraphSnapshot = {
@@ -47,6 +47,18 @@ describe('graph share codec', () => {
   it('guards links beyond the reliable browser URL budget', () => {
     expect(shareUrlTooLarge(`https://canvas.test/?g=${'x'.repeat(SHARE_URL_LIMIT)}`)).toBe(true);
     expect(shareUrlTooLarge('https://canvas.test/?g=small')).toBe(false);
+  });
+
+  it('round-trips optional viewport, zoom, and selection independently of graph data', () => {
+    const encoded = encodeShareView(
+      { x: 123.4567, y: -42.25, scale: 1.375 },
+      { kind: 'node', id: 'a', parent: ['c1'] },
+    );
+    expect(decodeShareView(encoded)).toEqual({
+      view: { x: 123.457, y: -42.25, scale: 1.375 },
+      selected: { kind: 'node', id: 'a', parent: ['c1'] },
+    });
+    expect(decodeShareView('not-valid')).toBeNull();
   });
 
   it('still decodes a legacy uncompressed base64 payload', async () => {
