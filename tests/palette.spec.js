@@ -51,6 +51,13 @@ test('drawer disclosure keeps toolbar fixed and catalog controls bounded', async
   await expect(page.locator('.palette-sheet > [data-palette-category="All"]')).toHaveCount(0);
   await expect(page.locator('.outline-panel-body')).toBeVisible();
   await expect(page.locator('.palette-saved-pinned')).toBeVisible();
+  const tabs = await page.locator('.palette-category-tabs').boundingBox();
+  const region = page.locator('.palette-catalog-region');
+  const regionBox = await region.boundingBox();
+  const savedBox = await page.locator('.palette-saved-pinned').boundingBox();
+  expect(tabs.height).toBeLessThanOrEqual(30);
+  expect(await region.evaluate(element => element.clientHeight)).toBeGreaterThanOrEqual(96);
+  expect(savedBox.y).toBeGreaterThanOrEqual(regionBox.y + regionBox.height);
 });
 
 test('collapsed drawer sections use intrinsic height and keep the hamburger visible', async ({ page }) => {
