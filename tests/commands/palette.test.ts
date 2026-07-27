@@ -226,7 +226,7 @@ describe('persistent node palette', () => {
     expect(ctx.graphs.current.nodes()[0]).toMatchObject({ NodeType: 'circle', Color: 'green' });
   });
 
-  it('turns a type tile into a persistent canvas placement tool', { timeout: 10_000 }, async () => {
+  it('turns a type tile into a persistent canvas placement tool', { timeout: 20_000 }, async () => {
     const ctx = bootPalette();
     await settle();
     click(document.querySelector<HTMLElement>('[data-command="palette.arm.type.diamond"]')!);

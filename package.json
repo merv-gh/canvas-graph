@@ -19,7 +19,7 @@
     "test": "npm run test:commands:coverage && npm run test:browser",
     "test:browser": "playwright test",
     "test:commands": "vitest run",
-    "test:commands:coverage": "COVERAGE=1 vitest run --coverage",
+    "test:commands:coverage": "COVERAGE=1 vitest run --coverage --maxWorkers=2",
     "test:dx": "node dx/selftest.mjs",
     "test:performance": "PERF_ENFORCE=1 vitest run tests/commands/performance.test.ts tests/commands/probes/scale-10k.test.ts",
     "bench": "vitest run --config vitest.bench.config.ts",

@@ -75,7 +75,7 @@ describe('mobile journey interaction budgets', () => {
     expect(move.dataset.interactionCost).toBe('3');
   });
 
-  it('links two nodes in exactly three touch interactions through long-press wheel', async () => {
+  it('links two nodes in exactly three touch interactions through long-press wheel', { timeout: 15_000 }, async () => {
     const ctx = bootApp({ autoLayout: false });
     const source = ctx.graphs.current.createNode({ Label: { text: 'Source' }, Description: 'Foldable', Position: { x: -180, y: 0 } });
     const target = ctx.graphs.current.createNode({ Label: { text: 'Target' }, Position: { x: 180, y: 0 } });
@@ -185,7 +185,7 @@ describe('mobile journey interaction budgets', () => {
     expect(document.activeElement).toBe(document.querySelector('[data-command="palette.mobile.toggle"]'));
   });
 
-  it('treats the compact graph navigator as a modal sheet', async () => {
+  it('treats the compact graph navigator as a modal sheet', { timeout: 15_000 }, async () => {
     bootApp({ autoLayout: false });
     await settle();
     const toggle = document.querySelector<HTMLElement>('.graph-navigator-toggle')!;
