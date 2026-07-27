@@ -3,7 +3,11 @@ const { defineConfig } = require('@playwright/test');
 module.exports = defineConfig({
   testDir: './tests',
   testIgnore: ['**/commands/**', '**/bench/**'],
-  timeout: 30_000,
+  // Hosted runners have fewer predictable CPU cycles than local development.
+  // Serialize browser journeys there and give each journey enough wall time;
+  // assertions and the release gate remain identical.
+  timeout: process.env.CI ? 60_000 : 30_000,
+  workers: process.env.CI ? 1 : 2,
   fullyParallel: true,
   reporter: [['./tests/screenshot-reporter.cjs']],
   use: {

@@ -17,7 +17,7 @@
     "build:lib": "vite build --config vite.lib.config.ts",
     "release:check": "npm run typecheck && npm run build && npm run test:dx && npm run test:performance && npm test",
     "test": "npm run test:commands:coverage && npm run test:browser",
-    "test:browser": "playwright test --workers=2",
+    "test:browser": "playwright test",
     "test:commands": "vitest run",
     "test:commands:coverage": "COVERAGE=1 vitest run --coverage --maxWorkers=2",
     "test:dx": "node dx/selftest.mjs",
