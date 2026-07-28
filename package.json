@@ -26,7 +26,7 @@
     "test:commands:coverage": "COVERAGE=1 vitest run --config vitest.fast.config.ts --coverage",
     "test:commands:coverage:full": "COVERAGE=1 vitest run --coverage",
     "test:dx": "node dx/selftest.mjs",
-    "test:performance": "PERF_ENFORCE=1 vitest run tests/commands/performance.test.ts tests/commands/probes/scale-10k.test.ts",
+    "test:performance": "PERF_ENFORCE=1 vitest run tests/commands/performance.test.ts tests/commands/probes/scale-10k.test.ts tests/commands/probes/telemetry-overhead.test.ts",
     "bench": "vitest run --config vitest.bench.config.ts",
     "bench:burn": "BURN=1 vitest run --config vitest.bench.config.ts",
     "perf:browser": "PERF_BROWSER=1 playwright test tests/perf-real.spec.ts --project=chromium --reporter=line",
