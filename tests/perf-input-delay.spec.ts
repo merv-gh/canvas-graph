@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { test, type Page } from '@playwright/test';
+const { setup } = require('./browser-testkit.cjs');
 
 const RUN = process.env.PERF_INPUT === '1';
 const LABEL = process.env.PERF_LABEL ?? 'after';
@@ -218,8 +219,7 @@ _Updated: ${new Date().toISOString()}_
 
 test('small node drag input delay', async ({ page }) => {
   await installEventTimingObserver(page);
-  await page.goto(PERF_URL ?? '/?io=memory&perf=1');
-  await page.waitForFunction(() => !!(window as unknown as { app?: unknown }).app);
+  await setup.app(page, PERF_URL ?? '/?io=memory&perf=1');
   let selector = '.node';
   if (!PERF_URL) {
     await seedSmallGraph(page);

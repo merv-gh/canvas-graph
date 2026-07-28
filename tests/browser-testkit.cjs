@@ -1,6 +1,26 @@
+const { expect, test } = require('@playwright/test');
+
 const boot = async (page, url = '/') => {
   await page.goto(url);
   await page.waitForFunction(() => Boolean(window.app));
+};
+
+const bootDemo = async (page, demo, minimumNodes = 1) => {
+  await boot(page, `/?demo=${demo}`);
+  await expect.poll(() => page.evaluate(() => window.app.graphs.current.nodes().length))
+    .toBeGreaterThanOrEqual(minimumNodes);
+};
+
+const bootMobile = async (page, url = '/') => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await boot(page, url);
+};
+
+const bootWithFlags = async (page, overrides = {}) => {
+  await page.addInitScript(({ flags }) => {
+    try { localStorage.setItem('frontend.flags', JSON.stringify(flags)); } catch (_) { /* storage unavailable */ }
+  }, { flags: overrides });
+  await boot(page);
 };
 
 const openMore = async page => {
@@ -52,7 +72,48 @@ const openTypeCatalog = async page => {
   if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click();
 };
 
+const graphItemCount = (page, kind) => page.evaluate(itemKind => {
+  const graph = window.app.graphs.current;
+  if (itemKind === 'nodes') return graph.nodes().length;
+  if (itemKind === 'edges') return graph.edges().length;
+  return graph.itemsOfKind('container').length;
+}, kind);
+
+const expectGraphItems = async (page, kind, count) => {
+  await expect.poll(() => graphItemCount(page, kind)).toBe(count);
+};
+
+const expectGraphItemsAtLeast = async (page, kind, count) => {
+  await expect.poll(() => graphItemCount(page, kind)).toBeGreaterThanOrEqual(count);
+};
+
+const expectInsideViewport = async (locator, viewport) => {
+  const box = await locator.boundingBox();
+  expect(box).toBeTruthy();
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+  expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+};
+
+const setup = Object.freeze({ app: boot, demo: bootDemo, flags: bootWithFlags, mobile: bootMobile });
+const steps = Object.freeze({
+  clickMore,
+  openExamples,
+  openGraphItem,
+  openMore,
+  openPaletteDrawer,
+  openTypeCatalog,
+  paletteRun,
+});
+const checks = Object.freeze({
+  graphItems: expectGraphItems,
+  graphItemsAtLeast: expectGraphItemsAtLeast,
+  insideViewport: expectInsideViewport,
+});
+
 module.exports = {
+  checks,
   boot,
   clickMore,
   openExamples,
@@ -61,4 +122,8 @@ module.exports = {
   openPaletteDrawer,
   openTypeCatalog,
   paletteRun,
+  setup,
+  steps,
+  expect,
+  test,
 };

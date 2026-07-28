@@ -40,7 +40,7 @@ const declarationSignature = rule => rule.nodes
   .map(declaration => `${declaration.prop}:${declaration.value}${declaration.important ? '!important' : ''}`)
   .join(';');
 
-export const analyzeCss = source => {
+export const analyzeStylesheet = source => {
   const root = postcss.parse(source);
   const rules = [];
   const scaleViolations = { elevation: [], radius: [], spacing: [], typography: [] };
@@ -98,6 +98,6 @@ export const analyzeCss = source => {
 const invokedPath = process.argv[1] ? resolve(process.argv[1]) : '';
 if (invokedPath === fileURLToPath(import.meta.url)) {
   const path = resolve(process.argv[2] ?? 'frontend/styles.css');
-  const health = analyzeCss(readFileSync(path, 'utf8'));
-  console.log(JSON.stringify({ path, ...health }, null, 2));
+  const structure = analyzeStylesheet(readFileSync(path, 'utf8'));
+  console.log(JSON.stringify({ path, ...structure }, null, 2));
 }

@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { analyzeCss } from '../../dx/tooling/css-health.mjs';
+import { analyzeStylesheet } from '../../dx/gates/stylesheet-structure.mjs';
 import { bootApp, commandButton, runCommand, settle, teardownApp } from './testkit';
 
 const Frontend = resolve(process.cwd(), 'frontend');
@@ -50,7 +50,7 @@ describe('frontend principles (enforced)', () => {
       expect(css.match(new RegExp(value!, 'gi'))).toHaveLength(1);
     });
 
-    const health = analyzeCss(css);
+    const health = analyzeStylesheet(css);
     expect(health.rules).toBeLessThanOrEqual(1_000);
     expect(health.duplicateRuleGroups).toEqual([]);
     expect(health.scaleViolations).toEqual({
@@ -93,6 +93,7 @@ describe('frontend principles (enforced)', () => {
       'debug.ts->debug-views',       // pure DOM builders
       'node-autosize.ts->text-layout', // pure text measurement helper
       'palette.ts->presets',        // pure preset catalog/IO functions; no module state
+      'palette.ts->palette-custom-type-commands', // pure command-spec factory; dependencies are injected
       'containers.ts->container-entity', // pure entity definition + validation helpers
     ]);
     const offenders: string[] = [];

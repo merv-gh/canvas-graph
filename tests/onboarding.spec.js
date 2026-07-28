@@ -1,11 +1,8 @@
-const { test, expect } = require('@playwright/test');
-const clickGuide = async page => {
-  await page.getByLabel('More actions').click();
-  await page.getByRole('button', { name: 'Open getting-started guide', exact: true }).click();
-};
+const { test, expect, setup, steps, checks } = require('./browser-testkit.cjs');
+const clickGuide = page => steps.clickMore(page, 'Open getting-started guide');
 
 test('guide opens from the toolbar and exposes all canonical starters', async ({ page }) => {
-  await page.goto('/');
+  await setup.app(page);
   await clickGuide(page);
   await expect(page.locator('.onboarding')).toBeVisible();
   await expect(page.getByRole('button', { name: /Start creating/ })).toBeVisible();
@@ -24,7 +21,7 @@ test('guide opens from the toolbar and exposes all canonical starters', async ({
 
 test('first-run guide and every architecture starter fit a laptop viewport', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
-  await page.goto('/');
+  await setup.app(page);
   await clickGuide(page);
   await page.getByText('Browse all examples', { exact: false }).click();
   const modal = await page.locator('.modal-layer[data-visual="onboarding"] .modal').boundingBox();
@@ -42,7 +39,7 @@ test('first-run guide and every architecture starter fit a laptop viewport', asy
 });
 
 test('hosted demo route opens the radial math map without onboarding', async ({ page }) => {
-  await page.goto('/?demo=math');
+  await setup.app(page, '/?demo=math');
   await expect(page.locator('.onboarding')).toHaveCount(0);
   await expect(page.locator('.node-title', { hasText: 'Expected value' })).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.app.graphs.current.nodes().length)).toBe(7);
@@ -50,7 +47,7 @@ test('hosted demo route opens the radial math map without onboarding', async ({ 
 });
 
 test('a chosen demo keeps its readable fitted camera after refresh', async ({ page }) => {
-  await page.goto('/');
+  await setup.app(page);
   await clickGuide(page);
   await page.getByText('Browse all examples', { exact: false }).click();
   await page.getByRole('button', { name: /Expected-value model/ }).click();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bootApp, runCommand, settle } from './testkit';
+import { checks, setup, steps } from './testkit';
 
 /**
  * Happy-path journey: a fresh user does the most ordinary thing — create a
@@ -14,26 +14,19 @@ import { bootApp, runCommand, settle } from './testkit';
  *   - the captured state matches expectations.
  */
 describe('frontend journey smoke (happy path)', () => {
-  const expectClean = async (ctx: ReturnType<typeof bootApp>, label: string) => {
-    const issues = ctx.dx?.run() ?? [];
-    const errors = issues.filter(i => i.level === 'error');
-    expect(errors, `${label}: ${errors.map(e => `${e.rule}: ${e.message}`).join('; ')}`).toEqual([]);
-  };
-
   it('creates → edges → edits → configures → deletes → switches without DX drift', async () => {
-    const ctx = bootApp();
-    await settle();
-    await expectClean(ctx, 'boot');
+    const ctx = setup.app();
+    await steps.settle();
+    checks.noDxErrors(ctx, 'boot');
 
     // 1. Create two nodes via the canonical user command.
-    runCommand(ctx, 'editing.node.create');
-    await settle();
-    runCommand(ctx, 'editing.node.create');
-    await settle();
-    expect(ctx.graphs.current.nodes()).toHaveLength(2);
+    steps.command(ctx, 'editing.node.create');
+    await steps.settle();
+    steps.command(ctx, 'editing.node.create');
+    await steps.settle();
     // Smart-A auto-attaches the second to the first, so we already have an edge.
-    expect(ctx.graphs.current.edges()).toHaveLength(1);
-    await expectClean(ctx, 'after creates');
+    checks.graphItems(ctx, { edges: 1, nodes: 2 });
+    checks.noDxErrors(ctx, 'after creates');
 
     // 2. Edit the selected node's title via the generic item.update seam.
     const selectedAfterCreate = ctx.selection.selectedNode();
@@ -42,40 +35,39 @@ describe('frontend journey smoke (happy path)', () => {
       ref: { kind: 'node', id: selectedAfterCreate!.id },
       patch: { Label: { text: 'Renamed' } },
     });
-    await settle();
+    await steps.settle();
     expect(ctx.graphs.current.getNode(selectedAfterCreate!.id)?.Label.text).toBe('Renamed');
-    await expectClean(ctx, 'after edit');
+    checks.noDxErrors(ctx, 'after edit');
 
     // 3. Configure: change width through the same generic seam.
     ctx.bus.emit('item.update', {
       ref: { kind: 'node', id: selectedAfterCreate!.id },
       patch: { Size: { w: 200, h: 64 } },
     });
-    await settle();
+    await steps.settle();
     expect(ctx.graphs.current.getNode(selectedAfterCreate!.id)?.Size).toEqual({ w: 200, h: 64 });
-    await expectClean(ctx, 'after configure');
+    checks.noDxErrors(ctx, 'after configure');
 
     // 4. Delete the selection.
-    runCommand(ctx, 'selection.item.delete');
-    await settle();
-    expect(ctx.graphs.current.nodes()).toHaveLength(1);
+    steps.command(ctx, 'selection.item.delete');
+    await steps.settle();
     // Cascade: incident edge dropped with the node.
-    expect(ctx.graphs.current.edges()).toHaveLength(0);
-    await expectClean(ctx, 'after delete');
+    checks.graphItems(ctx, { edges: 0, nodes: 1 });
+    checks.noDxErrors(ctx, 'after delete');
 
     // 5. Create a second graph, switch to it, confirm isolation.
-    runCommand(ctx, 'graph.create');
-    await settle();
-    expect(ctx.graphs.current.nodes()).toHaveLength(0);
-    runCommand(ctx, 'editing.node.create');
-    await settle();
-    expect(ctx.graphs.current.nodes()).toHaveLength(1);
-    await expectClean(ctx, 'after switch');
+    steps.command(ctx, 'graph.create');
+    await steps.settle();
+    checks.graphItems(ctx, { nodes: 0 });
+    steps.command(ctx, 'editing.node.create');
+    await steps.settle();
+    checks.graphItems(ctx, { nodes: 1 });
+    checks.noDxErrors(ctx, 'after switch');
   });
 
   it('introspect reflects current shape — adding a node shows up immediately', async () => {
-    const ctx = bootApp();
-    await settle();
+    const ctx = setup.app();
+    await steps.settle();
     const { introspect } = await import('../../frontend/core');
     const snap = introspect(ctx);
     // Node + edge entities are declared; collections list them; selectable et al

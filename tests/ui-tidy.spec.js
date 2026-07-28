@@ -1,5 +1,4 @@
-const { test, expect } = require('@playwright/test');
-const { boot } = require('./browser-testkit.cjs');
+const { test, expect, setup } = require('./browser-testkit.cjs');
 
 const createSmallGraph = async (page) => page.evaluate(() => {
   const v = window.app;
@@ -11,7 +10,7 @@ const createSmallGraph = async (page) => page.evaluate(() => {
 });
 
 test('node moves directly without a redundant drag handle', async ({ page }) => {
-  await boot(page);
+  await setup.app(page);
   const ids = await createSmallGraph(page);
 
   const node = page.locator(`.node[data-item-kind="node"][data-item-id="${ids.b}"]`);

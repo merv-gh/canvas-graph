@@ -1,9 +1,8 @@
-const { test, expect } = require('@playwright/test');
-const { clickMore, openExamples, openGraphItem, openMore } = require('./browser-testkit.cjs');
+const {
+  test, expect, setup, checks, clickMore, openExamples, openGraphItem, openMore,
+} = require('./browser-testkit.cjs');
 
-const expectModelNodeCount = async (page, count) => {
-  await expect.poll(() => page.evaluate(() => window.app.graphs.current.nodes().length)).toBe(count);
-};
+const expectModelNodeCount = (page, count) => checks.graphItems(page, 'nodes', count);
 const placeNode = async page => {
   const stage = page.locator('[data-place="stage"]');
   const before = await page.locator('.node').count();
@@ -16,7 +15,7 @@ const placeNode = async page => {
 };
 
 test('nested C4 document survives reload and share', async ({ page, context }) => {
-  await page.goto('/');
+  await setup.app(page);
   await clickMore(page, 'Open getting-started guide');
   await openExamples(page);
   await page.getByRole('button', { name: /Checkout microservices/ }).click();
@@ -37,8 +36,7 @@ test('nested C4 document survives reload and share', async ({ page, context }) =
 });
 
 test('share can restore the intended viewport, zoom, and selection', async ({ page, context }) => {
-  await page.goto('/?demo=agent-observability');
-  await page.waitForFunction(() => window.app.graphs.current.nodes().length >= 9);
+  await setup.demo(page, 'agent-observability', 9);
   const target = page.getByRole('button', { name: /Trace boundaries .*Timeline step node/ });
   await target.click();
   const selectedId = await page.evaluate(() => window.app.selection.selected().id);
@@ -60,7 +58,7 @@ test('share can restore the intended viewport, zoom, and selection', async ({ pa
 });
 
 test('Mermaid import validates, previews, and remains undoable', async ({ page }) => {
-  await page.goto('/');
+  await setup.app(page);
   await placeNode(page);
   await expect(page.locator('.node')).toHaveCount(1);
 
@@ -84,8 +82,7 @@ test('Mermaid import validates, previews, and remains undoable', async ({ page }
 });
 
 test('phone starts canvas-first with usable primary commands', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/');
+  await setup.mobile(page);
   await expect(page.locator('.graph-navigator')).toHaveAttribute('data-outline-folded', 'true');
   await expect(page.getByRole('button', { name: 'Expand graph navigator' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Show create and file actions' })).toBeVisible();
@@ -109,7 +106,7 @@ test('phone starts canvas-first with usable primary commands', async ({ page }) 
 });
 
 test('edge picker accepts a target click and explains the active mode', async ({ page }) => {
-  await page.goto('/');
+  await setup.app(page);
   await placeNode(page);
   await placeNode(page);
   const nodes = page.locator('.node');
@@ -123,7 +120,7 @@ test('edge picker accepts a target click and explains the active mode', async ({
 });
 
 test('edge picker never leaks into a new graph', async ({ page }) => {
-  await page.goto('/');
+  await setup.app(page);
   await placeNode(page);
   await placeNode(page);
   await page.getByRole('button', { name: 'Connect', exact: true }).click();
@@ -134,7 +131,7 @@ test('edge picker never leaks into a new graph', async ({ page }) => {
 });
 
 test('fit is the only persistent zoom control', async ({ page }) => {
-  await page.goto('/');
+  await setup.app(page);
   await clickMore(page, 'Open getting-started guide');
   await openExamples(page);
   await page.getByRole('button', { name: /Checkout microservices/ }).click();
@@ -143,8 +140,7 @@ test('fit is the only persistent zoom control', async ({ page }) => {
 });
 
 test('phone fit ignores overlay navigator width', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/');
+  await setup.mobile(page);
   await page.evaluate(() => window.app.contexts.commands.run('onboarding.open'));
   await openExamples(page);
   await page.getByRole('button', { name: /Checkout microservices/ }).click();
@@ -154,8 +150,7 @@ test('phone fit ignores overlay navigator width', async ({ page }) => {
 });
 
 test('phone chrome stays legible and touch-sized', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/');
+  await setup.mobile(page);
   const navigator = page.getByRole('button', { name: 'Expand graph navigator' });
   const navigatorBox = await navigator.boundingBox();
   expect(navigatorBox.height).toBeGreaterThanOrEqual(36);
@@ -173,7 +168,7 @@ test('phone chrome stays legible and touch-sized', async ({ page }) => {
 });
 
 test('export dialog exposes backup and image formats', async ({ page }) => {
-  await page.goto('/');
+  await setup.app(page);
   await clickMore(page, 'Export');
   await expect(page.getByRole('button', { name: 'Canvas Graph JSON' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'SVG' })).toBeVisible();
@@ -181,7 +176,7 @@ test('export dialog exposes backup and image formats', async ({ page }) => {
 });
 
 test('SVG and PNG exports produce downloadable files', async ({ page }) => {
-  await page.goto('/');
+  await setup.app(page);
   await placeNode(page);
   await clickMore(page, 'Export');
   const svgDownload = page.waitForEvent('download');
@@ -193,7 +188,7 @@ test('SVG and PNG exports produce downloadable files', async ({ page }) => {
 });
 
 test('deleting a graph requires explicit confirmation', async ({ page }) => {
-  await page.goto('/');
+  await setup.app(page);
   await page.getByRole('button', { name: 'Expand graph navigator' }).click();
   await page.evaluate(() => window.app.contexts.commands.run('graph.create'));
   const remove = page.locator('.graph-nav-card.active .graph-nav-delete');
@@ -209,7 +204,7 @@ test('deleting a graph requires explicit confirmation', async ({ page }) => {
 });
 
 test('deleting a populated container warns and offers ungroup', async ({ page }) => {
-  await page.goto('/');
+  await setup.app(page);
   await clickMore(page, 'Open getting-started guide');
   await openExamples(page);
   await page.getByRole('button', { name: /Checkout microservices/ }).click();
@@ -225,7 +220,7 @@ test('deleting a populated container warns and offers ungroup', async ({ page })
 });
 
 test('selected edges expose a nearby editor with connection actions', async ({ page }) => {
-  await page.goto('/');
+  await setup.app(page);
   await clickMore(page, 'Open getting-started guide');
   await openExamples(page);
   await page.getByRole('button', { name: /Checkout microservices/ }).click();
@@ -238,8 +233,7 @@ test('selected edges expose a nearby editor with connection actions', async ({ p
 });
 
 test('mobile selected-item wheel stays fully reachable', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/');
+  await setup.mobile(page);
   await page.evaluate(() => window.app.contexts.commands.run('onboarding.open'));
   await openExamples(page);
   await page.getByRole('button', { name: /Checkout microservices/ }).click();
@@ -268,7 +262,7 @@ test('mobile selected-item wheel stays fully reachable', async ({ page }) => {
 });
 
 test('previous-save recovery stays in command search, not export', async ({ page }) => {
-  await page.goto('/');
+  await setup.app(page);
   await placeNode(page);
   await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
   await placeNode(page);

@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { test, expect } = require('@playwright/test');
+const { test, expect, setup } = require('./browser-testkit.cjs');
 
 test('@smoke frontend centralizes DOM input listeners and keeps explicit lifecycle exceptions', async () => {
   const frontendDir = path.join(__dirname, '..', 'frontend');
@@ -34,7 +34,7 @@ test('@smoke frontend centralizes DOM input listeners and keeps explicit lifecyc
 });
 
 test('frontend help rejects duplicate shortcuts without saving', async ({ page }) => {
-  await page.goto('/');
+  await setup.app(page);
   await page.getByLabel('More actions').click();
   await page.locator('[data-command="help.open"]').click();
   await page.getByText('All keyboard shortcuts', { exact: true }).click();
@@ -59,7 +59,7 @@ test('frontend help rejects duplicate shortcuts without saving', async ({ page }
 });
 
 test('@smoke frontend configurable ability opens node properties', async ({ page }) => {
-  await page.goto('/');
+  await setup.app(page);
   const nodeTemplate = await page.locator('#tpl-node').evaluate(template => template.innerHTML);
   expect(nodeTemplate).not.toContain('node.collapse.toggle');
   expect(nodeTemplate).not.toContain('item.properties.open');

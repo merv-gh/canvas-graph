@@ -1,5 +1,4 @@
-const { test, expect } = require('@playwright/test');
-const { boot, paletteRun } = require('./browser-testkit.cjs');
+const { test, expect, setup, paletteRun } = require('./browser-testkit.cjs');
 
 /** Acceptance: recreate a Kimi-style architecture-diagram subset via the UI —
  *  once with the mouse, once fully keyboard-only (ink excluded from the
@@ -23,7 +22,7 @@ const model = (page) => page.evaluate(() => {
 });
 
 test('mouse flow: preset, typed colored blocks, plain edge, dashed kind, ink annotation', async ({ page }) => {
-  await boot(page);
+  await setup.app(page);
 
   // Preset remains an internal demo/document mode; the universal node gallery
   // no longer exposes collection tabs.
@@ -86,7 +85,7 @@ test('mouse flow: preset, typed colored blocks, plain edge, dashed kind, ink ann
 });
 
 test('keyboard-only flow: preset, blocks, chain, edge kinds, grouping, legend, multiplier', async ({ page }) => {
-  await boot(page);
+  await setup.app(page);
 
   // Preset — palette opens the picker modal, Tab reaches the choice, Enter applies.
   await paletteRun(page, 'Choose collection');

@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+import { fastCommandTests } from './tests/test-lanes';
 
 // High-signal developer lane. Exhaustive matrices, UX permutations, and
 // performance probes stay in `test:commands:full` and the release gate.
@@ -6,14 +7,8 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     isolate: false,
-    include: [
-      'tests/commands/model-core.test.ts',
-      'tests/commands/command-smoke.test.ts',
-      'tests/commands/journey-smoke.test.ts',
-      'tests/commands/architecture-journey.test.ts',
-      'tests/commands/redraw-convention.test.ts',
-      'tests/commands/recorded/reverse-edge.test.ts',
-    ],
+    maxWorkers: 2,
+    include: fastCommandTests,
     setupFiles: ['tests/commands/setup.ts'],
     coverage: {
       provider: 'v8',

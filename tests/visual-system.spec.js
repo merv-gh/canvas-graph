@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect, setup, checks } = require('./browser-testkit.cjs');
 
 const rgb = value => (value.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
 const luminance = value => {
@@ -18,8 +18,7 @@ const attachScreenshot = async (page, testInfo, name) => testInfo.attach(name, {
 });
 
 test('light and dark canvases preserve contrast and hierarchy', async ({ page }, testInfo) => {
-  await page.goto('/?demo=agent-observability');
-  await page.waitForFunction(() => window.app.graphs.current.nodes().length === 11);
+  await setup.demo(page, 'agent-observability', 11);
 
   const hierarchy = () => page.locator('.node').first().evaluate(node => {
     const surface = getComputedStyle(node).backgroundColor;
@@ -43,8 +42,7 @@ test('light and dark canvases preserve contrast and hierarchy', async ({ page },
 
 test('onboarding and inspector keep readable measure and de-emphasized labels', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('/?demo=agent-observability');
-  await page.waitForFunction(() => window.app.graphs.current.nodes().length === 11);
+  await setup.demo(page, 'agent-observability', 11);
   await page.evaluate(() => window.app.bus.emit('onboarding.open'));
 
   const measure = await page.locator('.onboarding-intro > p:not(.onboarding-storage)').evaluate(element => {
@@ -75,9 +73,8 @@ test('onboarding and inspector keep readable measure and de-emphasized labels', 
 });
 
 test('mobile drawer fits the viewport and keeps 44px primary touch targets', async ({ page }, testInfo) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/?demo=agent-observability');
-  await page.waitForFunction(() => window.app.graphs.current.nodes().length === 11);
+  await setup.mobile(page, '/?demo=agent-observability');
+  await checks.graphItems(page, 'nodes', 11);
   await page.getByRole('button', { name: 'Expand graph navigator', exact: true }).click();
 
   const layout = await page.evaluate(() => {

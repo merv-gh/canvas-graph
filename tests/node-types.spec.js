@@ -1,5 +1,4 @@
-const { test, expect } = require('@playwright/test');
-const { boot, paletteRun } = require('./browser-testkit.cjs');
+const { test, expect, setup, paletteRun } = require('./browser-testkit.cjs');
 
 const createNode = async (page, label) => page.evaluate((text) => {
   const v = window.app;
@@ -10,7 +9,7 @@ const createNode = async (page, label) => page.evaluate((text) => {
 }, label);
 
 test('command palette restyles the selected node without a right toolbar', async ({ page }) => {
-  await boot(page);
+  await setup.app(page);
   await expect(page.locator('[data-panel-id="node-style"]')).toHaveCount(0);
   const id = await createNode(page, 'MLP block');
   await expect(page.locator('[data-panel-id="node-style"]')).toHaveCount(0);
@@ -28,8 +27,7 @@ test('command palette restyles the selected node without a right toolbar', async
 });
 
 test('item inspector exposes visual property choices instead of select menus', async ({ page }) => {
-  await boot(page, '/?demo=agent-observability');
-  await page.waitForFunction(() => window.app.graphs.current.nodes().length >= 9);
+  await setup.demo(page, 'agent-observability', 9);
   const id = await page.evaluate(() => {
     const node = window.app.graphs.current.nodes().find(candidate => candidate.NodeType === 'timeline-step');
     window.app.selection.select({ kind: 'node', id: node.id });
@@ -63,7 +61,7 @@ test('item inspector exposes visual property choices instead of select menus', a
 });
 
 test('palette commands change type and color without the mouse', async ({ page }) => {
-  await boot(page);
+  await setup.app(page);
   const id = await createNode(page, 'Mixer');
 
   await page.keyboard.press('p');
@@ -81,8 +79,7 @@ test('palette commands change type and color without the mouse', async ({ page }
 // so DOM counts cover only the visible head of the diagram — assert the full
 // architecture on the model and the type/color rendering on the visible part.
 test('Kimi K2 example loads a typed, colored MoE architecture under the architecture preset', async ({ page }) => {
-  await boot(page, '/?demo=kimi-k2');
-  await page.waitForFunction(() => window.app.graphs.current.nodes().length >= 11);
+  await setup.demo(page, 'kimi-k2', 11);
   await expect(page.locator('.shell[data-preset="architecture"]')).toHaveCount(1);
   await expect(page.locator('.node[data-node-type="input"][data-node-color="gray"]')).toHaveCount(1);
 
@@ -107,8 +104,7 @@ test('Kimi K2 example loads a typed, colored MoE architecture under the architec
 });
 
 test('Transformer example loads typed ML blocks', async ({ page }) => {
-  await boot(page, '/?demo=transformer');
-  await page.waitForFunction(() => window.app.graphs.current.nodes().length >= 9);
+  await setup.demo(page, 'transformer', 9);
   // Culling renders only the visible head; the model carries the full diagram.
   await expect(page.locator('.node[data-node-type]').first()).toBeVisible();
 
@@ -119,7 +115,7 @@ test('Transformer example loads typed ML blocks', async ({ page }) => {
 });
 
 test('guide grid offers one canonical example for every collection', async ({ page }) => {
-  await boot(page);
+  await setup.app(page);
   await page.evaluate(() => window.app.contexts.commands.run('onboarding.open', { origin: 'test' }));
   await expect(page.locator('[data-command="demo.render-kimi-k2"]')).toHaveCount(1);
   await expect(page.locator('[data-command="demo.render-flowchart"]')).toHaveCount(1);

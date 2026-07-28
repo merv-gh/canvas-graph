@@ -9,6 +9,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
+const { setup } = require('./browser-testkit.cjs');
 
 const SPEC_DIR = join(process.cwd(), 'tests', 'commands', 'dx');
 const specs = existsSync(SPEC_DIR)
@@ -19,8 +20,7 @@ for (const file of specs) {
   const spec = JSON.parse(readFileSync(join(SPEC_DIR, file), 'utf8'));
   test(`@smoke layout: ${spec.title ?? file}`, async ({ page }) => {
     const { runLayoutProbe } = await import('../dx/ollama-runner/layout-probe.mjs');
-    await page.goto('/?io=memory');
-    await page.waitForFunction(() => !!(window as unknown as { app?: unknown }).app, undefined, { timeout: 8000 });
+    await setup.app(page, '/?io=memory');
     const { pass, results } = await runLayoutProbe(page, spec);
     const failed = results.filter(r => !r.ok).map(r => `${r.label} — actual: ${JSON.stringify(r.actual)}`);
     expect(pass, `layout oracle failed:\n${failed.join('\n')}`).toBe(true);

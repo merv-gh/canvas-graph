@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { expect, test, type CDPSession, type Page } from '@playwright/test';
+const { setup } = require('./browser-testkit.cjs');
 
 const RUN = process.env.PERF_BROWSER === '1';
 const NODE_COUNT = Number(process.env.PERF_NODES ?? 10_000);
@@ -392,8 +393,7 @@ test('10k real browser/CDP performance scenario', async ({ page, context }) => {
   const client = await context.newCDPSession(page);
   await client.send('Performance.enable');
 
-  await page.goto('/?io=memory&perf=1');
-  await page.waitForFunction(() => !!(window as unknown as { app?: unknown }).app, undefined, { timeout: 8000 });
+  await setup.app(page, '/?io=memory&perf=1');
   await page.evaluate(() => (window as unknown as { app: { perf: { setEnabled(on: boolean): void } } }).app.perf.setEnabled(true));
   await settle(page, 3);
 

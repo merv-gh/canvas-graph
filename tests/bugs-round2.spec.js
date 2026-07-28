@@ -1,5 +1,4 @@
-const { test, expect } = require('@playwright/test');
-const { boot, clickMore, openExamples } = require('./browser-testkit.cjs');
+const { test, expect, setup, clickMore, openExamples } = require('./browser-testkit.cjs');
 
 /**
  * Round-2 bug catchers. Run RED first to prove they fail on the live regression,
@@ -8,13 +7,13 @@ const { boot, clickMore, openExamples } = require('./browser-testkit.cjs');
  */
 
 test('model exposes an edge collection for navigation surfaces', async ({ page }) => {
-  await boot(page);
+  await setup.app(page);
   const collections = await page.evaluate(() => window.app.model.collections().map(collection => collection.id));
   expect(collections).toContain('edges');
 });
 
 test('editing.edge.create is a registered command, while graph.edge.create stays storage', async ({ page }) => {
-  await boot(page);
+  await setup.app(page);
   const registered = await page.evaluate(() => {
     const c = window.app.contexts.commands.all();
     return {
@@ -27,7 +26,7 @@ test('editing.edge.create is a registered command, while graph.edge.create stays
 });
 
 test('palette can find edge actions by name', async ({ page }) => {
-  await boot(page);
+  await setup.app(page);
   await page.evaluate(() => window.app.contexts.commands.run('palette.open'));
   const search = page.locator('.palette-search');
   await search.fill('edge');
@@ -37,7 +36,7 @@ test('palette can find edge actions by name', async ({ page }) => {
 });
 
 test('after view.fit.all, no node DOM extends into the left panel', async ({ page }) => {
-  await boot(page);
+  await setup.app(page);
   await page.getByRole('button', { name: 'Expand graph navigator' }).click();
   // Build a wide horizontal graph: 1 root, 8 leaves connected
   await page.evaluate(() => {
@@ -69,7 +68,7 @@ test('after view.fit.all, no node DOM extends into the left panel', async ({ pag
 
 test('resize re-fits a simple graph inside the live frame beside the open navigator', async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 800 });
-  await boot(page);
+  await setup.app(page);
   await page.getByRole('button', { name: 'Expand graph navigator' }).click();
   await page.getByRole('button', { name: 'Add node', exact: true }).click();
   await page.keyboard.press('z');
@@ -92,7 +91,7 @@ test('resize re-fits a simple graph inside the live frame beside the open naviga
 });
 
 test('Escape collapses the open navigator and redundant per-node/status panels stay absent', async ({ page }) => {
-  await boot(page);
+  await setup.app(page);
   await page.getByRole('button', { name: 'Expand graph navigator' }).click();
   await expect(page.locator('.node-type-panel')).toHaveCount(0);
   await expect(page.locator('.save-state')).toHaveCount(0);
@@ -103,7 +102,7 @@ test('Escape collapses the open navigator and redundant per-node/status panels s
 
 test('guide shortcut lanes do not overlap on desktop or phone', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  await boot(page);
+  await setup.app(page);
   await clickMore(page, 'Open getting-started guide');
   await page.getByText('Quick controls', { exact: true }).click();
   const overlapCount = () => page.locator('.onboarding-keys li').evaluateAll(rows => rows.filter(row => {
@@ -121,7 +120,7 @@ test('guide shortcut lanes do not overlap on desktop or phone', async ({ page })
 });
 
 test('dark Preview import button keeps high-contrast primary styling', async ({ page }) => {
-  await boot(page);
+  await setup.app(page);
   await clickMore(page, 'Toggle theme');
   await clickMore(page, 'Open getting-started guide');
   await page.getByText('Import an existing Mermaid architecture', { exact: true }).click();
@@ -131,7 +130,7 @@ test('dark Preview import button keeps high-contrast primary styling', async ({ 
 });
 
 test('workflow edge-label rectangles clear nodes, each other, and their own arrow axes', async ({ page }) => {
-  await boot(page);
+  await setup.app(page);
   await clickMore(page, 'Open getting-started guide');
   await openExamples(page);
   await page.getByRole('button', { name: /Delivery workflow/ }).click();
@@ -182,7 +181,7 @@ test('workflow edge-label rectangles clear nodes, each other, and their own arro
 });
 
 test('DX warns when bus emits graph.<kind>.* events but no entity/collection covers that kind', async ({ page }) => {
-  await boot(page);
+  await setup.app(page);
   const issues = await page.evaluate(() => window.app.dx.run());
   // Edge kind has bus events but currently no entity declaration AND no collection.
   // RED until either a DX rule fires here OR the model gains edges + collection (which

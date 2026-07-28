@@ -5,6 +5,7 @@ const fullConfig = require('./playwright.config.cjs');
 // `test:browser:full` and the release gate.
 module.exports = defineConfig({
   ...fullConfig,
+  workers: 2,
   testMatch: [
     'abilities.spec.js',
     'dx-layout.spec.ts',

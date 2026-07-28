@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { expect } from 'vitest';
 import { registerAbilitySystems } from '../../frontend/abilities';
 import {
   createAppContext,
@@ -181,3 +182,23 @@ export const field = (name: string) =>
   document.querySelector(`[data-form-field="${name}"]`) as HTMLInputElement | null;
 
 export const modalText = () => document.querySelector('.modal-slot')?.textContent ?? '';
+
+const expectNoDxErrors = (ctx: AppCtx, label = 'app') => {
+  const errors = (ctx.dx?.run() ?? []).filter(issue => issue.level === 'error');
+  expect(errors, `${label}: ${errors.map(error => `${error.rule}: ${error.message}`).join('; ')}`).toEqual([]);
+};
+
+const expectGraphItems = (
+  ctx: AppCtx,
+  expected: Partial<Record<'containers' | 'edges' | 'nodes', number>>,
+) => {
+  if (expected.nodes != null) expect(ctx.graphs.current.nodes()).toHaveLength(expected.nodes);
+  if (expected.edges != null) expect(ctx.graphs.current.edges()).toHaveLength(expected.edges);
+  if (expected.containers != null) {
+    expect(ctx.graphs.current.itemsOfKind('container')).toHaveLength(expected.containers);
+  }
+};
+
+export const setup = Object.freeze({ app: bootApp });
+export const steps = Object.freeze({ command: runCommand, settle });
+export const checks = Object.freeze({ graphItems: expectGraphItems, noDxErrors: expectNoDxErrors });

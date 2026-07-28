@@ -1,5 +1,4 @@
-const { test, expect } = require('@playwright/test');
-const { boot } = require('./browser-testkit.cjs');
+const { test, expect, setup } = require('./browser-testkit.cjs');
 
 const createNodes = async (page, labels) => page.evaluate((labels) => {
   const v = window.app;
@@ -8,7 +7,7 @@ const createNodes = async (page, labels) => page.evaluate((labels) => {
 }, labels);
 
 test('@smoke frontend boots current TypeScript entrypoint with edge creation UI enabled', async ({ page }) => {
-  await boot(page);
+  await setup.app(page);
 
   await expect(page.locator('.toolbar [data-command="editing.edge.create"] .ui-icon')).toBeVisible();
   const state = await page.evaluate(() => ({
@@ -25,7 +24,7 @@ test('@smoke frontend boots current TypeScript entrypoint with edge creation UI 
 });
 
 test('edge command explains why it cannot run before two nodes exist', async ({ page }) => {
-  await boot(page);
+  await setup.app(page);
   await page.evaluate(() => {
     window.__notices = [];
     window.app.bus.on('app.notice', notice => window.__notices.push(notice.message));
@@ -42,7 +41,7 @@ test('edge command explains why it cannot run before two nodes exist', async ({ 
 });
 
 test('@smoke edge command seeds source and picks target by letter when only two nodes exist', async ({ page }) => {
-  await boot(page);
+  await setup.app(page);
   const nodes = await createNodes(page, ['A', 'B']);
 
   await page.evaluate((sourceId) => {
@@ -69,7 +68,7 @@ test('@smoke edge command seeds source and picks target by letter when only two 
 });
 
 test('edge command lets the user choose among several target letters', async ({ page }) => {
-  await boot(page);
+  await setup.app(page);
   const nodes = await createNodes(page, ['A', 'B', 'C']);
 
   await page.evaluate((sourceId) => {
@@ -90,7 +89,7 @@ test('edge command lets the user choose among several target letters', async ({ 
 });
 
 test('focused edge uses graph styling without a browser focus rectangle', async ({ page }) => {
-  await boot(page);
+  await setup.app(page);
   const nodes = await createNodes(page, ['A', 'B']);
   const edgeId = await page.evaluate(([from, to]) => {
     const v = window.app;
@@ -106,7 +105,7 @@ test('focused edge uses graph styling without a browser focus rectangle', async 
 });
 
 test('edge label has a forgiving target, hover grace, and owns rename mode', async ({ page }) => {
-  await boot(page);
+  await setup.app(page);
   const nodes = await createNodes(page, ['A', 'B']);
   const edgeId = await page.evaluate(([from, to]) => {
     const v = window.app;
@@ -152,7 +151,7 @@ test('edge label has a forgiving target, hover grace, and owns rename mode', asy
 });
 
 test('@smoke graph storage rejects self-loop and missing-endpoint edge creates', async ({ page }) => {
-  await boot(page);
+  await setup.app(page);
   const nodes = await createNodes(page, ['A']);
 
   const count = await page.evaluate((id) => {

@@ -1,5 +1,4 @@
-const { test, expect } = require('@playwright/test');
-const { clickMore, openExamples, openGraphItem } = require('./browser-testkit.cjs');
+const { test, expect, setup, clickMore, openExamples, openGraphItem } = require('./browser-testkit.cjs');
 
 const streamText = async download => {
   const stream = await download.createReadStream();
@@ -9,7 +8,7 @@ const streamText = async download => {
 };
 
 test('JSON export and import round-trip the complete graph', async ({ page }) => {
-  await page.goto('/');
+  await setup.app(page);
   await clickMore(page, 'Open getting-started guide');
   await openExamples(page);
   await page.getByRole('button', { name: /Checkout microservices/ }).click();
@@ -39,7 +38,7 @@ test('JSON export and import round-trip the complete graph', async ({ page }) =>
 
 test('edge picker owns keyboard focus, preserves graph name, and restores focus', async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 800 });
-  await page.goto('/');
+  await setup.app(page);
   await page.getByRole('button', { name: 'Add node', exact: true }).click();
   await page.locator('[data-place="stage"]').click({ position: { x: 700, y: 500 } });
   await page.getByRole('button', { name: 'Add node', exact: true }).click();
@@ -62,7 +61,7 @@ test('edge picker owns keyboard focus, preserves graph name, and restores focus'
 });
 
 test('canvas nodes expose names and retain DOM focus during keyboard navigation', async ({ page }) => {
-  await page.goto('/');
+  await setup.app(page);
   await page.getByRole('button', { name: 'Add node', exact: true }).click();
   await page.getByRole('button', { name: 'Select mode', exact: true }).click();
   await page.getByRole('button', { name: 'Add node', exact: true }).click();
@@ -82,7 +81,7 @@ test('canvas nodes expose names and retain DOM focus during keyboard navigation'
 test('light theme is default even when OS prefers dark', async ({ browser }) => {
   const context = await browser.newContext({ colorScheme: 'dark' });
   const page = await context.newPage();
-  await page.goto('/');
+  await setup.app(page);
   await expect(page.locator('.shell')).toHaveAttribute('data-theme', 'light');
   await expect(page.locator('.shell')).toHaveAttribute('data-colorscheme', 'light');
   await expect(page.locator('.tool-panel[data-anchor="top-center"]')).toHaveCSS('background-color', 'rgb(248, 248, 248)');
@@ -90,7 +89,7 @@ test('light theme is default even when OS prefers dark', async ({ browser }) => 
 });
 
 test('expanded navigator never covers the desktop command bar', async ({ page }) => {
-  await page.goto('/');
+  await setup.app(page);
   await page.getByRole('button', { name: 'Expand graph navigator' }).click();
   const navigator = page.locator('.graph-navigator');
   const toolbar = page.locator('.tool-panel[data-anchor="top-center"]');
@@ -114,7 +113,7 @@ test('expanded navigator never covers the desktop command bar', async ({ page })
 });
 
 test('light onboarding keeps its dialog label visible', async ({ page }) => {
-  await page.goto('/');
+  await setup.app(page);
   await clickMore(page, 'Open getting-started guide');
   await expect(page.locator('.modal-layer[data-visual="onboarding"] .modal-head'))
     .toHaveCSS('color', 'rgb(110, 110, 110)');
@@ -122,8 +121,7 @@ test('light onboarding keeps its dialog label visible', async ({ page }) => {
 });
 
 test('far mobile overview favors readable titles over clipped descriptions', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/');
+  await setup.mobile(page);
   await page.evaluate(() => window.app.contexts.commands.run('onboarding.open'));
   await openExamples(page);
   await page.getByRole('button', { name: /Checkout microservices/ }).click();
@@ -148,7 +146,7 @@ test('far mobile overview favors readable titles over clipped descriptions', asy
 });
 
 test('node, container, and edge selections remain unmistakable in grayscale', async ({ page }) => {
-  await page.goto('/');
+  await setup.app(page);
   await clickMore(page, 'Open getting-started guide');
   await openExamples(page);
   await page.getByRole('button', { name: /Checkout microservices/ }).click();

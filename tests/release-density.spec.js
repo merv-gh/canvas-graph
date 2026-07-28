@@ -1,7 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { test, expect } = require('@playwright/test');
-const { clickMore } = require('./browser-testkit.cjs');
+const { test, expect, setup, clickMore } = require('./browser-testkit.cjs');
 
 test('release chrome stays borderless and the empty action does not move on hover', async ({ page }) => {
   const css = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'styles.css'), 'utf8');
@@ -24,7 +23,7 @@ test('release chrome stays borderless and the empty action does not move on hove
     expect(green, `rgb(${channels}) must be grayscale`).toBe(blue);
   }
 
-  await page.goto('/');
+  await setup.app(page);
   await page.evaluate(() => window.app.contexts.commands.run('graph.create'));
   await expect(page.getByLabel('Current graph name')).toHaveValue('Graph 2');
 
@@ -45,7 +44,7 @@ test('release chrome stays borderless and the empty action does not move on hove
 });
 
 test('light and dark UI are grayscale and editable text uses one underline', async ({ page }) => {
-  await page.goto('/');
+  await setup.app(page);
   const colors = async () => page.evaluate(() => {
     const selectors = ['.stage', '.graph-navigator', '.tool-panel[data-anchor="top-center"]'];
     return selectors.flatMap(selector => {
@@ -75,7 +74,7 @@ test('light and dark UI are grayscale and editable text uses one underline', asy
 });
 
 test('first node starts at centre and later pointer creation keeps the camera stable', async ({ page }) => {
-  await page.goto('/');
+  await setup.app(page);
   await page.evaluate(() => window.app.contexts.commands.run('graph.create'));
   const stageCentre = () => page.locator('.stage').evaluate(element => {
     const rect = element.getBoundingClientRect();
@@ -108,7 +107,7 @@ test('first node starts at centre and later pointer creation keeps the camera st
 });
 
 test('a title-only node centres its text inside the node', async ({ page }) => {
-  await page.goto('/');
+  await setup.app(page);
   await page.evaluate(() => window.app.contexts.commands.run('graph.create'));
   await page.getByRole('button', { name: 'Add node', exact: true }).click();
 
@@ -128,7 +127,7 @@ test('a title-only node centres its text inside the node', async ({ page }) => {
 });
 
 test('period opens one compact actions and properties inspector', async ({ page }) => {
-  await page.goto('/');
+  await setup.app(page);
   await page.evaluate(() => window.app.contexts.commands.run('graph.create'));
   await page.getByRole('button', { name: 'Add node', exact: true }).click();
   await page.keyboard.press('.');
