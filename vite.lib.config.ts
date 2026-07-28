@@ -18,6 +18,7 @@ export default defineConfig({
     emptyOutDir: true,
     cssCodeSplit: false,
     copyPublicDir: false,
-    minify: false,
+    minify: 'oxc',
+    cssMinify: 'lightningcss',
   },
 });

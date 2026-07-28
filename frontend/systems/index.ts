@@ -99,10 +99,10 @@ export function registerSystems(system: Registry) {
   registerDetail(system);
   registerDemo(system);
   registerOnboarding(system);
-  registerDebug(system);
+  if (import.meta.env.DEV) registerDebug(system);
   registerScenario(system);
   registerShare(system);
   // Presentation and varflow remain in-tree (and documented) but are not
   // registered in the release composition until their UX is ready.
-  registerDx(system);
+  if (import.meta.env.DEV) registerDx(system);
 }

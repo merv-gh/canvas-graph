@@ -6,13 +6,13 @@ Event-driven, plugin-structured TypeScript; the architecture is judged by how
 cheaply it can be regrouped and how easily a bug can be found, reproduced, and
 fixed — by a human *or* a local model.
 
-The app is `frontend/`, served at root. Version 0.1 is distributed only as a
-static web build; the experimental embeddable library is outside the first
-release and this repository is intentionally not configured for npm publication.
+The app is `frontend/`, served at root. Version 3 is distributed as a static web
+build; the embeddable library is also built as a release artifact, while this
+repository intentionally remains outside npm publication.
 
 **Live app:** [merv-gh.github.io/canvas-graph](https://merv-gh.github.io/canvas-graph/)
 
-Version 0.1 supports current Chromium on desktop and touch-sized viewports. Graphs
+Version 3 supports current Chromium on desktop and touch-sized viewports. Graphs
 are stored in the browser; use JSON export for portable backups. Issues can be
 reported through the [GitHub issue tracker](https://github.com/merv-gh/canvas-graph/issues).
 
