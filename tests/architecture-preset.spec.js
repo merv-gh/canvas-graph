@@ -1,14 +1,10 @@
 const { test, expect } = require('@playwright/test');
+const { boot, paletteRun } = require('./browser-testkit.cjs');
 
 /** Acceptance: recreate a Kimi-style architecture-diagram subset via the UI —
  *  once with the mouse, once fully keyboard-only (ink excluded from the
  *  keyboard flow: the stroke gesture is inherently pointer-based; its toggle /
  *  select / delete remain keyboard-reachable). */
-
-const boot = async (page) => {
-  await page.goto('/');
-  await page.waitForFunction(() => !!window.app);
-};
 
 const model = (page) => page.evaluate(() => {
   const g = window.app.graphs.current;
@@ -25,12 +21,6 @@ const model = (page) => page.evaluate(() => {
     ink: g.itemsOfKind('ink').map(stroke => ({ points: stroke.Points.length, color: stroke.Color })),
   };
 });
-
-const paletteRun = async (page, label) => {
-  await page.keyboard.press('p');
-  await page.locator('.palette-search').fill(label);
-  await page.keyboard.press('Enter');
-};
 
 test('mouse flow: preset, typed colored blocks, plain edge, dashed kind, ink annotation', async ({ page }) => {
   await boot(page);

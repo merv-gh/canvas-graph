@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Experiment v2: deterministic browser journeys, one terminal screenshot per
+// Deterministic browser journeys, one terminal screenshot per
 // journey, then a bounded visual-model verdict. This script never reads the dx
 // task document and never edits product code. Suspicious, mechanically
 // reproducible findings become candidate task + layout-test artifacts only.
@@ -12,10 +12,10 @@ import {
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
-import { runLayoutProbe } from '../ollama-runner/layout-probe.mjs';
+import { runLayoutProbe } from './ollama-runner/layout-probe.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO = resolve(HERE, '../..');
+const REPO = resolve(HERE, '..');
 const DEFAULT_ENDPOINT = process.env.OLLAMA_ENDPOINT ?? 'http://192.168.1.148:11434';
 const DEFAULT_MODEL = process.env.OLLAMA_VISION_MODEL ?? 'qwen2.5vl:7b';
 

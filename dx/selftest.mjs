@@ -16,7 +16,7 @@ import { runLayoutSteps } from './ollama-runner/layout-probe.mjs';
 import { OllamaChat, parseToolFromText } from './ollama-runner/ollama.mjs';
 import { Tools } from './ollama-runner/tools.mjs';
 import { Workspace } from './ollama-runner/workspace.mjs';
-import { aggregateUsage, buildWalks, promoteCandidates } from './experiments/deterministic-visual-walks.mjs';
+import { aggregateUsage, buildWalks, promoteCandidates } from './visual-walks.mjs';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 let passed = 0;

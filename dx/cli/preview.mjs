@@ -35,7 +35,9 @@ function encodeCommands(wsDir, ids) {
 }
 
 function taskDemo(id) {
-  const md = readFileSync(join(DX_ROOT, 'tasks', 'TASKS.md'), 'utf8');
+  const tasksFile = join(DX_ROOT, 'tasks', 'TASKS.md');
+  if (!existsSync(tasksFile)) return null;
+  const md = readFileSync(tasksFile, 'utf8');
   const block = md.split(/^## /m).slice(1).find(b => b.split('\n')[0].trim() === id);
   if (!block) return null;
   const m = block.match(/^- demo:\s*(.+)$/m);

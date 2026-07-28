@@ -1,20 +1,9 @@
 const { test, expect } = require('@playwright/test');
+const { clickMore, openExamples, openGraphItem, openMore } = require('./browser-testkit.cjs');
 
 const expectModelNodeCount = async (page, count) => {
   await expect.poll(() => page.evaluate(() => window.app.graphs.current.nodes().length)).toBe(count);
 };
-const openMore = async page => {
-  const details = page.locator('.toolbar-overflow');
-  if (!(await details.evaluate(element => element.open))) await page.getByLabel('More actions').click();
-};
-const clickMore = async (page, name) => { await openMore(page); await page.getByRole('button', { name, exact: true }).click(); };
-const openExamples = async page => page.getByText('Browse all examples', { exact: false }).click();
-const openGraphItem = async (page, kind, label) => page.evaluate(({ kind, label }) => {
-  const graph = window.app.graphs.current;
-  const items = kind === 'node' ? graph.nodes() : kind === 'edge' ? graph.edges() : graph.itemsOfKind('container');
-  const item = label ? items.find(candidate => candidate.Label?.text?.includes(label)) : items[0];
-  window.app.bus.emit('outline.item.open', { graphId: graph.id, ref: { kind, id: item.id } });
-}, { kind, label });
 const placeNode = async page => {
   const stage = page.locator('[data-place="stage"]');
   const before = await page.locator('.node').count();

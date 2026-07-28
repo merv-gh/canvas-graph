@@ -426,7 +426,8 @@ function verify(ws, jlog) {
 }
 
 // ---------- main ----------
-const tasks = parseTasks(readFileSync(join(DX_ROOT, 'tasks', 'TASKS.md'), 'utf8'))
+const tasksFile = join(DX_ROOT, 'tasks', 'TASKS.md');
+const tasks = parseTasks(existsSync(tasksFile) ? readFileSync(tasksFile, 'utf8') : '')
   // Honour the delegate gate: in the normal queue only `delegate: ready` (or
   // untagged cards like walk) run, so un-disabling a not-ready card never hands
   // it to a weak model. --task overrides for manual / debug runs.

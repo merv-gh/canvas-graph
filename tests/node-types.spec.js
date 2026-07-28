@@ -1,9 +1,5 @@
 const { test, expect } = require('@playwright/test');
-
-const boot = async (page, url = '/') => {
-  await page.goto(url);
-  await page.waitForFunction(() => !!window.app);
-};
+const { boot, paletteRun } = require('./browser-testkit.cjs');
 
 const createNode = async (page, label) => page.evaluate((text) => {
   const v = window.app;
@@ -12,12 +8,6 @@ const createNode = async (page, label) => page.evaluate((text) => {
   v.bus.emit('selection.node.select', { id: node.id });
   return node.id;
 }, label);
-
-const paletteRun = async (page, label) => {
-  await page.keyboard.press('p');
-  await page.locator('.palette-search').fill(label);
-  await page.keyboard.press('Enter');
-};
 
 test('command palette restyles the selected node without a right toolbar', async ({ page }) => {
   await boot(page);

@@ -1,11 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { test, expect } = require('@playwright/test');
-const clickMore = async (page, name) => {
-  const details = page.locator('.toolbar-overflow');
-  if (!(await details.evaluate(element => element.open))) await page.getByLabel('More actions').click();
-  await page.getByRole('button', { name, exact: true }).click();
-};
+const { clickMore } = require('./browser-testkit.cjs');
 
 test('release chrome stays borderless and the empty action does not move on hover', async ({ page }) => {
   const css = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'styles.css'), 'utf8');

@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { clickMore, openExamples, openGraphItem } = require('./browser-testkit.cjs');
 
 const streamText = async download => {
   const stream = await download.createReadStream();
@@ -6,17 +7,6 @@ const streamText = async download => {
   for await (const chunk of stream) chunks.push(chunk);
   return Buffer.concat(chunks).toString('utf8');
 };
-const clickMore = async (page, name) => {
-  const details = page.locator('.toolbar-overflow');
-  if (!(await details.evaluate(element => element.open))) await page.getByLabel('More actions').click();
-  await page.getByRole('button', { name, exact: true }).click();
-};
-const openExamples = async page => page.getByText('Browse all examples', { exact: false }).click();
-const openGraphItem = async (page, kind) => page.evaluate(kind => {
-  const graph = window.app.graphs.current;
-  const item = kind === 'node' ? graph.nodes()[0] : kind === 'edge' ? graph.edges()[0] : graph.itemsOfKind('container')[0];
-  window.app.bus.emit('outline.item.open', { graphId: graph.id, ref: { kind, id: item.id } });
-}, kind);
 
 test('JSON export and import round-trip the complete graph', async ({ page }) => {
   await page.goto('/');

@@ -1,21 +1,11 @@
 const { test, expect } = require('@playwright/test');
+const { boot, clickMore, openExamples } = require('./browser-testkit.cjs');
 
 /**
  * Round-2 bug catchers. Run RED first to prove they fail on the live regression,
  * then turn green as each fix lands. Keep these in the suite — they're the receipts
  * for "we considered this case".
  */
-
-const boot = async (page) => {
-  await page.goto('/');
-  await page.waitForFunction(() => !!window.app);
-};
-const clickMore = async (page, name) => {
-  const details = page.locator('.toolbar-overflow');
-  if (!(await details.evaluate(element => element.open))) await page.getByLabel('More actions').click();
-  await page.getByRole('button', { name, exact: true }).click();
-};
-const openExamples = async page => page.getByText('Browse all examples', { exact: false }).click();
 
 test('model exposes an edge collection for navigation surfaces', async ({ page }) => {
   await boot(page);

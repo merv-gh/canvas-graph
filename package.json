@@ -10,11 +10,11 @@
   },
   "scripts": {
     "dx": "node dx/cli/dx.mjs",
+    "dx:loc": "node dx/tooling/loc-tree.mjs .",
     "dev": "node dx/cli/dev.mjs",
     "dev:frontend": "vite frontend --host 0.0.0.0 --port 5174 --strictPort",
     "build": "vite build frontend --base ./",
     "preview:build": "vite preview frontend",
-    "requirements:graph": "node tools/requirements-graph.mjs",
     "build:lib": "vite build --config vite.lib.config.ts",
     "release:check": "npm run typecheck:release && npm run build && npm run test:dx && npm run test:performance && npm run test:release",
     "test": "npm run test:commands:coverage && npm run test:browser",

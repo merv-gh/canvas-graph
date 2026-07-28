@@ -22,6 +22,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import {
   appendFileSync,
   existsSync,
+  mkdirSync,
   readFileSync,
   readdirSync,
   rmSync,
@@ -39,6 +40,7 @@ const REPO = resolve(DX_ROOT, '..');
 const TASKS_FILE = join(DX_ROOT, 'tasks', 'TASKS.md');
 const DONE_FILE = join(DX_ROOT, 'tasks', 'DONE.md');
 const APPROVALS_FILE = join(DX_ROOT, 'tasks', 'APPROVALS.md');
+const TASKS_DIR = join(DX_ROOT, 'tasks');
 const JOURNAL_DIR = join(DX_ROOT, 'journal');
 
 const argv = parseArgv(process.argv.slice(2));
@@ -120,7 +122,15 @@ function parseTasks(md) {
 }
 
 function loadTasks() {
+  if (!existsSync(TASKS_FILE)) return [];
   return parseTasks(readFileSync(TASKS_FILE, 'utf8'));
+}
+
+function ensureTaskStore() {
+  mkdirSync(TASKS_DIR, { recursive: true });
+  if (!existsSync(TASKS_FILE)) {
+    writeFileSync(TASKS_FILE, '# dx tasks\n\nActive local-model work queue.\n');
+  }
 }
 
 function loadDoneTasks() {
@@ -493,6 +503,7 @@ function approveTask(row) {
     console.log(`${row.task.id} is already in ${rel(APPROVALS_FILE)}.`);
     return 0;
   }
+  mkdirSync(TASKS_DIR, { recursive: true });
   appendFileSync(APPROVALS_FILE, `${row.task.id}\n`);
   console.log(`Approved ${row.task.id} in ${rel(APPROVALS_FILE)}.`);
   return 0;
@@ -531,6 +542,7 @@ async function addTask(rl) {
     demo ? `- demo: ${demo}` : '',
   ].filter(Boolean);
   const block = `\n## ${id}\n${meta.join('\n')}\n\n${promptLines.join('\n').trim()}\n`;
+  ensureTaskStore();
   appendFileSync(TASKS_FILE, block);
   console.log(`Added ${id} to ${rel(TASKS_FILE)}.`);
 }

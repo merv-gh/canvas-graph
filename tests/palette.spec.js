@@ -1,17 +1,5 @@
 const { test, expect } = require('@playwright/test');
-
-const openPaletteDrawer = async page => {
-  const drawer = page.locator('.graph-navigator');
-  if (await drawer.getAttribute('data-outline-folded') === 'true') {
-    await page.getByRole('button', { name: 'Expand graph navigator', exact: true }).click();
-  }
-};
-
-const openTypeCatalog = async page => {
-  await openPaletteDrawer(page);
-  const toggle = page.locator('[data-fold-id="palette.catalog"]');
-  if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click();
-};
+const { openPaletteDrawer, openTypeCatalog } = require('./browser-testkit.cjs');
 
 test('graph drawer stays graph-only and searches graph names', async ({ page }) => {
   await page.goto('/');

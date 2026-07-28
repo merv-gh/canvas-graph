@@ -1,9 +1,5 @@
 const { test, expect } = require('@playwright/test');
-
-const boot = async (page) => {
-  await page.goto('/');
-  await page.waitForFunction(() => !!window.app);
-};
+const { boot } = require('./browser-testkit.cjs');
 
 const createSmallGraph = async (page) => page.evaluate(() => {
   const v = window.app;
