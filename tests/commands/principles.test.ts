@@ -92,8 +92,17 @@ describe('frontend principles (enforced)', () => {
     const allowed = new Set([
       'debug.ts->debug-views',       // pure DOM builders
       'node-autosize.ts->text-layout', // pure text measurement helper
+      'container-commands.ts->container-entity', // pure entity helpers used by command specs
+      'containers.ts->container-commands', // pure command-spec factory; dependencies are injected
+      'layout.ts->layout-algorithms', // pure hierarchy/layout algorithms
+      'outline.ts->outline-view', // pure DOM builder; state is passed as a snapshot
       'palette.ts->presets',        // pure preset catalog/IO functions; no module state
       'palette.ts->palette-custom-type-commands', // pure command-spec factory; dependencies are injected
+      'palette.ts->palette-catalog', // pure palette value helpers
+      'palette.ts->palette-view', // pure DOM builder; state is passed as a snapshot
+      'palette-view.ts->palette-catalog', // pure palette value helpers
+      'palette-view.ts->presets', // pure preset catalog/IO functions; no module state
+      'share.ts->share-codecs', // pure codecs and import parsers
       'containers.ts->container-entity', // pure entity definition + validation helpers
     ]);
     const offenders: string[] = [];
