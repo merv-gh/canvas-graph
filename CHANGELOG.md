@@ -5,6 +5,13 @@ All notable changes to this project will be documented here. The format follows
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-07-28
+
+### Fixed
+
+- Restored reproducible `npm ci` installs by refreshing transitive lockfile
+  metadata and updated PostCSS to the patched advisory-free release.
+
 ## [2.0.0] - 2026-07-28
 
 ### Added
@@ -124,7 +131,8 @@ All notable changes to this project will be documented here. The format follows
 - Scoped 0.1 to the static application; the experimental library remains post-0.1 work.
 - Removed the unused system-design subsystem and split container/debug rendering policy from behavior.
 
-[Unreleased]: https://github.com/merv-gh/canvas-graph/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/merv-gh/canvas-graph/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/merv-gh/canvas-graph/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/merv-gh/canvas-graph/releases/tag/v2.0.0
 [1.0.0]: https://github.com/merv-gh/canvas-graph/releases/tag/v1.0.0
 [0.2.0]: https://github.com/merv-gh/canvas-graph/releases/tag/v0.2.0
