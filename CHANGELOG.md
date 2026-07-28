@@ -5,6 +5,41 @@ All notable changes to this project will be documented here. The format follows
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-07-28
+
+### Added
+
+- Added privacy-preserving interaction telemetry with a worker-backed event
+  pipeline, diagnostics portal, performance probes, and regression coverage.
+- Added direct canvas manipulation for resizing, reconnecting edges, moving edge
+  labels, and editing node descriptions in every supported placement.
+- Added a dedicated Text tool, persistent future-node appearance controls, and
+  quick Node, Container, and Text creation actions in the workspace rail.
+- Restored graph creation beside graph search and expanded first-use guidance,
+  help, keyboard, and interaction-state feedback.
+
+### Changed
+
+- Reworked the workspace rail so graph navigation, creation defaults, and
+  selected-item properties remain visually stable as selection changes.
+- Simplified graph cards and actions, reduced heavy button chrome, removed drag
+  handles where the object itself is draggable, and improved compact layouts.
+- Made edge labels and their hit targets easier to select and rename, with a
+  stable clicked toolbar and clearer appearance-oriented edge styles.
+- Switched the development typecheck to tsgo while retaining tsc as the release
+  gate, and added parallel fast configurations for Vitest and Playwright.
+
+### Fixed
+
+- Prevented current-graph activation from clearing selection and eliminated
+  stale selected-item properties after deletion or deselection.
+- Made Text nodes transparent and borderless by default while preserving clear
+  selection feedback and type-aware creation previews.
+- Prevented contextual toolbars and properties panels from obscuring editing,
+  graph navigation, or one another at constrained viewport sizes.
+- Improved cancellation, gesture ownership, geometry, command cleanup, and
+  render scheduling across canvas interactions.
+
 ## [1.0.0] - 2026-07-27
 
 ### Added
@@ -89,7 +124,8 @@ All notable changes to this project will be documented here. The format follows
 - Scoped 0.1 to the static application; the experimental library remains post-0.1 work.
 - Removed the unused system-design subsystem and split container/debug rendering policy from behavior.
 
-[Unreleased]: https://github.com/merv-gh/canvas-graph/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/merv-gh/canvas-graph/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/merv-gh/canvas-graph/releases/tag/v2.0.0
 [1.0.0]: https://github.com/merv-gh/canvas-graph/releases/tag/v1.0.0
 [0.2.0]: https://github.com/merv-gh/canvas-graph/releases/tag/v0.2.0
 [0.1.1]: https://github.com/merv-gh/canvas-graph/releases/tag/v0.1.1
