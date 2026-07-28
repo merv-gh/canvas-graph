@@ -84,7 +84,9 @@ describe('frontend edge commands (picker-driven)', () => {
     await settle();
     await settle();
 
-    expect(document.activeElement).toBe(command);
+    const restored = document.activeElement as HTMLElement;
+    expect(restored.dataset.command).toBe('editing.edge.create');
+    expect(restored.isConnected).toBe(true);
   });
 
   it('picks both endpoints when no selection — 3 keystrokes', async () => {

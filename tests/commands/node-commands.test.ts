@@ -277,27 +277,28 @@ describe('frontend node commands', () => {
     await settle();
 
     expect(document.querySelector('.properties select[data-field]')).toBeNull();
-    expect(document.querySelectorAll('.property-choice-swatches')).toHaveLength(2);
+    expect(document.querySelectorAll('.properties .property-choice-swatches')).toHaveLength(0);
+    expect(document.querySelectorAll('[data-panel-id="palette"] .palette-swatches')).toHaveLength(2);
     expect(document.querySelectorAll('.property-choice-placement button')).toHaveLength(6);
     const description = document.querySelector<HTMLTextAreaElement>('[data-field="description"]')!;
     expect(description.placeholder).toBe('Description');
     expect(description.getAttribute('aria-label')).toBe('Description');
     expect(description.parentElement?.textContent).toBe('');
     expect(document.querySelector('[data-property-group="Content"]')).toBeNull();
-    const color = document.querySelector<HTMLElement>('[data-field="color"][data-value="red"]')!;
-    const fill = document.querySelector<HTMLElement>('[data-field="fill"][data-value="solid"]')!;
     const placement = document.querySelector<HTMLElement>('[data-field="descPlacement"][data-value="below"]')!;
-    expect(runCommand(ctx, 'properties.item.choice', { target: color })).toBe(true);
-    expect(runCommand(ctx, 'properties.item.choice', { target: fill })).toBe(true);
+    expect(runCommand(ctx, 'palette.arm.color.red')).toBe(true);
+    expect(runCommand(ctx, 'palette.arm.fill.solid')).toBe(true);
+    expect(runCommand(ctx, 'palette.arm.border.blue')).toBe(true);
     expect(runCommand(ctx, 'properties.item.choice', { target: placement })).toBe(true);
     await settle();
 
     expect(ctx.graphs.current.nodes()[0]).toMatchObject({
-      Color: 'red', Fill: 'solid', DescriptionPlacement: 'below',
+      Color: 'red', Fill: 'solid', BorderColor: 'blue', DescriptionPlacement: 'below',
     });
-    expect(color.getAttribute('aria-pressed')).toBe('true');
-    expect(fill.getAttribute('aria-pressed')).toBe('true');
-    expect(placement.getAttribute('aria-pressed')).toBe('true');
+    expect(document.querySelector('[data-command="palette.arm.color.red"]')?.getAttribute('aria-pressed')).toBe('true');
+    expect(document.querySelector('[data-command="palette.arm.fill.solid"]')?.getAttribute('aria-pressed')).toBe('true');
+    expect(document.querySelector('[data-command="palette.arm.border.blue"]')?.getAttribute('aria-pressed')).toBe('true');
+    expect(document.querySelector('[data-field="descPlacement"][data-value="below"]')?.getAttribute('aria-pressed')).toBe('true');
 
     const top = document.querySelector<HTMLElement>('[data-field="descPlacement"][data-value="top"]')!;
     const left = document.querySelector<HTMLElement>('[data-field="descPlacement"][data-value="left"]')!;

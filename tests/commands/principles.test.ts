@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { bootApp, commandButton, runCommand, settle } from './testkit';
+import { bootApp, commandButton, runCommand, settle, teardownApp } from './testkit';
 
 const Frontend = resolve(process.cwd(), 'frontend');
 
@@ -93,8 +93,9 @@ describe('frontend principles (enforced)', () => {
   // PRINCIPLE 2 — Systems are self-sufficient. Disabling any single non-core system
   // must not break boot. We exercise the full system flag matrix one-off-at-a-time.
   it('every system boots when disabled one-at-a-time', async () => {
-    const probe = bootApp();
+    const probe = bootApp({ dx: false });
     const systemNames = probe.flags.declared('system').filter(name => name !== 'render' && name !== 'input');
+    teardownApp(probe);
     for (const name of systemNames) {
       // dx throws on contract violations — we surface them, not silently swallow.
       try {
@@ -102,8 +103,12 @@ describe('frontend principles (enforced)', () => {
         // (e.g. disabling `collections` removes the create command). The principle
         // being tested here is "boot does not crash", not "all DX rules still pass".
         const ctx = bootApp({ [name]: false, dx: false });
-        // App still has commands registered (proves rest of the system stack came up).
-        expect(ctx.contexts.commands.all().length).toBeGreaterThan(0);
+        try {
+          // App still has commands registered (proves rest of the system stack came up).
+          expect(ctx.contexts.commands.all().length).toBeGreaterThan(0);
+        } finally {
+          teardownApp(ctx);
+        }
       } catch (err) {
         throw new Error(`boot failed with ${name}=false: ${(err as Error).message}`);
       }
@@ -113,16 +118,21 @@ describe('frontend principles (enforced)', () => {
   // PRINCIPLE 11 — Abilities can be turned off independently. Flipping any single
   // ability off should not break boot or remove unrelated abilities.
   it('every ability boots when disabled one-at-a-time', async () => {
-    const probe = bootApp();
+    const probe = bootApp({ dx: false });
     const abilityNames = probe.flags.declared('ability');
+    teardownApp(probe);
     for (const name of abilityNames) {
       try {
         // dx asserts a global contract; flipping a single system breaks some checks
         // (e.g. disabling `collections` removes the create command). The principle
         // being tested here is "boot does not crash", not "all DX rules still pass".
         const ctx = bootApp({ [name]: false, dx: false });
-        const live = ctx.model.entity('node')?.abilities.map(a => `ability.${a.id}`) ?? [];
-        expect(live).not.toContain(name);
+        try {
+          const live = ctx.model.entity('node')?.abilities.map(a => `ability.${a.id}`) ?? [];
+          expect(live).not.toContain(name);
+        } finally {
+          teardownApp(ctx);
+        }
       } catch (err) {
         throw new Error(`boot failed with ${name}=false: ${(err as Error).message}`);
       }
