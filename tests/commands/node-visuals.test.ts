@@ -15,6 +15,22 @@ const createNode = async (ctx: ReturnType<typeof bootApp>, text = 'Block') => {
 };
 
 describe('node type and color', () => {
+  it('keeps the Add node brush in sync with an explicit type change', async () => {
+    const ctx = bootApp();
+    runCommand(ctx, 'editing.node.create');
+    await settle();
+    ctx.bus.emit('selection.item.select', { kind: 'node', id: ctx.graphs.current.nodes()[0].id });
+    await settle();
+
+    expect(runCommand(ctx, 'node.type.diamond')).toBe(true);
+    await settle();
+    ctx.bus.emit('selection.item.clear');
+    expect(runCommand(ctx, 'palette.place.activate')).toBe(true);
+    await settle();
+
+    expect(ctx.graphs.current.nodes().at(-1)?.NodeType).toBe('diamond');
+  });
+
   it('sets ML block type and color on the selected node via commands', async () => {
     const ctx = bootApp();
     await settle();

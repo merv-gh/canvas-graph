@@ -88,14 +88,6 @@ export function registerItemToolbar(system: Registry) {
       return button;
     };
 
-    const buildHandler = (item: unknown, ui: AffordanceDef<unknown>, text: string) => {
-      const span = document.createElement('span');
-      if (ui.className) span.classList.add(...ui.className.split(/\s+/).filter(Boolean));
-      Object.entries(ui.attrs ?? {}).forEach(([name, value]) => span.setAttribute(name, uiValue(value, item)));
-      span.textContent = text;
-      return span;
-    };
-
     const buildToolbar = (entityDef: EntityDef<unknown>, item: unknown, ref: ItemRef) => {
       const wrapper = document.createElement('div');
       wrapper.className = 'item-toolbar node-toolbar';
@@ -111,28 +103,55 @@ export function registerItemToolbar(system: Registry) {
         w: fallbackSize.w,
         h: fallbackSize.h,
       };
-      const screen = contexts.view.spaceToScreen({ x: rect.x + rect.w / 2, y: rect.y });
+      let screen = contexts.view.spaceToScreen({ x: rect.x + rect.w / 2, y: rect.y });
       const stage = contexts.places.el(Places.Stage);
-      const stageWidth = stage?.getBoundingClientRect().width || window.innerWidth;
+      const stageRect = stage?.getBoundingClientRect();
+      const stageWidth = stageRect?.width || window.innerWidth;
       const leftPanel = contexts.places.el(Places.Left)?.getBoundingClientRect();
       const minX = leftPanel && leftPanel.width > 0 ? leftPanel.right + 44 : 0;
+      if (ref.kind === 'edge') {
+        const label = stage?.querySelector<SVGGraphicsElement>(`.edge-label-host[data-item-id="${ref.id}"]`);
+        const labelRect = label?.getBoundingClientRect();
+        if (labelRect && stageRect) {
+          const toolbarWidth = 112;
+          const toolbarHeight = 36;
+          const gap = 8;
+          const roomRight = stageRect.right - labelRect.right;
+          const leftAnchor = labelRect.left - stageRect.left - gap;
+          const roomAbove = labelRect.top - stageRect.top;
+          const centerY = labelRect.top - stageRect.top + labelRect.height / 2;
+          if (stageWidth > 680 && roomRight >= toolbarWidth + gap) {
+            wrapper.dataset.edgeToolbarPlacement = 'right';
+            screen = { x: labelRect.right - stageRect.left + gap, y: centerY };
+          } else if (stageWidth > 680 && leftAnchor - toolbarWidth >= minX) {
+            wrapper.dataset.edgeToolbarPlacement = 'left';
+            screen = { x: leftAnchor, y: centerY };
+          } else if (roomAbove >= toolbarHeight + gap) {
+            wrapper.dataset.edgeToolbarPlacement = 'above';
+            screen = {
+              x: labelRect.left - stageRect.left + labelRect.width / 2,
+              y: labelRect.top - stageRect.top,
+            };
+          } else {
+            wrapper.dataset.edgeToolbarPlacement = 'below';
+            screen = {
+              x: labelRect.left - stageRect.left + labelRect.width / 2,
+              y: labelRect.bottom - stageRect.top,
+            };
+          }
+        }
+      }
       wrapper.style.left = `${Math.max(screen.x, minX)}px`;
       wrapper.style.top = `${Math.max(screen.y, stageWidth <= 680 ? 104 : 88)}px`;
 
-      const append = (slot: string, kind: 'button' | 'handler', handlerText = '', baseClass = '') => {
+      const append = (slot: string) => {
         contexts.affordances.entity(entityDef, slot).forEach(({ action, ui }) => {
           if (ui.when && !ui.when(item)) return;
-          if (ui.kind !== kind) return;
-          const el = kind === 'button'
-            ? buildButton(item, action, ui, ref)
-            : buildHandler(item, ui, handlerText);
-          if (baseClass) el.classList.add(baseClass);
-          wrapper.append(el);
+          if (ui.kind === 'button') wrapper.append(buildButton(item, action, ui, ref));
         });
       };
-      append(Slots.Drag, 'handler', '⋮⋮', 'node-drag-handle');
-      append(Slots.HeaderStart, 'button');
-      append(Slots.HeaderEnd, 'button');
+      append(Slots.HeaderStart);
+      append(Slots.HeaderEnd);
       if (ref.kind === 'node' || ref.kind === 'container') {
         const remove = document.createElement('button');
         remove.type = 'button';
@@ -409,7 +428,7 @@ export function registerItemToolbar(system: Registry) {
             const touchLike = pointer.pointerType === 'touch'
               || (globalThis.innerWidth <= 680 && pointer.pointerType !== 'mouse');
             return touchLike
-              && !(event.target as Element).closest('.tool-panel, .item-toolbar, .modal-layer, [data-command], [data-drag-handle], [data-resize-handle], input, textarea, select');
+              && !(event.target as Element).closest('.tool-panel, .item-toolbar, .modal-layer, [data-command], [data-resize-handle], input, textarea, select');
           },
         },
         payload: ({ event, target }) => {

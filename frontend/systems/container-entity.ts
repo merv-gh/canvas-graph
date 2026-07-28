@@ -160,7 +160,7 @@ export const createContainerEntity = (
       label.dataset.editableTitle = '';
       // Containers drag by their title bar only — the body belongs to the
       // nodes nested inside it.
-      label.dataset.dragSurface = '';
+      label.dataset.slot = Slots.Drag;
       label.textContent = container.Label.text;
       const handle = document.createElement('div');
       handle.className = 'container-resize';

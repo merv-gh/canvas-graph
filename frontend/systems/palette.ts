@@ -34,6 +34,7 @@ declare module '../types' {
   interface CustomEvents {
     'palette.arm.entry': { preset: PresetId; index: number };
     'palette.arm.type': { type: NodeType };
+    'palette.arm.sync-type': { type: NodeType };
     'palette.arm.color': { color?: NodeColor };
     'palette.arm.fill': { fill: NodeFill };
     'palette.arm.border': { border?: NodeBorder };
@@ -757,7 +758,7 @@ export function registerPalette(system: Registry) {
       row.className = 'palette-options palette-edge-kinds';
       const current = primaryEdge()?.EdgeKind;
       for (const { value, label } of EDGE_KINDS) {
-        const option = button(`palette.edge.kind.${value}`, `Edge kind: ${label}`, label);
+        const option = button(`palette.edge.kind.${value}`, `Edge appearance: ${label}`, label);
         pressed(option, current === value);
         row.append(option);
       }
@@ -823,6 +824,7 @@ export function registerPalette(system: Registry) {
       root.className = 'palette-panel';
       root.dataset.mobileOpen = mobileOpen ? 'true' : 'false';
       root.dataset.placing = placing ? 'true' : 'false';
+      root.dataset.drawing = drawing ? 'true' : 'false';
       // The desktop drawer is display:none while folded. Avoid allocating the
       // full searchable catalog on every selection/render cycle until it can
       // actually be seen; fold.changed redraws it when the hamburger opens.
@@ -949,6 +951,21 @@ export function registerPalette(system: Registry) {
       if (!def) return;
       remember({ command: `palette.arm.type.${type}`, preset: 'none', index: -1, type });
       applyEntry({ value: def.id, label: def.label }, -1);
+    });
+    on('palette.arm.sync-type', ({ type }) => {
+      const def = nodeTypeDefinition(type);
+      if (!def) return;
+      arm = {
+        ...arm,
+        type,
+        entity: 'node',
+        containerType: undefined,
+        label: def.label,
+        entryIndex: undefined,
+        entryId: undefined,
+        entryPreset: undefined,
+      };
+      changed();
     });
     on('palette.arm.color', ({ color }) => {
       if (color !== undefined && !isNodeColor(color)) return;

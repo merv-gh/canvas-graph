@@ -4,6 +4,7 @@ import { Slots } from '../types';
 declare module '../types' {
   interface CustomEvents {
     'onboarding.open': void;
+    'onboarding.dismiss': void;
   }
 }
 
@@ -106,36 +107,79 @@ const example = (command: string, brands: Brand[], title: string, description: s
   return button;
 };
 
+const welcomeAction = (command: string, title: string, detail: string, primary = false) => {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `onboarding-action${primary ? ' primary' : ''}`;
+  button.dataset.command = command;
+  const label = document.createElement('strong');
+  label.textContent = title;
+  const hint = document.createElement('small');
+  hint.textContent = detail;
+  button.append(label, hint);
+  return button;
+};
+
+const welcomeMark = () => {
+  const mark = document.createElement('span');
+  mark.className = 'onboarding-mark';
+  mark.setAttribute('aria-hidden', 'true');
+  mark.innerHTML = '<i></i><i></i><i></i><i></i>';
+  return mark;
+};
+
 const guideView = () => {
   const guide = document.createElement('section');
   guide.className = 'onboarding';
 
   const intro = document.createElement('header');
   intro.className = 'onboarding-intro';
+  const brand = document.createElement('div');
+  brand.className = 'onboarding-brand';
+  const brandName = document.createElement('strong');
+  brandName.textContent = 'Canvas Graph';
+  brand.append(welcomeMark(), brandName);
   const eyebrow = document.createElement('span');
   eyebrow.className = 'onboarding-eyebrow';
-  eyebrow.textContent = 'Start with a production-shaped map';
+  eyebrow.textContent = 'Visual thinking, without setup';
   const title = document.createElement('h1');
-  title.textContent = 'Sketch the system you can actually ship.';
+  title.textContent = 'Make the idea visible.';
   const lead = document.createElement('p');
-  lead.textContent = 'Open a compact example, then replace services, boundaries, and protocols with your own.';
-  intro.append(eyebrow, title, lead);
+  lead.textContent = 'Map a system, workflow, or connected thought. Start blank, borrow an example, or bring existing work.';
+  const storage = document.createElement('p');
+  storage.className = 'onboarding-storage';
+  storage.textContent = 'Saved in this browser. Export a backup for work you cannot lose.';
+  intro.append(brand, eyebrow, title, lead, storage);
 
+  const actions = document.createElement('div');
+  actions.className = 'onboarding-actions';
+  actions.append(
+    welcomeAction('onboarding.dismiss', 'Start creating', 'Continue on the blank canvas', true),
+    welcomeAction('demo.render-c4', 'Try an example', 'Open a small editable system map'),
+    welcomeAction('graph.import.paste', 'Import work', 'Paste Mermaid or a Markdown outline'),
+    welcomeAction('help.open', 'Help & shortcuts', 'Learn the few controls that matter first'),
+  );
+
+  const basics = document.createElement('details');
+  basics.className = 'onboarding-basics';
+  const basicsSummary = document.createElement('summary');
+  basicsSummary.textContent = 'Quick controls';
   const shortcuts = document.createElement('ol');
   shortcuts.className = 'onboarding-keys';
   shortcuts.append(
-    key('Tap', 'Select an item and reveal its actions'),
-    key('Drag', 'Arrange a node or pan empty canvas'),
-    key('Add', 'Places one node now; click a container to nest the next'),
+    key('Click', 'Select an item and reveal its actions'),
+    key('Drag', 'Move a node directly; drag empty canvas to pan'),
+    key('A', 'Add a node'),
     key('E', 'Connect two services'),
     key('Z', 'Fit the whole architecture'),
   );
+  basics.append(basicsSummary, shortcuts);
 
-  const examples = document.createElement('section');
+  const examples = document.createElement('details');
   examples.className = 'onboarding-examples';
-  const examplesHead = document.createElement('div');
+  const examplesHead = document.createElement('summary');
   examplesHead.className = 'onboarding-section-head';
-  examplesHead.innerHTML = '<strong>Architecture examples</strong><span>Small enough to understand in one glance.</span>';
+  examplesHead.innerHTML = '<strong>Browse all examples</strong><span>9 editable starters</span>';
   const grid = document.createElement('div');
   grid.className = 'onboarding-example-grid';
   grid.append(
@@ -176,7 +220,7 @@ const guideView = () => {
   importButton.textContent = 'Preview import';
   mermaid.append(summary, mermaidCopy, textarea, importButton);
 
-  guide.append(intro, shortcuts, examples, mermaid);
+  guide.append(intro, actions, basics, examples, mermaid);
   return guide;
 };
 
@@ -185,6 +229,7 @@ export function registerOnboarding(system: Registry) {
     let guideOpen = false;
     contexts.commands.register([
       { id: 'onboarding.open', label: 'Open getting-started guide', group: 'help' },
+      { id: 'onboarding.dismiss', label: 'Continue to blank canvas', group: 'help', hidden: true },
       {
         id: 'onboarding.mermaid.import',
         label: 'Preview Mermaid import',
@@ -201,7 +246,7 @@ export function registerOnboarding(system: Registry) {
 
     const open = () => {
       guideOpen = true;
-      emit('modal.open', { title: 'Start here', visual: 'onboarding', body: guideView });
+      emit('modal.open', { title: 'Welcome', visual: 'onboarding', body: guideView });
       queueMicrotask(() => {
         const source = contexts.places.el('modal')?.querySelector<HTMLTextAreaElement>('.onboarding-mermaid-source');
         if (!source) return;
@@ -211,6 +256,7 @@ export function registerOnboarding(system: Registry) {
       });
     };
     on('onboarding.open', open);
+    on('onboarding.dismiss', () => emit('modal.close'));
     on('modal.closed', () => { guideOpen = false; });
     on('demo.loaded', () => { if (guideOpen) emit('modal.close'); });
     on('graph.imported', () => { if (guideOpen) emit('modal.close'); });

@@ -273,8 +273,7 @@ export function registerCommandModal(system: Registry) {
       });
       return guide;
     };
-    const renderHelp = () => {
-      if (compactViewport()) return renderTouchHelp();
+    const renderShortcutReference = () => {
       const fragment = document.createDocumentFragment();
       const commands = contexts.commands.all()
         .filter(command => !command.hidden && contexts.commands.isEnabled(command))
@@ -325,6 +324,59 @@ export function registerCommandModal(system: Registry) {
         fragment.append(section);
       }
       return fragment;
+    };
+    const renderHelp = () => {
+      if (compactViewport()) return renderTouchHelp();
+      const guide = document.createElement('section');
+      guide.className = 'help-guide';
+      const intro = document.createElement('header');
+      intro.className = 'help-intro';
+      const title = document.createElement('h2');
+      title.textContent = 'Make, connect, arrange.';
+      const lead = document.createElement('p');
+      lead.textContent = 'Most work needs six moves. Everything else can wait.';
+      intro.append(title, lead);
+
+      const tasks = document.createElement('div');
+      tasks.className = 'help-task-grid';
+      const task = (name: string, detail: string, key: string) => {
+        const row = document.createElement('div');
+        const copy = document.createElement('span');
+        const heading = document.createElement('strong');
+        heading.textContent = name;
+        const description = document.createElement('small');
+        description.textContent = detail;
+        copy.append(heading, description);
+        const shortcut = document.createElement('kbd');
+        shortcut.textContent = key;
+        row.append(copy, shortcut);
+        return row;
+      };
+      tasks.append(
+        task('Add', 'Create a node', 'A'),
+        task('Connect', 'Choose two nodes', 'E'),
+        task('Move', 'Drag the node itself', 'Drag'),
+        task('Edit', 'Rename the selected item', 'Enter'),
+        task('Find anything', 'Search commands and items', 'P'),
+        task('Undo', 'Reverse the last change', 'Ctrl Z'),
+      );
+
+      const startGuide = document.createElement('button');
+      startGuide.type = 'button';
+      startGuide.className = 'help-start-guide';
+      startGuide.dataset.command = 'onboarding.open';
+      startGuide.textContent = 'Open getting-started guide';
+
+      const reference = document.createElement('details');
+      reference.className = 'help-reference';
+      const summary = document.createElement('summary');
+      summary.textContent = 'All keyboard shortcuts';
+      const rows = document.createElement('div');
+      rows.className = 'help-reference-rows';
+      rows.append(renderShortcutReference());
+      reference.append(summary, rows);
+      guide.append(intro, tasks, startGuide, reference);
+      return guide;
     };
     const rerender = () => {
       const list = modalEl()?.querySelector('[data-command-modal="palette"] [data-slot="commands"]');

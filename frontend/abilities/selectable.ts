@@ -63,7 +63,7 @@ export function registerSelectable(system: Registry) {
           selector: '[data-item-kind][data-item-id]',
           // Inspector/tool chrome can carry data-item-kind/id for command payloads,
           // but only canvas entities participate in pointer selection.
-          when: event => !(event.target as Element).closest('.stage.ink-erasing, .tool-panel, .item-toolbar, [data-command], [data-drag-handle], [data-resize-handle], [data-container-section-title], [data-container-section-resize], .modal-layer, input, textarea, select, label'),
+          when: event => !(event.target as Element).closest('.stage.ink-erasing, .tool-panel, .item-toolbar, [data-command], [data-resize-handle], [data-container-section-title], [data-container-section-resize], .modal-layer, input, textarea, select, label'),
           prevent: true,
           stop: true,
         },
@@ -83,7 +83,7 @@ export function registerSelectable(system: Registry) {
           shift: true,
           // Inspector/tool chrome can carry data-item-kind/id for command payloads,
           // but only canvas entities participate in pointer selection.
-          when: event => !(event.target as Element).closest('.stage.ink-erasing, .tool-panel, .item-toolbar, [data-command], [data-drag-handle], [data-resize-handle], [data-container-section-title], [data-container-section-resize], .modal-layer, input, textarea, select, label'),
+          when: event => !(event.target as Element).closest('.stage.ink-erasing, .tool-panel, .item-toolbar, [data-command], [data-resize-handle], [data-container-section-title], [data-container-section-resize], .modal-layer, input, textarea, select, label'),
           prevent: true,
           stop: true,
         },

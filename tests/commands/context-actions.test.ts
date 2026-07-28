@@ -31,6 +31,8 @@ describe('context panel', () => {
     expect(properties()?.querySelector('[data-command="selection.group"]')?.textContent).toContain('Group');
     expect(properties()?.querySelector('[data-command="node.convert.container"]')?.textContent).toContain('Convert');
     expect(properties()?.querySelector('[data-command="selection.item.delete"]')?.textContent).toContain('Delete');
+    expect(properties()?.querySelector('.context-action-card strong')).toBeNull();
+    expect(properties()?.querySelector('.context-action-label')).not.toBeNull();
 
     title!.value = 'Gateway';
     title!.dispatchEvent(new Event('input', { bubbles: true }));

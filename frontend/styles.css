@@ -618,6 +618,9 @@ button.icon:hover { color: var(--ink); }
   order: 1;
   min-height: 0;
 }
+.tool-panel[data-panel-id="palette"] { display: none; }
+.tool-panel[data-panel-id="palette"]:has(.palette-panel[data-drawing="true"]) { display: flex; }
+.palette-panel[data-drawing="true"] .palette-workspace-section { display: none; }
 .palette-panel { width: 100%; height: 100%; min-width: 0; min-height: 0; }
 .palette-sheet {
   position: relative; display: flex; flex-direction: column; height: 100%; max-height: 100%; overflow: hidden; padding: 8px 10px 10px;
@@ -785,7 +788,7 @@ button.icon:hover { color: var(--ink); }
 @media (max-width: 700px) {
   .tool-panel[data-panel-id="palette"] {
     position: fixed;
-    display: flex !important;
+    display: none !important;
     inset: auto auto 12px 12px;
     width: auto;
     max-width: calc(100% - 24px);
@@ -795,6 +798,10 @@ button.icon:hover { color: var(--ink); }
     background: transparent;
   }
   .left:has(.graph-navigator[data-outline-folded="true"]) > .tool-panel[data-panel-id="palette"] {
+    display: none !important;
+  }
+  .tool-panel[data-panel-id="palette"]:has(.palette-panel[data-drawing="true"]),
+  .left:has(.graph-navigator[data-outline-folded="true"]) > .tool-panel[data-panel-id="palette"]:has(.palette-panel[data-drawing="true"]) {
     display: flex !important;
   }
   .palette-mobile-toggle { display: inline-flex; align-items: center; min-height: 40px; padding: 7px 12px; border-color: var(--line-strong); background: var(--panel); }
@@ -855,7 +862,6 @@ button.icon:hover { color: var(--ink); }
 .shell[data-requirements-map="true"] .tool-panel[data-panel-id="layout"],
 .shell[data-requirements-map="true"] [data-resize-handle],
 .shell[data-requirements-map="true"] [data-container-section-resize],
-.shell[data-requirements-map="true"] .item-toolbar [data-drag-handle],
 .shell[data-requirements-map="true"] .item-toolbar [data-command="item.properties.open"] {
   display: none;
 }
@@ -938,6 +944,7 @@ button.icon:hover { color: var(--ink); }
 /* The label is HTML in a <foreignObject> so it can hold a caret (SVG <text>
    cannot be contenteditable). It keeps the same box the layout engine reserves. */
 .edges .edge-label-host { overflow: visible; pointer-events: none; }
+.edges .edge-label-target { fill: transparent; pointer-events: all; cursor: text; }
 .edges .edge-label {
   display: flex;
   align-items: center;
@@ -956,7 +963,12 @@ button.icon:hover { color: var(--ink); }
 .edges .edge-label.edge-kind-async { color: var(--accent-2); }
 /* Unlabelled relationship: an invisible, inert box until you hover or select
    the edge — then it offers itself as the "name this" target. */
-.edge-label-wrap.is-empty .edge-label { opacity: 0; pointer-events: none; }
+.edge-label-wrap.is-empty .edge-label {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms var(--ease-default) 450ms, visibility 0s linear 570ms;
+}
 .edge:hover .edge-label-wrap.is-empty .edge-label,
 .edge:focus-within .edge-label-wrap.is-empty .edge-label,
 .edge:has(.selected) .edge-label-wrap.is-empty .edge-label {
@@ -966,10 +978,13 @@ button.icon:hover { color: var(--ink); }
   border: 1px dashed var(--line-strong);
   border-radius: 3px;
   background: var(--bg);
+  visibility: visible;
+  transition-delay: 0s;
 }
 .edge-label-wrap.is-empty .edge-label::after { content: '+ label'; }
 .edge-label-wrap.is-empty .edge-label.editing::after { content: none; }
 .edges .edge-label.editing {
+  visibility: visible;
   opacity: 1;
   pointer-events: auto;
   color: var(--ink);
@@ -979,6 +994,12 @@ button.icon:hover { color: var(--ink); }
   cursor: text;
   white-space: pre;
 }
+.edges .edge:has(.edge-line.selected) .edge-label-wrap .edge-label {
+  border: 1.5px solid var(--ink);
+  border-radius: 4px;
+}
+.stage:has([data-editable-title].editing) .item-toolbar,
+.stage:has([data-editable-description].editing) .item-toolbar { display: none; }
 .item-overlays { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
 .item-overlay {
   position: absolute;
@@ -1202,16 +1223,24 @@ button.icon:hover { color: var(--ink); }
 }
 /* --- Description placement --------------------------------------------------
    `data-desc-placement` (DescriptionPlacement in model/graph.ts). Default —
-   no attribute — keeps the description inside the card. Below/right hang the
-   body outside the card; the card keeps its own size. */
+   no attribute — keeps the description inside the card. Cardinal placements
+   hang the body outside the card; the card keeps its own size. */
 .node[data-desc-placement="hidden"] .node-body { display: none; }
+.node[data-desc-placement="top"] .node-body,
 .node[data-desc-placement="below"] .node-body,
+.node[data-desc-placement="left"] .node-body,
 .node[data-desc-placement="right"] .node-body {
   position: absolute;
   overflow: visible;
   min-width: 100%;
   width: max-content;
   max-width: 320px;
+}
+.node[data-desc-placement="top"] .node-body {
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 0 6px;
 }
 .node[data-desc-placement="below"] .node-body {
   top: 100%;
@@ -1224,6 +1253,12 @@ button.icon:hover { color: var(--ink); }
   top: 50%;
   transform: translateY(-50%);
   padding: 0 0 0 10px;
+}
+.node[data-desc-placement="left"] .node-body {
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 0 10px 0 0;
 }
 /* --- Per-node color tint ----------------------------------------------------
    Palette keys set on the node element as `data-node-color` (NodeColor in
@@ -1560,19 +1595,9 @@ button.icon:hover { color: var(--ink); }
   pointer-events: auto;
   user-select: none;
 }
-.node-toolbar .node-drag-handle {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 26px;
-  color: var(--text-muted);
-  cursor: grab;
-  line-height: 1;
-  text-align: center;
-  font-size: 10px;
-  letter-spacing: -2px;
-}
-.node-toolbar .node-drag-handle:hover { color: var(--ink); }
+.node-toolbar[data-edge-toolbar-placement="below"] { transform: translate(-50%, 4px); }
+.node-toolbar[data-edge-toolbar-placement="right"] { transform: translate(0, -50%); }
+.node-toolbar[data-edge-toolbar-placement="left"] { transform: translate(-100%, -50%); }
 .stage.context-menu-open .item-toolbar,
 .stage.context-menu-open .ghost-node,
 .stage.node-placing .item-toolbar,
@@ -2468,11 +2493,11 @@ button.icon:hover { color: var(--ink); }
 }
 
 /* --- Release document rail ------------------------------------------------ */
-.left:has(.graph-navigator) { width: 304px; }
+.left:has(.graph-navigator) { width: 248px; }
 .left[data-outline-folded="true"],
 .left:has(.graph-navigator[data-outline-folded="true"]) { width: 42px; min-width: 42px; bottom: auto; }
 .graph-navigator {
-  width: 280px;
+  width: 248px;
   border: 0;
   box-shadow: 0 2px 12px color-mix(in srgb, var(--ink) 8%, transparent);
 }
@@ -2526,8 +2551,6 @@ button.icon:hover { color: var(--ink); }
 .left:has(.graph-navigator[data-outline-folded="true"]) > .tool-panel[data-panel-id="properties"] { display: none; }
 .graph-navigator .outline-panel-body { padding: 5px; background: var(--panel); }
 .graph-nav-search-row { display: grid; grid-template-columns: 1fr; gap: 4px; margin-bottom: 8px; }
-.graph-nav-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin: 0 0 5px; }
-.graph-nav-actions > button { width: 100%; min-width: 0; padding-inline: 4px; }
 .graph-nav-search {
   min-width: 0; width: 100%; min-height: 34px; padding: 6px 8px;
   color: var(--ink); border: 1px solid var(--line); border-radius: 7px; background: var(--panel-2);
@@ -2535,16 +2558,17 @@ button.icon:hover { color: var(--ink); }
 }
 .graph-nav-search:hover { border-color: var(--line-strong); }
 .graph-nav-search:focus { border-color: var(--ink); outline: 0; box-shadow: 0 0 0 2px color-mix(in srgb, var(--ink) 10%, transparent); }
-.graph-nav-create { padding-inline: 7px; color: var(--bg); border-color: var(--accent); background: var(--accent); font-size: 10px; }
-.graph-nav-duplicate-current { padding-inline: 6px; font-size: 10px; }
 .graph-nav-list { display: grid; gap: 4px; }
-.graph-nav-card { overflow: hidden; border: 1px solid var(--line); border-radius: 3px; background: var(--panel); }
-.graph-nav-card.active { border-color: color-mix(in srgb, var(--accent) 56%, var(--line)); }
-.graph-nav-card-head { display: grid; grid-template-columns: 22px 1fr 22px 22px; align-items: center; padding: 2px; }
-.graph-nav-fold, .graph-nav-delete, .graph-nav-duplicate { width: 20px; height: 20px; padding: 0; color: var(--text-muted); }
-.graph-nav-choose { display: grid; gap: 0; padding: 3px 4px; text-align: left; }
-.graph-nav-choose strong { font: 650 13px/1.2 "Avenir Next Condensed", "Arial Narrow", sans-serif; }
+.graph-nav-card { overflow: hidden; border: 0; border-radius: 7px; background: transparent; }
+.graph-nav-card:hover,
+.graph-nav-card.active { background: var(--panel-2); }
+.graph-nav-card-head { display: grid; grid-template-columns: minmax(0, 1fr) 28px; align-items: center; padding: 2px; }
+.graph-nav-delete { width: 28px; height: 28px; padding: 0; color: var(--text-muted); }
+.graph-nav-delete:hover { color: var(--danger); background: var(--danger-soft); }
+.graph-nav-choose { display: grid; gap: 1px; min-width: 0; padding: 7px 8px; text-align: left; }
+.graph-nav-name { font: 400 13px/1.2 "Avenir Next", Inter, system-ui, sans-serif; }
 .graph-nav-choose small { color: var(--text-muted); font: 9px/1.2 ui-monospace, monospace; }
+.left button:not(.graph-navigator-scrim) { border: 0; box-shadow: none; font-weight: 400; }
 .graph-nav-tree { padding: 0 4px 4px 19px; }
 .graph-nav-kind + .graph-nav-kind { margin-top: 4px; }
 .graph-nav-kind-title { display: flex; justify-content: space-between; padding: 3px; color: var(--text-muted); font: 700 8px/1.2 ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; }
@@ -2649,7 +2673,7 @@ button.icon:hover { color: var(--ink); }
 
 /* The command panel is viewport-centered. Drawer disclosure must never move it. */
 @media (min-width: 721px) {
-  .shell:has(.graph-navigator:not([data-outline-folded="true"])) .tool-panel[data-anchor="bottom-center"] { left: calc(50% + 146px); }
+  .shell:has(.graph-navigator:not([data-outline-folded="true"])) .tool-panel[data-anchor="bottom-center"] { left: calc(50% + 118px); }
   .shell:has(.graph-navigator[data-outline-folded="true"]) .tool-panel[data-anchor="bottom-center"] { left: calc(50% + 95px); }
 }
 
@@ -2751,15 +2775,15 @@ button.icon:hover { color: var(--ink); }
 
 /* Combined item inspector: actions and fields share one compact grammar. */
 .left > .tool-panel[data-panel-id="properties"] {
-  position: relative; inset: auto; flex: 0 0 min(280px, 34vh); order: 2;
-  width: 100%; max-width: none; min-height: min(180px, 28vh); max-height: min(320px, 40vh);
+  position: relative; inset: auto; flex: 1 1 0; order: 2;
+  width: 100%; max-width: none; min-height: 0; max-height: none;
   padding: 0; border: 0; border-top: 1px solid var(--line); border-radius: 0 0 12px 12px; background: var(--panel);
   box-shadow: none; transform: none; align-items: stretch; overflow: hidden;
 }
 .left:has(> .tool-panel[data-panel-id="properties"]) > .outline-panel:not([data-outline-folded="true"]) {
-  flex: 0 0 min(110px, 18vh);
-  min-height: min(90px, 16vh);
-  max-height: 120px;
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: min(38vh, 260px);
 }
 .properties-inspector { display: flex; flex: 1 1 auto; min-height: 0; flex-direction: column; }
 .properties-inspector > header {
@@ -2784,7 +2808,13 @@ button.icon:hover { color: var(--ink); }
 .properties-inspector .property-choice-options { gap: 4px; }
 .properties-inspector .property-choice-segments .property-choice-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .properties-inspector .property-choice-segments button { min-height: 30px; padding: 4px 6px; font-size: 11px; }
-.properties-inspector .property-choice-placement button { min-height: 48px; padding: 5px 2px; }
+.properties-inspector .property-choice-placement button { min-height: 48px; padding: 5px 2px; background: transparent; }
+.properties-inspector .property-choice-placement button:hover,
+.properties-inspector .property-choice-placement button[aria-pressed="true"] {
+  color: var(--ink);
+  background: var(--panel-2);
+  box-shadow: none;
+}
 .properties-inspector .property-choice-placement .property-choice-icon { min-height: 22px; }
 .properties-inspector .property-choice-placement .property-choice-icon .ui-icon { width: 20px; height: 20px; }
 .properties-inspector .property-advanced-toggle { min-height: 28px; padding: 6px 7px; font-size: 9px; }
@@ -2805,7 +2835,9 @@ button.icon:hover { color: var(--ink); }
 .context-action-card.danger:hover { border-color: var(--danger); background: var(--danger-soft); }
 .context-action-icon { display: grid; place-items: center; width: 18px; height: 18px; padding-right: 4px; color: var(--accent); border-right: 1px solid var(--line); }
 .context-action-icon .ui-icon { width: 13px; height: 13px; }
-.context-action-card > strong { font-size: 11px; }
+.context-action-label { font-size: 11px; font-weight: 400; }
+.property-label-hidden { display: block; }
+.property-label-hidden textarea { width: 100%; }
 
 .shell:has(.stage.ink-drawing) .left > .tool-panel[data-panel-id="properties"],
 .shell:has(.stage.ink-erasing) .left > .tool-panel[data-panel-id="properties"] { display: none; }
@@ -2934,7 +2966,6 @@ button.icon:hover { color: var(--ink); }
   .tool-panel[data-panel-id="zoom"] button,
   .tool-panel[data-panel-id="layout"] button,
   .item-toolbar button { min-height: 40px; min-width: 40px; }
-  .item-toolbar .node-drag-handle { min-height: 40px; display: inline-flex; align-items: center; }
 }
 
 /* Compact first-run guide: the complete chooser fits a laptop viewport, while
@@ -3486,8 +3517,7 @@ button { min-height: 32px; padding: 6px 9px; }
 .theme-toggle::before { content: none !important; }
 .node-action, .node-toggle { width: 26px; height: 26px; min-height: 26px; }
 .node-config { width: auto; min-width: 34px; height: 26px; min-height: 26px; }
-.node-toolbar .node-drag-handle { width: 22px; min-height: 26px; }
-.graph-nav-fold, .graph-nav-delete, .graph-nav-duplicate { width: 32px; height: 32px; }
+.graph-nav-delete { width: 32px; height: 32px; }
 .property-section-row button { width: 32px; height: 32px; }
 
 /* Navigator terminology and addressability. */
@@ -3500,7 +3530,7 @@ button { min-height: 32px; padding: 6px 9px; }
 .graph-nav-search-row { grid-template-columns: 1fr; }
 .graph-nav-delete-current { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 34%, var(--line)); }
 .graph-nav-delete-current:hover { color: var(--danger); background: var(--danger-soft); }
-.graph-nav-choose strong { font-family: "Avenir Next", Inter, system-ui, sans-serif; font-weight: 550; }
+.graph-nav-name { font-family: "Avenir Next", Inter, system-ui, sans-serif; font-weight: 400; }
 .graph-nav-marker-container { border-radius: 1px; border-style: dashed; border-color: var(--warm); }
 .graph-nav-item-copy strong { font-weight: 550; }
 .graph-nav-kind-title { font-size: 9px; font-weight: 600; }
@@ -3547,7 +3577,7 @@ button { min-height: 32px; padding: 6px 9px; }
 .properties-autosave-note { margin: 2px 0 0; color: var(--text-muted); font-size: 12px; }
 .property-axis-choice button[aria-pressed="true"],
 .context-action-card[aria-pressed="true"],
-.tool-panel button[aria-pressed="true"]:not(.property-choice-swatches button) {
+.tool-panel button[aria-pressed="true"]:not(.property-choice-swatches button):not(.property-choice-placement button) {
   color: var(--panel);
   background: var(--ink);
 }
@@ -3595,6 +3625,157 @@ input:not([type]):focus {
   font-size: 10px;
 }
 .onboarding-mermaid-import { align-self: center; min-height: 42px; }
+
+/* First visit: one obvious exit to the canvas, then progressively disclose
+   examples, import, and reference material. */
+.modal-layer[data-visual="onboarding"] .modal { width: min(780px, calc(100vw - 24px)); }
+.onboarding {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(260px, .92fr);
+  background: var(--panel);
+}
+.onboarding-intro {
+  grid-column: 1;
+  grid-row: 1 / 3;
+  padding: 34px 36px;
+  background: var(--panel-2);
+}
+.onboarding-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 38px; }
+.onboarding-brand > strong { font-size: 14px; font-weight: 650; letter-spacing: -.01em; }
+.onboarding-mark { position: relative; width: 34px; height: 28px; }
+.onboarding-mark::before,
+.onboarding-mark::after {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 13px;
+  width: 22px;
+  height: 1px;
+  background: var(--ink);
+  transform: rotate(29deg);
+  transform-origin: center;
+}
+.onboarding-mark::after { transform: rotate(-29deg); }
+.onboarding-mark i { position: absolute; width: 8px; height: 8px; border: 1.5px solid var(--ink); border-radius: 50%; background: var(--panel-2); }
+.onboarding-mark i:nth-child(1) { left: 0; top: 10px; }
+.onboarding-mark i:nth-child(2) { right: 0; top: 0; }
+.onboarding-mark i:nth-child(3) { right: 0; bottom: 0; }
+.onboarding-mark i:nth-child(4) { left: 13px; top: 10px; background: var(--ink); }
+.onboarding-eyebrow { margin: 0 0 12px; }
+.onboarding h1 { max-width: 11ch; font-size: clamp(34px, 5vw, 50px); line-height: .98; }
+.onboarding-intro p { max-width: 34ch; margin-top: 18px; }
+.onboarding-intro .onboarding-storage {
+  margin-top: 24px;
+  padding: 12px 14px;
+  color: var(--ink);
+  border-left: 2px solid var(--ink);
+  background: var(--panel);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.onboarding-actions {
+  grid-column: 2;
+  grid-row: 1;
+  display: grid;
+  gap: 7px;
+  align-content: start;
+  padding: 34px 30px 18px;
+}
+.onboarding-action {
+  display: grid;
+  gap: 3px;
+  min-height: 56px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+}
+.onboarding-action:hover { border-color: var(--ink); background: var(--panel-2); }
+.onboarding-action strong { font-size: 13px; }
+.onboarding-action small { color: var(--text-muted); font-size: 11px; font-weight: 400; }
+.onboarding-action.primary small { color: color-mix(in srgb, var(--bg) 78%, transparent); }
+.onboarding-basics {
+  grid-column: 2;
+  grid-row: 2;
+  margin: 0 30px 24px;
+  border-top: 1px solid var(--line);
+}
+.onboarding-basics > summary,
+.onboarding-examples > summary,
+.onboarding-mermaid > summary {
+  min-height: 42px;
+  padding: 12px 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+.onboarding-keys { display: grid; padding: 0 0 6px; background: transparent; }
+.onboarding-keys li { grid-template-columns: 48px 1fr; padding: 6px 0; }
+.onboarding-examples {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  padding: 0 30px;
+  border-top: 1px solid var(--line);
+}
+.onboarding-examples:not([open]) > :not(summary) { display: none; }
+.onboarding-examples[open] { padding-bottom: 24px; }
+.onboarding-section-head { margin: 0; }
+.onboarding-section-head span { margin-left: auto; }
+.onboarding-example-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.onboarding-mermaid { display: block; grid-column: 1 / -1; grid-row: 4; padding-inline: 30px; }
+.onboarding-mermaid[open] {
+  display: grid;
+  grid-template-columns: minmax(160px, .6fr) minmax(260px, 1.4fr) auto;
+}
+
+/* Help starts with user goals; the editable shortcut registry is optional. */
+.modal-layer[data-visual="command"] .modal:has(.help-guide) { width: min(680px, calc(100vw - 32px)); }
+.help-guide { display: grid; gap: 14px; padding: 8px; }
+.help-intro h2 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
+.help-intro p { margin: 5px 0 0; color: var(--text-muted); font-size: 13px; }
+.help-task-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.help-task-grid > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 52px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel-2);
+}
+.help-task-grid span { display: grid; gap: 2px; }
+.help-task-grid small { color: var(--text-muted); font-size: 11px; }
+.help-task-grid kbd {
+  flex: 0 0 auto;
+  padding: 3px 6px;
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: var(--panel);
+  font: 11px ui-monospace, monospace;
+}
+.help-start-guide { justify-self: start; color: var(--ink); border: 1px solid var(--line); background: var(--panel); }
+.help-reference { border-top: 1px solid var(--line); }
+.help-reference > summary { padding: 12px 2px 4px; color: var(--text-muted); cursor: pointer; font-size: 12px; }
+.help-reference-rows { display: grid; gap: 14px; max-height: min(48vh, 440px); padding-top: 10px; overflow: auto; }
+.help-reference-rows .help-list { max-height: none; overflow: visible; }
+
+@media (max-width: 680px) {
+  .onboarding { display: block; }
+  .onboarding-intro { padding: 28px 24px 24px; }
+  .onboarding-brand { margin-bottom: 28px; }
+  .onboarding h1 { font-size: 36px; }
+  .onboarding-actions { padding: 20px 22px 14px; }
+  .onboarding-basics { margin: 0 22px 18px; }
+  .onboarding-examples { padding-inline: 22px; }
+  .onboarding-mermaid { padding-inline: 22px; }
+  .onboarding-mermaid[open] { grid-template-columns: 1fr; }
+  .onboarding-example-grid { grid-template-columns: 1fr; }
+  .help-task-grid { grid-template-columns: 1fr; }
+}
 
 /* Selected content must survive a dense grayscale canvas. Use one strong halo
    outside the geometry; focus without selection remains a quieter dashed cue. */
@@ -3745,11 +3926,8 @@ input:not([type]):focus {
   .tool-panel[data-panel-id="layout"] button,
   .tool-panel[data-panel-id="zoom"] button,
   .item-toolbar button { min-width: 44px; min-height: 44px; }
-  .item-toolbar .node-drag-handle { min-height: 44px; }
   .graph-navigator-toggle,
-  .graph-nav-fold,
-  .graph-nav-delete,
-  .graph-nav-duplicate { min-width: 44px; min-height: 44px; }
+  .graph-nav-delete { min-width: 44px; min-height: 44px; }
   .graph-navigator .outline-panel-head { min-height: 48px; }
   .graph-navigator[data-outline-folded="true"],
   .left:has(.graph-navigator[data-outline-folded="true"]) { height: 48px; max-height: 48px; }

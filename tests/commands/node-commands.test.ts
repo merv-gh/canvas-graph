@@ -278,7 +278,12 @@ describe('frontend node commands', () => {
 
     expect(document.querySelector('.properties select[data-field]')).toBeNull();
     expect(document.querySelectorAll('.property-choice-swatches')).toHaveLength(2);
-    expect(document.querySelectorAll('.property-choice-placement button')).toHaveLength(4);
+    expect(document.querySelectorAll('.property-choice-placement button')).toHaveLength(6);
+    const description = document.querySelector<HTMLTextAreaElement>('[data-field="description"]')!;
+    expect(description.placeholder).toBe('Description');
+    expect(description.getAttribute('aria-label')).toBe('Description');
+    expect(description.parentElement?.textContent).toBe('');
+    expect(document.querySelector('[data-property-group="Content"]')).toBeNull();
     const color = document.querySelector<HTMLElement>('[data-field="color"][data-value="red"]')!;
     const fill = document.querySelector<HTMLElement>('[data-field="fill"][data-value="solid"]')!;
     const placement = document.querySelector<HTMLElement>('[data-field="descPlacement"][data-value="below"]')!;
@@ -293,6 +298,13 @@ describe('frontend node commands', () => {
     expect(color.getAttribute('aria-pressed')).toBe('true');
     expect(fill.getAttribute('aria-pressed')).toBe('true');
     expect(placement.getAttribute('aria-pressed')).toBe('true');
+
+    const top = document.querySelector<HTMLElement>('[data-field="descPlacement"][data-value="top"]')!;
+    const left = document.querySelector<HTMLElement>('[data-field="descPlacement"][data-value="left"]')!;
+    expect(runCommand(ctx, 'properties.item.choice', { target: top })).toBe(true);
+    expect(ctx.graphs.current.nodes()[0].DescriptionPlacement).toBe('top');
+    expect(runCommand(ctx, 'properties.item.choice', { target: left })).toBe(true);
+    expect(ctx.graphs.current.nodes()[0].DescriptionPlacement).toBe('left');
   });
 
   it('preserves existing positions when nodes are added or deleted', async () => {
@@ -316,22 +328,18 @@ describe('frontend node commands', () => {
     expect(ctx.contexts.view.get()).toEqual(cameraBeforeDelete);
   });
 
-  // The card body is the other drag entry point — see direct-manipulation.test.ts.
-  it('drags from the explicit drag handle in the ephemeral node-toolbar', async () => {
+  it('drags directly from the node without a redundant toolbar handle', async () => {
     const ctx = bootApp();
     runCommand(ctx, 'editing.node.create');
     await settle();
     const node = ctx.graphs.current.nodes()[0];
     const before = { ...node.Position! };
-    // Smart A leaves the new node selected, so the floating toolbar (which
-    // owns the drag handle now that the in-node header is gone) is mounted.
-    const toolbar = document.querySelector<HTMLElement>('.node-toolbar')!;
-    expect(toolbar).not.toBeNull();
-    const handle = toolbar.querySelector<HTMLElement>('.node-drag-handle')!;
-    expect(handle.hasAttribute('data-drag-handle')).toBe(true);
+    const surface = document.querySelector<HTMLElement>('.node[data-drag-surface]')!;
+    expect(surface).not.toBeNull();
+    expect(document.querySelector('[data-drag-handle]')).toBeNull();
     expect(document.querySelector('.node .node-header')).toBeNull();
 
-    runCommand(ctx, 'drag.item.start', { event: new PointerEvent('pointerdown', { clientX: 10, clientY: 10 }), target: handle });
+    runCommand(ctx, 'drag.item.surface.start', { event: new PointerEvent('pointerdown', { clientX: 10, clientY: 10 }), target: surface });
     runCommand(ctx, 'drag.item.move', { event: new PointerEvent('pointermove', { clientX: 70, clientY: 30 }), target: document.body });
     runCommand(ctx, 'drag.item.end');
 

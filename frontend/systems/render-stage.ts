@@ -44,7 +44,9 @@ export function registerRenderStage(system: Registry) {
         (grouped.get(slotName) ?? grouped.set(slotName, []).get(slotName)!).push({ action: action as ActionDef<T>, ui: ui as AffordanceDef<T> });
       });
       grouped.forEach((entries, slotName) => {
-        const target = el.querySelector(`[data-slot="${slotName}"]`);
+        const target = el.matches(`[data-slot="${slotName}"]`)
+          ? el
+          : el.querySelector(`[data-slot="${slotName}"]`);
         if (!(target instanceof HTMLElement)) return;
         entries.forEach(({ action, ui }) => {
           if (ui.kind === 'handler') applyAffordance(target, item, ui);
@@ -428,8 +430,8 @@ export function registerRenderStage(system: Registry) {
           purpose.className = 'empty-purpose';
           purpose.textContent = 'Map a system, workflow, or connected idea.';
           hint.append(purpose);
-          if (globalThis.innerWidth <= 680) hint.append('Tap to add a node');
-          else if (shortcut) hint.append(kbdHint('Press ', shortcut, ' to add a node'));
+          if (globalThis.innerWidth <= 680) hint.append('Tap to add a node. Then drag it anywhere.');
+          else if (shortcut) hint.append(kbdHint('Click here or press ', shortcut, '. Then drag the node anywhere.'));
           return emptyState(contexts.templates, 'No nodes in this graph yet', hint, 'canvas.empty.create') ?? document.createDocumentFragment();
         },
       });

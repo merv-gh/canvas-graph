@@ -3,6 +3,7 @@ import { expandRect, intersectRectBoundary, segmentIntersectsRect } from '../cor
 import { renderMarkdown } from '../core/markdown';
 import { collapsible, configurable, draggable, editable, nudgeable, selectable } from '../abilities';
 import type { DataScale, DescriptionPlacement, EdgeKind, Graph, GraphEdge, GraphNode, NodeEntity, EdgePatch, NodeColor, NodeFill, NodePatch, NodeType } from './graph';
+import { Slots } from '../types';
 import type { EntityDef, EntityRenderCtx, EntityRenderer, ItemRef, Position, PropertyDef, Rect, Segment, Size } from '../types';
 import { isNodeType, NODE_TYPES, nodeTypeLabel } from './node-types';
 
@@ -42,23 +43,25 @@ export const NODE_FILLS: { value: NodeFill; label: string }[] = [
 export const isNodeFill = (value: unknown): value is NodeFill =>
   NODE_FILLS.some(option => option.value === value);
 export const EDGE_KINDS: { value: EdgeKind; label: string }[] = [
-  { value: 'sync', label: 'Sync request' },
-  { value: 'async', label: 'Async request' },
-  { value: 'read', label: 'Read' },
-  { value: 'write', label: 'Write' },
-  { value: 'plain', label: 'Plain line' },
-  { value: 'dashed', label: 'Dashed link' },
-  { value: 'residual', label: 'Residual / skip' },
+  { value: 'sync', label: 'Dotted arrow' },
+  { value: 'async', label: 'Dashed arrow' },
+  { value: 'read', label: 'Subtle arrow' },
+  { value: 'write', label: 'Strong arrow' },
+  { value: 'plain', label: 'Solid line' },
+  { value: 'dashed', label: 'Dashed line' },
+  { value: 'residual', label: 'Light arrow' },
 ];
 export const isEdgeKind = (value: unknown): value is EdgeKind =>
   EDGE_KINDS.some(option => option.value === value);
 /** Diagram-line kinds render without an arrowhead (plain connector reading). */
 const ARROWLESS_KINDS: readonly EdgeKind[] = ['plain', 'dashed'];
 const DESC_PLACEMENTS: { value: DescriptionPlacement; label: string; icon: string }[] = [
-  { value: 'inside', label: 'Inside', icon: '▣' },
-  { value: 'below', label: 'Below', icon: '▱\n━' },
-  { value: 'right', label: 'Right', icon: '▯ ┃' },
-  { value: 'hidden', label: 'Hidden', icon: '◫̸' },
+  { value: 'inside', label: 'Inside', icon: 'placement-inside' },
+  { value: 'top', label: 'Top', icon: 'placement-top' },
+  { value: 'right', label: 'Right', icon: 'placement-right' },
+  { value: 'below', label: 'Below', icon: 'placement-below' },
+  { value: 'left', label: 'Left', icon: 'placement-left' },
+  { value: 'hidden', label: 'Hidden', icon: 'placement-hidden' },
 ];
 const isDescPlacement = (value: unknown): value is DescriptionPlacement =>
   DESC_PLACEMENTS.some(option => option.value === value);
@@ -112,11 +115,14 @@ const resolveEndpoint = (id: string, ctx: { graph: { getItem(ref: ItemRef): unkn
   };
 };
 
-export const EDGE_LABEL_FONT_SIZE = 13;
-export const EDGE_LABEL_LINE_HEIGHT = 16;
+export const EDGE_LABEL_FONT_SIZE = 14;
+export const EDGE_LABEL_LINE_HEIGHT = 18;
 export const EDGE_LABEL_CHAR_WIDTH = 9;
-const EDGE_LABEL_PAD_X = 5;
-const EDGE_LABEL_PAD_Y = 2;
+const EDGE_LABEL_PAD_X = 8;
+const EDGE_LABEL_PAD_Y = 4;
+const EDGE_LABEL_MIN_WIDTH = 72;
+const EDGE_LABEL_MIN_HEIGHT = 28;
+const EDGE_LABEL_HIT_MARGIN = 12;
 const EDGE_LABEL_LINE_GAP = 10;
 const EDGE_LABEL_AVOID_STEP = 12;
 export const EDGE_LABEL_AVOID_REACH = 480;
@@ -127,8 +133,8 @@ const EDGE_LABEL_PLACEHOLDER = 'label';
 export const measureEdgeLabel = (label: string): Size => {
   const lines = label.split(/\r?\n/);
   return {
-    w: Math.max(1, ...lines.map(line => line.length)) * EDGE_LABEL_CHAR_WIDTH + EDGE_LABEL_PAD_X * 2,
-    h: (lines.length - 1) * EDGE_LABEL_LINE_HEIGHT + EDGE_LABEL_FONT_SIZE + EDGE_LABEL_PAD_Y * 2,
+    w: Math.max(EDGE_LABEL_MIN_WIDTH, Math.max(1, ...lines.map(line => line.length)) * EDGE_LABEL_CHAR_WIDTH + EDGE_LABEL_PAD_X * 2),
+    h: Math.max(EDGE_LABEL_MIN_HEIGHT, (lines.length - 1) * EDGE_LABEL_LINE_HEIGHT + EDGE_LABEL_FONT_SIZE + EDGE_LABEL_PAD_Y * 2),
   };
 };
 
@@ -332,6 +338,20 @@ const edgeRenderer: EntityRenderer<GraphEdge> = {
       'data-label-width': geometry.size.w,
       'data-label-height': geometry.size.h,
     });
+    // Keep the visible label comfortably sized while making acquisition even
+    // more forgiving. This transparent target also reveals empty labels before
+    // the pointer reaches the offset text box, avoiding edge-line pixel hunts.
+    const target = svg('rect', {
+      class: 'edge-label-target',
+      x: -geometry.size.w / 2 - EDGE_LABEL_HIT_MARGIN,
+      y: -geometry.size.h / 2 - EDGE_LABEL_HIT_MARGIN,
+      width: geometry.size.w + EDGE_LABEL_HIT_MARGIN * 2,
+      height: geometry.size.h + EDGE_LABEL_HIT_MARGIN * 2,
+      rx: 8,
+    });
+    ctx.tagItem(target as unknown as HTMLElement, ref);
+    target.dataset.edgeLabelTrigger = '';
+    wrap.append(target);
     if (label) {
       // Opaque backdrop uses the same rectangle the layout engine reserves.
       wrap.append(svg('rect', {
@@ -416,7 +436,7 @@ export const edgeEntity: EntityDef<GraphEdge, EdgePatch> = entityDef<GraphEdge, 
       patch: (_edge, value) => ({ Label: { text: String(value) } }),
     }),
     property<GraphEdge, EdgePatch>({
-      id: 'edgeKind', label: 'Kind', input: 'segments', options: EDGE_KINDS,
+      id: 'edgeKind', label: 'Appearance', input: 'segments', options: EDGE_KINDS,
       value: edge => (isEdgeKind(edge.EdgeKind) ? edge.EdgeKind : 'sync'),
       patch: (_edge, value) => isEdgeKind(value) ? { EdgeKind: value } : undefined,
     }),
@@ -478,7 +498,7 @@ const nodeRenderer: EntityRenderer<GraphNode> = {
     el.tabIndex = -1;
     // The whole card is the drag surface (see abilities/draggable.ts). Text
     // selection, buttons, and the inline editors opt out via DRAG_BLOCKERS.
-    el.setAttribute('data-drag-surface', '');
+    el.dataset.slot = Slots.Drag;
     el.setAttribute('role', nodeVisual === 'switch' ? 'group' : 'button');
     const editHint = globalThis.innerWidth <= 680 ? 'Hold for actions.' : 'Press Enter to edit.';
     el.setAttribute('aria-label', `${node.Label.text || 'Untitled'}; ${typeLabel(nodeType)} node. ${editHint}`);
@@ -644,12 +664,12 @@ export const nodeEntity: EntityDef<GraphNode, NodePatch> = entityDef<GraphNode, 
     //   patch: (_node, value) => numberPatch<NodePatch, 'FreshnessMs'>('FreshnessMs', value),
     // }),
     property<GraphNode, NodePatch>({
-      id: 'description', label: 'Markdown description', input: 'textarea', rows: 6, group: 'Content',
+      id: 'description', label: 'Description', input: 'textarea', rows: 6, placeholder: 'Description', hideLabel: true,
       value: node => node.Description ?? '',
       patch: (_node, value) => ({ Description: String(value) }),
     }),
     property<GraphNode, NodePatch>({
-      id: 'descPlacement', label: 'Description placement', input: 'placement', group: 'Content',
+      id: 'descPlacement', label: 'Description placement', input: 'placement',
       options: DESC_PLACEMENTS,
       value: node => node.DescriptionPlacement ?? 'inside',
       patch: (_node, value) =>

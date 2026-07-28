@@ -11,10 +11,17 @@ const clickMore = async (page, name) => {
   if (!(await details.evaluate(element => element.open))) await page.getByLabel('More actions').click();
   await page.getByRole('button', { name, exact: true }).click();
 };
+const openExamples = async page => page.getByText('Browse all examples', { exact: false }).click();
+const openGraphItem = async (page, kind) => page.evaluate(kind => {
+  const graph = window.app.graphs.current;
+  const item = kind === 'node' ? graph.nodes()[0] : kind === 'edge' ? graph.edges()[0] : graph.itemsOfKind('container')[0];
+  window.app.bus.emit('outline.item.open', { graphId: graph.id, ref: { kind, id: item.id } });
+}, kind);
 
 test('JSON export and import round-trip the complete graph', async ({ page }) => {
   await page.goto('/');
   await clickMore(page, 'Open getting-started guide');
+  await openExamples(page);
   await page.getByRole('button', { name: /Checkout microservices/ }).click();
   const before = await page.evaluate(() => window.app.graphs.current.snapshot());
 
@@ -121,13 +128,14 @@ test('light onboarding keeps its dialog label visible', async ({ page }) => {
   await clickMore(page, 'Open getting-started guide');
   await expect(page.locator('.modal-layer[data-visual="onboarding"] .modal-head'))
     .toHaveCSS('color', 'rgb(110, 110, 110)');
-  await expect(page.getByText('Start here', { exact: true })).toBeVisible();
+  await expect(page.getByText('Welcome', { exact: true })).toBeVisible();
 });
 
 test('far mobile overview favors readable titles over clipped descriptions', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await page.evaluate(() => window.app.contexts.commands.run('onboarding.open'));
+  await openExamples(page);
   await page.getByRole('button', { name: /Checkout microservices/ }).click();
   // Fit deliberately stops at the 80% reading floor. Exercise semantic zoom
   // through the explicit zoom command instead of requiring Fit to violate it.
@@ -148,20 +156,19 @@ test('far mobile overview favors readable titles over clipped descriptions', asy
 test('node, container, and edge selections remain unmistakable in grayscale', async ({ page }) => {
   await page.goto('/');
   await clickMore(page, 'Open getting-started guide');
+  await openExamples(page);
   await page.getByRole('button', { name: /Checkout microservices/ }).click();
-  await page.getByRole('button', { name: 'Expand graph navigator' }).click();
-
   const node = page.locator('.node').first();
   const unselectedBackground = await node.evaluate(element => getComputedStyle(element).backgroundColor);
-  await page.locator('.graph-nav-item[data-item-kind="node"]').first().click();
+  await openGraphItem(page, 'node');
   await expect(page.locator('.node.selected')).toHaveCSS('outline-width', '3px');
   await expect(page.locator('.node.selected')).toHaveCSS('outline-style', 'solid');
   expect(await node.evaluate(element => getComputedStyle(element).backgroundColor)).toBe(unselectedBackground);
 
-  await page.locator('.graph-nav-item[data-item-kind="container"]').first().click();
+  await openGraphItem(page, 'container');
   await expect(page.locator('.container.selected')).toHaveCSS('outline-width', '3px');
   await expect(page.locator('.container.selected')).toHaveCSS('outline-style', 'solid');
 
-  await page.locator('.graph-nav-item[data-item-kind="edge"]').first().click();
+  await openGraphItem(page, 'edge');
   await expect(page.locator('.edge-line.selected')).toHaveCSS('stroke-width', '4px');
 });

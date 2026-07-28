@@ -15,6 +15,7 @@ const clickMore = async (page, name) => {
   if (!(await details.evaluate(element => element.open))) await page.getByLabel('More actions').click();
   await page.getByRole('button', { name, exact: true }).click();
 };
+const openExamples = async page => page.getByText('Browse all examples', { exact: false }).click();
 
 test('model exposes an edge collection for navigation surfaces', async ({ page }) => {
   await boot(page);
@@ -114,13 +115,14 @@ test('guide shortcut lanes do not overlap on desktop or phone', async ({ page })
   await page.setViewportSize({ width: 1280, height: 900 });
   await boot(page);
   await clickMore(page, 'Open getting-started guide');
+  await page.getByText('Quick controls', { exact: true }).click();
   const overlapCount = () => page.locator('.onboarding-keys li').evaluateAll(rows => rows.filter(row => {
     const key = row.querySelector('kbd').getBoundingClientRect();
     const label = row.querySelector('span').getBoundingClientRect();
     return key.left < label.right && key.right > label.left && key.top < label.bottom && key.bottom > label.top;
   }).length);
   expect(await overlapCount()).toBe(0);
-  expect((await page.locator('.modal-layer[data-visual="onboarding"] .modal').boundingBox()).width).toBeGreaterThan(1000);
+  expect((await page.locator('.modal-layer[data-visual="onboarding"] .modal').boundingBox()).width).toBeGreaterThan(700);
 
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await overlapCount()).toBe(0);
@@ -141,6 +143,7 @@ test('dark Preview import button keeps high-contrast primary styling', async ({ 
 test('workflow edge-label rectangles clear nodes, each other, and their own arrow axes', async ({ page }) => {
   await boot(page);
   await clickMore(page, 'Open getting-started guide');
+  await openExamples(page);
   await page.getByRole('button', { name: /Delivery workflow/ }).click();
   const collisions = await page.locator('g.edge').evaluateAll(groups => {
     const intersects = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;

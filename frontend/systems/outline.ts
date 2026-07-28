@@ -38,13 +38,10 @@ declare module '../types' {
 }
 
 const PANEL_FOLD_ID = 'outline.panel';
-const GRAPH_SECTION_FOLD_ID = 'outline.workspace.graphs';
-const graphFoldId = (id: Id) => `outline.graph.${id}`;
 const graphName = (graph: Graph) => graph.name;
 
 /** Release document navigator: the current graph name is always visible. Expand
- *  the rail to search all documents, switch between them, and reveal each
- *  graph's nodes and connections without turning the canvas into a file tree. */
+ *  the rail to search and switch documents. Canvas content stays on canvas. */
 export function registerOutline(system: Registry) {
   system('outline', ({ on, emit, contexts, graphs, frameLoop, origin }) => {
     let query = '';
@@ -59,13 +56,7 @@ export function registerOutline(system: Registry) {
       return node;
     };
     const matches = (text: string) => !query.trim() || text.toLowerCase().includes(query.trim().toLowerCase());
-    const count = (value: number, singular: string, plural = `${singular}s`) => `${value} ${value === 1 ? singular : plural}`;
     const containersOf = (graph: Graph) => graph.itemsOfKind<OutlineContainer>('container');
-    const graphMeta = (graph: Graph) => [
-      count(graph.nodes().length, 'node'),
-      count(graph.edges().length, 'connection'),
-      count(containersOf(graph).length, 'container'),
-    ].join(' · ');
     const nodeTypeLabel = (type?: string) => type === 'square' ? 'Box' : type === 'circle' ? 'Circle' : 'Text';
 
     const itemRow = (graph: Graph, ref: ItemRef, label: string, detail: string) => {
@@ -358,34 +349,20 @@ export function registerOutline(system: Registry) {
 
     const graphCard = (graph: Graph) => {
       const active = graph.id === graphs.current.id;
-      const hasMatch = matches(`${graphName(graph)} ${graph.id}`)
-        || graph.nodes().some(node => matches(`${node.Label.text} ${node.id} ${descriptiveText(node)}`))
-        || graph.edges().some(edge => matches(`${edge.Label?.text ?? ''} ${edge.id} ${descriptiveText(edge)}`))
-        || containersOf(graph).some(container => matches(
-          `${container.Label?.text ?? ''} ${container.id} ${container.Sections?.map(section => section.title).join(' ') ?? ''}`,
-        ));
-      if (!hasMatch) return null;
-      const open = query.trim() ? true : contexts.fold.isOpen(graphFoldId(graph.id), active);
+      if (!matches(`${graphName(graph)} ${graph.id}`)) return null;
       const card = el('article', `graph-nav-card${active ? ' active' : ''}`);
       card.dataset.graphId = graph.id;
       const head = el('div', 'graph-nav-card-head');
-      const fold = el('button', 'graph-nav-fold', open ? '⊟' : '⊞');
-      fold.type = 'button';
-      fold.dataset.command = 'fold.toggle';
-      fold.dataset.foldId = graphFoldId(graph.id);
-      fold.setAttribute('aria-label', `${open ? 'Collapse' : 'Expand'} ${graphName(graph)}`);
       const choose = el('button', 'graph-nav-choose');
       choose.type = 'button';
       choose.dataset.command = 'graph.switch';
       choose.dataset.itemId = graph.id;
-      choose.append(el('strong', undefined, graphName(graph)), el('small', undefined, graphMeta(graph)));
-      head.append(fold, choose);
-      const duplicate = el('button', 'graph-nav-duplicate', '⧉');
-      duplicate.type = 'button';
-      duplicate.dataset.command = 'graph.duplicate';
-      duplicate.dataset.itemId = graph.id;
-      duplicate.setAttribute('aria-label', `Duplicate ${graphName(graph)}`);
-      head.append(duplicate);
+      choose.setAttribute('aria-current', active ? 'page' : 'false');
+      choose.append(
+        el('span', 'graph-nav-name', graphName(graph)),
+        el('small', undefined, active ? 'Current graph' : 'Open graph'),
+      );
+      head.append(choose);
       if (graphs.all().length > 1) {
         const remove = el('button', 'graph-nav-delete', '×');
         remove.type = 'button';
@@ -395,7 +372,6 @@ export function registerOutline(system: Registry) {
         head.append(remove);
       }
       card.append(head);
-      if (open) card.append(graphItems(graph));
       return card;
     };
 
@@ -443,53 +419,32 @@ export function registerOutline(system: Registry) {
       const searchRow = el('div', 'graph-nav-search-row workspace-search-row');
       const search = el('input', 'graph-nav-search') as HTMLInputElement;
       search.type = 'search';
-      search.placeholder = 'Search graphs, items, and node types';
+      search.placeholder = 'Search graphs';
       search.value = query;
       search.dataset.graphNavSearch = '';
-      search.setAttribute('aria-label', 'Search graphs, items, and node types');
+      search.setAttribute('aria-label', 'Search graphs');
       searchRow.append(search);
       body.append(searchRow);
-      const graphSection = el('section', 'workspace-drawer-section graph-workspace-section');
-      const graphSectionOpen = contexts.fold.isOpen(GRAPH_SECTION_FOLD_ID);
-      const graphSectionToggle = el('button', 'workspace-drawer-section-toggle', `${graphSectionOpen ? '⌄' : '›'} Graph`);
-      graphSectionToggle.type = 'button';
-      graphSectionToggle.dataset.command = 'fold.toggle';
-      graphSectionToggle.dataset.foldId = GRAPH_SECTION_FOLD_ID;
-      graphSectionToggle.setAttribute('aria-expanded', graphSectionOpen ? 'true' : 'false');
-      const graphActions = el('div', 'graph-nav-actions');
-      const create = el('button', 'graph-nav-create', 'New graph');
-      create.type = 'button';
-      create.dataset.command = 'graph.create';
-      const duplicateCurrent = el('button', 'graph-nav-duplicate-current', 'Duplicate');
-      duplicateCurrent.type = 'button';
-      duplicateCurrent.dataset.command = 'graph.duplicate';
-      duplicateCurrent.dataset.itemId = graphs.current.id;
-      graphActions.append(create, duplicateCurrent);
-      if (graphs.all().length > 1) {
-        const deleteCurrent = el('button', 'graph-nav-delete-current', 'Delete');
-        deleteCurrent.type = 'button';
-        deleteCurrent.dataset.command = 'graph.delete';
-        deleteCurrent.dataset.itemId = graphs.current.id;
-        deleteCurrent.setAttribute('aria-label', `Delete ${graphName(graphs.current)}`);
-        graphActions.append(deleteCurrent);
-      }
       const list = el('div', 'graph-nav-list');
-      const current = el('section', 'graph-nav-current');
-      current.append(graphItems(graphs.current));
-      list.append(current);
-      [...graphs.all()].reverse().filter(graph => graph.id !== graphs.current.id).forEach(graph => {
+      list.setAttribute('aria-label', 'Graphs');
+      [graphs.current, ...[...graphs.all()].reverse().filter(graph => graph.id !== graphs.current.id)].forEach(graph => {
         const card = graphCard(graph);
         if (card) list.append(card);
       });
-      if (!list.querySelector('.graph-nav-item, .graph-nav-card') && query.trim()) {
+      if (!list.querySelector('.graph-nav-card') && query.trim()) {
         const clear = el('button', 'empty empty-action graph-nav-empty', 'No graphs match this filter');
         clear.type = 'button';
         clear.dataset.command = 'outline.search.clear';
-        current.replaceChildren(clear);
+        list.append(clear);
       }
-      graphSection.append(graphSectionToggle);
-      if (graphSectionOpen) graphSection.append(graphActions, list);
-      body.append(graphSection);
+      body.append(list);
+      // Requirements review commands still use the outline's addressable item
+      // model. Keep that engine outside the visible and accessibility trees;
+      // the drawer itself remains graph-only.
+      const itemModel = el('section', 'graph-nav-current graph-nav-item-model');
+      itemModel.hidden = true;
+      itemModel.append(graphItems(graphs.current));
+      body.append(itemModel);
       wrapper.append(body);
       return wrapper;
     };

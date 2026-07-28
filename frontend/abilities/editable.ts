@@ -7,6 +7,7 @@ import type { MaybeLabeled } from './shapes';
 declare module '../types' {
   interface CustomEvents {
     'item.title.edit': { ref: ItemRef };
+    'item.title.pointer': { ref: ItemRef };
     'item.title.commit': { ref: ItemRef; text: string; finish?: boolean };
     'item.description.edit': { ref: ItemRef };
     'item.description.commit': { ref: ItemRef; text: string; finish?: boolean };
@@ -77,6 +78,8 @@ export function registerEditable(system: Registry) {
      *  the Cancellable + the focusout/Enter commit guard. */
     let editingRef: ItemRef | null = null;
     let editingDescriptionRef: ItemRef | null = null;
+    let lastTitlePointer: { ref: ItemRef; at: number } | null = null;
+    let suppressEdgeDblclickUntil = 0;
     /** Text as it was when the edit started, so Escape can put it back. */
     let editingOriginal = '';
     const renderedDescriptions = new WeakMap<HTMLElement, Node[]>();
@@ -156,9 +159,33 @@ export function registerEditable(system: Registry) {
         // editable again after expansion, avoiding two gestures firing at once.
         input: {
           on: 'dblclick',
-          selector: '[data-editable-title]',
-          when: event => !(event.target instanceof Element && event.target.closest('.collapsed')),
+          selector: '[data-editable-title], [data-edge-label-trigger]',
+          when: event => {
+            const target = event.target instanceof Element ? event.target : null;
+            if (target?.closest('.collapsed')) return false;
+            return !target?.closest('.edge-label-wrap') || performance.now() >= suppressEdgeDblclickUntil;
+          },
           prevent: true,
+        },
+        payload: ({ target }) => {
+          const ref = itemRefFrom(target);
+          return ref ? { ref } : undefined;
+        },
+      },
+      {
+        // Selecting an edge can refresh its SVG between the two clicks, so a
+        // browser may not synthesize `dblclick` against one stable DOM node.
+        // Track the two pointerdowns by item identity so the semantic double
+        // click survives that DOM replacement.
+        id: 'item.title.edit.multiclick',
+        label: 'Edit title on second click',
+        event: 'item.title.pointer',
+        group: 'item',
+        hidden: true,
+        input: {
+          on: 'pointerdown',
+          selector: '.edge-label, [data-edge-label-trigger]',
+          priority: -10,
         },
         payload: ({ target }) => {
           const ref = itemRefFrom(target);
@@ -241,6 +268,22 @@ export function registerEditable(system: Registry) {
         payload: ({ target }) => titleCommit(target),
       },
     ]);
+
+    on('item.title.pointer', ({ ref }) => {
+      const now = performance.now();
+      const repeated = lastTitlePointer
+        && lastTitlePointer.ref.kind === ref.kind
+        && lastTitlePointer.ref.id === ref.id
+        && now - lastTitlePointer.at <= 500;
+      lastTitlePointer = repeated ? null : { ref, at: now };
+      if (repeated) {
+        suppressEdgeDblclickUntil = now + 200;
+        // Enter after the browser finishes pointerup/click/dblclick. Focusing a
+        // contenteditable during pointerdown lets the rest of that gesture
+        // blur and instantly commit it again.
+        setTimeout(() => emit('item.title.edit', { ref }), 0);
+      }
+    });
 
     on('item.title.edit', ({ ref }) => {
       frameLoop.cancel(finishFocusTask);

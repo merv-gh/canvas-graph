@@ -16,9 +16,11 @@ describe('first-visit guide', () => {
 
     expect(document.querySelector('.onboarding')).not.toBeNull();
     expect(document.querySelectorAll('.onboarding-example')).toHaveLength(9);
+    expect(document.querySelector('.onboarding-action.primary')?.textContent).toContain('Start creating');
+    expect(document.querySelector('.onboarding-storage')?.textContent).toContain('Saved in this browser');
     expect(document.cookie).toContain('showDemo=false');
 
-    runCommand(ctx, 'modal.close');
+    expect(runCommand(ctx, 'onboarding.dismiss')).toBe(true);
     expect(document.querySelector('.onboarding')).toBeNull();
     expect(runCommand(ctx, 'onboarding.open')).toBe(true);
     expect(document.querySelector('.onboarding')).not.toBeNull();

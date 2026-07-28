@@ -142,14 +142,11 @@ const seedSmallGraph = async (page: Page) => {
 const dragSelectedNode = async (page: Page, selector = '.node[data-item-id="e1"]') => {
   const node = page.locator(selector).first();
   await node.waitFor({ state: 'visible' });
-  await node.click();
-  await page.waitForSelector('.node-toolbar .node-drag-handle');
   await settle(page, 2);
   await resetAppPerf(page);
   await resetEventTimings(page);
-  const handle = page.locator('.node-toolbar .node-drag-handle');
-  const box = await handle.boundingBox();
-  if (!box) throw new Error('Missing drag handle box');
+  const box = await node.boundingBox();
+  if (!box) throw new Error('Missing draggable node box');
   const x = box.x + box.width / 2;
   const y = box.y + box.height / 2;
   await page.mouse.move(x, y);

@@ -75,7 +75,8 @@ export function registerConfigurable(system: Registry) {
       const glyph = document.createElement('span');
       glyph.className = 'context-action-icon';
       glyph.append(iconNode(icon));
-      const text = document.createElement('strong');
+      const text = document.createElement('span');
+      text.className = 'context-action-label';
       text.textContent = label;
       button.append(glyph, text);
       return button;
@@ -281,6 +282,7 @@ export function registerConfigurable(system: Registry) {
       emit('item.update', { ref, patch });
     };
     const selected = () => selection.selected();
+    let inspectedRef: ItemRef | null = null;
     let inspectorRedrawQueued = false;
     const queueInspectorRedraw = () => {
       if (inspectorRedrawQueued) return;
@@ -293,12 +295,14 @@ export function registerConfigurable(system: Registry) {
     const inspectorRoot = () => contexts.places.el(Places.Left)
       ?.querySelector<HTMLElement>('[data-panel-id="properties"]');
     const inspectable = () => {
-      const ref = selected();
+      const ref = selected() ?? inspectedRef;
       if (!ref) return undefined;
       const current = item(ref);
       const entity = entityDef(ref);
       const properties = entity?.properties ?? [];
-      return current && entity && properties.length ? { ref, current, entity, properties } : undefined;
+      if (!current || !entity || !properties.length) return undefined;
+      inspectedRef = ref;
+      return { ref, current, entity, properties };
     };
     const renderInspector = () => {
       const target = inspectable();
@@ -326,7 +330,7 @@ export function registerConfigurable(system: Registry) {
 
     declarePanel({
       id: 'properties', anchor: 'top-left', place: Places.Left, movable: false, layout: 'custom', render: renderInspector, order: 2,
-      mountWhen: () => selection.selectedAll().length === 1 && !!inspectable(),
+      mountWhen: () => !!inspectable(),
     });
 
     contexts.commands.register([
@@ -502,6 +506,9 @@ export function registerConfigurable(system: Registry) {
     });
     on('ink.stroke.completed', () => emit('tool.panel.redraw', { id: 'properties' }));
     on('ink.stroke.deleted', () => emit('tool.panel.redraw', { id: 'properties' }));
-    on('graph.switched', () => emit('tool.panel.redraw', { id: 'properties' }));
+    on('graph.switched', () => {
+      inspectedRef = null;
+      emit('tool.panel.redraw', { id: 'properties' });
+    });
   }, { requires: ['ability.selectable', 'tool.panel'] });
 }

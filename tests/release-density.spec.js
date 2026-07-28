@@ -29,7 +29,7 @@ test('release chrome stays borderless and the empty action does not move on hove
   }
 
   await page.goto('/');
-  await page.getByRole('button', { name: 'New graph', exact: true }).click();
+  await page.evaluate(() => window.app.contexts.commands.run('graph.create'));
   await expect(page.getByLabel('Current graph name')).toHaveValue('Graph 2');
 
   const empty = page.locator('.stage .empty-action');
@@ -80,7 +80,7 @@ test('light and dark UI are grayscale and editable text uses one underline', asy
 
 test('first node starts at centre and later pointer creation keeps the camera stable', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'New graph', exact: true }).click();
+  await page.evaluate(() => window.app.contexts.commands.run('graph.create'));
   const stageCentre = () => page.locator('.stage').evaluate(element => {
     const rect = element.getBoundingClientRect();
     return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
@@ -113,7 +113,7 @@ test('first node starts at centre and later pointer creation keeps the camera st
 
 test('a title-only node centres its text inside the node', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'New graph', exact: true }).click();
+  await page.evaluate(() => window.app.contexts.commands.run('graph.create'));
   await page.getByRole('button', { name: 'Add node', exact: true }).click();
 
   const offset = await page.locator('.node-title').evaluate(title => {
@@ -133,7 +133,7 @@ test('a title-only node centres its text inside the node', async ({ page }) => {
 
 test('period opens one compact actions and properties inspector', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'New graph', exact: true }).click();
+  await page.evaluate(() => window.app.contexts.commands.run('graph.create'));
   await page.getByRole('button', { name: 'Add node', exact: true }).click();
   await page.keyboard.press('.');
 

@@ -48,13 +48,10 @@ test('mouse flow: preset, typed colored blocks, plain edge, dashed kind, ink ann
   await expect(page.locator('.node')).toHaveCount(2);
   const ids = await page.evaluate(() => window.app.graphs.current.nodes().map(node => node.id));
 
-  // Restyle the selected (second) node directly from the persistent palette.
-  await page.getByRole('button', { name: 'Expand graph navigator', exact: true }).click();
-  await page.locator('[data-palette-type="attention"]').click();
-  await page.getByRole('button', { name: 'Color: Red', exact: true }).click();
-  await page.keyboard.press('Escape'); // leave node-placement mode
+  // The graph drawer stays graph-only; node styles remain command-accessible.
+  await paletteRun(page, 'Arm node type: ML · Attention');
+  await paletteRun(page, 'Arm node color: Red');
   await expect(page.locator(`.node[data-item-id="${ids[1]}"].node-type-attention[data-node-color="red"]`)).toHaveCount(1);
-  await page.getByRole('button', { name: 'Collapse graph navigator', exact: true }).click();
 
   // Connect via the picker (click path); the preset defaults the kind to plain.
   await page.locator(`.node[data-item-id="${ids[0]}"]`).dispatchEvent('pointerdown', { bubbles: true, cancelable: true });
@@ -185,7 +182,7 @@ test('keyboard-only flow: preset, blocks, chain, edge kinds, grouping, legend, m
   expect(edgeLetter, 'picker letter for the router→routed edge').toBeTruthy();
   await page.keyboard.press(edgeLetter);
   await expect.poll(() => page.evaluate(() => window.app.selection.selected()?.kind)).toBe('edge');
-  await paletteRun(page, 'Set edge kind: Dashed link');
+  await paletteRun(page, 'Set edge appearance: Dashed line');
   await expect.poll(() => page.evaluate(() =>
     window.app.graphs.current.edges().filter(edge => edge.EdgeKind === 'dashed').length)).toBe(1);
 

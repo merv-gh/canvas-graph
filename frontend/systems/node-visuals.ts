@@ -107,7 +107,7 @@ export function registerNodeVisuals(system: Registry) {
       },
       ...EDGE_KINDS.map(({ value, label }) => ({
         id: `edge.kind.${value}`,
-        label: `Set edge kind: ${label}`,
+        label: `Set edge appearance: ${label}`,
         event: 'edge.kind.set' as const,
         group: 'edge',
         available: edgeSelected,
@@ -199,6 +199,7 @@ export function registerNodeVisuals(system: Registry) {
       // resize).
       if (size && node.NodeType !== nodeType && ((nodeType === 'operator' || nodeType === 'diamond') || isDefaultNodeSize(node.Size))) patch.Size = size;
       emit('item.update', { ref: nodeRef(id), patch });
+      emit('palette.arm.sync-type', { type: nodeType });
       emit('modal.close');
     });
 

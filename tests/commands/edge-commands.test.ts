@@ -282,7 +282,7 @@ describe('frontend edge commands (picker-driven)', () => {
     expect(residualLine.getAttribute('marker-end')).toBe('url(#edge-arrow)');
   });
 
-  it('round-trips new edge kinds through the snapshot and the Kind property', async () => {
+  it('round-trips edge styles and names them by appearance', async () => {
     const ctx = bootApp({ autoLayout: false });
     await settle();
     const source = createNode(ctx, 'A');
@@ -291,7 +291,15 @@ describe('frontend edge commands (picker-driven)', () => {
     await settle();
     const edge = ctx.graphs.current.edges()[0];
 
-    // The properties-inspector Kind control patches through item.update.
+    ctx.bus.emit('selection.item.select', { kind: 'edge', id: edge.id });
+    expect(runCommand(ctx, 'item.properties.open')).toBe(true);
+    await settle();
+    const appearance = document.querySelector('[data-field="edgeKind"]')?.closest('fieldset');
+    expect(appearance?.querySelector('legend')?.textContent).toBe('Appearance');
+    expect(appearance?.textContent).toContain('Dotted arrow');
+    expect(appearance?.textContent).not.toContain('Sync request');
+
+    // The properties-inspector Appearance control patches through item.update.
     ctx.bus.emit('item.update', { ref: { kind: 'edge', id: edge.id }, patch: { EdgeKind: 'dashed' } });
     await settle();
     expect(ctx.graphs.current.edges()[0].EdgeKind).toBe('dashed');

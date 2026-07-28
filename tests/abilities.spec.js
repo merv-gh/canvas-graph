@@ -37,6 +37,7 @@ test('frontend help rejects duplicate shortcuts without saving', async ({ page }
   await page.goto('/');
   await page.getByLabel('More actions').click();
   await page.locator('[data-command="help.open"]').click();
+  await page.getByText('All keyboard shortcuts', { exact: true }).click();
 
   const helpShortcut = page.locator('.shortcut-edit[data-shortcut-command="help.open"]');
   const helpRow = page.locator('.help-row:has(.shortcut-edit[data-shortcut-command="help.open"])');
@@ -79,7 +80,6 @@ test('@smoke frontend configurable ability opens node properties', async ({ page
 
   await page.getByLabel('Item title').fill('Configured');
   await expect(node.locator('.node-title')).toHaveText('Configured');
-  await page.locator('.property-advanced-group').filter({ hasText: 'Content' }).locator('.property-advanced-toggle').click();
   await page.locator('.properties [data-field="description"]').fill([
     '### Details',
     'A *rendered* paragraph.',

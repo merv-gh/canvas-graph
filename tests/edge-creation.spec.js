@@ -109,6 +109,52 @@ test('focused edge uses graph styling without a browser focus rectangle', async 
   await expect(hit).toHaveCSS('outline-style', 'none');
 });
 
+test('edge label has a forgiving target, hover grace, and owns rename mode', async ({ page }) => {
+  await boot(page);
+  const nodes = await createNodes(page, ['A', 'B']);
+  const edgeId = await page.evaluate(([from, to]) => {
+    const v = window.app;
+    v.bus.emit('graph.edge.create', { From: from.id, To: to.id });
+    return v.graphs.current.edges()[0].id;
+  }, nodes);
+
+  const target = page.locator(`.edge-label-target[data-item-id="${edgeId}"]`);
+  const label = page.locator(`.edge-label-host[data-item-id="${edgeId}"] [data-editable-title]`);
+  const targetBox = await target.boundingBox();
+  const labelBox = await label.boundingBox();
+  expect(targetBox.width).toBeGreaterThanOrEqual(labelBox.width + 20);
+  expect(targetBox.height).toBeGreaterThanOrEqual(labelBox.height + 20);
+
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2);
+  await expect(label).toHaveCSS('opacity', '1');
+  await page.mouse.move(4, 4);
+  await page.waitForTimeout(250);
+  await expect(label).toHaveCSS('opacity', '1');
+  await expect(label).toHaveCSS('opacity', '0', { timeout: 1_000 });
+
+  await page.mouse.click(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2);
+  await expect(page.locator(`.edge-line[data-item-id="${edgeId}"]`)).toHaveClass(/selected/);
+  await expect(label).toHaveCSS('border-top-style', 'solid');
+  const toolbar = page.locator(`.item-toolbar[data-item-kind="edge"][data-item-id="${edgeId}"]`);
+  await expect(toolbar).toBeVisible();
+  const toolbarBox = await toolbar.boundingBox();
+  const selectedLabelBox = await label.boundingBox();
+  const overlaps = toolbarBox.x < selectedLabelBox.x + selectedLabelBox.width
+    && toolbarBox.x + toolbarBox.width > selectedLabelBox.x
+    && toolbarBox.y < selectedLabelBox.y + selectedLabelBox.height
+    && toolbarBox.y + toolbarBox.height > selectedLabelBox.y;
+  expect(overlaps).toBe(false);
+
+  await page.waitForTimeout(550);
+  const renameBox = await target.boundingBox();
+  await page.mouse.dblclick(renameBox.x + renameBox.width / 2, renameBox.y + renameBox.height / 2);
+  await expect(label).toHaveClass(/editing/);
+  await expect(toolbar).toBeHidden();
+  await label.fill('publishes to');
+  await label.press('Enter');
+  await expect.poll(() => page.evaluate(id => window.app.graphs.current.getEdge(id).Label?.text, edgeId)).toBe('publishes to');
+});
+
 test('@smoke graph storage rejects self-loop and missing-endpoint edge creates', async ({ page }) => {
   await boot(page);
   const nodes = await createNodes(page, ['A']);

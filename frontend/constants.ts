@@ -10,7 +10,7 @@ export type Place = typeof Places[keyof typeof Places];
  *  `[data-slot=...]` elements. Centralized so a typo at either end becomes a
  *  TypeScript error AND a DX rule. */
 export const Slots = {
-  /** Drag handle (handler affordance, draggable). Entity surface. */
+  /** Direct drag surface (handler affordance, draggable). Entity surface. */
   Drag: 'drag',
   /** Resize handle (handler affordance, resizeable). Entity surface. */
   Resize: 'resize',

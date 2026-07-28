@@ -135,6 +135,10 @@ describe('edge labels', () => {
     expect(label).not.toBeNull();
     expect(label!.textContent).toBe('');
     expect(document.querySelector('.edge-label-wrap.is-empty')).not.toBeNull();
+    const target = host!.parentElement!.querySelector('[data-edge-label-trigger]');
+    expect(target).not.toBeNull();
+    expect(Number(target!.getAttribute('width'))).toBeGreaterThan(Number(host!.getAttribute('width')));
+    expect(Number(target!.getAttribute('height'))).toBeGreaterThan(Number(host!.getAttribute('height')));
   });
 
   it('double-clicking the label edits it and commits on Enter', async () => {
@@ -151,6 +155,17 @@ describe('edge labels', () => {
     await settle();
 
     expect(ctx.graphs.current.getEdge(edge.id)!.Label?.text).toBe('publishes to');
+  });
+
+  it('double-clicking the expanded edge-label target starts rename', async () => {
+    const ctx = bootApp();
+    const edge = await twoConnectedNodes(ctx);
+    const target = document.querySelector<SVGElement>(`.edge-label-wrap [data-edge-label-trigger][data-item-id="${edge.id}"]`)!;
+
+    target.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+    await settle();
+
+    expect(document.querySelector(`.edge-label-host[data-item-id="${edge.id}"] [data-editable-title]`)?.classList.contains('editing')).toBe(true);
   });
 
   it('renames the selected edge from the keyboard too', async () => {

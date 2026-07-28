@@ -14,25 +14,20 @@ declare module '../types' {
 }
 
 /** Chrome that owns its own pointer gestures — never a drag start. */
-const DRAG_BLOCKERS = '.stage.ink-erasing, .tool-panel, .item-toolbar, .modal-layer, [data-command], [data-drag-handle], [data-resize-handle], [data-container-section-title], [data-container-section-resize], .editing, [contenteditable="true"], [contenteditable="plaintext-only"], input, textarea, select, button, label';
+const DRAG_BLOCKERS = '.stage.ink-erasing, .tool-panel, .item-toolbar, .modal-layer, [data-command], [data-resize-handle], [data-container-section-title], [data-container-section-resize], .editing, [contenteditable="true"], [contenteditable="plaintext-only"], input, textarea, select, button, label';
 
-/** Draggable — any item with a `Position` can be moved by pointer drag.
- *  The ability declares the drag handle slot; the renderer places it.
- *
- *  Two entry points, same drag:
- *   - the `⋮⋮` grip in the item toolbar (`[data-drag-handle]`, the slot below);
- *   - the item's own body, wherever its renderer marks `[data-drag-surface]`
- *     (the whole card for a node, the title bar for a container). Renderer
- *     convention, like `[data-editable-title]` for `editable`. */
+/** Draggable — any item with a `Position` can be moved from the surface its
+ * renderer marks `[data-drag-surface]` (whole node, container title bar).
+ * No separate grip: the surface itself is the affordance. */
 export const draggable = <T extends Positioned>() => ability<T>('draggable', [action<T>({
   id: 'item.drag',
-  label: 'Drag with pointer',
+  label: 'Drag item directly',
   ui: [{
     surface: 'entity',
-    command: 'drag.item.start',
+    command: 'drag.item.surface.start',
     kind: 'handler',
     slot: Slots.Drag,
-    attrs: { 'data-drag-handle': '', role: 'button', 'aria-label': 'Drag item', title: 'Drag item' },
+    attrs: { 'data-drag-surface': '' },
   }],
 })]);
 
@@ -113,14 +108,6 @@ export function registerDraggable(system: Registry) {
           priority: -10,
           when: event => !(event.target as Element).closest(DRAG_BLOCKERS),
         },
-        payload: startPayload,
-      },
-      {
-        id: 'drag.item.start',
-        label: 'Start drag',
-        group: 'drag',
-        hidden: true,
-        input: { on: 'pointerdown', selector: '[data-drag-handle]', when: event => !(event.target as Element).closest('.stage.ink-erasing, [data-command]'), prevent: true },
         payload: startPayload,
       },
       {

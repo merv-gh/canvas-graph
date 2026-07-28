@@ -3,7 +3,9 @@ import { iconNode } from './icons';
 
 const placementIcon: Record<string, IconName> = {
   inside: 'placement-inside',
+  top: 'placement-top',
   below: 'placement-below',
+  left: 'placement-left',
   right: 'placement-right',
   hidden: 'placement-hidden',
 };
@@ -56,7 +58,12 @@ export function propertiesContext() {
       textarea.dataset.field = prop.id;
       textarea.rows = prop.rows ?? 5;
       textarea.value = String(prop.value(item));
-      label.append(prop.label, textarea);
+      if (prop.placeholder) textarea.placeholder = prop.placeholder;
+      if (prop.hideLabel) {
+        textarea.setAttribute('aria-label', prop.label);
+        label.className = 'property-label-hidden';
+        label.append(textarea);
+      } else label.append(prop.label, textarea);
       return label;
     }
     if (prop.input === 'select') {

@@ -13,6 +13,8 @@ describe('release UX', () => {
     expect(document.querySelector('[data-command="view.zen"]')).toBeNull();
     expect(document.querySelectorAll('[data-command="theme.toggle"]')).toHaveLength(1);
     expect(document.querySelector('[data-command="theme.toggle"]')?.classList.contains('theme-toggle')).toBe(true);
+    expect(document.querySelector('.top-tool-panel [data-command="graph.create"]')).toBeNull();
+    expect(ctx.contexts.commands.get('graph.create')).toBeDefined();
   });
 
   it('turns the empty canvas placeholder into the first-node action', async () => {
@@ -30,7 +32,7 @@ describe('release UX', () => {
     expect(document.querySelector('.stage')?.classList.contains('ink-drawing')).toBe(false);
   });
 
-  it('shows an editable current name, newest graphs first, and filters nested graph items', async () => {
+  it('shows an editable current name and a flat graph-only switcher', async () => {
     const ctx = bootApp();
     await settle();
     runCommand(ctx, 'editing.node.create');
@@ -51,19 +53,26 @@ describe('release UX', () => {
     await settle();
 
     const cards = [...document.querySelectorAll<HTMLElement>('.graph-nav-card')];
-    expect(cards).toHaveLength(1);
-    expect(cards[0].dataset.graphId).toBe(firstId);
-    expect(document.querySelector('.graph-nav-current')?.textContent).toContain('Nodes');
-    expect(document.querySelector('.graph-nav-current')?.textContent).toContain('Connections');
-    expect(document.querySelector('.graph-nav-current')?.textContent).toContain('Containers');
+    expect(cards).toHaveLength(2);
+    expect(cards[0].dataset.graphId).toBe(ctx.graphs.current.id);
+    expect(cards[0].textContent).toContain('Roadmap');
+    expect(cards[1].dataset.graphId).toBe(firstId);
+    expect(document.querySelector('.graph-nav-list .graph-nav-item')).toBeNull();
+    expect(document.querySelector('.graph-nav-create, .graph-nav-duplicate, .graph-nav-duplicate-current')).toBeNull();
 
     const search = document.querySelector<HTMLInputElement>('[data-graph-nav-search]')!;
     search.value = 'Node 2';
     search.dispatchEvent(new Event('input', { bubbles: true }));
     await settle();
-    const results = [...document.querySelectorAll('.graph-nav-item-copy strong')];
-    expect(results.length).toBeGreaterThan(0);
-    expect(results.every(result => result.textContent?.includes('Node 2'))).toBe(true);
+    expect(document.querySelectorAll('.graph-nav-list .graph-nav-card')).toHaveLength(0);
+    expect(document.querySelector('.graph-nav-list .graph-nav-empty')?.textContent).toContain('No graphs');
+
+    const renamedSearch = document.querySelector<HTMLInputElement>('[data-graph-nav-search]')!;
+    renamedSearch.value = 'Roadmap';
+    renamedSearch.dispatchEvent(new Event('input', { bubbles: true }));
+    await settle();
+    expect(document.querySelectorAll('.graph-nav-list .graph-nav-card')).toHaveLength(1);
+    expect(document.querySelector('.graph-nav-list .graph-nav-card')?.textContent).toContain('Roadmap');
   });
 
   it('collapses the open graph navigator on Escape', async () => {
@@ -209,6 +218,9 @@ describe('release UX', () => {
     runCommand(ctx, 'help.open');
     await settle();
     expect(document.querySelector('.modal-head')?.textContent).toContain('Commands and shortcuts');
+    expect(document.querySelector('.help-intro')?.textContent).toContain('Make, connect, arrange');
+    expect(document.querySelectorAll('.help-task-grid > div')).toHaveLength(6);
+    expect(document.querySelector('.help-reference')?.hasAttribute('open')).toBe(false);
     expect(document.querySelectorAll('.shortcut-edit').length).toBeGreaterThan(5);
     expect([...document.querySelectorAll<HTMLInputElement>('.shortcut-edit')].every(input => !!input.value)).toBe(true);
     expect([...document.querySelectorAll<HTMLInputElement>('.shortcut-edit')].every(input => input.getAttribute('aria-label')?.startsWith('Shortcut for '))).toBe(true);

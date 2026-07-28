@@ -21,7 +21,7 @@ export type ShapeNodeType = 'rounded' | 'pill' | 'diamond' | 'parallelogram';
 export type NodeType = string;
 /** Where a node renders its Description relative to the card. Default
  *  (undefined) is `inside` — today's rendering. */
-export type DescriptionPlacement = 'inside' | 'below' | 'right' | 'hidden';
+export type DescriptionPlacement = 'inside' | 'top' | 'right' | 'below' | 'left' | 'hidden';
 /** User-chosen tint for a node, applied as `--node-tone` via `data-node-color`.
  *  Palette keys, not hex — the CSS owns the actual values so themes stay coherent. */
 export type NodeColor = 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple' | 'pink' | 'gray';

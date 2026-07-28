@@ -8,6 +8,13 @@ const openMore = async page => {
   if (!(await details.evaluate(element => element.open))) await page.getByLabel('More actions').click();
 };
 const clickMore = async (page, name) => { await openMore(page); await page.getByRole('button', { name, exact: true }).click(); };
+const openExamples = async page => page.getByText('Browse all examples', { exact: false }).click();
+const openGraphItem = async (page, kind, label) => page.evaluate(({ kind, label }) => {
+  const graph = window.app.graphs.current;
+  const items = kind === 'node' ? graph.nodes() : kind === 'edge' ? graph.edges() : graph.itemsOfKind('container');
+  const item = label ? items.find(candidate => candidate.Label?.text?.includes(label)) : items[0];
+  window.app.bus.emit('outline.item.open', { graphId: graph.id, ref: { kind, id: item.id } });
+}, { kind, label });
 const placeNode = async page => {
   const stage = page.locator('[data-place="stage"]');
   const before = await page.locator('.node').count();
@@ -22,6 +29,7 @@ const placeNode = async page => {
 test('nested C4 document survives reload and share', async ({ page, context }) => {
   await page.goto('/');
   await clickMore(page, 'Open getting-started guide');
+  await openExamples(page);
   await page.getByRole('button', { name: /Checkout microservices/ }).click();
   await expect(page.locator('.container')).toHaveCount(5);
   await expectModelNodeCount(page, 9);
@@ -131,7 +139,7 @@ test('edge picker never leaks into a new graph', async ({ page }) => {
   await placeNode(page);
   await page.getByRole('button', { name: 'Connect', exact: true }).click();
   await expect(page.locator('.picker-prompt')).toBeVisible();
-  await page.locator('.top-tool-panel [data-command="graph.create"]').click();
+  await page.evaluate(() => window.app.contexts.commands.run('graph.create'));
   await expect(page.locator('.picker-prompt')).toHaveCount(0);
   await expect(page.locator('[data-place="stage"] > .empty')).toContainText('No nodes in this graph yet');
 });
@@ -139,6 +147,7 @@ test('edge picker never leaks into a new graph', async ({ page }) => {
 test('fit is the only persistent zoom control', async ({ page }) => {
   await page.goto('/');
   await clickMore(page, 'Open getting-started guide');
+  await openExamples(page);
   await page.getByRole('button', { name: /Checkout microservices/ }).click();
   await expect(page.getByRole('button', { name: 'Fit canvas to content' })).toBeVisible();
   await expect(page.locator('[data-command="view.zoom.in"], [data-command="view.zoom.out"], [data-command="view.zoom.reset"]')).toHaveCount(0);
@@ -148,6 +157,7 @@ test('phone fit ignores overlay navigator width', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await page.evaluate(() => window.app.contexts.commands.run('onboarding.open'));
+  await openExamples(page);
   await page.getByRole('button', { name: /Checkout microservices/ }).click();
   await page.getByRole('button', { name: 'Fit canvas to content' }).click();
   const scale = await page.evaluate(() => window.app.contexts.view.get().scale);
@@ -196,15 +206,15 @@ test('SVG and PNG exports produce downloadable files', async ({ page }) => {
 test('deleting a graph requires explicit confirmation', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Expand graph navigator' }).click();
-  await page.locator('.graph-nav-create').click();
-  const remove = page.locator('.graph-nav-delete');
-  await expect(remove).toHaveCount(1);
+  await page.evaluate(() => window.app.contexts.commands.run('graph.create'));
+  const remove = page.locator('.graph-nav-card.active .graph-nav-delete');
+  await expect(page.locator('.graph-nav-delete')).toHaveCount(2);
   await remove.click();
   await expect(page.locator('.delete-preview')).toContainText('cannot be undone');
   await page.getByRole('button', { name: 'Keep graph' }).click();
-  await expect(page.locator('.graph-nav-delete')).toHaveCount(1);
+  await expect(page.locator('.graph-nav-delete')).toHaveCount(2);
 
-  await page.locator('.graph-nav-delete').click();
+  await page.locator('.graph-nav-card.active .graph-nav-delete').click();
   await page.getByRole('button', { name: 'Delete graph', exact: true }).click();
   await expect(page.locator('.graph-nav-delete')).toHaveCount(0);
 });
@@ -212,12 +222,9 @@ test('deleting a graph requires explicit confirmation', async ({ page }) => {
 test('deleting a populated container warns and offers ungroup', async ({ page }) => {
   await page.goto('/');
   await clickMore(page, 'Open getting-started guide');
+  await openExamples(page);
   await page.getByRole('button', { name: /Checkout microservices/ }).click();
-  // Oversized Fit deliberately leaves lower content off-screen at 80%.
-  // Address the container through the navigator, which also frames it before
-  // exposing contextual deletion.
-  await page.getByRole('button', { name: 'Expand graph navigator' }).click();
-  await page.locator('.graph-nav-item[data-item-kind="container"]').first().click();
+  await openGraphItem(page, 'container');
   await expect(page.locator('.item-toolbar')).toHaveAttribute('data-item-kind', 'container');
   await page.keyboard.press('x');
   await expect(page.getByRole('dialog', { name: 'Delete container?' })).toBeVisible();
@@ -231,11 +238,9 @@ test('deleting a populated container warns and offers ungroup', async ({ page })
 test('selected edges expose a nearby editor with connection actions', async ({ page }) => {
   await page.goto('/');
   await clickMore(page, 'Open getting-started guide');
+  await openExamples(page);
   await page.getByRole('button', { name: /Checkout microservices/ }).click();
-  // At fit-to-document zoom, the navigator is the reliable, intended route
-  // for selecting a fine connection without pixel-level hit testing.
-  await page.getByRole('button', { name: 'Expand graph navigator' }).click();
-  await page.locator('.graph-nav-item[data-item-kind="edge"]').first().click();
+  await openGraphItem(page, 'edge');
   const edit = page.locator('.item-toolbar [data-command="item.properties.open"]');
   await expect(edit).toBeVisible();
   await edit.click();
@@ -247,12 +252,9 @@ test('mobile selected-item wheel stays fully reachable', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await page.evaluate(() => window.app.contexts.commands.run('onboarding.open'));
+  await openExamples(page);
   await page.getByRole('button', { name: /Checkout microservices/ }).click();
-  // The reading-scale floor intentionally leaves the far end off-screen.
-  // Select it through the addressable navigator, which frames it first.
-  await page.getByRole('button', { name: 'Expand graph navigator' }).click();
-  await page.locator('.graph-nav-item[data-item-kind="node"]')
-    .filter({ hasText: 'Payment Service' }).click();
+  await openGraphItem(page, 'node', 'Payment Service');
 
   await expect(page.locator('.item-toolbar')).toBeHidden();
   const node = page.locator('.node').filter({ hasText: 'Payment Service' });

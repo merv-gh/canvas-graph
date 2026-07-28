@@ -7,37 +7,27 @@ const openPaletteDrawer = async page => {
   }
 };
 
-test('catalog search and categories keep saved types in a separate lower section', async ({ page }) => {
+test('graph drawer stays graph-only and searches graph names', async ({ page }) => {
   await page.goto('/');
+  await page.evaluate(() => window.app.contexts.commands.run('graph.create'));
   await openPaletteDrawer(page);
-  await expect(page.locator('.graph-navigator input[type="search"], .palette-panel input[type="search"]')).toHaveCount(1);
-  await expect(page.getByText('Node catalog', { exact: false })).toHaveCount(1);
-  await expect(page.locator('[data-palette-preset-choice]')).toHaveCount(0);
-  await expect(page.getByText('Current collection', { exact: false })).toHaveCount(0);
+  await expect(page.locator('.graph-navigator input[type="search"]')).toHaveCount(1);
+  await expect(page.locator('.tool-panel[data-panel-id="palette"]')).toBeHidden();
+  await expect(page.getByText('Node catalog', { exact: false })).toBeHidden();
+  await expect(page.locator('.graph-nav-list .graph-nav-card')).toHaveCount(2);
+  await expect(page.locator('.graph-nav-list .graph-nav-card').first()).toHaveCSS('border-top-width', '0px');
+  await expect(page.locator('.graph-nav-list button').first()).toHaveCSS('border-top-width', '0px');
+  await expect(page.locator('.graph-nav-choose strong')).toHaveCount(0);
+  await expect(page.locator('.graph-nav-name')).toHaveCount(2);
+  await expect(page.locator('.graph-nav-list .graph-nav-item')).toHaveCount(0);
+  await expect(page.locator('.graph-nav-create, .graph-nav-duplicate, .graph-nav-duplicate-current')).toHaveCount(0);
   const search = page.locator('[data-graph-nav-search]');
-  await search.fill('approval');
-  await expect(page.locator('[data-palette-catalog]')).toHaveCount(1);
-  await expect(page.locator('[data-palette-catalog][data-palette-type="approval-gate"]')).toBeVisible();
-
-  await search.fill('');
-  await page.locator('[data-palette-category="Autonomous systems"]').click();
-  await expect(page.locator('[data-palette-catalog]')).toHaveCount(6);
-  const order = await page.locator('.palette-sheet').evaluate(sheet => {
-    const catalog = sheet.querySelector('.palette-catalog-block');
-    const saved = sheet.querySelector('.palette-saved-block');
-    return !!(catalog.compareDocumentPosition(saved) & Node.DOCUMENT_POSITION_FOLLOWING);
-  });
-  expect(order).toBe(true);
-
-  const camera = await page.evaluate(() => ({ ...window.app.contexts.view.get() }));
-  const catalog = page.locator('.palette-catalog-region');
-  await catalog.hover();
-  await page.mouse.wheel(0, 700);
-  await expect.poll(() => catalog.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
-  expect(await page.evaluate(() => ({ ...window.app.contexts.view.get() }))).toEqual(camera);
+  await search.fill('Graph 2');
+  await expect(page.locator('.graph-nav-list .graph-nav-card')).toHaveCount(1);
+  await expect(page.locator('.graph-nav-list .graph-nav-card')).toContainText('Graph 2');
 });
 
-test('drawer disclosure keeps toolbar fixed and catalog controls bounded', async ({ page }) => {
+test('drawer disclosure keeps toolbar fixed and graph list bounded', async ({ page }) => {
   await page.goto('/');
   const toolbar = page.locator('.tool-panel[data-anchor="top-center"]');
   const before = await toolbar.boundingBox();
@@ -46,30 +36,20 @@ test('drawer disclosure keeps toolbar fixed and catalog controls bounded', async
   expect(Math.abs((after.x + after.width / 2) - (before.x + before.width / 2))).toBeLessThan(1);
   expect(Math.abs(after.y - before.y)).toBeLessThan(1);
 
-  const catalog = page.locator('.palette-workspace-section');
-  await expect(catalog.locator('[data-palette-category="All"]')).toBeVisible();
-  await expect(page.locator('.palette-sheet > [data-palette-category="All"]')).toHaveCount(0);
   await expect(page.locator('.outline-panel-body')).toBeVisible();
-  await expect(page.locator('.palette-saved-pinned')).toBeVisible();
-  const tabs = await page.locator('.palette-category-tabs').boundingBox();
-  const region = page.locator('.palette-catalog-region');
-  const regionBox = await region.boundingBox();
-  const savedBox = await page.locator('.palette-saved-pinned').boundingBox();
-  expect(tabs.height).toBeLessThanOrEqual(30);
-  expect(await region.evaluate(element => element.clientHeight)).toBeGreaterThanOrEqual(96);
-  expect(savedBox.y).toBeGreaterThanOrEqual(regionBox.y + regionBox.height);
+  const drawer = await page.locator('.graph-navigator').boundingBox();
+  const list = await page.locator('.graph-nav-list').boundingBox();
+  expect(drawer.width).toBe(248);
+  expect(list.x).toBeGreaterThanOrEqual(drawer.x);
+  expect(list.x + list.width).toBeLessThanOrEqual(drawer.x + drawer.width);
 });
 
-test('collapsed drawer sections use intrinsic height and keep the hamburger visible', async ({ page }) => {
+test('flat drawer uses intrinsic height and keeps the hamburger visible', async ({ page }) => {
   await page.goto('/?demo=agent-observability');
   await page.waitForFunction(() => window.app.graphs.current.nodes().length >= 9);
   await openPaletteDrawer(page);
-  const graphToggle = page.locator('[data-fold-id="outline.workspace.graphs"]');
-  if (await graphToggle.getAttribute('aria-expanded') === 'true') await graphToggle.click();
-  const catalogToggle = page.locator('[data-fold-id="palette.catalog"]');
-  if (await catalogToggle.getAttribute('aria-expanded') === 'true') await catalogToggle.click();
-  expect((await page.locator('.outline-panel').boundingBox()).height).toBeLessThan(150);
-  expect((await page.locator('.palette-workspace-section').boundingBox()).height).toBeLessThan(50);
+  expect((await page.locator('.outline-panel').boundingBox()).height).toBeLessThan(180);
+  await expect(page.locator('.tool-panel[data-panel-id="palette"]')).toBeHidden();
 
   await page.locator('.node').first().click();
   await expect(page.locator('.properties-inspector')).toBeVisible();
@@ -93,7 +73,7 @@ test('collapsed drawer sections use intrinsic height and keep the hamburger visi
 test('Add node is a persistent mode using the active catalog type', async ({ page }) => {
   await page.goto('/');
   await openPaletteDrawer(page);
-  await page.locator('[data-command="palette.arm.entry"][data-palette-type="diamond"]').click();
+  await page.locator('[data-command="palette.arm.entry"][data-palette-type="diamond"]').evaluate(element => element.click());
   await page.getByRole('button', { name: 'Select mode', exact: true }).click();
   const before = await page.evaluate(() => window.app.graphs.current.nodes().length);
   await page.getByRole('button', { name: 'Add node', exact: true }).click();
@@ -331,7 +311,60 @@ test('selection opens compact left properties without leaking canvas context act
   await expect(page.locator('.item-toolbar [data-command="graph.container.delete"] .ui-icon')).toBeVisible();
 });
 
-test('draw mode preserves catalog but suspends select-mode affordances', async ({ page }) => {
+test('graph list and properties share the rail without clipping or nested panel caps', async ({ page }) => {
+  await page.setViewportSize({ width: 820, height: 720 });
+  await page.goto('/');
+  await page.evaluate(() => window.app.contexts.commands.run('editing.node.create'));
+  await page.getByRole('button', { name: 'Expand graph navigator', exact: true }).click();
+
+  const rail = page.locator('.left');
+  const graphPanel = page.locator('.graph-navigator');
+  const graphCard = page.locator('.graph-nav-list .graph-nav-card.active');
+  const properties = page.locator('[data-panel-id="properties"]');
+  const scroll = properties.locator('.properties-inspector-scroll');
+  await expect(graphCard).toBeVisible();
+  await expect(properties).toBeVisible();
+
+  const boxes = await page.evaluate(() => {
+    const rect = selector => {
+      const { top, right, bottom, left, width, height } = document.querySelector(selector).getBoundingClientRect();
+      return { top, right, bottom, left, width, height };
+    };
+    const rail = rect('.left');
+    const graph = rect('.graph-navigator');
+    const card = rect('.graph-nav-list .graph-nav-card.active');
+    const properties = rect('[data-panel-id="properties"]');
+    const scroll = rect('.properties-inspector-scroll');
+    return { rail, graph, card, properties, scroll };
+  });
+  expect(boxes.card.bottom).toBeLessThanOrEqual(boxes.graph.bottom + 1);
+  expect(boxes.graph.bottom).toBeLessThanOrEqual(boxes.properties.top + 1);
+  expect(boxes.properties.bottom).toBeLessThanOrEqual(boxes.rail.bottom + 1);
+  expect(boxes.scroll.height).toBeGreaterThanOrEqual(260);
+  expect(await scroll.evaluate(element => getComputedStyle(element).overflowY)).toBe('auto');
+});
+
+test('properties stay pinned when canvas selection clears', async ({ page }) => {
+  await page.goto('/');
+  const id = await page.evaluate(() => {
+    window.app.contexts.commands.run('editing.node.create');
+    return window.app.graphs.current.nodes()[0].id;
+  });
+  await page.locator(`.node[data-item-id="${id}"]`).click();
+  await openPaletteDrawer(page);
+  const inspector = page.locator('.properties-inspector');
+  await expect(inspector).toBeVisible();
+  const before = await page.locator('[data-panel-id="properties"]').boundingBox();
+
+  await page.evaluate(() => window.app.selection.select(null));
+
+  await expect(inspector).toBeVisible();
+  await expect(inspector.locator('[data-item-modal-title]')).toHaveValue('Node 1');
+  const after = await page.locator('[data-panel-id="properties"]').boundingBox();
+  expect(Math.abs(after.height - before.height)).toBeLessThanOrEqual(1);
+});
+
+test('draw mode exposes only drawing controls and suspends select-mode affordances', async ({ page }) => {
   await page.goto('/?demo=agent-observability');
   await page.waitForFunction(() => window.app.graphs.current.nodes().length >= 9);
   await openPaletteDrawer(page);
@@ -340,7 +373,7 @@ test('draw mode preserves catalog but suspends select-mode affordances', async (
   await expect(page.locator('.properties-inspector')).toBeVisible();
   await expect(page.locator('.item-toolbar')).toBeVisible();
   await page.locator('[data-command="ink.toggle"]').first().click();
-  await expect(page.locator('.palette-catalog-region')).toBeVisible();
+  await expect(page.locator('.palette-catalog-region')).toBeHidden();
   await expect(page.locator('.palette-draw')).toBeVisible();
   await expect(page.locator('.properties-inspector')).toBeHidden();
   await expect(page.locator('.item-toolbar')).toBeHidden();
@@ -384,28 +417,16 @@ test('agent observability demo renders report primitives with catalog geometry',
   });
 });
 
-test('mobile palette stays collapsed until requested and closes on outside tap', async ({ page }) => {
+test('mobile keeps node catalog out of the graph drawer', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
 
   const stage = page.locator('[data-place="stage"]');
-  const palette = page.locator('.palette-panel');
-  const sheet = page.locator('.palette-sheet');
-  const toggle = page.getByRole('button', { name: 'Open node palette', exact: true });
-
-  await expect(palette).toHaveAttribute('data-mobile-open', 'false');
-  await expect(sheet).toBeHidden();
-  await expect(toggle).toBeVisible();
+  await expect(page.locator('.tool-panel[data-panel-id="palette"]')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Open node palette', exact: true })).toBeHidden();
   const stageBox = await stage.boundingBox();
   expect(stageBox.width).toBe(390);
   expect(stageBox.height).toBe(844);
-
-  await toggle.click();
-  await expect(palette).toHaveAttribute('data-mobile-open', 'true');
-  await expect(sheet).toBeVisible();
-  await page.mouse.click(200, 150);
-  await expect(palette).toHaveAttribute('data-mobile-open', 'false');
-  await expect(sheet).toBeHidden();
 });
 
 test('mobile graph navigator is a focus-contained modal sheet', async ({ page }) => {
@@ -446,7 +467,7 @@ test('draw mode swaps node styling for stroke controls', async ({ page }) => {
 test('custom palette types keep their form and colors after reload', async ({ page }) => {
   await page.goto('/');
   await openPaletteDrawer(page);
-  await page.getByRole('button', { name: 'Create a reusable palette type', exact: true }).click();
+  await page.evaluate(() => window.app.contexts.commands.run('palette.custom-type.create'));
   await page.locator('[data-form-field="label"]').fill('Critical service');
   await page.locator('[data-form-field="shape"]').selectOption('pill');
   await page.locator('[data-form-field="color"]').selectOption('purple');
@@ -464,7 +485,7 @@ test('custom palette types keep their form and colors after reload', async ({ pa
   await openPaletteDrawer(page);
   await expect(page.locator('[data-palette-custom-type]')).toContainText('Critical service');
 
-  await page.getByRole('button', { name: 'Rename Critical service', exact: true }).click();
+  await page.locator('[data-command="palette.custom-type.rename"]').evaluate(element => element.click());
   await page.locator('[data-form-field="label"]').fill('Critical worker');
   await page.getByRole('button', { name: 'Rename', exact: true }).click();
   await expect(page.locator('[data-palette-custom-type]')).toContainText('Critical worker');
@@ -472,9 +493,9 @@ test('custom palette types keep their form and colors after reload', async ({ pa
   await openPaletteDrawer(page);
   await expect(page.locator('[data-palette-custom-type]')).toContainText('Critical worker');
 
-  await page.getByRole('button', { name: 'Delete Critical worker', exact: true }).click();
+  await page.locator('[data-command="palette.custom-type.delete.request"]').evaluate(element => element.click());
   await expect(page.getByText('Existing nodes will not change.')).toBeVisible();
-  await page.getByRole('button', { name: 'Delete Critical worker', exact: true }).click();
+  await page.locator('[data-command="palette.custom-type.delete.confirm"]').click();
   await expect(page.locator('[data-palette-custom-type]')).toHaveCount(0);
   await page.reload();
   await expect(page.locator('[data-palette-custom-type]')).toHaveCount(0);
@@ -571,7 +592,7 @@ test('type palette becomes a canvas placement tool and edits selection', async (
   await page.goto('/');
   await openPaletteDrawer(page);
   const before = await page.evaluate(() => window.app.graphs.current.nodes().length);
-  await page.locator('[data-command="palette.arm.entry"][data-palette-type="diamond"]').click();
+  await page.locator('[data-command="palette.arm.entry"][data-palette-type="diamond"]').evaluate(element => element.click());
   const stage = page.locator('[data-place="stage"]');
   await expect(stage).toHaveClass(/node-placing/);
   const box = await stage.boundingBox();
@@ -602,7 +623,7 @@ test('Context exposes actions and C4 palette creates real containers', async ({ 
 
   await page.evaluate(() => window.app.bus.emit('preset.set', { preset: 'c4' }));
   await page.evaluate(() => window.app.selection.select(null));
-  await page.getByRole('button', { name: 'System', exact: true }).click();
+  await page.locator('[data-command="palette.arm.entry"]').filter({ hasText: 'System' }).evaluate(element => element.click());
   const stage = page.locator('[data-place="stage"]');
   const box = await stage.boundingBox();
   await page.mouse.click(box.x + 500, box.y + box.height - 80);
@@ -629,23 +650,22 @@ test('Add, Draw, Select, and Erase form one exclusive mode group', async ({ page
   await expect(pressed()).toHaveAttribute('data-command', 'canvas.select');
 });
 
-test('catalog favorites and recent types survive redraw and reload', async ({ page }) => {
+test('hidden catalog state survives redraw and reload', async ({ page }) => {
   await page.goto('/');
   await openPaletteDrawer(page);
   const diamond = page.locator('.palette-catalog-block [data-palette-type="diamond"]').first();
-  await diamond.locator('xpath=..').getByRole('button', { name: 'Add Diamond to favorites', exact: true }).click();
-  await page.locator('[data-palette-category="Favorites"]').click();
-  await expect(page.locator('.palette-favorites-block [data-palette-type="diamond"]')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Remove Diamond from favorites', exact: true }).locator('.ui-icon')).toBeVisible();
-  await page.locator('[data-palette-category="All"]').click();
-  await page.locator('.palette-catalog-block [data-palette-type="diamond"]').first().click();
-  await expect(page.locator('.palette-recent-block [data-palette-type="diamond"]')).toBeVisible();
+  await diamond.locator('xpath=..').locator('[data-command="palette.favorite.toggle"]').evaluate(element => element.click());
+  await page.locator('[data-palette-category="Favorites"]').evaluate(element => element.click());
+  await expect(page.locator('.palette-favorites-block [data-palette-type="diamond"]')).toHaveCount(1);
+  await page.locator('[data-palette-category="All"]').evaluate(element => element.click());
+  await page.locator('.palette-catalog-block [data-palette-type="diamond"]').first().evaluate(element => element.click());
+  await expect(page.locator('.palette-recent-block [data-palette-type="diamond"]')).toHaveCount(1);
   await page.reload();
   await openPaletteDrawer(page);
-  await page.locator('[data-palette-category="Favorites"]').click();
-  await expect(page.locator('.palette-favorites-block [data-palette-type="diamond"]')).toBeVisible();
-  await page.locator('[data-palette-category="All"]').click();
-  await expect(page.locator('.palette-recent-block [data-palette-type="diamond"]')).toBeVisible();
+  await page.locator('[data-palette-category="Favorites"]').evaluate(element => element.click());
+  await expect(page.locator('.palette-favorites-block [data-palette-type="diamond"]')).toHaveCount(1);
+  await page.locator('[data-palette-category="All"]').evaluate(element => element.click());
+  await expect(page.locator('.palette-recent-block [data-palette-type="diamond"]')).toHaveCount(1);
 });
 
 test('shared SVG controls dismiss overflow on canvas without moving the camera', async ({ page }) => {

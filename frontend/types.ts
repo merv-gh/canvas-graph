@@ -345,6 +345,8 @@ export type PropertyDef<T = unknown, Patch = unknown> = {
   min?: number;
   step?: number;
   rows?: number;
+  placeholder?: string;
+  hideLabel?: boolean;
   options?: { value: string; label: string; icon?: string }[];
   /** Section the property is rendered under in the modal. Default 'default'. */
   group?: string;
@@ -367,7 +369,7 @@ export type IconName = 'menu' | 'fit' | 'more' | 'commands' | 'select' | 'draw' 
   | 'node' | 'connect' | 'container' | 'group' | 'undo' | 'redo' | 'export' | 'import'
   | 'share' | 'help' | 'theme' | 'star' | 'star-filled' | 'close' | 'trash'
   | 'text' | 'circle' | 'toggle' | 'reverse' | 'collapse' | 'ungroup' | 'move-out' | 'check'
-  | 'placement-inside' | 'placement-below' | 'placement-right' | 'placement-hidden'
+  | 'placement-inside' | 'placement-top' | 'placement-below' | 'placement-left' | 'placement-right' | 'placement-hidden'
   | 'layout-columns' | 'layout-rows' | 'pulse';
 
 export type AffordanceDef<T = unknown> = {

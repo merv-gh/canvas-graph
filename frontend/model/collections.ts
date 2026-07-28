@@ -13,7 +13,9 @@ export const appCollections = [
     label: 'Graphs',
     kind: 'graph',
     items: ctx => ctx.graphs.all(),
-    toolbar: { text: 'New graph', order: 20 },
+    // Graph creation is a rare workspace action. Keep it in commands and
+    // shortcuts, not in the persistent canvas tool panel.
+    toolbar: false,
   }),
   collection<NodeEntity>({
     id: 'nodes',

@@ -14,21 +14,18 @@ const createSmallGraph = async (page) => page.evaluate(() => {
   return { a: a.id, b: b.id };
 });
 
-test('node drag handle is explicit and moves the node', async ({ page }) => {
+test('node moves directly without a redundant drag handle', async ({ page }) => {
   await boot(page);
   const ids = await createSmallGraph(page);
 
   const node = page.locator(`.node[data-item-kind="node"][data-item-id="${ids.b}"]`);
   const header = node.locator('.node-header');
-  const toolbar = page.locator('.node-toolbar');
-  const handle = toolbar.locator('.node-drag-handle');
-
-  await expect(handle).toBeVisible();
-  await expect(handle).toHaveAttribute('data-drag-handle', '');
+  await expect(page.locator('[data-drag-handle]')).toHaveCount(0);
+  await expect(node).toHaveAttribute('data-drag-surface', '');
   await expect(header).toHaveCount(0);
 
   const before = await node.boundingBox();
-  const box = await handle.boundingBox();
+  const box = await node.boundingBox();
   expect(before && box).toBeTruthy();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
