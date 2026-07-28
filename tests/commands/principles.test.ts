@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { analyzeCss } from '../../dx/tooling/css-health.mjs';
 import { bootApp, commandButton, runCommand, settle, teardownApp } from './testkit';
 
 const Frontend = resolve(process.cwd(), 'frontend');
@@ -23,6 +24,38 @@ describe('frontend principles (enforced)', () => {
   it('core.ts stays ≤ 400 lines (smallest-core principle)', () => {
     const lines = readFileSync(join(Frontend, 'core.ts'), 'utf8').split('\n').length;
     expect(lines).toBeLessThanOrEqual(400);
+  });
+
+  it('styles stay within one small, concept-owned visual system', () => {
+    const css = readFileSync(join(Frontend, 'styles.css'), 'utf8');
+    expect(css.split('\n').length).toBeLessThanOrEqual(1_000);
+    const owners = [
+      'Tokens, themes, and element defaults',
+      'Application shell and global chrome',
+      'Canvas, entities, and spatial interaction',
+      'Navigator, palette, and properties',
+      'Dialogs, onboarding, and contextual actions',
+      'Diagnostics, projections, and presentation modes',
+    ];
+    const positions = owners.map(owner => css.indexOf(`/* ${owner} */`));
+    positions.forEach((position, index) => expect(position, owners[index]).toBeGreaterThanOrEqual(0));
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
+
+    // Named tones are shared by nodes, edges, ink, legends, and both palettes.
+    // Repeating their literals recreates the variant matrices this budget removed.
+    const tones = ['red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink'];
+    tones.forEach(tone => {
+      const value = css.match(new RegExp(`--color-${tone}: (#[0-9a-f]{6})`))?.[1];
+      expect(value, tone).toBeTruthy();
+      expect(css.match(new RegExp(value!, 'gi'))).toHaveLength(1);
+    });
+
+    const health = analyzeCss(css);
+    expect(health.rules).toBeLessThanOrEqual(1_000);
+    expect(health.duplicateRuleGroups).toEqual([]);
+    expect(health.scaleViolations).toEqual({
+      elevation: [], radius: [], spacing: [], typography: [],
+    });
   });
 
   // PRINCIPLE 13 — Toolbar buttons come from data, not templates. The shell template

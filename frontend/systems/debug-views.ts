@@ -2,7 +2,8 @@ import { flattenSnapshotTree, type SnapshotNode } from '../core';
 
 const treeRow = (node: SnapshotNode, depth: number): HTMLElement => {
   const row = document.createElement('div');
-  row.className = `debug-tree-row depth-${depth}`;
+  row.className = 'debug-tree-row';
+  row.style.setProperty('--depth', String(depth));
   row.dataset.path = node.code;
   const label = document.createElement('span');
   label.className = 'debug-tree-label';

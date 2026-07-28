@@ -134,7 +134,11 @@ test('far mobile overview favors readable titles over clipped descriptions', asy
   await page.keyboard.press('-');
   await expect(page.locator('.stage')).toHaveAttribute('data-zoom-band', 'far');
   await expect(page.locator('.item-toolbar')).toHaveCount(0);
-  await expect(page.locator('.node-title').first()).toHaveCSS('font-size', '22px');
+  const titleSize = await page.locator('.node-title').first().evaluate(title =>
+    getComputedStyle(title).fontSize);
+  const farTitleToken = await page.evaluate(() =>
+    getComputedStyle(document.documentElement).getPropertyValue('--text-3xl').trim());
+  expect(titleSize).toBe(farTitleToken);
   await expect(page.locator('.node-body').first()).toHaveCSS('display', 'none');
   // Rotated/skewed architecture shapes intentionally extend their transformed
   // geometry beyond the untransformed box; check the readable title itself.
