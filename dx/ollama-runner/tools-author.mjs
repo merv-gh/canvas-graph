@@ -1,7 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { lineNumber, lineStartIndex, findMatching } from './tool-source.mjs';
-
 export const authorTools = {
 tool_set_command({ id, props }) {
     if (this.phase !== 'green') return 'set_command is GREEN-phase only (it edits frontend/)';
@@ -62,7 +61,6 @@ tool_set_command({ id, props }) {
     const from = Math.max(0, lineNo - 2);
     return `updated ${file}: added ${missingEntries.map(([k]) => k).join(', ')}${skipped}.\n${all.slice(from, lineNo + 1).map((l, i) => `${from + 1 + i}|${l}`).join('\n')}\nNow run_test to confirm.`;
   },
-
 serializeObject(obj) {
     const val = (v) => {
       if (typeof v === 'string') return /=>/.test(v) || /^\(.*\)\s*=>/.test(v) ? v : `'${v.replace(/'/g, "\\'")}'`;
@@ -72,7 +70,6 @@ serializeObject(obj) {
     };
     return `{ ${Object.entries(obj).map(([k, v]) => `${k}: ${val(v)}`).join(', ')} }`;
   },
-
 tool_add_command({ system, spec, handler }) {
     if (this.phase !== 'green') return 'add_command is GREEN-phase only (it edits frontend/)';
     const parsedSpec = this.parseSpec(spec);
@@ -498,5 +495,5 @@ tool_add_container_delete_cascade() {
       'Child containers emit graph.container.delete; child nodes emit graph.node.delete.',
       'Now run_test to confirm.',
     ].join('\n');
-  }
+  },
 };

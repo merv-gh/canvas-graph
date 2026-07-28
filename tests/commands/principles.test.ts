@@ -93,13 +93,25 @@ describe('frontend principles (enforced)', () => {
       'debug.ts->debug-views',       // pure DOM builders
       'node-autosize.ts->text-layout', // pure text measurement helper
       'container-commands.ts->container-entity', // pure entity helpers used by command specs
+      'container-state.ts->container-entity', // pure entity validation used by isolated state owner
+      'containers.ts->container-delete-preview', // pure delete-summary DOM builder
+      'containers.ts->container-state', // per-graph container state owner
       'containers.ts->container-commands', // pure command-spec factory; dependencies are injected
+      'command-modal.ts->command-help-view', // pure help DOM builder
+      'demo.ts->demo-builder', // demo construction helpers with injected graph context
+      'demo.ts->demo-commands', // declarative demo command specs
+      'graph.ts->graph-export', // isolated export rendering and download adapter
+      'item-toolbar.ts->item-toolbar-view', // pure toolbar/menu DOM builder
       'layout.ts->layout-algorithms', // pure hierarchy/layout algorithms
       'outline.ts->outline-view', // pure DOM builder; state is passed as a snapshot
       'palette.ts->presets',        // pure preset catalog/IO functions; no module state
       'palette.ts->palette-custom-type-commands', // pure command-spec factory; dependencies are injected
       'palette.ts->palette-catalog', // pure palette value helpers
+      'palette.ts->palette-commands', // pure command-spec factory; dependencies are injected
+      'palette.ts->palette-surface', // isolated surface registrations
       'palette.ts->palette-view', // pure DOM builder; state is passed as a snapshot
+      'palette-commands.ts->palette-custom-type-commands', // composed command-spec factories
+      'palette-commands.ts->presets', // immutable preset data and forms
       'palette-view.ts->palette-catalog', // pure palette value helpers
       'palette-view.ts->presets', // pure preset catalog/IO functions; no module state
       'share.ts->share-codecs', // pure codecs and import parsers
@@ -254,19 +266,21 @@ describe('frontend principles (enforced)', () => {
     expect(names.length).toBeLessThanOrEqual(14);
   });
 
-  // PRINCIPLE — types read high → low. types.ts opens with a MODEL MAP, and the
-  // nouns it names are defined further down, in that same order, so a reader
-  // grasps the overview first and descends only into the detail they need.
-  it('types.ts opens with a MODEL MAP whose nouns are defined below in order', () => {
+  // PRINCIPLE — types read high → low. types.ts opens with a MODEL MAP. Core
+  // nouns remain below it in reading order; the rendering contract has one
+  // explicit owner so types.ts can remain a small public facade.
+  it('types.ts opens with a MODEL MAP whose nouns have ordered, explicit owners', () => {
     const src = readFileSync(join(Frontend, 'types.ts'), 'utf8');
+    const renderSrc = readFileSync(join(Frontend, 'render-types.ts'), 'utf8');
     const mapAt = src.indexOf('MODEL MAP');
     const firstDef = src.search(/\nexport (type|interface) /);
     expect(mapAt).toBeGreaterThanOrEqual(0);
     expect(mapAt).toBeLessThan(firstDef); // overview precedes detail
-    const nouns = ['Renderable', 'ItemRef', 'AppEvents', 'CommandSpec', 'AbilityDef', 'EntityDef', 'CollectionDef'];
+    const nouns = ['Renderable', 'ItemRef', 'AppEvents', 'CommandSpec', 'AbilityDef', 'CollectionDef'];
     const positions = nouns.map(noun => src.indexOf(`export type ${noun}`));
     positions.forEach((pos, i) => expect(pos, nouns[i]).toBeGreaterThan(0));
     expect(positions).toEqual([...positions].sort((a, b) => a - b)); // high→low order
+    expect(renderSrc.indexOf('export type EntityDef')).toBeGreaterThan(0);
   });
 
   // PRINCIPLE — hierarchy is visible in navigation, not just storage. A node

@@ -1,6 +1,8 @@
 import { boundsOf, createNesting, expandRect, itemFoldId, itemIdFrom, rectCenter, refKey, sameItemRef, unionRect, type NestApi, type Registry } from '../core';
 import { Places } from '../types';
+import { createContainerStates } from './container-state';
 import { containerCommands } from './container-commands';
+import { createContainerDeletePreview } from './container-delete-preview';
 import type {
   Id,
   ItemRef,
@@ -63,103 +65,16 @@ declare module '../types' {
 const COLLAPSED_SIZE: Size = { w: 140, h: 36 };
 const PADDING = 24;
 const LABEL_BAND = 18;
-type ContainerSnapshot = Omit<Container, 'kind'>;
 
 // ---------- The system ----------
 
 export function registerContainers(system: Registry) {
   system('containers', (ctx) => {
     const { on, emit, contexts, graphs, selection, contribute, origin } = ctx;
-    let next = 1;
     let pendingContainerDelete: Id | null = null;
 
-    /** Per-graph state bucket — containers, the nesting helper, and the live
-     *  item-store registration. Keyed by graph id so switching graphs hides
-     *  others; deleting a graph drops its bucket. */
-    type GraphState = {
-      containers: Map<Id, Container>;
-      nest: NestApi;
-      storeOff: () => void;
-      snapshotOff: () => void;
-    };
-    const states = new Map<Id, GraphState>();
-    const ensureState = (gid: Id): GraphState => {
-      const existing = states.get(gid);
-      if (existing) return existing;
-      const containers = new Map<Id, Container>();
-      let restoring = false;
-      const nest = createNesting<Container>({
-        parents: containers,
-        parentKind: 'container',
-        onChange: id => { if (!restoring) emit('container.children.changed', { id }); },
-      });
-      const graph = graphs.get(gid) ?? graphs.current;
-      const storeOff = graph.registerItemStore<Container>('container', () => [...containers.values()]);
-      const serialize = (): ContainerSnapshot[] => [...containers.values()].map(container => ({
-        id: container.id,
-        Label: { ...container.Label },
-        Position: { ...container.Position },
-        Size: { ...container.Size },
-        AutoFit: container.AutoFit,
-        ContainerType: container.ContainerType,
-        Color: container.Color,
-        Sections: container.Sections?.map(section => ({ ...section })),
-        SectionAxis: container.SectionAxis,
-        ChildSections: { ...(container.ChildSections ?? {}) },
-        Children: container.Children.map(child => ({ ...child, parent: child.parent ? [...child.parent] : undefined })),
-        Legend: container.Legend?.map(entry => ({ ...entry })),
-        Multiplier: container.Multiplier,
-      }));
-      const restore = (value: ContainerSnapshot[] | undefined) => {
-        restoring = true;
-        try {
-          [...containers.values()].forEach(container => container.Children.forEach(child => nest.remove(child)));
-          containers.clear();
-          const saved = Array.isArray(value) ? value : [];
-          saved.forEach(input => {
-            if (!input?.id || !input.Label || !input.Position || !input.Size) return;
-            containers.set(input.id, {
-              id: input.id,
-              kind: 'container',
-              Label: { ...input.Label },
-              Position: { ...input.Position },
-              Size: { ...input.Size },
-              AutoFit: input.AutoFit,
-              ContainerType: input.ContainerType,
-              Color: input.Color,
-              Sections: input.Sections?.map(section => ({ ...section })) ?? [],
-              SectionAxis: input.SectionAxis ?? 'rows',
-              ChildSections: { ...(input.ChildSections ?? {}) },
-              Children: [],
-              // Keep an empty legend as `undefined`, not `[]`, so a
-              // legend-free container round-trips to an identical snapshot.
-              Legend: sanitizeLegend(input.Legend).length ? sanitizeLegend(input.Legend) : undefined,
-              Multiplier: typeof input.Multiplier === 'string' && input.Multiplier.trim() ? input.Multiplier : undefined,
-            });
-            const sequence = Number.parseInt(input.id.replace(/^\D+/, ''), 10);
-            if (Number.isFinite(sequence)) next = Math.max(next, sequence + 1);
-          });
-          saved.forEach(input => {
-            if (!containers.has(input.id)) return;
-            input.Children?.forEach(child => {
-              if (child?.id && (child.kind === 'node' || child.kind === 'container') && graph.getItem(child)) {
-                nest.add(input.id, { ...child, parent: child.parent ? [...child.parent] : undefined });
-              }
-            });
-            const container = containers.get(input.id);
-            if (container) sanitizeContainerSections(container);
-          });
-        } finally {
-          restoring = false;
-        }
-      };
-      restore(graph.snapshotExtension<ContainerSnapshot[]>('containers'));
-      const snapshotOff = graph.registerSnapshotExtension('containers', serialize, restore);
-      const state: GraphState = { containers, nest, storeOff, snapshotOff };
-      states.set(gid, state);
-      return state;
-    };
-    const stateOf = () => ensureState(graphs.current.id);
+    const containerStates = createContainerStates({ emit, graphs });
+    const stateOf = () => containerStates.current();
     const containersHere = () => stateOf().containers;
     const nestHere = () => stateOf().nest;
     let sectionTitleEdit: { containerId: Id; sectionId: Id } | null = null;
@@ -228,13 +143,8 @@ export function registerContainers(system: Registry) {
       el.classList.remove('editing');
     };
 
-    on('graph.switched', () => { ensureState(graphs.current.id); });
-    on('graph.deleted', ({ id }) => {
-      const s = states.get(id);
-      if (!s) return;
-      s.storeOff();
-      states.delete(id);
-    });
+    on('graph.switched', ({ id }) => { containerStates.ensure(id); });
+    on('graph.deleted', ({ id }) => containerStates.delete(id));
 
     // Hierarchy + targets read live from the current graph's state — no
     // re-registration needed on switch.
@@ -306,7 +216,7 @@ export function registerContainers(system: Registry) {
 
 
     on('editing.container.create', draft => {
-      const id = `c${next++}`;
+      const id = containerStates.nextId();
       containersHere().set(id, {
         id, kind: 'container',
         Label: draft.Label ?? { text: id },
@@ -346,65 +256,18 @@ export function registerContainers(system: Registry) {
       });
       emit('selection.item.clear');
     });
-    const descendantCounts = (id: Id) => {
-      const seen = new Set<Id>();
-      let nodes = 0;
-      let containers = 0;
-      const visit = (containerId: Id) => {
-        if (seen.has(containerId)) return;
-        seen.add(containerId);
-        containersHere().get(containerId)?.Children.forEach(child => {
-          if (child.kind === 'node') nodes += 1;
-          else if (child.kind === 'container') { containers += 1; visit(child.id); }
-        });
-      };
-      visit(id);
-      return { nodes, containers };
-    };
-    const deletePreview = (id: Id) => () => {
-      const container = containersHere().get(id);
-      const counts = descendantCounts(id);
-      const panel = document.createElement('section');
-      panel.className = 'delete-preview container-delete-preview';
-      const warning = document.createElement('p');
-      const parts = [
-        counts.nodes ? `${counts.nodes} node${counts.nodes === 1 ? '' : 's'}` : '',
-        counts.containers ? `${counts.containers} nested container${counts.containers === 1 ? '' : 's'}` : '',
-      ].filter(Boolean);
-      warning.textContent = parts.length
-        ? `Delete “${container?.Label.text ?? id}” and its ${parts.join(' and ')}? This cannot be undone.`
-        : `Delete empty container “${container?.Label.text ?? id}”?`;
-      const note = document.createElement('small');
-      note.textContent = parts.length ? 'To remove only the boundary, choose Ungroup and keep contents.' : '';
-      const actions = document.createElement('div');
-      actions.className = 'import-actions';
-      const cancel = document.createElement('button');
-      cancel.type = 'button';
-      cancel.dataset.command = 'container.delete.cancel';
-      cancel.dataset.containerDeleteCancel = '';
-      cancel.textContent = 'Keep container';
-      const confirm = document.createElement('button');
-      confirm.type = 'button';
-      confirm.className = 'danger graph-delete-confirm';
-      confirm.dataset.command = 'container.delete.confirm';
-      confirm.dataset.containerDeleteConfirm = '';
-      confirm.textContent = parts.length ? 'Delete contents' : 'Delete container';
-      actions.append(cancel, confirm);
-      panel.append(warning);
-      if (note.textContent) panel.append(note);
-      panel.append(actions);
-      return panel;
-    };
+    const deletePreview = createContainerDeletePreview(containersHere);
+
     on('container.delete.request', ({ id, confirm }) => {
       const container = containersHere().get(id);
       if (!container) return;
-      const counts = descendantCounts(id);
+      const counts = deletePreview.counts(id);
       if (!confirm || (!counts.nodes && !counts.containers)) {
         emit('graph.container.delete', { id });
         return;
       }
       pendingContainerDelete = id;
-      emit('modal.open', { title: 'Delete container?', visual: 'properties', body: deletePreview(id) });
+      emit('modal.open', { title: 'Delete container?', visual: 'properties', body: deletePreview.body(id) });
     });
     on('container.delete.confirm', () => {
       const id = pendingContainerDelete;
@@ -617,8 +480,7 @@ export function registerContainers(system: Registry) {
     return () => {
       offEntity();
       offCollection();
-      states.forEach(s => { s.storeOff(); s.snapshotOff(); });
-      states.clear();
+      containerStates.dispose();
     };
   }, { requires: ['render.stage', 'graph'] });
 }

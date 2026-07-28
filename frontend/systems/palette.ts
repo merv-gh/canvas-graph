@@ -1,70 +1,21 @@
-import { clientPoint, edgeRef, itemRefFrom, nodeRef, type Registry } from '../core';
+import { edgeRef, itemRefFrom, nodeRef, type Registry } from '../core';
 import {
-  EDGE_KINDS,
-  isEdgeKind,
-  isNodeColor,
-  isNodeFill,
-  NODE_COLORS,
-  NODE_FILLS,
-  BUILTIN_NODE_TYPES,
-  isDefaultNodeSize,
-  nodeTypeBorder,
-  nodeTypeDefinition,
-  nodeTypeFill,
-  nodeTypeLabel,
-  type EdgeKind,
-  type EdgePatch,
-  type NodeBorder,
-  type NodeColor,
-  type NodeFill,
-  type NodePatch,
-  type NodeType,
+  isDefaultNodeSize, isEdgeKind, isNodeColor, isNodeFill,
+  nodeTypeBorder, nodeTypeDefinition, nodeTypeFill,
+  type EdgePatch, type NodeColor, type NodePatch,
 } from '../model';
 import { Places, type ItemRef } from '../types';
 import type { ContainerType } from './container-entity';
-import { customPaletteTypeCommands } from './palette-custom-type-commands';
+import { paletteCommands } from './palette-commands';
+import { registerPaletteSurface } from './palette-surface';
+import './palette-events';
 import {
-  FAVORITES_KEY,
-  RECENT_KEY,
-  catalogRefKey,
-  sameVisualEntry,
-  typeLabel,
-  type CatalogRef,
-  type PaletteArm,
+  FAVORITES_KEY, RECENT_KEY, catalogRefKey, sameVisualEntry, typeLabel,
+  type CatalogRef, type PaletteArm,
 } from './palette-catalog';
 import { createPaletteView } from './palette-view';
-import {
-  activePresetId,
-  CUSTOM_TYPE_FORMS,
-  getPreset,
-  typeEntriesFor,
-  type PresetId,
-  type PresetTypeEntry,
-} from './presets';
+import { activePresetId, getPreset, typeEntriesFor, type PresetId, type PresetTypeEntry } from './presets';
 
-declare module '../types' {
-  interface CustomEvents {
-    'palette.arm.entry': { preset: PresetId; index: number };
-    'palette.arm.type': { type: NodeType };
-    'palette.arm.sync-type': { type: NodeType };
-    'palette.arm.color': { color?: NodeColor };
-    'palette.arm.fill': { fill: NodeFill };
-    'palette.arm.border': { border?: NodeBorder };
-    'palette.edge.kind': { kind: EdgeKind };
-    'palette.arm.changed': { type: NodeType; color?: NodeColor; fill?: NodeFill; border?: NodeBorder; entity?: 'node' | 'container'; containerType?: ContainerType; label?: string; entryIndex?: number; entryId?: string };
-    'palette.custom-type.delete.request': { preset: PresetId; entryId: string };
-    'palette.custom-type.delete.confirm': void;
-    'palette.node.place': { point: { x: number; y: number }; containerId?: string };
-    'palette.place.item': { ref: ItemRef; point: { x: number; y: number }; client: { x: number; y: number } };
-    'palette.place.activate': void;
-    'palette.place.cancel': void;
-    'palette.mobile.toggle': void;
-    'palette.mobile.close': void;
-    'palette.mobile.tab': { shift: boolean };
-    'palette.category.set': { category: string };
-    'palette.favorite.toggle': { key: string };
-  }
-}
 export function registerPalette(system: Registry) {
   system('palette', ({ on, emit, contexts, graphs, io, selection, declarePanel, contribute, origin, frameLoop }) => {
     let placing = false;
@@ -269,113 +220,16 @@ export function registerPalette(system: Registry) {
         : undefined;
     };
 
-    const typeCommands = BUILTIN_NODE_TYPES.map(def => def.id);
-    contexts.commands.register([
-      {
-        id: 'palette.arm.entry', label: 'Arm collection type', event: 'palette.arm.entry',
-        group: 'palette', hidden: true,
-        payload: ({ target }) => {
-          const el = (target as HTMLElement | null)?.closest<HTMLElement>('[data-palette-index]');
-          return { preset: el?.dataset.palettePreset ?? '', index: Number(el?.dataset.paletteIndex ?? -1) };
-        },
-      },
-      ...customPaletteTypeCommands({
-        activeStyle: () => arm,
-        presetId,
-        selectedNode: primaryNode,
-        typeForms: CUSTOM_TYPE_FORMS,
-      }),
-      {
-        id: 'palette.place.activate', label: 'Add node using selected catalog type', group: 'palette',
-      },
-      {
-        id: 'palette.node.place', label: 'Place armed item', group: 'palette', hidden: true,
-        input: {
-          on: 'click', selector: `[data-place="${Places.Stage}"]`, prevent: true,
-          when: (event, stage) => {
-            if (!placing || drawing || erasing) return false;
-            const target = event.target;
-            return target === stage || (target instanceof Element && stage.contains(target)
-              && !target.closest('[data-item-id], .tool-panel, .item-toolbar, .modal-layer'));
-          },
-        },
-        payload: ({ event }) => ({ point: contexts.view.clientToSpace(Places.Stage, clientPoint(event!)) }),
-      },
-      {
-        id: 'palette.place.item', label: 'Resolve an item click while adding', group: 'palette', hidden: true,
-        input: {
-          on: 'pointerdown', selector: '[data-item-kind][data-item-id]', prevent: true, stop: true,
-          when: event => placing && !drawing && !erasing
-            && (event as PointerEvent).button === 0
-            && !(event.target as Element).closest('.tool-panel, .item-toolbar, .modal-layer, [data-command], input, textarea, select'),
-        },
-        payload: ({ event, target }) => {
-          const ref = itemRefFrom(target);
-          const client = clientPoint(event!);
-          return ref ? { ref, client, point: contexts.view.clientToSpace(Places.Stage, client) } : undefined;
-        },
-      },
-      { id: 'palette.place.cancel', label: 'Stop placing nodes', group: 'palette', hidden: true },
-      ...typeCommands.map(type => ({
-        id: `palette.arm.type.${type}`,
-        label: `Arm node type: ${nodeTypeLabel(type)}`,
-        event: 'palette.arm.type' as const,
-        group: 'palette',
-        available: () => !!nodeTypeDefinition(type),
-        payload: () => ({ type }),
-      })),
-      ...NODE_COLORS.map(({ value, label }) => ({
-        id: `palette.arm.color.${value}`,
-        label: `Arm node color: ${label}`,
-        event: 'palette.arm.color' as const,
-        group: 'palette',
-        payload: () => ({ color: value }),
-      })),
-      {
-        id: 'palette.arm.color.default', label: 'Arm node color: collection default',
-        event: 'palette.arm.color', group: 'palette', payload: () => ({ color: undefined }),
-      },
-      ...NODE_FILLS.map(({ value, label }) => ({
-        id: `palette.arm.fill.${value}`,
-        label: `Arm node fill: ${label}`,
-        event: 'palette.arm.fill' as const,
-        group: 'palette',
-        payload: () => ({ fill: value }),
-      })),
-      ...NODE_COLORS.map(({ value, label }) => ({
-        id: `palette.arm.border.${value}`,
-        label: `Arm node border: ${label}`,
-        event: 'palette.arm.border' as const,
-        group: 'palette',
-        payload: () => ({ border: value }),
-      })),
-      {
-        id: 'palette.arm.border.none', label: 'Arm node border: none',
-        event: 'palette.arm.border', group: 'palette', payload: () => ({ border: 'none' as const }),
-      },
-      {
-        id: 'palette.arm.border.default', label: 'Arm node border: automatic',
-        event: 'palette.arm.border', group: 'palette', payload: () => ({ border: undefined }),
-      },
-      ...EDGE_KINDS.map(({ value, label }) => ({
-        id: `palette.edge.kind.${value}`,
-        label: `Set selected edge kind: ${label}`,
-        event: 'palette.edge.kind' as const,
-        group: 'palette',
-        available: () => selectedEdges().length > 0,
-        payload: () => ({ kind: value }),
-      })),
-      {
-        id: 'palette.category.set', label: 'Filter node type category', group: 'palette', hidden: true,
-        payload: ({ target }) => ({ category: (target as HTMLElement).closest<HTMLElement>('[data-palette-category]')?.dataset.paletteCategory ?? 'All' }),
-      },
-      {
-        id: 'palette.favorite.toggle', label: 'Toggle favorite node type', group: 'palette', hidden: true,
-        payload: ({ target }) => ({ key: target?.closest<HTMLElement>('[data-palette-favorite]')?.dataset.paletteFavorite ?? '' }),
-      },
-      { id: 'palette.mobile.toggle', label: 'Toggle node palette', group: 'palette', hidden: true },
-      { id: 'palette.mobile.close', label: 'Close node palette', group: 'palette', hidden: true },
-    ]);
+    contexts.commands.register(paletteCommands({
+      activeStyle: () => arm,
+      contexts,
+      isDrawing: () => drawing,
+      isErasing: () => erasing,
+      isPlacing: () => placing,
+      presetId,
+      selectedEdges,
+      selectedNode: primaryNode,
+    }));
 
     const view = () => createPaletteView({
       contexts,
@@ -593,58 +447,15 @@ export function registerPalette(system: Registry) {
       if (mobileOpen) setMobileOpen(false);
     });
 
-    contexts.interaction.cancel.register({
+    registerPaletteSurface({
+      contribute,
+      contexts,
+      emit,
+      isMobileOpen: () => mobileOpen,
+      isPlacing: () => placing,
+      isText: () => arm.type === 'text',
       origin,
-      priority: 20,
-      background: false,
-      blocksPointer: true,
-      active: () => placing,
-      cancel: () => emit('palette.place.cancel'),
-    });
-    contexts.interaction.cancel.register({
-      origin: `${origin}.mobile`,
-      priority: 40,
-      background: false,
-      active: () => mobileOpen,
-      cancel: () => setMobileOpen(false),
-    });
-    contexts.commands.register([{
-      id: 'palette.mobile.tab', label: 'Keep focus in the mobile palette', group: 'palette', hidden: true,
-      input: {
-        on: 'keydown', key: 'Tab', global: true, prevent: true, stop: true,
-        when: event => mobileOpen && globalThis.innerWidth <= 700
-          && !!(event.target as Element | null)?.closest('.palette-sheet'),
-      },
-      payload: ({ event }) => ({ shift: (event as KeyboardEvent).shiftKey }),
-    }]);
-    contexts.storage.claimDefaults('node', origin);
-
-    contribute({
-      origin,
-      surface: 'top',
-      command: 'palette.arm.type.text',
-      kind: 'button',
-      icon: 'text',
-      label: 'Text tool',
-      className: 'canvas-type-tool palette-text-type',
-      active: () => arm.type === 'text',
-      slot: 'start',
-      group: 'type',
-      order: 2,
-    });
-
-    contribute({
-      origin,
-      surface: 'top',
-      command: 'palette.place.activate',
-      kind: 'button',
-      icon: () => arm.type === 'text' ? 'text' : 'node',
-      label: 'Add node',
-      className: 'canvas-mode-tool palette-place-switch',
-      active: () => placing,
-      slot: 'start',
-      group: 'mode',
-      order: 3,
+      setMobileOpen,
     });
 
     on('app.start', () => {

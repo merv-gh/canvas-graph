@@ -3,12 +3,14 @@
 Executable quality contracts live here. Names describe what each gate measures:
 
 - `stylesheet-structure.mjs`: rule count, duplicate declaration blocks, and token-scale violations.
+- `production-file-lines.mjs`: production TypeScript/JavaScript modules; fails above 500 lines.
 - `test-file-lines.mjs`: test-file LOC report; warns above 1,000 lines by default.
 - `development-test-duration.mjs`: parallel developer test lanes; fails above 10 seconds.
 
 Use package entrypoints instead of invoking files directly:
 
 - `npm run gate:styles`
+- `npm run gate:source-loc`
 - `npm run gate:test-loc`
 - `npm run gate:dev-time`
 - `npm run gate:performance`
