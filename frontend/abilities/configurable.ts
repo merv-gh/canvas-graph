@@ -98,9 +98,6 @@ export function registerConfigurable(system: Registry) {
       actions.className = 'context-actions context-actions-combined';
       if (ref.kind === 'node') {
         const type = (current as { NodeType?: string }).NodeType ?? 'text';
-        if (contexts.commands.get('node.type.open')) actions.append(actionGroup('Type', [
-          actionButton(`Change type · ${model.nodeType(type)?.label ?? type}`, 'node.type.open', 'node'),
-        ]));
         const itemActions = [
           actionButton('Convert to container', 'node.convert.container', 'container'),
           actionButton('Group', 'selection.group', 'group'),
@@ -112,7 +109,7 @@ export function registerConfigurable(system: Registry) {
         ));
         if (contexts.commands.get('palette.custom-type.create')) itemActions.push(
           actionButton('Save as type', 'palette.custom-type.create', 'star'));
-        actions.append(actionGroup('Actions', itemActions));
+        actions.append(actionGroup(`Selected ${model.nodeType(type)?.label ?? type}`, itemActions));
         actions.append(actionGroup('Danger', [actionButton('Delete', 'selection.item.delete', 'trash')]));
       }
       if (ref.kind === 'edge') {
@@ -237,13 +234,16 @@ export function registerConfigurable(system: Registry) {
       const parent = itemParentAttr(ref.parent);
       if (parent) form.dataset.itemParent = parent;
       const fields = contexts.templates.slot(form, 'fields');
-      fields.append(renderActions(ref, current));
       const structureProps = ref.kind === 'container'
         ? properties.filter(prop => prop.id === 'sectionAxis' || prop.id === 'sections')
         : [];
       if (structureProps.length) fields.append(renderContainerStructure(ref, current, structureProps));
       const byGroup = new Map<string, PropertyDef<unknown, unknown>[]>();
-      properties.filter(prop => !['title', 'width', 'height', ...(ref.kind === 'node' ? ['nodeType'] : []), ...(ref.kind === 'edge' ? ['label'] : [])].includes(prop.id) && !structureProps.includes(prop)).forEach(prop => {
+      properties.filter(prop => ![
+        'title', 'width', 'height',
+        ...(ref.kind === 'node' ? ['nodeType', 'color', 'fill', 'borderColor'] : []),
+        ...(ref.kind === 'edge' ? ['label', 'color'] : []),
+      ].includes(prop.id) && !structureProps.includes(prop)).forEach(prop => {
         const group = prop.group ?? 'default';
         (byGroup.get(group) ?? byGroup.set(group, []).get(group)!).push(prop);
       });
@@ -271,6 +271,7 @@ export function registerConfigurable(system: Registry) {
         }
         props.forEach(prop => fields.append(contexts.properties.render(prop, current)));
       });
+      fields.append(renderActions(ref, current));
       return form;
     };
     const applyProperty = (ref: ItemRef, field: string, value: PropertyValue) => {
@@ -282,7 +283,6 @@ export function registerConfigurable(system: Registry) {
       emit('item.update', { ref, patch });
     };
     const selected = () => selection.selected();
-    let inspectedRef: ItemRef | null = null;
     let inspectorRedrawQueued = false;
     const queueInspectorRedraw = () => {
       if (inspectorRedrawQueued) return;
@@ -295,13 +295,12 @@ export function registerConfigurable(system: Registry) {
     const inspectorRoot = () => contexts.places.el(Places.Left)
       ?.querySelector<HTMLElement>('[data-panel-id="properties"]');
     const inspectable = () => {
-      const ref = selected() ?? inspectedRef;
+      const ref = selected();
       if (!ref) return undefined;
       const current = item(ref);
       const entity = entityDef(ref);
       const properties = entity?.properties ?? [];
       if (!current || !entity || !properties.length) return undefined;
-      inspectedRef = ref;
       return { ref, current, entity, properties };
     };
     const renderInspector = () => {
@@ -311,6 +310,7 @@ export function registerConfigurable(system: Registry) {
       root.className = 'properties-inspector';
       root.setAttribute('aria-label', `${target.entity.label} properties`);
       const header = document.createElement('header');
+      header.className = 'properties-context-header';
       const kind = document.createElement('span');
       const nodeType = target.ref.kind === 'node'
         ? model.nodeType((target.current as { NodeType?: string }).NodeType ?? 'text')?.label
@@ -320,11 +320,11 @@ export function registerConfigurable(system: Registry) {
       const scroll = document.createElement('div');
       scroll.className = 'properties-inspector-scroll';
       scroll.dataset.nativeScroll = '';
-      scroll.append(renderProperties(target.ref, target.current, target.properties));
+      scroll.append(header, renderProperties(target.ref, target.current, target.properties));
       const note = document.createElement('p');
       note.className = 'properties-autosave-note';
       note.textContent = 'Changes save automatically';
-      root.append(header, scroll, note);
+      root.append(scroll, note);
       return root;
     };
 
@@ -507,7 +507,6 @@ export function registerConfigurable(system: Registry) {
     on('ink.stroke.completed', () => emit('tool.panel.redraw', { id: 'properties' }));
     on('ink.stroke.deleted', () => emit('tool.panel.redraw', { id: 'properties' }));
     on('graph.switched', () => {
-      inspectedRef = null;
       emit('tool.panel.redraw', { id: 'properties' });
     });
   }, { requires: ['ability.selectable', 'tool.panel'] });

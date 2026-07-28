@@ -393,9 +393,10 @@ export type AffordanceDef<T = unknown> = {
  *  `top`-surface button to a declared tool panel by id; omit it for the default
  *  top toolbar. Routing here (not a bespoke render) is what lets the `command-ui`
  *  projection move a button between panels as a one-field views edit. */
-export type SystemAffordance = Omit<AffordanceDef<void>, 'text' | 'label' | 'when'> & {
+export type SystemAffordance = Omit<AffordanceDef<void>, 'text' | 'label' | 'when' | 'icon'> & {
   text?: string;
   label?: string;
+  icon?: IconName | (() => IconName);
   panel?: string;
   /** Live pressed state for mutually-exclusive controls such as layout modes.
    *  The tool-panel renderer exposes it through aria-pressed and the shared
@@ -477,6 +478,9 @@ export type NodeTypeDef = {
   keywords?: string[];
   visual: NodeVisual;
   defaultSize?: Size;
+  /** Visual defaults used when an item has no explicit style override. */
+  defaultFill?: 'none' | 'soft' | 'solid';
+  defaultBorder?: 'none' | 'gray' | 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple' | 'pink';
   /** False when the visual owns its geometry (tables, controls, run-report
    * primitives). Text edits then preserve the catalog-declared dimensions. */
   autoSize?: boolean;

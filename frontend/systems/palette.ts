@@ -8,7 +8,9 @@ import {
   NODE_FILLS,
   BUILTIN_NODE_TYPES,
   isDefaultNodeSize,
+  nodeTypeBorder,
   nodeTypeDefinition,
+  nodeTypeFill,
   nodeTypeLabel,
   type EdgeKind,
   type EdgePatch,
@@ -143,9 +145,10 @@ export function registerPalette(system: Registry) {
       const preferred = getPreset(io, presetId())?.defaultNodeType ?? entries[0]?.value ?? 'text';
       const entryIndex = Math.max(0, entries.findIndex(candidate => candidate.value === preferred));
       const entry = entries[entryIndex] ?? entries[0];
+      const type = entry?.value ?? 'text';
       return {
-        type: entry?.value ?? 'text', color: entry?.color, fill: entry?.fill,
-        border: entry?.border,
+        type, color: entry?.color, fill: nodeTypeFill(type, entry?.fill),
+        border: nodeTypeBorder(type, entry?.border),
         entity: entry?.entity, containerType: entry?.containerType, label: entry ? typeLabel(entry) : undefined,
         entryIndex, entryId: entry?.id,
       };
@@ -201,7 +204,8 @@ export function registerPalette(system: Registry) {
     };
     const setArm = (entry: PresetTypeEntry, entryIndex: number, entryPreset = presetId()) => {
       arm = {
-        ...arm, type: entry.value, color: entry.color, fill: entry.fill, border: entry.border,
+        ...arm, type: entry.value, color: entry.color,
+        fill: nodeTypeFill(entry.value, entry.fill), border: nodeTypeBorder(entry.value, entry.border),
         entity: entry.entity, containerType: entry.containerType, label: typeLabel(entry),
         entryIndex, entryId: entry.id, entryPreset,
       };
@@ -294,6 +298,7 @@ export function registerPalette(system: Registry) {
     const changed = () => {
       emit('palette.arm.changed', { ...arm });
       redraw();
+      emit('tool.panel.redraw', { id: 'top' });
     };
     const reset = () => { arm = defaultArm(); changed(); };
     const primaryNode = () => {
@@ -565,8 +570,8 @@ export function registerPalette(system: Registry) {
         const container = primaryContainer();
         const shownType = node ? node.NodeType : arm.type;
         const shownColor = node ? node.Color : arm.color;
-        const shownFill = node ? node.Fill : arm.fill;
-        const shownBorder = node ? node.BorderColor : arm.border;
+        const shownFill = node ? nodeTypeFill(node.NodeType, node.Fill) : arm.fill;
+        const shownBorder = node ? nodeTypeBorder(node.NodeType, node.BorderColor) : arm.border;
         if (command !== 'palette.arm.entry') {
           pressed(tile, !container && shownType === entry.value);
           return tile;
@@ -576,7 +581,8 @@ export function registerPalette(system: Registry) {
         pressed(tile, container
           ? entry.entity === 'container' && container.ContainerType === entry.containerType && container.Color === entry.color
           : identityMatches && shownType === entry.value && shownColor === entry.color
-            && shownFill === entry.fill && shownBorder === entry.border);
+            && shownFill === nodeTypeFill(entry.value, entry.fill)
+            && shownBorder === nodeTypeBorder(entry.value, entry.border));
         return tile;
     };
 
@@ -717,7 +723,7 @@ export function registerPalette(system: Registry) {
       const container = primaryContainer();
       const current = kind === 'color'
         ? (node ? node.Color : edge ? edge.Color : container ? container.Color : arm.color)
-        : (node ? node.BorderColor : arm.border);
+        : (node ? nodeTypeBorder(node.NodeType, node.BorderColor) : arm.border);
       const auto = button(`palette.arm.${kind}.default`, `${title}: automatic`, 'A');
       auto.className = 'palette-swatch palette-swatch-auto';
       pressed(auto, current === undefined);
@@ -745,9 +751,23 @@ export function registerPalette(system: Registry) {
       for (const { value, label } of NODE_FILLS) {
         const option = button(`palette.arm.fill.${value}`, `Fill: ${label}`, value);
         const node = primaryNode();
-        pressed(option, (node ? node.Fill : arm.fill) === value);
+        pressed(option, (node ? nodeTypeFill(node.NodeType, node.Fill) : arm.fill) === value);
         row.append(option);
       }
+      section.append(row);
+      return section;
+    };
+
+    const creationBlock = () => {
+      const section = block('Actions');
+      section.classList.add('palette-creation-block');
+      const row = document.createElement('div');
+      row.className = 'palette-creation-actions';
+      row.append(
+        button('palette.place.activate', 'Create node', 'Node'),
+        button('editing.container.create', 'Create container', 'Container'),
+        button('palette.arm.type.text', 'Use the text tool', 'Text'),
+      );
       section.append(row);
       return section;
     };
@@ -848,7 +868,12 @@ export function registerPalette(system: Registry) {
         const catalogOpen = contexts.fold.isOpen('palette.catalog');
         const catalogSection = document.createElement('section');
         catalogSection.className = 'workspace-drawer-section palette-workspace-section';
-        const catalogToggle = button('fold.toggle', `${catalogOpen ? 'Collapse' : 'Expand'} node catalog`, `${catalogOpen ? '⌄' : '›'} Node catalog`);
+        const activeTypeLabel = nodeTypeLabel(primaryNode()?.NodeType ?? arm.type);
+        const catalogToggle = button(
+          'fold.toggle',
+          `${catalogOpen ? 'Collapse' : 'Change'} node type`,
+          `${catalogOpen ? '⌄' : '›'} Change type · ${activeTypeLabel}`,
+        );
         catalogToggle.className = 'workspace-drawer-section-toggle';
         catalogToggle.dataset.foldId = 'palette.catalog';
         catalogToggle.setAttribute('aria-expanded', catalogOpen ? 'true' : 'false');
@@ -873,11 +898,11 @@ export function registerPalette(system: Registry) {
         }
         const styles = document.createElement('div');
         styles.className = 'palette-style-controls';
-        styles.append(colorBlock('Color', 'color'), fillBlock(), colorBlock('Border', 'border'));
+        styles.append(creationBlock(), colorBlock('Color', 'color'), fillBlock(), colorBlock('Border', 'border'));
         if (selectedEdges().length) styles.append(edgeBlock());
         sheet.append(catalogSection);
         if (drawing) sheet.append(drawBody());
-        else if (!selection.selectedAll().length) sheet.append(styles);
+        else sheet.append(styles);
       }
       root.append(toggle, scrim, sheet);
       return root;
@@ -911,6 +936,7 @@ export function registerPalette(system: Registry) {
       if (index < 0) return redraw();
       const entry = entries[index];
       if (change === 'created') {
+        contexts.fold.set('palette.catalog', true);
         setArm(entry, index);
         activateArm();
         return;
@@ -958,6 +984,8 @@ export function registerPalette(system: Registry) {
       arm = {
         ...arm,
         type,
+        fill: def.defaultFill,
+        border: def.defaultBorder,
         entity: 'node',
         containerType: undefined,
         label: def.label,
@@ -1112,9 +1140,23 @@ export function registerPalette(system: Registry) {
     contribute({
       origin,
       surface: 'top',
+      command: 'palette.arm.type.text',
+      kind: 'button',
+      icon: 'text',
+      label: 'Text tool',
+      className: 'canvas-type-tool palette-text-type',
+      active: () => arm.type === 'text',
+      slot: 'start',
+      group: 'type',
+      order: 2,
+    });
+
+    contribute({
+      origin,
+      surface: 'top',
       command: 'palette.place.activate',
       kind: 'button',
-      icon: 'node',
+      icon: () => arm.type === 'text' ? 'text' : 'node',
       label: 'Add node',
       className: 'canvas-mode-tool palette-place-switch',
       active: () => placing,
@@ -1123,7 +1165,14 @@ export function registerPalette(system: Registry) {
       order: 3,
     });
 
-    on('app.start', () => { stageEl()?.classList.toggle('node-placing', placing); redraw(); });
+    on('app.start', () => {
+      stageEl()?.classList.toggle('node-placing', placing);
+      const foldState = contexts.fold.all();
+      if (!Object.prototype.hasOwnProperty.call(foldState, 'palette.catalog')) {
+        contexts.fold.set('palette.catalog', false);
+      }
+      redraw();
+    });
     return () => {
       disposed = true;
       stageEl()?.classList.remove('node-placing');

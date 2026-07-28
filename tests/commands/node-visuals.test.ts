@@ -126,14 +126,37 @@ describe('node type and color', () => {
     expect(cleared?.dataset.nodeColor).toBeUndefined();
   });
 
-  it('keeps the removed style toolbar absent and exposes type in selection properties', async () => {
+  it('keeps the removed style toolbar absent and exposes type in persistent defaults', async () => {
     const ctx = bootApp();
+    ctx.contexts.fold.set('outline.panel', true);
     await settle();
     expect(document.querySelector('.tool-panel[data-panel-id="node-style"]')).toBeNull();
     await createNode(ctx);
     expect(document.querySelector('.tool-panel[data-panel-id="node-style"]')).toBeNull();
-    expect(document.querySelector('.tool-panel[data-panel-id="properties"] [data-command="node.type.open"]')).not.toBeNull();
+    expect(document.querySelector('.tool-panel[data-panel-id="palette"] [data-fold-id="palette.catalog"]')).not.toBeNull();
     expect(document.querySelector('[data-command="node.color.open"]')).toBeNull();
+  });
+
+  it('uses transparent borderless defaults for Text and previews T in Add node', async () => {
+    const ctx = bootApp();
+    await settle();
+    const top = document.querySelector('.top-tool-panel')!;
+    expect(top.querySelector('[data-command="palette.arm.type.text"] .ui-icon')).not.toBeNull();
+
+    runCommand(ctx, 'palette.arm.type.diamond');
+    await settle();
+    expect(document.querySelector('.top-tool-panel [data-command="palette.place.activate"] path')?.getAttribute('d')).toBe('M5 5h14v14H5z');
+    runCommand(ctx, 'palette.arm.type.text');
+    await settle();
+    expect(document.querySelector('.top-tool-panel [data-command="palette.place.activate"] path')?.getAttribute('d')).toBe('M5 5h14');
+
+    runCommand(ctx, 'editing.node.create');
+    await settle();
+    const node = ctx.graphs.current.nodes()[0]!;
+    expect(node).toMatchObject({ NodeType: 'text', Fill: 'none', BorderColor: 'none' });
+    const rendered = document.querySelector<HTMLElement>(`.node[data-item-id="${node.id}"]`)!;
+    expect(rendered.dataset.fill).toBe('none');
+    expect(rendered.dataset.borderColor).toBe('none');
   });
 
   it('removes the panel and its buttons when the system is disabled', async () => {

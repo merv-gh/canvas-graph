@@ -460,6 +460,7 @@ export function registerGraph(system: Registry) {
     on('graph.delete.cancel', () => { pendingGraphDelete = null; emit('modal.close'); });
     on('modal.closed', () => { pendingGraphDelete = null; });
     on('graph.switch', ({ id }) => {
+      if (id === graphs.current.id) return;
       flushRename();
       const graph = graphs.switch(id);
       emit('graph.switched', { id: graph.id });

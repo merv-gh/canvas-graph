@@ -137,13 +137,13 @@ export function registerToolPanel(system: Registry) {
       return btn;
     };
 
-    const addButton = (parent: HTMLElement, aff: { command: string; text?: string; icon?: import('../types').IconName; label?: string; className?: string; active?: () => boolean }) => {
+    const addButton = (parent: HTMLElement, aff: { command: string; text?: string; icon?: import('../types').IconName | (() => import('../types').IconName); label?: string; className?: string; active?: () => boolean }) => {
       const cmd = contexts.commands.get(aff.command);
       if (cmd?.available && !cmd.available()) return;
       const text = aff.text ?? aff.command;
       const button = buttonFor(aff.command, text, aff.label);
       if (aff.icon) {
-        setIcon(button, aff.icon);
+        setIcon(button, typeof aff.icon === 'function' ? aff.icon() : aff.icon);
         if (parent.classList.contains('toolbar-overflow-menu') && aff.text) {
           const copy = document.createElement('span');
           copy.textContent = aff.text;

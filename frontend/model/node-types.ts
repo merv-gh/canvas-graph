@@ -1,12 +1,12 @@
 import type { NodeTypeDef } from '../types';
-import type { NodeType } from './graph';
+import type { NodeBorder, NodeFill, NodeType } from './graph';
 
 const define = <T extends NodeTypeDef[]>(defs: T): T => defs;
 
 /** Canonical searchable vocabulary. Domain additions normally require one row
  * here. Reuse an existing `visual`; only new rendering grammar needs CSS/DOM. */
 export const BUILTIN_NODE_TYPES = define([
-  { id: 'text', label: 'Text', category: 'Basics', keywords: ['note', 'label'], visual: 'card', defaultSize: { w: 170, h: 76 } },
+  { id: 'text', label: 'Text', category: 'Basics', keywords: ['note', 'label'], visual: 'card', defaultSize: { w: 170, h: 76 }, defaultFill: 'none', defaultBorder: 'none' },
   { id: 'square', label: 'Box', category: 'Basics', keywords: ['rectangle', 'card'], visual: 'card' },
   { id: 'rounded', label: 'Rounded box', category: 'Basics', keywords: ['card'], visual: 'rounded' },
   { id: 'pill', label: 'Pill', category: 'Basics', keywords: ['start', 'end', 'status'], visual: 'pill' },
@@ -51,6 +51,10 @@ export const nodeTypeDefinition = (id: unknown): NodeTypeDef | undefined =>
   typeof id === 'string' ? BUILTIN_NODE_TYPES.find(def => def.id === id) : undefined;
 export const isNodeType = (value: unknown): value is NodeType => !!nodeTypeDefinition(value);
 export const nodeTypeLabel = (id: string) => nodeTypeDefinition(id)?.label ?? id;
+export const nodeTypeFill = (id: unknown, fill?: NodeFill): NodeFill | undefined =>
+  fill ?? nodeTypeDefinition(id)?.defaultFill;
+export const nodeTypeBorder = (id: unknown, border?: NodeBorder): NodeBorder | undefined =>
+  border ?? nodeTypeDefinition(id)?.defaultBorder;
 export const isDefaultNodeSize = (size: { w: number; h: number }) =>
   (size.w === 150 && size.h === 64)
   || BUILTIN_NODE_TYPES.some(def => def.defaultSize?.w === size.w && def.defaultSize?.h === size.h);

@@ -355,8 +355,9 @@ export function registerOutline(system: Registry) {
       const head = el('div', 'graph-nav-card-head');
       const choose = el('button', 'graph-nav-choose');
       choose.type = 'button';
-      choose.dataset.command = 'graph.switch';
       choose.dataset.itemId = graph.id;
+      if (active) choose.disabled = true;
+      else choose.dataset.command = 'graph.switch';
       choose.setAttribute('aria-current', active ? 'page' : 'false');
       choose.append(
         el('span', 'graph-nav-name', graphName(graph)),
@@ -423,7 +424,12 @@ export function registerOutline(system: Registry) {
       search.value = query;
       search.dataset.graphNavSearch = '';
       search.setAttribute('aria-label', 'Search graphs');
-      searchRow.append(search);
+      const create = el('button', 'graph-nav-create', '+');
+      create.type = 'button';
+      create.dataset.command = 'graph.create';
+      create.setAttribute('aria-label', 'New graph');
+      create.title = 'New graph';
+      searchRow.append(search, create);
       body.append(searchRow);
       const list = el('div', 'graph-nav-list');
       list.setAttribute('aria-label', 'Graphs');

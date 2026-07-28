@@ -48,20 +48,21 @@ test('item inspector exposes visual property choices instead of select menus', a
   });
 
   await expect(page.locator('.properties select[data-field]')).toHaveCount(0);
-  await expect(page.locator('.property-choice-swatches')).toHaveCount(2);
+  await expect(page.locator('.properties .property-choice-swatches')).toHaveCount(0);
+  await expect(page.locator('[data-panel-id="palette"] .palette-swatches')).toHaveCount(2);
   await expect(page.locator('.property-choice-placement button')).toHaveCount(6);
   await expect(page.locator('.property-advanced-group').filter({ hasText: 'Content' })).toHaveCount(0);
   await expect(page.locator('[data-field="description"]')).toHaveAttribute('placeholder', 'Description');
   await expect(page.locator('[data-field="description"]')).toHaveAttribute('aria-label', 'Description');
   await expect(page.locator('[data-field="descPlacement"][data-value="top"] .ui-icon path').first()).toHaveAttribute('d', 'M5 11h14v10H5z');
   await expect(page.locator('[data-field="descPlacement"][data-value="left"] .ui-icon path').first()).toHaveAttribute('d', 'M11 5h10v14H11z');
-  const red = page.locator('[data-field="color"][data-value="red"]');
+  const red = page.locator('[data-panel-id="palette"] [aria-label="Color: Red"]');
   const swatchBox = await red.boundingBox();
   expect(swatchBox.width).toBeLessThanOrEqual(24);
   expect(swatchBox.height).toBeLessThanOrEqual(24);
   await red.click();
   expect(await red.evaluate(element => getComputedStyle(element).backgroundColor)).toBe('rgb(220, 38, 38)');
-  await page.locator('[data-field="fill"][data-value="solid"]').click();
+  await page.locator('[data-panel-id="palette"] [aria-label="Fill: Solid"]').click();
   const below = page.locator('[data-field="descPlacement"][data-value="below"]');
   await below.click();
   expect(await below.evaluate(element => getComputedStyle(element).backgroundColor)).not.toBe('rgb(22, 22, 22)');

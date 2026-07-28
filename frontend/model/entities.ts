@@ -5,7 +5,7 @@ import { collapsible, configurable, draggable, editable, nudgeable, selectable }
 import type { DataScale, DescriptionPlacement, EdgeKind, Graph, GraphEdge, GraphNode, NodeEntity, EdgePatch, NodeColor, NodeFill, NodePatch, NodeType } from './graph';
 import { Slots } from '../types';
 import type { EntityDef, EntityRenderCtx, EntityRenderer, ItemRef, Position, PropertyDef, Rect, Segment, Size } from '../types';
-import { isNodeType, NODE_TYPES, nodeTypeLabel } from './node-types';
+import { isNodeType, NODE_TYPES, nodeTypeBorder, nodeTypeFill, nodeTypeLabel } from './node-types';
 
 /** Built-in entity declarations — what a graph / node / edge *is*: its label,
  *  abilities, properties, and renderer. Behavior (commands, storage handlers,
@@ -530,8 +530,10 @@ const nodeRenderer: EntityRenderer<GraphNode> = {
     if (node.Color) el.dataset.nodeColor = node.Color;
     // Fill + border are data-driven so any type (built-in or future
     // user-defined) styles without its own CSS. Absent → the type's own look.
-    if (node.Fill) el.dataset.fill = node.Fill;
-    if (node.BorderColor) el.dataset.borderColor = node.BorderColor;
+    const effectiveFill = nodeTypeFill(nodeType, node.Fill);
+    const effectiveBorder = nodeTypeBorder(nodeType, node.BorderColor);
+    if (effectiveFill) el.dataset.fill = effectiveFill;
+    if (effectiveBorder) el.dataset.borderColor = effectiveBorder;
     if (node.DescriptionPlacement) el.dataset.descPlacement = node.DescriptionPlacement;
     if (node.DataScale) el.dataset.dataScale = node.DataScale;
     const titleText = semanticTitle(node);
@@ -596,13 +598,13 @@ export const nodeEntity: EntityDef<GraphNode, NodePatch> = entityDef<GraphNode, 
     }),
     property<GraphNode, NodePatch>({
       id: 'fill', label: 'Fill', input: 'segments', options: NODE_FILLS,
-      value: node => node.Fill ?? 'soft',
+      value: node => nodeTypeFill(node.NodeType, node.Fill) ?? 'soft',
       patch: (_node, value) => isNodeFill(value) ? { Fill: value } : undefined,
     }),
     property<GraphNode, NodePatch>({
       id: 'borderColor', label: 'Border', input: 'swatches',
       options: [{ value: '', label: 'Match color' }, { value: 'none', label: 'None' }, ...NODE_COLORS],
-      value: node => node.BorderColor ?? '',
+      value: node => nodeTypeBorder(node.NodeType, node.BorderColor) ?? '',
       patch: (_node, value) =>
         value === '' ? { BorderColor: undefined }
           : value === 'none' ? { BorderColor: 'none' }

@@ -192,8 +192,13 @@ export function registerNodeVisuals(system: Registry) {
       if (!id) return;
       const node = graphs.current.getNode(id);
       if (!node) return;
-      const patch: NodePatch = { NodeType: nodeType };
-      const size = nodeTypeDefinition(nodeType)?.defaultSize;
+      const definition = nodeTypeDefinition(nodeType);
+      const patch: NodePatch = {
+        NodeType: nodeType,
+        Fill: definition?.defaultFill,
+        BorderColor: definition?.defaultBorder,
+      };
+      const size = definition?.defaultSize;
       // Operator circles are fixed-size glyphs — always snap; other shapes
       // only snap when the current size is still a default (respect a manual
       // resize).

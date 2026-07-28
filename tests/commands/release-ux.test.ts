@@ -58,7 +58,11 @@ describe('release UX', () => {
     expect(cards[0].textContent).toContain('Roadmap');
     expect(cards[1].dataset.graphId).toBe(firstId);
     expect(document.querySelector('.graph-nav-list .graph-nav-item')).toBeNull();
-    expect(document.querySelector('.graph-nav-create, .graph-nav-duplicate, .graph-nav-duplicate-current')).toBeNull();
+    expect(document.querySelector('.graph-nav-create')?.getAttribute('data-command')).toBe('graph.create');
+    expect(document.querySelector('.graph-nav-duplicate, .graph-nav-duplicate-current')).toBeNull();
+    const currentChoice = cards[0].querySelector<HTMLButtonElement>('.graph-nav-choose')!;
+    expect(currentChoice.disabled).toBe(true);
+    expect(currentChoice.hasAttribute('data-command')).toBe(false);
 
     const search = document.querySelector<HTMLInputElement>('[data-graph-nav-search]')!;
     search.value = 'Node 2';
@@ -272,5 +276,34 @@ describe('release UX', () => {
     expect(document.querySelectorAll('.property-axis-choice button')).toHaveLength(2);
     expect(document.querySelectorAll('[data-section-input]').length).toBeGreaterThan(0);
     expect(document.querySelector('[data-command="properties.sections.add"]')).not.toBeNull();
+  });
+
+  it('keeps creation defaults stable while contextual properties come and go', async () => {
+    const ctx = bootApp();
+    ctx.contexts.fold.set('outline.panel', true);
+    await settle();
+
+    const defaults = document.querySelector('.tool-panel[data-panel-id="palette"]')!;
+    expect(defaults.textContent).toContain('Change type · Text');
+    expect(defaults.textContent).toContain('Actions');
+    expect(defaults.textContent).toContain('Color');
+    expect(defaults.textContent).toContain('Fill');
+    expect(defaults.textContent).toContain('Border');
+    expect(defaults.querySelector('[data-command="palette.place.activate"]')).not.toBeNull();
+    expect(defaults.querySelector('[data-command="editing.container.create"]')).not.toBeNull();
+    expect(defaults.querySelector('[data-command="palette.arm.type.text"]')).not.toBeNull();
+    expect(document.querySelector('.properties-inspector')).toBeNull();
+
+    runCommand(ctx, 'editing.node.create');
+    await settle();
+    const contextual = document.querySelector('.properties-inspector')!;
+    const identity = contextual.querySelector('.properties-context-header')!;
+    const description = contextual.querySelector('[data-field="description"]')!;
+    expect(identity.compareDocumentPosition(description) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    runCommand(ctx, 'selection.item.delete');
+    await settle();
+    expect(document.querySelector('.properties-inspector')).toBeNull();
+    expect(document.querySelector('.tool-panel[data-panel-id="palette"]')?.textContent).toContain('Change type · Text');
   });
 });

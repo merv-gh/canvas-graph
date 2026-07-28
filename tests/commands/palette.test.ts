@@ -8,6 +8,7 @@ const click = (el: HTMLElement) => el.dispatchEvent(new MouseEvent('click', { bu
 const bootPalette = (flags = {}, io = memoryIo()) => {
   const ctx = bootApp(flags, io);
   ctx.contexts.fold.set('outline.panel', true);
+  ctx.contexts.fold.set('palette.catalog', true);
   return ctx;
 };
 
