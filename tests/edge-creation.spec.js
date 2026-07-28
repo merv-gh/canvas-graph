@@ -11,7 +11,7 @@ const createNodes = async (page, labels) => page.evaluate((labels) => {
   return v.graphs.current.nodes().map(node => ({ id: node.id, label: node.Label.text }));
 }, labels);
 
-test('frontend boots current TypeScript entrypoint with edge creation UI enabled', async ({ page }) => {
+test('@smoke frontend boots current TypeScript entrypoint with edge creation UI enabled', async ({ page }) => {
   await boot(page);
 
   await expect(page.locator('.toolbar [data-command="editing.edge.create"] .ui-icon')).toBeVisible();
@@ -45,7 +45,7 @@ test('edge command explains why it cannot run before two nodes exist', async ({ 
   await expect.poll(() => page.evaluate(() => window.__notices.at(-1))).toContain('Nothing to pick for Pick target node');
 });
 
-test('edge command seeds source and picks target by letter when only two nodes exist', async ({ page }) => {
+test('@smoke edge command seeds source and picks target by letter when only two nodes exist', async ({ page }) => {
   await boot(page);
   const nodes = await createNodes(page, ['A', 'B']);
 
@@ -109,7 +109,7 @@ test('focused edge uses graph styling without a browser focus rectangle', async 
   await expect(hit).toHaveCSS('outline-style', 'none');
 });
 
-test('graph storage rejects self-loop and missing-endpoint edge creates', async ({ page }) => {
+test('@smoke graph storage rejects self-loop and missing-endpoint edge creates', async ({ page }) => {
   await boot(page);
   const nodes = await createNodes(page, ['A']);
 

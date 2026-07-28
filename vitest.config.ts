@@ -3,6 +3,9 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'jsdom',
+    // App boots have explicit per-test teardown, so workers can reuse their
+    // module graph without leaking listeners, timers, or DOM between files.
+    isolate: false,
     include: ['tests/commands/**/*.test.ts'],
     setupFiles: ['tests/commands/setup.ts'],
     coverage: {

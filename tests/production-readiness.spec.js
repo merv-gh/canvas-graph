@@ -279,9 +279,9 @@ test('mobile selected-item wheel stays fully reachable', async ({ page }) => {
 test('previous-save recovery stays in command search, not export', async ({ page }) => {
   await page.goto('/');
   await placeNode(page);
-  await page.waitForTimeout(400);
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
   await placeNode(page);
-  await page.waitForTimeout(400);
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
   await expect(page.locator('.save-state')).toHaveCount(0);
   await clickMore(page, 'Export');
   await expect(page.locator('.export-json [data-command="io.backup.restore.request"]')).toHaveCount(0);

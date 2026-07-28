@@ -49,18 +49,25 @@ export function registerCommandPicker(system: Registry) {
       emit('render.view.clear', { place: Places.Stage, key: 'picker-prompt' });
       contexts.places.el(Places.Stage)?.classList.remove('picker-canvas-target');
       frameLoop.schedule('commandPicker.restoreFocus.prepare', () => {
-        // Render flushes may enqueue follow-up patches. Restore in the next
-        // frame so focus lands on the final live command button, never a node
-        // about to be replaced.
-        frameLoop.schedule('commandPicker.restoreFocus.commit', () => {
+        // Render flushes may enqueue follow-up patches. Reconcile for a few
+        // frames because a focused command can be replaced by a later patch.
+        // Never steal focus when the user already moved somewhere else.
+        let remaining = 16;
+        const commit = () => {
           const command = restoreCommand.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
           const shell = contexts.places.el(Places.Top)?.parentElement;
-          const fallback = command
+          const replacement = command
             ? shell?.querySelector<HTMLElement>(`[data-command="${command}"]`) ?? null
             : null;
-          const target = restoreFocus?.isConnected ? restoreFocus : fallback;
-          target?.focus({ preventScroll: true });
-        }, 40);
+          const stableFallback = shell?.querySelector<HTMLElement>(
+            '[aria-label="Current graph name"], [data-place="top"] button, [data-place="top"] input',
+          ) ?? null;
+          const target = restoreFocus?.isConnected ? restoreFocus : replacement ?? stableFallback;
+          const focused = document.activeElement;
+          if (!focused || focused === document.body) target?.focus({ preventScroll: true });
+          if (--remaining > 0) frameLoop.schedule('commandPicker.restoreFocus.commit', commit, 40);
+        };
+        frameLoop.schedule('commandPicker.restoreFocus.commit', commit, 40);
       }, 40);
     };
 
@@ -243,7 +250,10 @@ export function registerCommandPicker(system: Registry) {
       contexts.interaction.cancel.cancelPointerModes();
       frameLoop.cancel('commandPicker.restoreFocus.prepare');
       frameLoop.cancel('commandPicker.restoreFocus.commit');
-      const sourceTarget = pickerSource.target instanceof HTMLElement ? pickerSource.target : null;
+      const sourceElement = pickerSource.target instanceof Element ? pickerSource.target : null;
+      // Pointer events often originate on an icon/span inside the command.
+      // Restore to the actual focusable command owner, not that inert child.
+      const sourceTarget = sourceElement?.closest<HTMLElement>('[data-command], button, [href], input, select, textarea, [tabindex]') ?? null;
       const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       const restoreFocus = sourceTarget ?? focused;
       active = {

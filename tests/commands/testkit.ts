@@ -18,6 +18,32 @@ import { Places, type CommandSource, type FeatureFlags } from '../../frontend/ty
 const html = readFileSync(resolve(process.cwd(), 'frontend/index.html'), 'utf8')
   .replace(/<script\b[^>]*><\/script>/g, '');
 
+type BootResources = {
+  ctx: AppCtx;
+  plugins: ReturnType<typeof registry>;
+  stopRuntime: () => void;
+};
+
+const activeBoots = new Set<BootResources>();
+
+/** Fully stop one app boot. Tests share a jsdom realm when Vitest isolation is
+ * disabled, so every listener, timer, registry entry, and DOM reference must
+ * die before the next test starts. */
+export function teardownApp(ctx: AppCtx) {
+  const boot = [...activeBoots].find(entry => entry.ctx === ctx);
+  if (!boot) return;
+  boot.stopRuntime();
+  [...boot.plugins.names()].reverse().forEach(name => boot.plugins.stop(ctx, name));
+  activeBoots.delete(boot);
+  if (window.app === ctx) delete window.app;
+}
+
+export function teardownBoots() {
+  [...activeBoots].reverse().forEach(({ ctx }) => teardownApp(ctx));
+  document.documentElement.innerHTML = '';
+  localStorage.clear();
+}
+
 /** Flag overrides only. Registry declares each system/ability/feature ON at boot,
  *  so an empty object boots everything. Pass `{ render: false }` to disable.
  *  Pass a shared `io` to simulate persistence across two boots. */
@@ -34,12 +60,18 @@ export function bootApp(flags: FeatureFlags = {}, io: ReturnType<typeof memoryIo
   registerFeatures(withKind(plugins, 'feature'));
   // Most command tests exercise the canvas directly. Onboarding has its own
   // explicit tests and remains enabled in the real browser entrypoint.
-  const ctx = createAppContext(graphStore(), appModel, { onboarding: false, ...flags }, io);
-  installRuntimeFeatureManager(ctx, plugins);
+  const ctx = createAppContext(graphStore(), appModel, {
+    onboarding: false,
+    telemetry: false,
+    'telemetry.portal': false,
+    ...flags,
+  }, io);
+  const stopRuntime = installRuntimeFeatureManager(ctx, plugins);
   plugins.start(ctx);
   ctx.bus.emit('app.start');
   const booted = ctx;
   window.app = booted;
+  activeBoots.add({ ctx: booted, plugins, stopRuntime });
   const stage = ctx.contexts.places.el(Places.Stage);
   if (stage) {
     stage.getBoundingClientRect = () => ({
@@ -53,6 +85,7 @@ export function bootApp(flags: FeatureFlags = {}, io: ReturnType<typeof memoryIo
 export const settle = async () => {
   await Promise.resolve();
   await new Promise(resolve => setTimeout(resolve, 0));
+  activeBoots.forEach(({ ctx }) => ctx.frameLoop.flushNow());
   await new Promise(resolve => requestAnimationFrame(() => resolve(undefined)));
   await Promise.resolve();
 };

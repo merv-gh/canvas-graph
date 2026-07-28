@@ -7,7 +7,7 @@ module.exports = defineConfig({
   // Serialize browser journeys there and give each journey enough wall time;
   // assertions and the release gate remain identical.
   timeout: process.env.CI ? 60_000 : 30_000,
-  workers: process.env.CI ? 1 : 2,
+  workers: process.env.CI ? 1 : 4,
   fullyParallel: true,
   reporter: [['./tests/screenshot-reporter.cjs']],
   use: {

@@ -69,6 +69,24 @@ describe('frontend edge commands (picker-driven)', () => {
     expect(edge.To).toBe(target.id);
   });
 
+  it('restores focus to a command when its nested icon opened the picker', async () => {
+    const ctx = bootApp();
+    const source = createNode(ctx, 'A');
+    createNode(ctx, 'B');
+    ctx.bus.emit('selection.node.select', { id: source.id });
+    await settle();
+
+    const command = commandButton('editing.edge.create')!;
+    const icon = command.querySelector<HTMLElement>('span, b, svg') ?? command;
+    runCommand(ctx, 'editing.edge.create', { target: icon });
+    await settle();
+    pressLetter('a');
+    await settle();
+    await settle();
+
+    expect(document.activeElement).toBe(command);
+  });
+
   it('picks both endpoints when no selection — 3 keystrokes', async () => {
     const ctx = bootApp();
     const a = createNode(ctx, 'A');

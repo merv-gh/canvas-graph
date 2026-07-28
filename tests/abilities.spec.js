@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { test, expect } = require('@playwright/test');
 
-test('frontend centralizes DOM input listeners and keeps explicit lifecycle exceptions', async () => {
+test('@smoke frontend centralizes DOM input listeners and keeps explicit lifecycle exceptions', async () => {
   const frontendDir = path.join(__dirname, '..', 'frontend');
   const files = [];
   const walk = dir => fs.readdirSync(dir, { withFileTypes: true }).forEach(entry => {
@@ -57,7 +57,7 @@ test('frontend help rejects duplicate shortcuts without saving', async ({ page }
   await expect.poll(() => page.evaluate(() => window.app.contexts.commands.get('help.open').shortcut)).toBe('Control+H');
 });
 
-test('frontend configurable ability opens node properties', async ({ page }) => {
+test('@smoke frontend configurable ability opens node properties', async ({ page }) => {
   await page.goto('/');
   const nodeTemplate = await page.locator('#tpl-node').evaluate(template => template.innerHTML);
   expect(nodeTemplate).not.toContain('node.collapse.toggle');

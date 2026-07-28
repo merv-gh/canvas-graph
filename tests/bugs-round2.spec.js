@@ -58,8 +58,8 @@ test('after view.fit.all, no node DOM extends into the left panel', async ({ pag
     }
     v.bus.emit('layout.apply.tidy');
     v.bus.emit('view.fit.all');
+    v.frameLoop.flushNow();
   });
-  await page.waitForTimeout(200);
   const panelRect = await page.locator('.left').evaluate(el => {
     const rect = el.getBoundingClientRect();
     return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };

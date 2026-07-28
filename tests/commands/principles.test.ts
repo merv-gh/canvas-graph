@@ -102,7 +102,6 @@ describe('frontend principles (enforced)', () => {
         // (e.g. disabling `collections` removes the create command). The principle
         // being tested here is "boot does not crash", not "all DX rules still pass".
         const ctx = bootApp({ [name]: false, dx: false });
-        await settle();
         // App still has commands registered (proves rest of the system stack came up).
         expect(ctx.contexts.commands.all().length).toBeGreaterThan(0);
       } catch (err) {
@@ -122,7 +121,6 @@ describe('frontend principles (enforced)', () => {
         // (e.g. disabling `collections` removes the create command). The principle
         // being tested here is "boot does not crash", not "all DX rules still pass".
         const ctx = bootApp({ [name]: false, dx: false });
-        await settle();
         const live = ctx.model.entity('node')?.abilities.map(a => `ability.${a.id}`) ?? [];
         expect(live).not.toContain(name);
       } catch (err) {

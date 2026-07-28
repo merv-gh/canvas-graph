@@ -17,7 +17,7 @@ const specs = existsSync(SPEC_DIR)
 
 for (const file of specs) {
   const spec = JSON.parse(readFileSync(join(SPEC_DIR, file), 'utf8'));
-  test(`layout: ${spec.title ?? file}`, async ({ page }) => {
+  test(`@smoke layout: ${spec.title ?? file}`, async ({ page }) => {
     const { runLayoutProbe } = await import('../dx/ollama-runner/layout-probe.mjs');
     await page.goto('/?io=memory');
     await page.waitForFunction(() => !!(window as unknown as { app?: unknown }).app, undefined, { timeout: 8000 });
@@ -30,7 +30,7 @@ for (const file of specs) {
 // Keep the file non-empty so Playwright doesn't error when no layout task has
 // landed yet (a spec file that defines zero tests is treated as an error).
 if (!specs.length) {
-  test('layout: no landed layout specs yet', () => {
+  test('@smoke layout: no landed layout specs yet', () => {
     expect(specs.length).toBe(0);
   });
 }

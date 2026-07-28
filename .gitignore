@@ -22,6 +22,9 @@ dx/STOP
 
 dist-lib/graph-viewer.js
 dx/bench
+!dx/bench/
+dx/bench/*
+!dx/bench/TOOLING_REPORT.md
 dx/cli/preview-ws/frontend/*
 /todo.md
 .agents

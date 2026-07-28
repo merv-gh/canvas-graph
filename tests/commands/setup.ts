@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, vi } from 'vitest';
+import { teardownBoots } from './testkit';
 
 beforeEach(() => {
   vi.spyOn(console, 'info').mockImplementation(() => {});
@@ -6,5 +7,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  teardownBoots();
   vi.restoreAllMocks();
 });

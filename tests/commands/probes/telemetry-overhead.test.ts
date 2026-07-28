@@ -16,7 +16,14 @@ import type { AppCtx } from '../../../frontend/core';
 
 const SNAP_10K = syntheticSnapshot(10_000, 1.5);
 const OFF = { telemetry: false, 'telemetry.portal': false } as const;
-const BASE = { dx: false, demo: false, debug: false, autoLayout: false } as const;
+const BASE = {
+  dx: false,
+  demo: false,
+  debug: false,
+  autoLayout: false,
+  telemetry: true,
+  'telemetry.portal': true,
+} as const;
 
 const burst = (ctx: AppCtx, n: number) => {
   const t0 = performance.now();

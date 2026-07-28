@@ -34,7 +34,7 @@ test('disabling an ability removes its commands and entity affordances', async (
   expect(collapseBtn).toBe(0);
 });
 
-test('all flags on: baseline affordances exist', async ({ page }) => {
+test('@smoke all flags on: baseline affordances exist', async ({ page }) => {
   await goWithFlags(page);
   await expect(page.locator('.toolbar button[data-command="palette.place.activate"]')).toBeVisible();
   await page.getByLabel('More actions').click();
@@ -69,7 +69,7 @@ test('memory mode does not write to localStorage', async ({ page }) => {
   expect(persisted.hasMemory).toBe(false);
 });
 
-test('requires.unmet warning fires when a dependency is disabled', async ({ page }) => {
+test('@smoke requires.unmet warning fires when a dependency is disabled', async ({ page }) => {
   await goWithFlags(page, { graph: false });
   const warnings = await page.evaluate(() => window.app.contexts.dx.issues()
     .filter(i => i.rule === 'requires.unmet')

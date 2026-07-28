@@ -8,10 +8,14 @@ import type { TelemetrySpan } from '../../frontend/systems/telemetry';
  *  human asks for it (the deployed build is a static frontend). */
 
 const spanNames = (spans: TelemetrySpan[]) => spans.map(span => span.name);
+const bootTelemetry = (
+  flags: Parameters<typeof bootApp>[0] = {},
+  io?: Parameters<typeof bootApp>[1],
+) => bootApp({ telemetry: true, 'telemetry.portal': true, ...flags }, io);
 
 describe('telemetry', () => {
   it('records a span per bus event with parent/child from dispatch depth', async () => {
-    const ctx = bootApp();
+    const ctx = bootTelemetry();
     await settle();
     ctx.telemetry!.clear();
 
@@ -31,7 +35,7 @@ describe('telemetry', () => {
   });
 
   it('never records its own events', async () => {
-    const ctx = bootApp();
+    const ctx = bootTelemetry();
     await settle();
     runCommand(ctx, 'telemetry.clear');
     runCommand(ctx, 'telemetry.copy');
@@ -41,7 +45,7 @@ describe('telemetry', () => {
 
   it('keeps the newest 100 spans in io across a reload', async () => {
     const io = memoryIo();
-    const first = bootApp({}, io);
+    const first = bootTelemetry({}, io);
     await settle();
     for (let i = 0; i < 250; i++) first.bus.forward('app.notice', { message: `${i}` });
     await settle();
@@ -64,7 +68,7 @@ describe('telemetry', () => {
     // Reload: a fresh browser with only what was on disk.
     const reloaded = memoryIo();
     reloaded.set(STORAGE_KEYS.telemetry, stored);
-    const second = bootApp({}, reloaded);
+    const second = bootTelemetry({}, reloaded);
     await settle();
     expect(second.telemetry!.spans().map(span => span.attributes['app.subject'])).toContain('249');
   });
@@ -73,7 +77,7 @@ describe('telemetry', () => {
     const fetchMock = vi.fn(() => Promise.resolve(new Response('{}')));
     vi.stubGlobal('fetch', fetchMock);
     try {
-      const ctx = bootApp();
+      const ctx = bootTelemetry();
       await settle();
       expect(ctx.telemetry!.config().export).toBe(false);
       for (let i = 0; i < 100; i++) ctx.bus.forward('app.notice', { message: `${i}` });
@@ -95,7 +99,7 @@ describe('telemetry', () => {
   });
 
   it('emits ids in OTLP hex widths', async () => {
-    const ctx = bootApp();
+    const ctx = bootTelemetry();
     await settle();
     const span = ctx.telemetry!.spans()[0];
     expect(span.traceId).toMatch(/^[0-9a-f]{32}$/);
@@ -103,7 +107,7 @@ describe('telemetry', () => {
   });
 
   it('does not build spans on the interaction path', async () => {
-    const ctx = bootApp();
+    const ctx = bootTelemetry();
     await settle();
     const before = ctx.telemetry!.spans().length;
     // Capture is columns-only; nothing is aggregated until the batch lands.
@@ -116,7 +120,7 @@ describe('telemetry', () => {
 
 describe('telemetry portal', () => {
   it('stays unmounted until toggled, then draws a node per event name', async () => {
-    const ctx = bootApp();
+    const ctx = bootTelemetry();
     await settle();
     expect(document.querySelector('.telemetry-portal')).toBeNull();
 
@@ -133,7 +137,7 @@ describe('telemetry portal', () => {
   });
 
   it('filters to one channel and back', async () => {
-    const ctx = bootApp();
+    const ctx = bootTelemetry();
     await settle();
     runCommand(ctx, 'telemetry.portal.toggle');
     await settle();
@@ -153,7 +157,7 @@ describe('telemetry portal', () => {
 
   it('resizes from the grip and remembers the size', async () => {
     const io = memoryIo();
-    const ctx = bootApp({}, io);
+    const ctx = bootTelemetry({}, io);
     await settle();
     runCommand(ctx, 'telemetry.portal.toggle');
     await settle();
@@ -170,7 +174,7 @@ describe('telemetry portal', () => {
   });
 
   it('goes away with its flag, and telemetry keeps recording without it', async () => {
-    const ctx = bootApp({ 'telemetry.portal': false });
+    const ctx = bootTelemetry({ 'telemetry.portal': false });
     await settle();
     expect(document.querySelector('.telemetry-portal')).toBeNull();
     expect(ctx.contexts.commands.get('telemetry.portal.toggle')).toBeUndefined();
