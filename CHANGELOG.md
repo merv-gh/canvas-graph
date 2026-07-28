@@ -5,6 +5,13 @@ All notable changes to this project will be documented here. The format follows
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-07-28
+
+### Fixed
+
+- Made the lockfile reproducible under the npm 10 toolchain used by GitHub
+  Actions and documented that package-manager version for future updates.
+
 ## [2.0.1] - 2026-07-28
 
 ### Fixed
@@ -131,7 +138,8 @@ All notable changes to this project will be documented here. The format follows
 - Scoped 0.1 to the static application; the experimental library remains post-0.1 work.
 - Removed the unused system-design subsystem and split container/debug rendering policy from behavior.
 
-[Unreleased]: https://github.com/merv-gh/canvas-graph/compare/v2.0.1...HEAD
+[Unreleased]: https://github.com/merv-gh/canvas-graph/compare/v2.0.2...HEAD
+[2.0.2]: https://github.com/merv-gh/canvas-graph/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/merv-gh/canvas-graph/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/merv-gh/canvas-graph/releases/tag/v2.0.0
 [1.0.0]: https://github.com/merv-gh/canvas-graph/releases/tag/v1.0.0
